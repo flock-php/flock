@@ -1,7 +1,7 @@
 VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
 LDFLAGS := -s -w -X flock/internal/cli.Version=$(VERSION)
 
-.PHONY: build build-all test lint
+.PHONY: build build-all test lint app
 
 build:
 	go build -ldflags "$(LDFLAGS)" -o bin/flock ./cmd/flock
@@ -18,3 +18,6 @@ test:
 lint:
 	go vet ./...
 	test -z "$$(gofmt -l .)"
+
+app:
+	macos/build-app.sh

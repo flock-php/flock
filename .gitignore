@@ -18,3 +18,5 @@
 /build/postgres-client/*.log
 /build/php/*.log
 /build/valkey/*.log
+/macos/.build/
+/build/macos/
