@@ -2,127 +2,86 @@ import AppKit
 import FlockKit
 import SwiftUI
 
+/// A terminal-like timeline: newest request on top, dumps one after another, no sidebar.
 struct DumpsWindow: View {
     @Environment(AppModel.self) private var model
-    private let selectionState = State<Dump.ID?>(initialValue: nil)
-    private var selection: Dump.ID? {
-        get { selectionState.wrappedValue }
-        nonmutating set { selectionState.wrappedValue = newValue }
+    @AppStorage("dumps.latestOnly") private var latestOnly = true
+    @AppStorage("dumps.editor") private var editorID = Editor.phpstorm.rawValue
+
+    private let queryState = State<String>(initialValue: "")
+    private var query: String {
+        get { queryState.wrappedValue }
+        nonmutating set { queryState.wrappedValue = newValue }
     }
+
+    private var editor: Editor { Editor(rawValue: editorID) ?? .phpstorm }
 
     var body: some View {
         let store = model.dumps
+        let capturing = model.status?.dumps == true
+        let visible = DumpTimeline.filter(latestOnly ? DumpTimeline.latestGroup(of: store.dumps) : store.dumps, query: query)
 
-        NavigationSplitView {
-            List(store.dumps, selection: selectionState.projectedValue) { dump in
-                DumpRow(dump: dump)
-            }
-            .overlay {
-                if store.dumps.isEmpty {
-                    ContentUnavailableView("No dumps", systemImage: "ladybug",
-                                           description: Text(model.status?.dumps == true
-                                               ? "dump() and dd() output will show up here."
-                                               : "Turn on “Capture dumps” in the menu bar to collect dump() and dd() output."))
+        Group {
+            if visible.isEmpty {
+                ContentUnavailableView {
+                    Label(store.dumps.isEmpty ? "No dumps yet" : "No matching dumps", systemImage: "ladybug")
+                } description: {
+                    Text(capturing
+                        ? "dump() and dd() output from your sites and artisan commands appears here."
+                        : "Capture is off — turn it on with the antenna button to collect dump() and dd() output here.")
+                } actions: {
+                    if !capturing {
+                        Button("Start Capturing") { Task { await model.setDumps(true) } }
+                    }
                 }
-            }
-            .navigationSplitViewColumnWidth(min: 260, ideal: 320)
-        } detail: {
-            if let dump = store.dumps.first(where: { $0.id == selection }) {
-                DumpDetail(dump: dump)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .background(Color(red: 0.094, green: 0.09, blue: 0.106))
+                .environment(\.colorScheme, .dark)
             } else {
-                ContentUnavailableView("No dump selected", systemImage: "ladybug")
+                WebView(html: DumpTimeline.html(dumps: visible, header: store.header, editor: editor),
+                        allowsJavaScript: true, blocksRemoteContent: true)
             }
         }
+        .searchable(text: queryState.projectedValue, placement: .toolbar, prompt: "Search dumps")
         .toolbar {
             ToolbarItemGroup {
-                Button("Refresh", systemImage: "arrow.clockwise") {
-                    Task { await store.refresh() }
+                Toggle(isOn: Binding(get: { capturing }, set: { on in Task { await model.setDumps(on) } })) {
+                    Label(capturing ? "Capturing" : "Capture Dumps", systemImage: "antenna.radiowaves.left.and.right")
                 }
+                .help(capturing ? "Stop intercepting dump() and dd()" : "Intercept dump() and dd()")
+                .symbolEffect(.pulse, isActive: capturing)
+                .disabled(model.status == nil)
+
+                Toggle(isOn: $latestOnly) {
+                    Label("Latest Request Only", systemImage: "clock.arrow.circlepath")
+                }
+                .help(latestOnly ? "Showing the latest request only — click to show the full history" : "Showing all requests")
+
+                Menu {
+                    Picker("Open Sources In", selection: $editorID) {
+                        ForEach(Editor.allCases) { Text($0.name).tag($0.rawValue) }
+                    }
+                    .pickerStyle(.inline)
+                } label: {
+                    Label("Editor", systemImage: "chevron.left.forwardslash.chevron.right")
+                }
+                .help("Editor used when clicking a dump's file and line")
+
                 Button("Clear", systemImage: "trash") {
-                    selection = nil
                     Task { await store.clear() }
                 }
                 .disabled(store.dumps.isEmpty)
             }
         }
+        .navigationTitle(visible.isEmpty ? "Dumps" : "Dumps (\(visible.count))")
         .safeAreaInset(edge: .bottom) {
             ErrorBanner(message: store.error)
         }
+        .task { await Snapshot.captureIfRequested(WindowID.dumps) }
         .task {
             store.isVisible = true
             await store.refresh()
-            if selection == nil {
-                selection = store.dumps.first?.id
-            }
         }
         .onDisappear { store.isVisible = false }
-    }
-}
-
-private struct DumpRow: View {
-    let dump: Dump
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 2) {
-            HStack {
-                Text(dump.shortSource ?? "dump").font(.callout.monospaced()).lineLimit(1)
-                Spacer()
-                Text(dump.time, format: .dateTime.hour().minute().second())
-                    .font(.caption.monospacedDigit())
-                    .foregroundStyle(.secondary)
-            }
-            Text(origin)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .lineLimit(1)
-                .truncationMode(.middle)
-        }
-        .padding(.vertical, 3)
-    }
-
-    private var origin: String {
-        if let request = dump.request {
-            return "\(request.method) \(request.uri)"
-        }
-        if let command = dump.commandLine, !command.isEmpty {
-            return command
-        }
-        return dump.site
-    }
-}
-
-private struct DumpDetail: View {
-    let dump: Dump
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            HStack {
-                VStack(alignment: .leading, spacing: 2) {
-                    if let source = dump.source {
-                        Text("\(source.file):\(source.line)").font(.callout.monospaced()).textSelection(.enabled)
-                    }
-                    Text(dump.time.formatted(date: .abbreviated, time: .standard))
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-                Spacer()
-                Button("Copy as Text", systemImage: "doc.on.doc") {
-                    NSPasteboard.general.clearContents()
-                    NSPasteboard.general.setString(dump.text, forType: .string)
-                }
-            }
-            .padding(12)
-            Divider()
-            WebView(html: page, allowsJavaScript: true, blocksRemoteContent: true)
-        }
-    }
-
-    /// Symfony's dumper uses a dark theme; give the page the same background so it fits in both modes.
-    private var page: String {
-        """
-        <!doctype html><html><head><meta charset="utf-8">
-        <style>html,body{margin:0;padding:0;background:#18171B;} pre.sf-dump{margin:0!important;padding:12px!important;}</style>
-        </head><body>\(dump.html)</body></html>
-        """
     }
 }

@@ -38,8 +38,9 @@ type Entry struct {
 	Source      *Source   `json:"source"`
 	Request     *Request  `json:"request"`
 	CommandLine *string   `json:"command_line"`
+	Group       string    `json:"group"` // shared by all dumps of one request / CLI run
 	Text        string    `json:"text"`
-	HTML        string    `json:"html"`
+	HTML        string    `json:"html"` // body only; render after Header()
 }
 
 // Source is where dump() was called.
@@ -57,6 +58,15 @@ type Request struct {
 
 // File is the JSON-lines file dumps are appended to.
 func File(root string) string { return filepath.Join(root, "dumps", "dumps.jsonl") }
+
+// Header returns Symfony's dump <script>/<style> header, written by the server at startup.
+func Header(root string) (string, error) {
+	data, err := os.ReadFile(filepath.Join(filepath.Dir(File(root)), "header.html"))
+	if err != nil {
+		return "", err
+	}
+	return string(data), nil
+}
 
 // Env makes PHP send dumps to the server on port.
 func Env(port int) []string {

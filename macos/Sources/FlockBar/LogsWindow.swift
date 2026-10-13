@@ -12,7 +12,9 @@ struct LogsWindow: View {
     var body: some View {
         let store = model.logs
 
-        NavigationSplitView {
+        // HSplitView instead of NavigationSplitView: the latter floats the sidebar and lets the
+        // detail column's toolbar background bleed under its edge on current macOS.
+        HSplitView {
             List(selection: selectionState.projectedValue) {
                 Section("Sites") {
                     ForEach(store.index.sites, id: \.self) { site in
@@ -25,16 +27,18 @@ struct LogsWindow: View {
                     }
                 }
             }
-            .navigationSplitViewColumnWidth(min: 200, ideal: 240)
-        } detail: {
-            switch selection {
-            case let .site(name):
-                SiteLogView(entries: store.entries, site: name)
-            case .service:
-                MonospacedText(store.serviceText.isEmpty ? "(empty)" : store.serviceText)
-            case nil:
-                ContentUnavailableView("Pick a log", systemImage: "doc.text.magnifyingglass")
+            .frame(minWidth: 200, idealWidth: 240, maxWidth: 340)
+            Group {
+                switch selection {
+                case let .site(name):
+                    SiteLogView(entries: store.entries, site: name)
+                case .service:
+                    MonospacedText(store.serviceText.isEmpty ? "(empty)" : store.serviceText)
+                case nil:
+                    ContentUnavailableView("Pick a log", systemImage: "doc.text.magnifyingglass")
+                }
             }
+            .frame(minWidth: 420, maxWidth: .infinity, maxHeight: .infinity)
         }
         .toolbar {
             ToolbarItemGroup {
@@ -51,6 +55,7 @@ struct LogsWindow: View {
         .safeAreaInset(edge: .bottom) {
             ErrorBanner(message: store.error)
         }
+        .task { await Snapshot.captureIfRequested(WindowID.logs) }
         .task {
             await store.loadIndex()
         }

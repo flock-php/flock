@@ -85,6 +85,11 @@ public actor FlockClient {
         try await decode([Dump]?.self, "GET", "/v1/dumps") ?? []
     }
 
+    /// Symfony's dump <script>/<style> header, shared by all dump bodies.
+    public func dumpHeader() async throws -> String {
+        String(decoding: try await send("GET", "/v1/dumps/header"), as: UTF8.self)
+    }
+
     public func clearDumps() async throws {
         _ = try await send("DELETE", "/v1/dumps")
     }

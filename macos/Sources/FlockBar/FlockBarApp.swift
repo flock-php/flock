@@ -16,7 +16,7 @@ struct FlockBarApp: App {
             PanelView()
                 .environment(model)
         } label: {
-            Image(systemName: model.menuBarSymbol)
+            MenuBarLabel(symbol: model.menuBarSymbol)
         }
         .menuBarExtraStyle(.window)
 
@@ -37,6 +37,22 @@ struct FlockBarApp: App {
                 .environment(model)
         }
         .defaultSize(width: 980, height: 640)
+    }
+}
+
+/// The menu bar icon. It is the only view that exists at launch, so it also opens the
+/// window requested by `--snapshot`.
+private struct MenuBarLabel: View {
+    let symbol: String
+    @Environment(\.openWindow) private var openWindow
+
+    var body: some View {
+        Image(systemName: symbol)
+            .task {
+                if let target = Snapshot.target {
+                    openWindow.activating(target)
+                }
+            }
     }
 }
 

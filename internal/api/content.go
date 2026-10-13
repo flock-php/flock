@@ -105,6 +105,16 @@ func registerDumps(mux *http.ServeMux, b Backend) {
 		writeJSON(w, http.StatusOK, entries)
 	})
 
+	mux.HandleFunc("GET /v1/dumps/header", func(w http.ResponseWriter, _ *http.Request) {
+		header, err := dumps.Header(b.Root())
+		if err != nil {
+			writeError(w, http.StatusNotFound, errors.New("the dump server has not run yet"))
+			return
+		}
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		_, _ = w.Write([]byte(header))
+	})
+
 	mux.HandleFunc("DELETE /v1/dumps", func(w http.ResponseWriter, _ *http.Request) {
 		if err := dumps.Clear(b.Root()); err != nil {
 			writeError(w, http.StatusInternalServerError, err)

@@ -18,7 +18,9 @@ struct MailWindow: View {
     var body: some View {
         let store = model.mail
 
-        NavigationSplitView {
+        // HSplitView instead of NavigationSplitView: the latter floats the sidebar and lets the
+        // detail column's toolbar background bleed under its edge on current macOS.
+        HSplitView {
             List(store.messages, selection: selectionState.projectedValue) { message in
                 MailRow(message: message)
             }
@@ -28,14 +30,16 @@ struct MailWindow: View {
                                            description: Text("Send mail to 127.0.0.1:2525. MAIL_USERNAME picks the inbox."))
                 }
             }
-            .navigationSplitViewColumnWidth(min: 260, ideal: 320)
-        } detail: {
-            if let selection {
-                MailDetailView(id: selection)
-                    .id(selection)
-            } else {
-                ContentUnavailableView("No message selected", systemImage: "envelope")
+            .frame(minWidth: 260, idealWidth: 320, maxWidth: 340)
+            Group {
+                if let selection {
+                    MailDetailView(id: selection)
+                        .id(selection)
+                } else {
+                    ContentUnavailableView("No message selected", systemImage: "envelope")
+                }
             }
+            .frame(minWidth: 420, maxWidth: .infinity, maxHeight: .infinity)
         }
         .toolbar {
             ToolbarItemGroup {
@@ -57,6 +61,7 @@ struct MailWindow: View {
         .safeAreaInset(edge: .bottom) {
             ErrorBanner(message: store.error)
         }
+        .task { await Snapshot.captureIfRequested(WindowID.mail) }
         .task {
             store.isVisible = true
             await store.refresh()

@@ -158,7 +158,11 @@ public struct Dump: Decodable, Sendable, Equatable, Identifiable, Hashable {
     public var source: Source?
     public var request: Request?
     public var commandLine: String?
+    /// Shared by every dump of one HTTP request or CLI run.
+    public var group: String
+    public var label: String?
     public var text: String
+    /// Dump body only; render it after the shared header from `FlockClient.dumpHeader()`.
     public var html: String
 
     public struct Source: Decodable, Sendable, Equatable, Hashable {
@@ -188,7 +192,7 @@ public struct Dump: Decodable, Sendable, Equatable, Identifiable, Hashable {
         return source.line > 0 ? "\(parts):\(source.line)" : parts
     }
 
-    enum CodingKeys: String, CodingKey { case id, time, site, source, request, commandLine, text, html }
+    enum CodingKeys: String, CodingKey { case id, time, site, source, request, commandLine, group, label, text, html }
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -198,6 +202,8 @@ public struct Dump: Decodable, Sendable, Equatable, Identifiable, Hashable {
         source = try c.decodeIfPresent(Source.self, forKey: .source)
         request = try c.decodeIfPresent(Request.self, forKey: .request)
         commandLine = try c.decodeIfPresent(String.self, forKey: .commandLine)
+        group = try c.decodeIfPresent(String.self, forKey: .group) ?? ""
+        label = try c.decodeIfPresent(String.self, forKey: .label)
         text = try c.decodeIfPresent(String.self, forKey: .text) ?? ""
         html = try c.decodeIfPresent(String.self, forKey: .html) ?? ""
     }

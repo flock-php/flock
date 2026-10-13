@@ -107,7 +107,13 @@ func TestServerReceivesDumps(t *testing.T) {
 		}
 	}
 	entries, _ := List(root)
-	if !strings.Contains(entries[0].Text, `"flock" => true`) || entries[0].Source == nil || !strings.Contains(entries[0].HTML, "sf-dump") {
+	if !strings.Contains(entries[0].Text, `"flock" => true`) || entries[0].Source == nil || !strings.Contains(entries[0].HTML, "sf-dump") || entries[0].Group == "" {
 		t.Fatalf("unexpected entry: %+v", entries[0])
+	}
+	if strings.Contains(entries[0].HTML, "<style") {
+		t.Fatal("entries must not repeat the dumper header")
+	}
+	if header, err := Header(root); err != nil || !strings.Contains(header, "Sfdump") {
+		t.Fatalf("header missing: %v", err)
 	}
 }

@@ -19,7 +19,11 @@ final class MailStore {
 
     func refresh() async {
         do {
-            messages = try await client.mail()
+            // Assigning an equal array still makes the list reload mid-update; only publish real changes.
+            let fresh = try await client.mail()
+            if fresh != messages {
+                messages = fresh
+            }
             error = nil
         } catch {
             self.error = error.localizedDescription
@@ -74,6 +78,7 @@ final class DumpStore {
     private let client: FlockClient
 
     var dumps: [Dump] = []
+    var header = ""
     var error: String?
     var isVisible = false
 
@@ -83,7 +88,14 @@ final class DumpStore {
 
     func refresh() async {
         do {
-            dumps = try await client.dumps()
+            let fresh = try await client.dumps()
+            // The header only exists once the dump server has run; fetch it when first needed.
+            if header.isEmpty, !fresh.isEmpty {
+                header = (try? await client.dumpHeader()) ?? ""
+            }
+            if fresh != dumps {
+                dumps = fresh
+            }
             error = nil
         } catch {
             self.error = error.localizedDescription
