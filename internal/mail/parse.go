@@ -106,6 +106,12 @@ func Parse(msg Message) (Detail, error) {
 	for i, p := range attachments(parts) {
 		detail.Attachments = append(detail.Attachments, Attachment{Index: i, Filename: p.filename, ContentType: p.contentType, Size: len(p.body)})
 	}
+	if detail.Cc == nil {
+		detail.Cc = []string{}
+	}
+	if detail.To == nil {
+		detail.To = []string{}
+	}
 	if detail.Headers == nil {
 		detail.Headers = []Header{}
 	}
