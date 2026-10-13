@@ -5,6 +5,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"flock/internal/dumps"
 	"flock/internal/php"
 	"flock/internal/postgres"
 	"flock/internal/valkey"
@@ -57,6 +58,52 @@ func newXdebugCommand() *cobra.Command {
 		},
 	}
 	return cmd
+}
+
+func newDumpsCommand() *cobra.Command {
+	return &cobra.Command{
+		Use:   "dumps [on|off|clear]",
+		Short: "Send dump()/dd() output to Flock instead of the page or terminal, or list captured dumps",
+		Args:  cobra.MaximumNArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			s, err := load()
+			if err != nil {
+				return err
+			}
+
+			switch {
+			case len(args) == 0:
+				entries, err := dumps.List(s.root)
+				if err != nil {
+					return err
+				}
+				state := "off"
+				if s.cfg.Dumps {
+					state = "on"
+				}
+				cmd.Printf("dump capture is %s — %d dump(s)\n", state, len(entries))
+				for i := len(entries) - 1; i >= 0; i-- {
+					e := entries[i]
+					where := ""
+					if e.Source != nil {
+						where = fmt.Sprintf("%s:%d", e.Source.File, e.Source.Line)
+					}
+					cmd.Printf("\n── %s %s\n%s\n", e.Time.Local().Format("15:04:05"), where, e.Text)
+				}
+				return nil
+			case args[0] == "clear":
+				return dumps.Clear(s.root)
+			case args[0] == "on" || args[0] == "off":
+				s.cfg.Dumps = args[0] == "on"
+				if err := s.commit(cmd.Context(), cmd.ErrOrStderr()); err != nil {
+					return err
+				}
+				cmd.Printf("dump capture %s\n", args[0])
+				return nil
+			}
+			return fmt.Errorf("expected on, off or clear, got %q", args[0])
+		},
+	}
 }
 
 func newRedisCommand() *cobra.Command {

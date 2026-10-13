@@ -1,0 +1,13 @@
+{
+    "name": "flock/dump-server",
+    "description": "Receives Symfony VarDumper payloads (VAR_DUMPER_FORMAT=server) for Flock's dumps window.",
+    "license": "MIT",
+    "require": {
+        "php": ">=8.4",
+        "symfony/var-dumper": "^8.0"
+    },
+    "config": {
+        "optimize-autoloader": true,
+        "classmap-authoritative": true
+    }
+}

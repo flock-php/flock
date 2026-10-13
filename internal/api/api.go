@@ -4,9 +4,11 @@ package api
 
 import (
 	"context"
+	"crypto/subtle"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"time"
@@ -26,6 +28,9 @@ type Status struct {
 	HTTPPort  int                     `json:"http_port"`
 	HTTPSPort int                     `json:"https_port"`
 	Mail      string                  `json:"mail"`
+	Dumps     bool                    `json:"dumps"`
+	MailCount int                     `json:"mail_count"`
+	DumpCount int                     `json:"dump_count"`
 	Postgres  string                  `json:"postgres,omitempty"`
 	Redis     string                  `json:"redis,omitempty"`
 	Xdebug    bool                    `json:"xdebug"`
@@ -52,22 +57,71 @@ type DNSStatus struct {
 	Addr string `json:"addr"`
 }
 
-// NewHandler builds the API routes. status is called per request so it always reflects live state;
-// reload makes the daemon re-read its config.
-func NewHandler(status func() Status, reload func() error) http.Handler {
+// Settings are the toggles a UI can change; nil fields stay as they are.
+type Settings struct {
+	Xdebug *bool `json:"xdebug"`
+	Dumps  *bool `json:"dumps"`
+}
+
+// Backend is what the API needs from the daemon.
+type Backend interface {
+	Status() Status
+	Reload() error
+	UpdateSettings(Settings) error
+	Root() string
+}
+
+// NewHandler builds the API routes. A non-empty token requires `Authorization: Bearer <token>`
+// (used for the TCP listener the native apps talk to; the CLI's unix socket is protected by file permissions).
+func NewHandler(b Backend, token string) http.Handler {
 	mux := http.NewServeMux()
+
 	mux.HandleFunc("GET /v1/status", func(w http.ResponseWriter, _ *http.Request) {
-		writeJSON(w, http.StatusOK, status())
+		writeJSON(w, http.StatusOK, b.Status())
 	})
 	mux.HandleFunc("POST /v1/reload", func(w http.ResponseWriter, _ *http.Request) {
-		if err := reload(); err != nil {
-			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		if err := b.Reload(); err != nil {
+			writeError(w, http.StatusInternalServerError, err)
 			return
 		}
-		writeJSON(w, http.StatusOK, status())
+		writeJSON(w, http.StatusOK, b.Status())
+	})
+	mux.HandleFunc("POST /v1/settings", func(w http.ResponseWriter, r *http.Request) {
+		var settings Settings
+		if err := json.NewDecoder(io.LimitReader(r.Body, 1<<16)).Decode(&settings); err != nil {
+			writeError(w, http.StatusBadRequest, fmt.Errorf("invalid settings: %w", err))
+			return
+		}
+		if err := b.UpdateSettings(settings); err != nil {
+			writeError(w, http.StatusInternalServerError, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, b.Status())
 	})
 
-	return mux
+	registerMail(mux, b)
+	registerDumps(mux, b)
+	registerLogs(mux, b)
+
+	if token == "" {
+		return mux
+	}
+	return requireToken(token, mux)
+}
+
+func requireToken(token string, next http.Handler) http.Handler {
+	want := []byte("Bearer " + token)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if subtle.ConstantTimeCompare([]byte(r.Header.Get("Authorization")), want) != 1 {
+			writeError(w, http.StatusUnauthorized, errors.New("missing or invalid token"))
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+func writeError(w http.ResponseWriter, code int, err error) {
+	writeJSON(w, code, map[string]string{"error": err.Error()})
 }
 
 func writeJSON(w http.ResponseWriter, code int, body any) {

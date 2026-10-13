@@ -323,7 +323,8 @@ func EnsureIni(root, minor string) error {
 }
 
 // FPMSpec writes the FPM config for a version and returns the process to supervise.
-func FPMSpec(root, minor string) (supervisor.Spec, error) {
+// extraEnv is passed to the workers (e.g. the dump server address).
+func FPMSpec(root, minor string, extraEnv ...string) (supervisor.Spec, error) {
 	if err := EnsureIni(root, minor); err != nil {
 		return supervisor.Spec{}, err
 	}
@@ -361,7 +362,7 @@ clear_env = no
 		Path: FPMBinary(root, minor),
 		Args: []string{"--nodaemonize", "--fpm-config", conf, "-c", IniPath(root, minor)},
 		// FLOCK_XDEBUG changes the spec when Xdebug is toggled, so the supervisor restarts FPM.
-		Env:        append(Env(root, minor), fmt.Sprintf("FLOCK_XDEBUG=%t", XdebugEnabled(root, minor))),
+		Env:        append(append(Env(root, minor), fmt.Sprintf("FLOCK_XDEBUG=%t", XdebugEnabled(root, minor))), extraEnv...),
 		LogFile:    logFile,
 		StopSignal: syscall.SIGQUIT, // graceful: finish in-flight requests
 	}, nil

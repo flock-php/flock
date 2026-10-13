@@ -20,6 +20,7 @@ type Config struct {
 	Ports       Ports    `json:"ports"`
 	Services    Services `json:"services"`
 	Xdebug      bool     `json:"xdebug"`
+	Dumps       bool     `json:"dumps"`
 	Parked      []string `json:"parked"`
 	Sites       []Site   `json:"sites"`
 }
@@ -32,6 +33,8 @@ type Ports struct {
 	SMTP     int `json:"smtp"`
 	Postgres int `json:"postgres"`
 	Redis    int `json:"redis"`
+	Dumps    int `json:"dumps"`
+	API      int `json:"api"` // token-protected HTTP API for the native apps
 }
 
 // Services are optional background services; an empty version means not installed.
@@ -57,7 +60,7 @@ func Default() *Config {
 		TLD:         "test",
 		DefaultPHP:  "8.5",
 		DefaultNode: "22",
-		Ports:       Ports{HTTP: 80, HTTPS: 443, DNS: 53535, SMTP: 2525, Postgres: 5432, Redis: 6379},
+		Ports:       Ports{HTTP: 80, HTTPS: 443, DNS: 53535, SMTP: 2525, Postgres: 5432, Redis: 6379, Dumps: 9912, API: 53531},
 	}
 }
 

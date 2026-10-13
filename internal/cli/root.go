@@ -27,7 +27,7 @@ func NewRootCommand() *cobra.Command {
 		newDaemonCommand(), newRestartCommand(), newStatusCommand(), newLogsCommand(), newVersionCommand(),
 		newSitesCommand(), newLinkCommand(), newUnlinkCommand(), newParkCommand(), newForgetCommand(),
 		newSecureCommand(true), newSecureCommand(false), newIsolateCommand(), newUseCommand(),
-		newPHPCommand(), newNodeCommand(), newPostgresCommand(), newRedisCommand(), newXdebugCommand(), newMailCommand(),
+		newPHPCommand(), newNodeCommand(), newPostgresCommand(), newRedisCommand(), newXdebugCommand(), newDumpsCommand(), newMailCommand(),
 		newImportCommand(), newExecCommand(),
 	)
 

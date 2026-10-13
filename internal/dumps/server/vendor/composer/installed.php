@@ -1,0 +1,41 @@
+<?php return array(
+    'root' => array(
+        'name' => 'flock/dump-server',
+        'pretty_version' => 'dev-main',
+        'version' => 'dev-main',
+        'reference' => 'ddcae84451ab03c95bf86413fe6e90ba9c7e3a5d',
+        'type' => 'library',
+        'install_path' => __DIR__ . '/../../',
+        'aliases' => array(),
+        'dev' => false,
+    ),
+    'versions' => array(
+        'flock/dump-server' => array(
+            'pretty_version' => 'dev-main',
+            'version' => 'dev-main',
+            'reference' => 'ddcae84451ab03c95bf86413fe6e90ba9c7e3a5d',
+            'type' => 'library',
+            'install_path' => __DIR__ . '/../../',
+            'aliases' => array(),
+            'dev_requirement' => false,
+        ),
+        'symfony/polyfill-mbstring' => array(
+            'pretty_version' => 'v1.43.0',
+            'version' => '1.43.0.0',
+            'reference' => '4d5d331bf731e0aedbc6b2f5e61135b7b7996a72',
+            'type' => 'library',
+            'install_path' => __DIR__ . '/../symfony/polyfill-mbstring',
+            'aliases' => array(),
+            'dev_requirement' => false,
+        ),
+        'symfony/var-dumper' => array(
+            'pretty_version' => 'v8.1.7',
+            'version' => '8.1.7.0',
+            'reference' => '741a8c4c948b0bb9bd3653daacd3644c73c40ea5',
+            'type' => 'library',
+            'install_path' => __DIR__ . '/../symfony/var-dumper',
+            'aliases' => array(),
+            'dev_requirement' => false,
+        ),
+    ),
+);

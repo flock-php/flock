@@ -19,6 +19,7 @@ import (
 	"flock/internal/certs"
 	"flock/internal/config"
 	"flock/internal/dns"
+	"flock/internal/dumps"
 	"flock/internal/mail"
 	"flock/internal/paths"
 	"flock/internal/php"
@@ -73,6 +74,38 @@ func (d *daemon) shutdown() {
 		_ = d.mail.Shutdown()
 	}
 	d.procs.StopAll()
+}
+
+type tcpAPI struct {
+	ln    net.Listener
+	token string
+}
+
+func (d *daemon) listenTCP() (*tcpAPI, error) {
+	d.mu.Lock()
+	port := 0
+	if d.cfg != nil {
+		port = d.cfg.Ports.API
+	}
+	d.mu.Unlock()
+
+	ln, err := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", port))
+	if err != nil {
+		return nil, fmt.Errorf("%s", busy(port, err))
+	}
+
+	token, err := api.WriteInfo(d.root, "http://"+ln.Addr().String())
+	if err != nil {
+		ln.Close()
+		return nil, err
+	}
+	return &tcpAPI{ln: ln, token: token}, nil
+}
+
+func (d *daemon) currentWarnings() []string {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	return append([]string(nil), d.warnings...)
 }
 
 func (d *daemon) setWarnings(w []string) {
@@ -164,12 +197,23 @@ func Run(ctx context.Context, cfg Config) error {
 	defer os.Remove(socket)
 
 	apiServer := &http.Server{
-		Handler:           api.NewHandler(d.status, d.reload),
+		Handler:           api.NewHandler(d, ""),
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 
 	serveErr := make(chan error, 1)
 	go func() { serveErr <- apiServer.Serve(ln) }()
+
+	// The native apps can't speak HTTP over a unix socket with URLSession, so they get a
+	// loopback TCP listener guarded by a random token published in api.json (mode 0600).
+	if tcp, err := d.listenTCP(); err != nil {
+		d.setWarnings(append(d.currentWarnings(), "api: "+err.Error()))
+	} else {
+		tcpServer := &http.Server{Handler: api.NewHandler(d, tcp.token), ReadHeaderTimeout: 5 * time.Second}
+		go func() { _ = tcpServer.Serve(tcp.ln) }()
+		defer tcpServer.Close()
+		defer os.Remove(api.InfoFile(d.root))
+	}
 
 	// Retry while degraded, so e.g. the web server comes up by itself once Lerd frees port 80.
 	retry := time.NewTicker(retryInterval)
@@ -195,6 +239,30 @@ loop:
 	defer cancel()
 
 	return apiServer.Shutdown(shutdownCtx)
+}
+
+// Reload implements api.Backend.
+func (d *daemon) Reload() error { return d.reload() }
+
+// Root implements api.Backend.
+func (d *daemon) Root() string { return d.root }
+
+// UpdateSettings implements api.Backend: it edits config.json and applies it.
+func (d *daemon) UpdateSettings(s api.Settings) error {
+	cfg, err := config.Load(d.root)
+	if err != nil {
+		return err
+	}
+	if s.Xdebug != nil {
+		cfg.Xdebug = *s.Xdebug
+	}
+	if s.Dumps != nil {
+		cfg.Dumps = *s.Dumps
+	}
+	if err := cfg.Save(d.root); err != nil {
+		return err
+	}
+	return d.reload()
 }
 
 // reload re-reads config.json and reconciles every service with it.
@@ -250,7 +318,11 @@ func (d *daemon) reload() error {
 		}
 
 		if !pools[version] {
-			spec, err := php.FPMSpec(d.root, version)
+			var extraEnv []string
+			if cfg.Dumps {
+				extraEnv = dumps.Env(cfg.Ports.Dumps)
+			}
+			spec, err := php.FPMSpec(d.root, version, extraEnv...)
 			if err != nil {
 				return err
 			}
@@ -286,6 +358,19 @@ func (d *daemon) reload() error {
 		case !d.procUp(spec.Name) && !ports.Free("127.0.0.1", cfg.Ports.Postgres):
 			// Starting would only crash-loop on "could not bind".
 			warnings = append(warnings, "postgres: "+ports.Describe(cfg.Ports.Postgres))
+		default:
+			d.procs.Ensure(spec)
+			keep[spec.Name] = true
+		}
+	}
+
+	if cfg.Dumps && len(installed) > 0 {
+		spec, err := dumps.Spec(d.root, php.Binary(d.root, installed[0]), cfg.Ports.Dumps)
+		switch {
+		case err != nil:
+			warnings = append(warnings, "dumps: "+err.Error())
+		case !d.procUp(spec.Name) && !ports.Free("127.0.0.1", cfg.Ports.Dumps):
+			warnings = append(warnings, "dumps: "+ports.Describe(cfg.Ports.Dumps))
 		default:
 			d.procs.Ensure(spec)
 			keep[spec.Name] = true
@@ -383,7 +468,8 @@ func PostgresDataDir(root string) string {
 	return filepath.Join(root, "services", "postgres", "data")
 }
 
-func (d *daemon) status() api.Status {
+// Status implements api.Backend.
+func (d *daemon) Status() api.Status {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 
@@ -398,6 +484,10 @@ func (d *daemon) status() api.Status {
 	if d.mail != nil {
 		st.Mail = d.mail.Addr()
 	}
+	if messages, err := mail.List(filepath.Join(d.root, "mail")); err == nil {
+		st.MailCount = len(messages)
+	}
+	st.DumpCount = dumps.Count(d.root)
 	if d.dns != nil {
 		st.DNS = api.DNSStatus{TLD: d.dns.TLD(), Addr: d.dns.Addr()}
 	}
@@ -410,6 +500,7 @@ func (d *daemon) status() api.Status {
 			st.Redis = fmt.Sprintf("Valkey %s on 127.0.0.1:%d", d.cfg.Services.Redis, d.cfg.Ports.Redis)
 		}
 		st.Xdebug = d.cfg.Xdebug
+		st.Dumps = d.cfg.Dumps
 	}
 
 	return st

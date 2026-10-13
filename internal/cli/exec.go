@@ -12,6 +12,7 @@ import (
 
 	"flock/internal/certs"
 	"flock/internal/config"
+	"flock/internal/dumps"
 	"flock/internal/envutil"
 	"flock/internal/node"
 	"flock/internal/php"
@@ -87,6 +88,9 @@ func resolveTool(s *state, cwd, tool string, args []string) (path string, argv, 
 		// end up running another PHP installation.
 		path = php.Binary(s.root, minor)
 		env = php.Env(s.root, minor)
+		if s.cfg.Dumps {
+			env = append(env, dumps.Env(s.cfg.Ports.Dumps)...)
+		}
 		if tool == "composer" {
 			return path, append([]string{path, php.ComposerPhar(s.root)}, args...), env, nil
 		}
