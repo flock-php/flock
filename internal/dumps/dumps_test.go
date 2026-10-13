@@ -69,6 +69,9 @@ func TestServerReceivesDumps(t *testing.T) {
 			t.Skip("no php available")
 		}
 	}
+	if err := exec.Command(php, "-n", "-r", "exit(PHP_VERSION_ID >= 80400 ? 0 : 1);").Run(); err != nil {
+		t.Skipf("%s is not a working PHP >= 8.4 (set FLOCK_TEST_PHP)", php)
+	}
 
 	root := t.TempDir()
 	ln, _ := net.Listen("tcp", "127.0.0.1:0")
