@@ -2,6 +2,8 @@
 package cli
 
 import (
+	"os"
+
 	"github.com/spf13/cobra"
 )
 
@@ -16,6 +18,9 @@ func NewRootCommand() *cobra.Command {
 		SilenceUsage:  true,
 		SilenceErrors: false,
 	}
+
+	// cmd.Print* defaults to stderr in cobra; regular output belongs on stdout.
+	root.SetOut(os.Stdout)
 
 	root.AddCommand(
 		newInstallCommand(), newUninstallCommand(), newPrivilegedSetupCommand(),
