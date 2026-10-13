@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/spf13/cobra"
 
@@ -110,11 +111,30 @@ func installService(root, bin string) error {
 	}
 
 	domain := "gui/" + strconv.Itoa(os.Getuid())
-	_ = exec.Command("launchctl", "bootout", domain+"/"+launchLabel).Run()
-	if out, err := exec.Command("launchctl", "bootstrap", domain, path).CombinedOutput(); err != nil {
-		return fmt.Errorf("launchctl bootstrap: %v: %s", err, out)
+	stopService(domain)
+
+	// bootout returns before launchd has fully released the job, so bootstrap can briefly fail with EIO.
+	var lastErr error
+	for range 20 {
+		out, err := exec.Command("launchctl", "bootstrap", domain, path).CombinedOutput()
+		if err == nil {
+			return nil
+		}
+		lastErr = fmt.Errorf("launchctl bootstrap: %v: %s", err, out)
+		time.Sleep(250 * time.Millisecond)
 	}
-	return nil
+	return lastErr
+}
+
+// stopService unloads the agent and waits until launchd forgets it.
+func stopService(domain string) {
+	_ = exec.Command("launchctl", "bootout", domain+"/"+launchLabel).Run()
+	for range 40 {
+		if exec.Command("launchctl", "print", domain+"/"+launchLabel).Run() != nil {
+			return
+		}
+		time.Sleep(250 * time.Millisecond)
+	}
 }
 
 func uninstallService() error {
@@ -122,7 +142,7 @@ func uninstallService() error {
 	if err != nil {
 		return err
 	}
-	_ = exec.Command("launchctl", "bootout", "gui/"+strconv.Itoa(os.Getuid())+"/"+launchLabel).Run()
+	stopService("gui/" + strconv.Itoa(os.Getuid()))
 	if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
 		return err
 	}

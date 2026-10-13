@@ -35,13 +35,24 @@ func TestResolveToolUsesTheSitePHPVersion(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if path != php.Binary(root, "8.4") || strings.Join(argv, " ") != "php artisan" || env[0] != "PHPRC="+php.IniPath(root, "8.4") {
+	if path != php.Binary(root, "8.4") || strings.Join(argv, " ") != php.Binary(root, "8.4")+" artisan" || env[0] != "PHPRC="+php.IniPath(root, "8.4") {
 		t.Fatalf("got %s %v %v", path, argv, env)
 	}
 
 	path, _, _, _ = resolveTool(s, "/elsewhere", "php", nil)
 	if path != php.Binary(root, "8.5") {
 		t.Fatalf("outside sites the default must be used, got %s", path)
+	}
+}
+
+func TestResolveToolPassesTheAbsoluteBinaryAsArgv0(t *testing.T) {
+	root := t.TempDir()
+	fakePHP(t, root, "8.5")
+	s := &state{root: root, cfg: config.Default()}
+
+	path, argv, _, err := resolveTool(s, "/x", "php", nil)
+	if err != nil || argv[0] != path || !filepath.IsAbs(argv[0]) {
+		t.Fatalf("PHP_BINARY would not point at Flock's PHP: argv=%v err=%v", argv, err)
 	}
 }
 

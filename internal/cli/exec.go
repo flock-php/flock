@@ -58,12 +58,15 @@ func resolveTool(s *state, cwd, tool string, args []string) (path string, argv, 
 			return "", nil, nil, fmt.Errorf("PHP %s is not installed (installed: %v)", minor, installed)
 		}
 
+		// argv[0] must be the absolute binary path: PHP derives PHP_BINARY from it, and a bare
+		// "php" would be looked up on PATH, so child processes (artisan test, queue workers) could
+		// end up running another PHP installation.
 		path = php.Binary(s.root, minor)
 		env = php.Env(s.root, minor)
 		if tool == "composer" {
-			return path, append([]string{"composer", php.ComposerPhar(s.root)}, args...), env, nil
+			return path, append([]string{path, php.ComposerPhar(s.root)}, args...), env, nil
 		}
-		return path, append([]string{"php"}, args...), env, nil
+		return path, append([]string{path}, args...), env, nil
 
 	case "node", "npm", "npx":
 		spec := node.DetectSpec(cwd)
@@ -91,7 +94,8 @@ func resolveTool(s *state, cwd, tool string, args []string) (path string, argv, 
 			"PATH=" + binDir + string(os.PathListSeparator) + os.Getenv("PATH"),
 			"NODE_EXTRA_CA_CERTS=" + filepath.Join(s.root, "certs", "ca.crt"),
 		}
-		return filepath.Join(binDir, name), append([]string{tool}, args...), env, nil
+		path = filepath.Join(binDir, name)
+		return path, append([]string{path}, args...), env, nil
 	}
 
 	return "", nil, nil, fmt.Errorf("unknown tool %q (supported: %v)", tool, tools)
