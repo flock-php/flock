@@ -6,6 +6,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -56,12 +57,35 @@ func newTestManager(t *testing.T, hooks *fakeHooks, releases []Release, static m
 	buildScript = []byte(fakeBuild)
 	t.Cleanup(func() { buildScript = old })
 
-	m := NewManager(t.TempDir(), Sources{}, hooks.hooks())
+	m := NewManager(t.TempDir(), shortTempDir(t), Sources{}, hooks.hooks())
 	m.state.Releases, m.state.StaticMinors = releases, static
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
 	go m.worker(ctx)
 	return m
+}
+
+// shortTempDir avoids t.TempDir under /var/folders/... (fine) but documents the no-spaces rule.
+func shortTempDir(t *testing.T) string {
+	t.Helper()
+	dir, err := os.MkdirTemp("", "flockbuild")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(dir) })
+	return dir
+}
+
+func TestRefusesWorkspaceWithSpaces(t *testing.T) {
+	hooks := &fakeHooks{installed: map[string]string{}}
+	m := newTestManager(t, hooks, []Release{{"8.3", "8.3.30", true}}, map[string]bool{"8.3": true})
+	m.workspace = filepath.Join(t.TempDir(), "Application Support")
+
+	m.Build("8.3")
+	waitJob(t, m, "8.3", Failed)
+	if v := status(m, "8.3"); v.Job == nil || !strings.Contains(v.Job.Error, "spaces") {
+		t.Fatalf("got %+v", v.Job)
+	}
 }
 
 func waitJob(t *testing.T, m *Manager, minor string, want JobState) {

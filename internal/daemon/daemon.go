@@ -187,8 +187,8 @@ func Run(ctx context.Context, cfg Config) error {
 	d := &daemon{root: cfg.Root, version: cfg.Version, startedAt: time.Now(), procs: supervisor.New()}
 	defer d.shutdown()
 
-	if runtime.GOOS == "darwin" {
-		d.builds = phpbuild.NewManager(cfg.Root, phpbuild.DefaultSources(), phpbuild.Hooks{
+	if workspace, err := phpbuild.DefaultWorkspace(); err == nil && runtime.GOOS == "darwin" {
+		d.builds = phpbuild.NewManager(cfg.Root, workspace, phpbuild.DefaultSources(), phpbuild.Hooks{
 			Installed: d.installedPHP,
 			Install:   d.installPHP,
 			AutoBuild: func() bool {

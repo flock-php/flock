@@ -7,6 +7,7 @@ public struct FlockConfig: Decodable, Sendable, Equatable {
     public var defaultNode: String
     public var xdebug: Bool
     public var dumps: Bool
+    public var phpAutoBuild: Bool
     public var root: String
     public var ports: Ports
     public var parked: [String]
@@ -62,6 +63,7 @@ public struct FlockConfig: Decodable, Sendable, Equatable {
     enum CodingKeys: String, CodingKey {
         case tld, xdebug, dumps, root, ports, parked, php, node
         case defaultPHP = "defaultPhp"
+        case phpAutoBuild = "phpAutoBuild"
         case defaultNode
     }
 
@@ -72,6 +74,7 @@ public struct FlockConfig: Decodable, Sendable, Equatable {
         defaultNode = try c.decodeIfPresent(String.self, forKey: .defaultNode) ?? ""
         xdebug = try c.decodeIfPresent(Bool.self, forKey: .xdebug) ?? false
         dumps = try c.decodeIfPresent(Bool.self, forKey: .dumps) ?? false
+        phpAutoBuild = try c.decodeIfPresent(Bool.self, forKey: .phpAutoBuild) ?? true
         root = try c.decodeIfPresent(String.self, forKey: .root) ?? ""
         ports = try c.decode(Ports.self, forKey: .ports)
         parked = try c.decodeIfPresent([String].self, forKey: .parked) ?? []
@@ -132,18 +135,21 @@ public struct SettingsChange: Encodable, Sendable {
     public var dumps: Bool?
     public var defaultPHP: String?
     public var defaultNode: String?
+    public var phpAutoBuild: Bool?
 
-    public init(xdebug: Bool? = nil, dumps: Bool? = nil, defaultPHP: String? = nil, defaultNode: String? = nil) {
+    public init(xdebug: Bool? = nil, dumps: Bool? = nil, defaultPHP: String? = nil, defaultNode: String? = nil, phpAutoBuild: Bool? = nil) {
         self.xdebug = xdebug
         self.dumps = dumps
         self.defaultPHP = defaultPHP
         self.defaultNode = defaultNode
+        self.phpAutoBuild = phpAutoBuild
     }
 
     enum CodingKeys: String, CodingKey {
         case xdebug, dumps
         case defaultPHP = "default_php"
         case defaultNode = "default_node"
+        case phpAutoBuild = "php_auto_build"
     }
 }
 

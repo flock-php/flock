@@ -111,6 +111,39 @@ public actor FlockClient {
         return try FlockJSON.decoder().decode(Installed.self, from: data).version
     }
 
+    // MARK: PHP versions
+
+    public func phpVersions() async throws -> PHPCatalog {
+        try await decode(PHPCatalog.self, "GET", "/v1/php/versions")
+    }
+
+    /// Installs a version: instantly when a verified build is waiting, otherwise it queues a build that installs when done.
+    public func installPHP(_ minor: String) async throws -> PHPCatalog {
+        try await decode(PHPCatalog.self, "POST", "/v1/php/versions/\(escape(minor))/install")
+    }
+
+    /// Builds a version without installing it, to verify it or prepare an instant install.
+    public func buildPHP(_ minor: String) async throws -> PHPCatalog {
+        try await decode(PHPCatalog.self, "POST", "/v1/php/versions/\(escape(minor))/build")
+    }
+
+    public func cancelPHPBuild(_ minor: String) async throws -> PHPCatalog {
+        try await decode(PHPCatalog.self, "POST", "/v1/php/versions/\(escape(minor))/cancel")
+    }
+
+    public func uninstallPHP(_ minor: String) async throws -> PHPCatalog {
+        try await decode(PHPCatalog.self, "DELETE", "/v1/php/versions/\(escape(minor))")
+    }
+
+    /// Asks the daemon to check php.net for new releases now.
+    public func checkPHPReleases() async throws -> PHPCatalog {
+        try await decode(PHPCatalog.self, "POST", "/v1/php/check", timeout: 60)
+    }
+
+    public func phpBuildLog(_ minor: String) async throws -> String {
+        String(decoding: try await send("GET", "/v1/php/versions/\(escape(minor))/log"), as: UTF8.self)
+    }
+
     public func mail() async throws -> [MailSummary] {
         try await decode([MailSummary]?.self, "GET", "/v1/mail") ?? []
     }
@@ -164,8 +197,8 @@ public actor FlockClient {
 
     // MARK: Transport
 
-    private func decode<T: Decodable>(_ type: T.Type, _ method: String, _ path: String, query: [URLQueryItem] = [], body: Data? = nil) async throws -> T {
-        let data = try await send(method, path, query: query, body: body)
+    private func decode<T: Decodable>(_ type: T.Type, _ method: String, _ path: String, query: [URLQueryItem] = [], body: Data? = nil, timeout: TimeInterval? = nil) async throws -> T {
+        let data = try await send(method, path, query: query, body: body, timeout: timeout)
         return try FlockJSON.decoder().decode(T.self, from: data)
     }
 

@@ -12,6 +12,8 @@ final class SettingsStore {
 
     private(set) var config: FlockConfig?
     private(set) var services: [Service] = []
+    /// PHP versions from php.net with install state; loaded by the PHP pane.
+    private(set) var php: PHPCatalog?
     var error: String?
     private(set) var isBusy = false
     var isVisible = false
@@ -66,6 +68,36 @@ final class SettingsStore {
             self.error = error.localizedDescription
         }
         await onChange?()
+    }
+
+    /// Reloads the PHP catalog (not part of `refresh`, it is only needed by the PHP pane).
+    func refreshPHP() async {
+        do {
+            let fresh = try await client.phpVersions()
+            if fresh != php {
+                php = fresh
+            }
+        } catch {
+            self.error = error.localizedDescription
+        }
+    }
+
+    /// Runs a PHP action and adopts the catalog it returns; installs also change config and status.
+    func performOnPHP(_ change: @Sendable (FlockClient) async throws -> PHPCatalog) async {
+        isBusy = true
+        defer { isBusy = false }
+        do {
+            php = try await change(client)
+            error = nil
+        } catch {
+            self.error = error.localizedDescription
+        }
+        await refresh()
+        await onChange?()
+    }
+
+    func phpBuildLog(_ minor: String) async -> String {
+        (try? await client.phpBuildLog(minor)) ?? ""
     }
 
     /// Lets the user pick folders; empty when cancelled.

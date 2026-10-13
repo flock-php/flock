@@ -73,9 +73,10 @@ type Hooks struct {
 
 // Manager discovers PHP releases and runs builds one at a time in the background.
 type Manager struct {
-	root    string
-	sources Sources
-	hooks   Hooks
+	root      string
+	workspace string
+	sources   Sources
+	hooks     Hooks
 
 	mu      sync.Mutex
 	jobs    map[string]*Job
@@ -94,16 +95,26 @@ type persisted struct {
 	Results      map[string]string `json:"results"` // full version → "ok" | "failed"
 }
 
-// NewManager creates a manager whose workspace is <root>/build/php.
-func NewManager(root string, sources Sources, hooks Hooks) *Manager {
-	m := &Manager{root: root, sources: sources, hooks: hooks, jobs: map[string]*Job{}, wake: make(chan struct{}, 1)}
+// NewManager creates a manager. root is Flock's data dir (for logs); workspace holds the build
+// tools, caches and finished builds. It must not contain spaces: static-php-cli runs shell
+// commands with unquoted paths (so not "~/Library/Application Support"; see DefaultWorkspace).
+func NewManager(root, workspace string, sources Sources, hooks Hooks) *Manager {
+	m := &Manager{root: root, workspace: workspace, sources: sources, hooks: hooks, jobs: map[string]*Job{}, wake: make(chan struct{}, 1)}
 	m.load()
 	return m
 }
 
-func (m *Manager) workspace() string { return filepath.Join(m.root, "build", "php") }
+// DefaultWorkspace is ~/Library/Caches/dev.flock/php-build: a cache (safe to delete) without spaces.
+func DefaultWorkspace() (string, error) {
+	cache, err := os.UserCacheDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(cache, "dev.flock", "php-build"), nil
+}
+
 func (m *Manager) readyDir(full string) string {
-	return filepath.Join(m.workspace(), "ready", full)
+	return filepath.Join(m.workspace, "ready", full)
 }
 
 // LogPath is the build log of a minor version.
@@ -112,7 +123,7 @@ func (m *Manager) LogPath(minor string) string {
 }
 
 func (m *Manager) load() {
-	data, err := os.ReadFile(filepath.Join(m.workspace(), "state.json"))
+	data, err := os.ReadFile(filepath.Join(m.workspace, "state.json"))
 	if err == nil {
 		_ = json.Unmarshal(data, &m.state)
 	}
@@ -127,8 +138,8 @@ func (m *Manager) save() {
 	if err != nil {
 		return
 	}
-	_ = os.MkdirAll(m.workspace(), 0o755)
-	_ = os.WriteFile(filepath.Join(m.workspace(), "state.json"), data, 0o644)
+	_ = os.MkdirAll(m.workspace, 0o755)
+	_ = os.WriteFile(filepath.Join(m.workspace, "state.json"), data, 0o644)
 }
 
 // Run checks for releases periodically and processes the build queue until ctx ends.
@@ -262,6 +273,9 @@ func (m *Manager) Versions() []Version {
 // buildable: static-php-cli has built this minor itself, or it lies within the range of minors
 // it has built, or Flock built it before. Must hold m.mu.
 func (m *Manager) buildable(minor, minStatic, maxStatic string) bool {
+	if Compare(minor, MinimumBuildable) < 0 {
+		return false
+	}
 	if m.state.StaticMinors[minor] || (maxStatic != "" && Compare(minor, minStatic) >= 0 && Compare(minor, maxStatic) <= 0) {
 		return true
 	}
@@ -274,7 +288,7 @@ func (m *Manager) buildable(minor, minStatic, maxStatic string) bool {
 }
 
 func unsupportedNote(minor, minStatic string) string {
-	if minStatic != "" && Compare(minor, minStatic) < 0 {
+	if Compare(minor, MinimumBuildable) < 0 || (minStatic != "" && Compare(minor, minStatic) < 0) {
 		return fmt.Sprintf("PHP %s no longer compiles with current libraries and Apple's compiler (e.g. libxml2), so it can't be built.", minor)
 	}
 	return fmt.Sprintf("The build tooling (static-php-cli) doesn't support PHP %s yet. Flock checks again automatically.", minor)
@@ -384,9 +398,13 @@ func (m *Manager) worker(ctx context.Context) {
 	}
 }
 
+// errRateLimited marks builds that failed because GitHub refused anonymous API requests.
+var errRateLimited = errors.New("GitHub's limit for anonymous downloads (60 per hour) was reached — the build tools could not fetch some libraries. Flock retries automatically later; you can also retry in an hour")
+
 var (
 	builtLine = regexp.MustCompile(`^FLOCK_BUILT (\S+) (.+)$`)
-	ansi      = regexp.MustCompile(`\x1b\[[0-9;]*[A-Za-z]`)
+
+	ansi = regexp.MustCompile(`\x1b\[[0-9;]*[A-Za-z]`)
 )
 
 func (m *Manager) run(parent context.Context, minor string, job *Job) {
@@ -408,7 +426,8 @@ func (m *Manager) run(parent context.Context, minor string, job *Job) {
 		job.State, job.Error = Canceled, ""
 	case err != nil:
 		job.State, job.Error = Failed, err.Error()
-		if latest := m.latestLocked(minor); latest != "" {
+		// A rate-limited download says nothing about whether the version builds; don't block retries.
+		if latest := m.latestLocked(minor); latest != "" && !errors.Is(err, errRateLimited) {
 			m.state.Results[latest] = "failed"
 		}
 	default:
@@ -424,12 +443,12 @@ func (m *Manager) run(parent context.Context, minor string, job *Job) {
 	}
 
 	// Keep only the newest ready build per minor.
-	if old, _ := filepath.Glob(filepath.Join(m.workspace(), "ready", minor+".*")); len(old) > 0 {
+	if old, _ := filepath.Glob(filepath.Join(m.workspace, "ready", minor+".*")); len(old) > 0 {
 		for _, o := range old {
 			_ = os.RemoveAll(o)
 		}
 	}
-	if err := os.MkdirAll(filepath.Join(m.workspace(), "ready"), 0o755); err == nil {
+	if err := os.MkdirAll(filepath.Join(m.workspace, "ready"), 0o755); err == nil {
 		err = os.Rename(dir, m.readyDir(full))
 	}
 	if install {
@@ -456,7 +475,10 @@ func (m *Manager) build(ctx context.Context, minor string, job *Job) (string, st
 		return "", "", errors.New("the Xcode Command Line Tools are required — run `xcode-select --install`")
 	}
 
-	ws := m.workspace()
+	ws := m.workspace
+	if strings.ContainsAny(ws, " \t") {
+		return "", "", fmt.Errorf("the build directory %q contains spaces, which static-php-cli cannot handle", ws)
+	}
 	if err := os.MkdirAll(ws, 0o755); err != nil {
 		return "", "", err
 	}
@@ -479,6 +501,7 @@ func (m *Manager) build(ctx context.Context, minor string, job *Job) (string, st
 	cmd.Stdout, cmd.Stderr = writer, writer
 
 	var full, dir, lastLine string
+	githubRefused := false
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
@@ -494,6 +517,9 @@ func (m *Manager) build(ctx context.Context, minor string, job *Job) (string, st
 			if b := builtLine.FindStringSubmatch(trimmed); b != nil {
 				full, dir = b[1], b[2]
 			}
+			if strings.Contains(trimmed, "returned error: 403") {
+				githubRefused = true
+			}
 			lastLine = trimmed
 			m.mu.Lock()
 			job.Step = shorten(strings.TrimPrefix(trimmed, "==> "), 140)
@@ -506,6 +532,9 @@ func (m *Manager) build(ctx context.Context, minor string, job *Job) (string, st
 	<-done
 
 	if runErr != nil {
+		if githubRefused {
+			return "", "", errRateLimited
+		}
 		return "", "", fmt.Errorf("build failed: %s (see the build log)", shorten(lastLine, 200))
 	}
 	if full == "" || dir == "" {

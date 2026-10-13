@@ -72,6 +72,12 @@ enum SelfTest {
                 return services.map { "\($0.id)[\($0.category)]\($0.running ? "↑" : "↓")\($0.port > 0 ? ":\($0.port)" : "")" }.joined(separator: " ")
             }
 
+            await check("GET /v1/php/versions") {
+                let catalog = try await client.phpVersions()
+                let rows = catalog.versions.map { "\($0.minor):\($0.status.rawValue)\($0.job.map { "[\($0.state.rawValue)]" } ?? "")" }
+                return "auto_build \(catalog.autoBuild), checked \(catalog.checkedAt.map { "\($0)" } ?? "never"), \(rows.joined(separator: " "))"
+            }
+
             semaphore.signal()
         }
 

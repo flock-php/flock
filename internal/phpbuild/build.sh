@@ -18,6 +18,7 @@ EXTENSIONS="bcmath,bz2,calendar,ctype,curl,dom,exif,fileinfo,filter,ftp,gd,gmp,i
 # Xdebug is a Zend extension and cannot be compiled in statically; it is built as xdebug.so and
 # only loaded when debugging is switched on. It is optional: new PHP versions often build before
 # Xdebug supports them, and PHP is still useful without it.
+# (PHP < 8.1 is not buildable: its libxml extension does not compile against current libxml2.)
 SHARED="xdebug"
 [[ "${FLOCK_XDEBUG:-1}" == "0" ]] && SHARED=""
 
@@ -34,29 +35,23 @@ if [[ ! -x ./spc || -n "$(find ./spc -mtime +1 2>/dev/null)" ]]; then
 fi
 ./spc doctor --auto-fix
 
-build() {
-  local shared="$1" with=""
-  [[ -n "$shared" ]] && with=",$shared"
+with=""
+[[ -n "$SHARED" ]] && with=",$SHARED"
 
-  echo "==> Downloading sources for PHP $PHP_MINOR"
-  ./spc download --with-php="$PHP_MINOR" --for-extensions="$EXTENSIONS$with" --prefer-pre-built \
-    --ignore-cache-sources="php-src${with}"
+echo "==> Downloading sources for PHP $PHP_MINOR"
+./spc download --with-php="$PHP_MINOR" --for-extensions="$EXTENSIONS$with" --prefer-pre-built \
+  --ignore-cache-sources="php-src${with}"
 
-  echo "==> Compiling PHP $PHP_MINOR${shared:+ with $shared}"
-  rm -rf buildroot/modules buildroot/bin/php buildroot/bin/php-fpm
-  # spc's post-build sanity checks are stricter than Flock needs (e.g. the pre-built sqlite lacks
-  # SQLITE_ENABLE_COLUMN_METADATA), so don't fail on them; the binaries are verified below.
-  ./spc build "$EXTENSIONS" ${shared:+--build-shared="$shared"} --build-cli --build-fpm \
-    || echo "spc build reported a problem, verifying binaries…"
-  [[ -x buildroot/bin/php && -x buildroot/bin/php-fpm ]]
-}
-
-if ! build "$SHARED"; then
-  [[ -z "$SHARED" ]] && { echo "build failed: php or php-fpm missing" >&2; exit 1; }
-  echo "==> Build with $SHARED failed, retrying without it"
-  SHARED=""
-  build "" || { echo "build failed: php or php-fpm missing" >&2; exit 1; }
-fi
+echo "==> Compiling PHP $PHP_MINOR${SHARED:+ with $SHARED}"
+rm -rf buildroot/modules buildroot/bin/php buildroot/bin/php-fpm
+# spc's post-build sanity checks are stricter than Flock needs (e.g. the pre-built sqlite lacks
+# SQLITE_ENABLE_COLUMN_METADATA), so don't fail on them; the binaries are verified below.
+# Shared extensions are compiled after PHP itself, so a failing Xdebug still leaves working
+# binaries (handled below); missing binaries mean PHP itself did not build.
+./spc build "$EXTENSIONS" ${SHARED:+--build-shared="$SHARED"} --build-cli --build-fpm \
+  || echo "spc build reported a problem, verifying binaries…"
+[[ -x buildroot/bin/php && -x buildroot/bin/php-fpm ]] \
+  || { echo "build failed: php or php-fpm missing (see the errors above)" >&2; exit 1; }
 
 echo "==> Verifying extensions"
 modules="$(./buildroot/bin/php -n -m | tr '[:upper:]' '[:lower:]')"

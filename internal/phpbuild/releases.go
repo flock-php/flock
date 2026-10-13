@@ -16,8 +16,12 @@ import (
 	"time"
 )
 
-// MinimumMinor is the oldest PHP version Flock offers.
-const MinimumMinor = "7.4"
+// MinimumMinor is the oldest PHP version Flock lists; MinimumBuildable the oldest that still
+// compiles: PHP 8.0 and 7.4 fail against current libxml2 (fixed upstream only from 8.1).
+const (
+	MinimumMinor     = "7.4"
+	MinimumBuildable = "8.1"
+)
 
 // Release is the newest release of one PHP minor version.
 type Release struct {
