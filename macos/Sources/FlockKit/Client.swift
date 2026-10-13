@@ -54,10 +54,61 @@ public actor FlockClient {
 
     /// Changes only the given settings and returns the new status.
     public func updateSettings(xdebug: Bool? = nil, dumps: Bool? = nil) async throws -> Status {
-        var body: [String: Bool] = [:]
-        body["xdebug"] = xdebug
-        body["dumps"] = dumps
-        return try await decode(Status.self, "POST", "/v1/settings", body: try JSONEncoder().encode(body))
+        try await updateSettings(SettingsChange(xdebug: xdebug, dumps: dumps))
+    }
+
+    /// Changes only the non-nil settings and returns the new status.
+    public func updateSettings(_ change: SettingsChange) async throws -> Status {
+        try await decode(Status.self, "POST", "/v1/settings", body: try JSONEncoder().encode(change))
+    }
+
+    public func config() async throws -> FlockConfig {
+        try await decode(FlockConfig.self, "GET", "/v1/config")
+    }
+
+    public func services() async throws -> [Service] {
+        try await decode([Service]?.self, "GET", "/v1/services") ?? []
+    }
+
+    public func startService(_ id: String) async throws -> [Service] {
+        try await decode([Service]?.self, "POST", "/v1/services/\(escape(id))/start") ?? []
+    }
+
+    public func stopService(_ id: String) async throws -> [Service] {
+        try await decode([Service]?.self, "POST", "/v1/services/\(escape(id))/stop") ?? []
+    }
+
+    public func setServicePort(_ id: String, port: Int) async throws -> [Service] {
+        try await decode([Service]?.self, "PATCH", "/v1/services/\(escape(id))", body: try JSONEncoder().encode(["port": port])) ?? []
+    }
+
+    /// Links a directory as a site (name defaults to the directory name on the daemon side).
+    public func linkSite(path: String, name: String? = nil, php: String? = nil, secured: Bool = false) async throws -> Status {
+        struct Body: Encodable { var path: String; var name: String?; var php: String?; var secured: Bool }
+        return try await decode(Status.self, "POST", "/v1/sites", body: try JSONEncoder().encode(Body(path: path, name: name, php: php, secured: secured)))
+    }
+
+    public func updateSite(_ name: String, _ change: SiteChange) async throws -> Status {
+        try await decode(Status.self, "PATCH", "/v1/sites/\(escape(name))", body: try JSONEncoder().encode(change))
+    }
+
+    public func unlinkSite(_ name: String) async throws -> Status {
+        try await decode(Status.self, "DELETE", "/v1/sites/\(escape(name))")
+    }
+
+    public func park(_ path: String) async throws -> Status {
+        try await decode(Status.self, "POST", "/v1/parked", body: try JSONEncoder().encode(["path": path]))
+    }
+
+    public func forget(_ path: String) async throws -> Status {
+        try await decode(Status.self, "DELETE", "/v1/parked", body: try JSONEncoder().encode(["path": path]))
+    }
+
+    /// Downloads and installs a Node.js version ("20", "20.19" or exact); this can take a minute.
+    public func installNode(_ version: String) async throws -> String {
+        struct Installed: Decodable { var version: String }
+        let data = try await send("POST", "/v1/node/install", body: try JSONEncoder().encode(["version": version]), timeout: 300)
+        return try FlockJSON.decoder().decode(Installed.self, from: data).version
     }
 
     public func mail() async throws -> [MailSummary] {
@@ -120,23 +171,23 @@ public actor FlockClient {
 
     /// Sends a request; on a connection failure it re-reads api.json once and retries,
     /// because a restarted daemon may listen on a new port with a new token.
-    private func send(_ method: String, _ path: String, query: [URLQueryItem] = [], body: Data? = nil) async throws -> Data {
+    private func send(_ method: String, _ path: String, query: [URLQueryItem] = [], body: Data? = nil, timeout: TimeInterval? = nil) async throws -> Data {
         do {
-            return try await attempt(method, path, query: query, body: body, config: try loadConfig(force: false))
-        } catch is URLError {
+            return try await attempt(method, path, query: query, body: body, timeout: timeout, config: try loadConfig(force: false))
+        } catch let error as URLError where error.code != .timedOut {
             config = nil
             do {
-                return try await attempt(method, path, query: query, body: body, config: try loadConfig(force: true))
+                return try await attempt(method, path, query: query, body: body, timeout: timeout, config: try loadConfig(force: true))
             } catch is URLError {
                 throw FlockError.notRunning
             }
         } catch FlockError.server(401, _) {
             config = nil
-            return try await attempt(method, path, query: query, body: body, config: try loadConfig(force: true))
+            return try await attempt(method, path, query: query, body: body, timeout: timeout, config: try loadConfig(force: true))
         }
     }
 
-    private func attempt(_ method: String, _ path: String, query: [URLQueryItem], body: Data?, config: APIConfig) async throws -> Data {
+    private func attempt(_ method: String, _ path: String, query: [URLQueryItem], body: Data?, timeout: TimeInterval?, config: APIConfig) async throws -> Data {
         var components = URLComponents(url: config.url.appendingPathComponent(path), resolvingAgainstBaseURL: false)!
         if !query.isEmpty {
             components.queryItems = query
@@ -144,6 +195,9 @@ public actor FlockClient {
 
         var request = URLRequest(url: components.url!)
         request.httpMethod = method
+        if let timeout {
+            request.timeoutInterval = timeout
+        }
         request.setValue("Bearer \(config.token)", forHTTPHeaderField: "Authorization")
         if let body {
             request.httpBody = body

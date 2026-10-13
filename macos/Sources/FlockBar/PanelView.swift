@@ -168,6 +168,10 @@ struct PanelView: View {
                 Task { await model.restart() }
             }
             .disabled(model.isRestarting || !model.isRunning)
+            Button("Settings…") {
+                openWindow.activating(WindowID.settings)
+            }
+            .keyboardShortcut(",")
             Spacer()
             Button("Quit Flock Bar") {
                 NSApp.terminate(nil)

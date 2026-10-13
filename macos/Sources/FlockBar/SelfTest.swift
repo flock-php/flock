@@ -63,6 +63,15 @@ enum SelfTest {
                 return result
             }
 
+            await check("GET /v1/config") {
+                let c = try await client.config()
+                return "tld \(c.tld), php \(c.php.map(\.fullVersion)) (default \(c.defaultPHP)), node \(c.node) (default \(c.defaultNode)), parked \(c.parked.count), smtp :\(c.ports.smtp)"
+            }
+            await check("GET /v1/services") {
+                let services = try await client.services()
+                return services.map { "\($0.id)[\($0.category)]\($0.running ? "↑" : "↓")\($0.port > 0 ? ":\($0.port)" : "")" }.joined(separator: " ")
+            }
+
             semaphore.signal()
         }
 

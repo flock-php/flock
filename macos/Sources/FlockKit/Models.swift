@@ -29,6 +29,7 @@ public struct Status: Decodable, Sendable, Equatable {
         public var domain: String
         public var path: String
         public var php: String
+        public var node: String?
         public var secured: Bool
         public var parked: Bool
         public var url: String?

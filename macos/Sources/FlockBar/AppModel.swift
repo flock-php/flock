@@ -15,6 +15,7 @@ final class AppModel {
     let mail: MailStore
     let dumps: DumpStore
     let logs: LogStore
+    let settings: SettingsStore
 
     @ObservationIgnored private var pollTask: Task<Void, Never>?
 
@@ -22,7 +23,9 @@ final class AppModel {
         mail = MailStore(client: client)
         dumps = DumpStore(client: client)
         logs = LogStore(client: client)
+        settings = SettingsStore(client: client)
         startPolling()
+        settings.onChange = { [weak self] in await self?.refresh() }
     }
 
     var isRunning: Bool { status != nil }
@@ -55,6 +58,7 @@ final class AppModel {
         let previous = status
         status = new
         error = nil
+        Task { await settings.refreshIfVisible() }
 
         // Lists in open windows follow the counters in the status.
         if previous?.mailCount != new.mailCount {

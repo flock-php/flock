@@ -7,6 +7,8 @@ import WebKit
 enum Snapshot {
     static let target: String? = argument(after: "--snapshot", offset: 1)
     static let path: String? = argument(after: "--snapshot", offset: 2)
+    /// `--pane <name>` picks the Settings pane to show.
+    static let pane: String? = argument(after: "--pane", offset: 1)
 
     private static func argument(after flag: String, offset: Int) -> String? {
         let args = CommandLine.arguments

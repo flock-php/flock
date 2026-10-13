@@ -37,6 +37,14 @@ struct FlockBarApp: App {
                 .environment(model)
         }
         .defaultSize(width: 980, height: 640)
+
+        Window("Flock Settings", id: WindowID.settings) {
+            SettingsWindow()
+                .environment(model)
+        }
+        .defaultSize(width: 860, height: 560)
+        .windowStyle(.hiddenTitleBar)
+        .windowResizability(.contentMinSize)
     }
 }
 
@@ -60,6 +68,7 @@ enum WindowID {
     static let mail = "mail"
     static let dumps = "dumps"
     static let logs = "logs"
+    static let settings = "settings"
 }
 
 extension OpenWindowAction {
