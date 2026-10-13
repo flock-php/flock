@@ -36,6 +36,25 @@ private func decode<T: Decodable>(_ type: T.Type, _ json: String) throws -> T {
     #expect(status.isDegraded)
 }
 
+@Test func decodesExtraDomainsAndTheWildcardState() throws {
+    let status = try decode(Status.self, """
+    {"version":"dev","pid":1,"started_at":"2026-10-13T14:10:01Z",
+     "dns":{"tld":"test","addr":"127.0.0.1:53535","wildcard":true,"max_depth":4},
+     "http_port":80,"https_port":443,"mail":"","xdebug":false,"dumps":false,"mail_count":0,"dump_count":0,"processes":[],
+     "sites":[{"name":"app","domain":"app.test","path":"/code/app","php":"8.5","secured":true,"parked":false,"url":"https://app.test",
+               "domains":[{"entry":"tenant1","host":"tenant1.app.test","alias":false,"url":"https://tenant1.app.test"},
+                          {"entry":"promo.test","host":"promo.test","alias":true,"problem":"promo.test is already served by promo"}]},
+              {"name":"blog","domain":"blog.test","path":"/code/blog","php":"8.5","secured":false,"parked":true,"domains":null}]}
+    """)
+
+    #expect(status.dns.wildcard && status.dns.wildcardProblem.isEmpty && status.dns.maxDepth == 4)
+    let app = status.sites[0]
+    #expect(app.domains.map(\.host) == ["tenant1.app.test", "promo.test"])
+    #expect(app.domains[0].url == "https://tenant1.app.test" && !app.domains[0].alias)
+    #expect(app.domains[1].alias && app.domains[1].url == nil && app.domains[1].problem != nil)
+    #expect(status.sites[1].domains.isEmpty)
+}
+
 @Test func decodesAMinimalStatusWithOmittedFields() throws {
     let status = try decode(Status.self, """
     {"version":"dev","pid":1,"started_at":"2026-10-13T14:10:01Z","dns":{"tld":"test","addr":""},
@@ -92,4 +111,20 @@ private func decode<T: Decodable>(_ type: T.Type, _ json: String) throws -> T {
 @Test func decodesTheAPIConfig() throws {
     let config = try JSONDecoder().decode(APIConfig.self, from: Data(#"{"url":"http://127.0.0.1:53531","token":"abc"}"#.utf8))
     #expect(config.url.port == 53531)
+}
+
+@Test func decodesWhereASiteVersionComesFrom() throws {
+    let status = try decode(Status.self, """
+    {"version":"dev","pid":1,"started_at":"2026-10-13T14:10:01Z","dns":{"tld":"test","addr":""},
+     "http_port":80,"https_port":443,"mail":"","xdebug":false,"dumps":false,"mail_count":0,"dump_count":0,"processes":[],
+     "sites":[{"name":"shop","domain":"shop.test","path":"/code/shop","secured":false,"parked":false,
+               "php":"8.3","php_source":"isolated","php_pinned":"8.4","php_file":"/code/shop/.flockrc",
+               "node":"24","node_source":"project","node_pinned":"24","node_file":"/code/shop/.flockrc","node_shadowed":".nvmrc: 20"},
+              {"name":"blog","domain":"blog.test","path":"/code/blog","php":"8.5","secured":false,"parked":true}]}
+    """)
+
+    let shop = status.sites[0]
+    #expect(shop.phpSource == .isolated && shop.phpPinned == "8.4" && shop.phpPinnedHere)
+    #expect(shop.nodeSource == .project && shop.nodeShadowed == ".nvmrc: 20" && shop.nodePinnedHere)
+    #expect(status.sites[1].phpSource == .default && !status.sites[1].phpPinnedHere)
 }

@@ -14,6 +14,8 @@ final class SettingsStore {
     private(set) var services: [Service] = []
     /// PHP versions from php.net with install state; loaded by the PHP pane.
     private(set) var php: PHPCatalog?
+    /// Node.js lines from nodejs.org with install state; loaded by the Node pane.
+    private(set) var node: NodeCatalog?
     var error: String?
     private(set) var isBusy = false
     var isVisible = false
@@ -94,6 +96,29 @@ final class SettingsStore {
         }
         await refresh()
         await onChange?()
+    }
+
+    /// Reloads the Node.js catalog (only the Node pane needs it).
+    func refreshNode() async {
+        do {
+            let fresh = try await client.nodeVersions()
+            if fresh != node {
+                node = fresh
+            }
+        } catch {
+            self.error = error.localizedDescription
+        }
+    }
+
+    /// Runs a Node.js action and adopts the catalog it returns.
+    func performOnNode(_ change: @Sendable (FlockClient) async throws -> NodeCatalog) async {
+        do {
+            node = try await change(client)
+            error = nil
+        } catch {
+            self.error = error.localizedDescription
+        }
+        await refresh()
     }
 
     func phpBuildLog(_ minor: String) async -> String {

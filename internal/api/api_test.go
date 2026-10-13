@@ -221,7 +221,7 @@ func TestSiteAndParkedEndpoints(t *testing.T) {
 		t.Fatalf("unlink: %d", resp.StatusCode)
 	}
 	if resp, _ := call(t, "DELETE", srv.URL+"/v1/parked", "", `{"path":"`+parent+`"}`); resp.StatusCode != http.StatusOK || len(b.config(t).Parked) != 0 {
-		t.Fatalf("forget: %d %v", resp.StatusCode, b.config(t).Parked)
+		t.Fatalf("unpark: %d %v", resp.StatusCode, b.config(t).Parked)
 	}
 }
 
@@ -255,5 +255,46 @@ func TestConfigView(t *testing.T) {
 		if !strings.Contains(body, want) {
 			t.Fatalf("missing %s in %s", want, body)
 		}
+	}
+}
+
+func TestSiteDomainEndpoints(t *testing.T) {
+	b := &fakeBackend{root: t.TempDir()}
+	cfg := config.Default()
+	cfg.Upsert(config.Site{Name: "app", Path: t.TempDir()})
+	cfg.Upsert(config.Site{Name: "shop", Path: t.TempDir()})
+	if err := cfg.Save(b.root); err != nil {
+		t.Fatal(err)
+	}
+	srv := serve(t, b, "")
+
+	for _, d := range []string{"tenant1", "A.B.app.test", "app-2.test"} {
+		if resp, body := call(t, "POST", srv.URL+"/v1/sites/app/domains", "", `{"domain":"`+d+`"}`); resp.StatusCode != http.StatusOK {
+			t.Fatalf("add %s: %d %s", d, resp.StatusCode, body)
+		}
+	}
+	if site, _ := b.config(t).FindSite("app"); strings.Join(site.Domains, ",") != "tenant1,a.b,app-2.test" {
+		t.Fatalf("domains not stored as expected: %v", site.Domains)
+	}
+
+	for d, want := range map[string]string{"tenant1": "already", "shop.test": "shop", "a.b.c.d.e": "levels"} {
+		resp, body := call(t, "POST", srv.URL+"/v1/sites/app/domains", "", `{"domain":"`+d+`"}`)
+		if resp.StatusCode != http.StatusBadRequest || !strings.Contains(body, want) {
+			t.Errorf("add %s: want 400 mentioning %q, got %d %s", d, want, resp.StatusCode, body)
+		}
+	}
+
+	// Removal takes the stored entry or the full name.
+	if resp, body := call(t, "DELETE", srv.URL+"/v1/sites/app/domains/a.b.app.test", "", ""); resp.StatusCode != http.StatusOK {
+		t.Fatalf("remove: %d %s", resp.StatusCode, body)
+	}
+	if resp, body := call(t, "DELETE", srv.URL+"/v1/sites/app/domains/tenant1", "", ""); resp.StatusCode != http.StatusOK {
+		t.Fatalf("remove: %d %s", resp.StatusCode, body)
+	}
+	if resp, _ := call(t, "DELETE", srv.URL+"/v1/sites/app/domains/tenant1", "", ""); resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("removing a missing domain must fail, got %d", resp.StatusCode)
+	}
+	if site, _ := b.config(t).FindSite("app"); strings.Join(site.Domains, ",") != "app-2.test" {
+		t.Fatalf("domains after removal: %v", site.Domains)
 	}
 }

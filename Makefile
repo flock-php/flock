@@ -22,10 +22,12 @@ lint:
 app:
 	macos/build-app.sh
 
-# flock.exe for Windows (copy it to the Windows machine and run `flock.exe install`).
+# flock.exe and flock-helper.exe for Windows (copy both to the Windows machine and run `flock.exe install`).
 windows:
 	GOOS=windows GOARCH=amd64 go build -ldflags "$(LDFLAGS)" -o dist/windows-amd64/flock.exe ./cmd/flock
+	GOOS=windows GOARCH=amd64 go build -ldflags "-s -w -X main.version=$(VERSION)" -o dist/windows-amd64/flock-helper.exe ./cmd/flock-helper
 	GOOS=windows GOARCH=arm64 go build -ldflags "$(LDFLAGS)" -o dist/windows-arm64/flock.exe ./cmd/flock
+	GOOS=windows GOARCH=arm64 go build -ldflags "-s -w -X main.version=$(VERSION)" -o dist/windows-arm64/flock-helper.exe ./cmd/flock-helper
 
 # The tray app's models and API client (windows/FlockKit) run on any OS; the app itself is built on Windows (windows/build.ps1).
 windows-test:

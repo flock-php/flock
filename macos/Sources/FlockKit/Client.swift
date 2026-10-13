@@ -96,11 +96,32 @@ public actor FlockClient {
         try await decode(Status.self, "DELETE", "/v1/sites/\(escape(name))")
     }
 
+    /// Adds an extra domain: a subdomain ("tenant1", "a.b") or an alias ("my-app-2.test").
+    public func addDomain(site: String, domain: String) async throws -> Status {
+        try await decode(Status.self, "POST", "/v1/sites/\(escape(site))/domains", body: try JSONEncoder().encode(["domain": domain]))
+    }
+
+    /// Removes an extra domain, given as `SiteDomain.entry` (or its full name).
+    public func removeDomain(site: String, domain: String) async throws -> Status {
+        try await decode(Status.self, "DELETE", "/v1/sites/\(escape(site))/domains/\(escape(domain))")
+    }
+
+    /// Writes a version (tool "php" or "node"; empty version: the one the site uses now) into the
+    /// site's project files and lifts the site's isolation for that tool.
+    public func pin(site: String, tool: String, version: String = "") async throws -> Status {
+        try await decode(Status.self, "POST", "/v1/sites/\(escape(site))/pin", body: try JSONEncoder().encode(["tool": tool, "version": version]))
+    }
+
+    /// Removes a tool's version from the site's project files.
+    public func unpin(site: String, tool: String) async throws -> Status {
+        try await decode(Status.self, "DELETE", "/v1/sites/\(escape(site))/pin/\(escape(tool))")
+    }
+
     public func park(_ path: String) async throws -> Status {
         try await decode(Status.self, "POST", "/v1/parked", body: try JSONEncoder().encode(["path": path]))
     }
 
-    public func forget(_ path: String) async throws -> Status {
+    public func unpark(_ path: String) async throws -> Status {
         try await decode(Status.self, "DELETE", "/v1/parked", body: try JSONEncoder().encode(["path": path]))
     }
 
@@ -109,6 +130,31 @@ public actor FlockClient {
         struct Installed: Decodable { var version: String }
         let data = try await send("POST", "/v1/node/install", body: try JSONEncoder().encode(["version": version]), timeout: 300)
         return try FlockJSON.decoder().decode(Installed.self, from: data).version
+    }
+
+    // MARK: Node.js versions
+
+    public func nodeVersions() async throws -> NodeCatalog {
+        try await decode(NodeCatalog.self, "GET", "/v1/node/versions", timeout: 60)
+    }
+
+    /// Installs the newest release of a major line, or updates it; a download of about 30 MB.
+    public func installNodeMajor(_ major: String) async throws -> NodeCatalog {
+        try await decode(NodeCatalog.self, "POST", "/v1/node/versions/\(escape(major))/install", timeout: 600)
+    }
+
+    /// Updates a line's npm to the newest version that supports it; its global packages stay.
+    public func updateNpm(_ major: String) async throws -> NodeCatalog {
+        try await decode(NodeCatalog.self, "POST", "/v1/node/versions/\(escape(major))/npm", timeout: 600)
+    }
+
+    public func uninstallNode(_ major: String) async throws -> NodeCatalog {
+        try await decode(NodeCatalog.self, "DELETE", "/v1/node/versions/\(escape(major))")
+    }
+
+    /// Asks the daemon to check nodejs.org (and npm's registry) for new releases now.
+    public func checkNodeReleases() async throws -> NodeCatalog {
+        try await decode(NodeCatalog.self, "POST", "/v1/node/check", timeout: 60)
     }
 
     // MARK: PHP versions

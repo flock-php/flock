@@ -25,9 +25,12 @@ const DefaultBaseURL = "https://nodejs.org/dist"
 
 // Installer downloads and unpacks Node.js versions.
 type Installer struct {
-	Root    string       // Flock data directory; versions land in <Root>/node/<version>
-	BaseURL string       // defaults to DefaultBaseURL
-	HTTP    *http.Client // defaults to http.DefaultClient
+	Root        string // Flock data directory; versions land in <Root>/node/<version>
+	BaseURL     string // defaults to DefaultBaseURL
+	ScheduleURL string // defaults to DefaultScheduleURL
+	// NpmRegistryURL is npm's package document; defaults to npmRegistry.
+	NpmRegistryURL string
+	HTTP           *http.Client // defaults to http.DefaultClient
 }
 
 // Dir is where all Node versions are installed.
@@ -127,15 +130,25 @@ func (i *Installer) fetch(ctx context.Context, path string) ([]byte, error) {
 	if base == "" {
 		base = DefaultBaseURL
 	}
+	return i.get(ctx, strings.TrimSuffix(base, "/")+"/"+path)
+}
+
+func (i *Installer) get(ctx context.Context, url string) ([]byte, error) {
+	return i.getAccept(ctx, url, "")
+}
+
+func (i *Installer) getAccept(ctx context.Context, url, accept string) ([]byte, error) {
 	client := i.HTTP
 	if client == nil {
 		client = http.DefaultClient
 	}
 
-	url := strings.TrimSuffix(base, "/") + "/" + path
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return nil, err
+	}
+	if accept != "" {
+		req.Header.Set("Accept", accept)
 	}
 
 	resp, err := client.Do(req)
@@ -203,6 +216,13 @@ func Installed(root string) ([]string, error) {
 	return versions, nil
 }
 
+// NotInstalledError reports that no installed version matches Spec.
+type NotInstalledError struct{ Spec string }
+
+func (e *NotInstalledError) Error() string {
+	return fmt.Sprintf("no installed Node.js matches %q (install it with `flock node install %s`)", e.Spec, e.Spec)
+}
+
 // Resolve returns the bin directory and version of the newest installed version matching spec.
 // On Windows the binaries live at the version root; elsewhere in bin/.
 func Resolve(root, spec string) (binDir, version string, err error) {
@@ -213,40 +233,68 @@ func Resolve(root, spec string) (binDir, version string, err error) {
 
 	version, ok := newestMatch(versions, spec)
 	if !ok {
-		return "", "", fmt.Errorf("no installed Node.js matches %q (install it with `flock node install %s`)", spec, spec)
+		return "", "", &NotInstalledError{Spec: spec}
 	}
 
-	dir := filepath.Join(Dir(root), version)
+	dir, err := BinDir(root, version)
+	return dir, version, err
+}
+
+// BinDir is where an installed version's node (and bundled npm) are: on Windows the version
+// directory itself, elsewhere its bin/.
+func BinDir(root, version string) (string, error) {
+	dir := VersionDir(root, version)
+	if _, err := os.Stat(dir); err != nil {
+		return "", &NotInstalledError{Spec: version}
+	}
 	if runtime.GOOS != "windows" {
 		dir = filepath.Join(dir, "bin")
 	}
-
-	return dir, version, nil
+	return dir, nil
 }
 
 // DetectSpec walks up from dir looking for .nvmrc or .node-version and returns the version spec
 // it names. Aliases like "lts/*" or "node" return "" so the caller falls back to its default.
 func DetectSpec(dir string) string {
+	spec, _ := DetectSpecFile(dir)
+	return spec
+}
+
+// SpecFiles are the files a project names its Node.js version in, in the order they are looked for.
+var SpecFiles = []string{".nvmrc", ".node-version"}
+
+// DetectSpecFile is DetectSpec that also returns the file the spec came from.
+func DetectSpecFile(dir string) (spec, file string) {
 	dir = filepath.Clean(dir)
 	for {
-		for _, name := range []string{".nvmrc", ".node-version"} {
-			data, err := os.ReadFile(filepath.Join(dir, name))
+		for _, name := range SpecFiles {
+			path := filepath.Join(dir, name)
+			data, err := os.ReadFile(path)
 			if err != nil {
 				continue
 			}
-			spec := strings.TrimPrefix(strings.TrimSpace(string(data)), "v")
-			if _, ok := parse(spec); !ok {
-				return ""
+			spec := ValidSpec(string(data))
+			if spec == "" {
+				return "", ""
 			}
-			return spec
+			return spec, path
 		}
 
 		parent := filepath.Dir(dir)
 		if parent == dir {
-			return ""
+			return "", ""
 		}
 		dir = parent
 	}
+}
+
+// ValidSpec returns a version spec ("22", "v22.11.0" → "22.11.0"), or "" for aliases and garbage.
+func ValidSpec(s string) string {
+	spec := strings.TrimPrefix(strings.TrimSpace(s), "v")
+	if _, ok := parse(spec); !ok {
+		return ""
+	}
+	return spec
 }
 
 // parse splits a version or partial spec ("22", "22.11", "22.11.0") into numbers.

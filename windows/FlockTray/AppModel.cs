@@ -35,8 +35,39 @@ public sealed class AppModel
     public bool IsRunning => Status is not null;
     public bool IsDegraded => Status?.IsDegraded ?? false;
 
-    /// <summary>"Running · v1.2", "Needs attention · v1.2" or "Not running".</summary>
-    public string Headline => Status is { } s ? $"{(s.IsDegraded ? "Needs attention" : "Running")} · v{s.Version}" : "Not running";
+    /// <summary>Flock isn't set up for this user yet, and this app can do it (see Installation).</summary>
+    public bool NeedsSetup { get; set; }
+
+    /// <summary>The app is replacing the installed CLI with its bundled one.</summary>
+    public bool IsUpdating { get; private set; }
+
+    /// <summary>"Running · v1.2", "Needs attention · v1.2", "Not running" (or "Not set up", "Updating…").</summary>
+    public string Headline => IsUpdating ? "Updating…"
+        : Status is { } s ? $"{(s.IsDegraded ? "Needs attention" : "Running")} · v{s.Version}"
+        : NeedsSetup ? "Not set up" : "Not running";
+
+    /// <summary>
+    /// Runs the bundled `flock install` after the app was updated. It restarts the daemon; Windows
+    /// asks for permission only if the hosts helper changed.
+    /// </summary>
+    public async Task UpdateInstallationAsync()
+    {
+        IsUpdating = true;
+        Changed?.Invoke();
+        var result = await Installation.InstallAsync();
+        IsUpdating = false;
+        if (result.Ok)
+        {
+            Installation.RecordInstalled();
+        }
+        else
+        {
+            App.Log(new InvalidOperationException("flock install (update) failed:\n" + result.Output));
+            Native.ShowError("Flock could not update", $"{result.Output}\n\nYou can run `flock install` in a terminal, or reinstall Flock.");
+        }
+        Changed?.Invoke();
+        await RefreshAsync();
+    }
 
     public async void StartPolling()
     {
@@ -447,6 +478,43 @@ public sealed class SettingsStore(FlockClient client) : Store
         }
     }
 
+    /// <summary>Node.js lines with install state; loaded by the Node pane.</summary>
+    public NodeCatalog? Node { get; private set; }
+
+    public async Task RefreshNodeAsync()
+    {
+        try
+        {
+            var fresh = await client.NodeVersionsAsync();
+            if (!Json.Same(fresh, Node))
+            {
+                Node = fresh;
+                Notify();
+            }
+        }
+        catch (FlockException e)
+        {
+            Error = e.Message;
+            Notify();
+        }
+    }
+
+    /// <summary>Runs a Node.js action and adopts the catalog it returns.</summary>
+    public async Task PerformOnNodeAsync(Func<FlockClient, Task<NodeCatalog>> change)
+    {
+        try
+        {
+            Node = await change(client);
+            Error = null;
+        }
+        catch (FlockException e)
+        {
+            Error = e.Message;
+        }
+        Notify();
+        await RefreshAsync();
+    }
+
     public async Task<string> PhpBuildLogAsync(string minor)
     {
         try
@@ -492,6 +560,8 @@ public sealed class Preferences
 {
     public string Editor { get; set; } = nameof(Kit.Editor.PhpStorm);
     public bool DumpsLatestOnly { get; set; } = true;
+    /// <summary>SHA-256 of the flock.exe this app last installed (see Installation.NeedsUpdate).</summary>
+    public string InstalledFlock { get; set; } = "";
 
     private static string FilePath => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Flock", "tray.json");
 

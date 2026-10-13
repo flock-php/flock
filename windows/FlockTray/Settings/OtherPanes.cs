@@ -115,6 +115,35 @@ internal sealed class AboutPane(SettingsWindow window, AppModel model) : Pane(wi
                 Ui.Setting("App", null, Ui.Text(version.Split('+')[0], foreground: Ui.SecondaryText, wrap: false)),
                 Ui.Setting("Daemon", null, Ui.Text(Model.Status?.Version ?? "not running", foreground: Ui.SecondaryText, wrap: false)),
                 Ui.Setting("Data folder", FlockPaths.Root, Ui.Button("Show in Explorer", () => Native.Reveal(FlockPaths.Root))),
-                Ui.Setting("Laravel documentation", null, Ui.Button("Open", () => Native.Open("https://laravel.com/docs")))));
+                Ui.Setting("Laravel documentation", null, Ui.Button("Open", () => Native.Open("https://laravel.com/docs")))),
+            Ui.Section("Uninstall",
+                Ui.Setting("Uninstall Flock", "Stops Flock and removes it from this PC. Your sites, databases and settings are kept.",
+                    Ui.Button("Uninstall…", () => _ = ConfirmUninstall()))));
+    }
+
+    private async Task ConfirmUninstall()
+    {
+        if (Installation.Uninstaller is null)
+        {
+            Store.ShowError("This build of Flock wasn't installed with Flock-Setup.exe. Run `flock uninstall` in a terminal and delete the app's folder.");
+            return;
+        }
+        var purge = new CheckBox { Content = "Also delete my sites' settings and databases" };
+        var dialog = new ContentDialog
+        {
+            Title = "Uninstall Flock?",
+            Content = Ui.Column(12,
+                Ui.Text("Flock stops and is removed from your PATH, together with its PHP and Node.js versions, certificates, logs and caches. Windows asks for permission to remove the hosts helper and Flock's trusted certificate."),
+                Ui.Text($"Your sites' settings and your PostgreSQL and Redis databases stay in {FlockPaths.Root}, so reinstalling picks up where you left off — unless you also delete them:", foreground: Ui.SecondaryText),
+                purge),
+            PrimaryButtonText = "Uninstall",
+            CloseButtonText = "Cancel",
+            DefaultButton = ContentDialogButton.Close,
+            XamlRoot = Window.XamlRoot,
+        };
+        if (await dialog.ShowAsync() == ContentDialogResult.Primary && Installation.StartUninstaller(purge.IsChecked == true))
+        {
+            App.Current.Quit();
+        }
     }
 }

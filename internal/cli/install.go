@@ -13,6 +13,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"flock/internal/certs"
+	"flock/internal/node"
 	"flock/internal/php"
 )
 
@@ -56,7 +57,8 @@ func newInstallCommand() *cobra.Command {
 			}
 			cmd.Printf("✓ local certificate authority (%s)\n", ca.Fingerprint())
 
-			if err := addToShellPath(filepath.Join(s.root, "bin")); err != nil {
+			// Flock's shims first, then the commands of the default Node.js version's global packages.
+			if err := addToShellPath(filepath.Join(s.root, "bin"), node.GlobalBin(node.CurrentGlobalDir(s.root))); err != nil {
 				cmd.Printf("! could not update your shell profile: %v\n", err)
 			}
 
@@ -68,7 +70,13 @@ func newInstallCommand() *cobra.Command {
 			if skipPrivileged {
 				return nil
 			}
-			return ensurePrivileged(cmd, s, bin, ca)
+			if err := ensurePrivileged(cmd, s, bin, ca); err != nil {
+				return err
+			}
+			// The daemon started before the privileged steps and still reports what was missing
+			// then (e.g. the hosts helper); have it check again now instead of on its next retry.
+			_, _ = s.client().Reload(cmd.Context())
+			return nil
 		},
 	}
 

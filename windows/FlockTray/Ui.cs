@@ -113,9 +113,15 @@ internal static class Ui
                 fe.VerticalAlignment = VerticalAlignment.Center;
             }
             panel.Children.Add(child);
+            owners.AddOrUpdate(child, panel);
         }
         return panel;
     }
+
+    // The panel Row/Column last put each element into. Once that panel has left the window (another
+    // pane is shown), FrameworkElement.Parent reports null, yet the element still belongs to it and
+    // can't be added anywhere else until it is removed.
+    private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<UIElement, Panel> owners = new();
 
     /// <summary>A grid row: content on the left (stretching), trailing elements on the right.</summary>
     public static Grid Spread(UIElement leading, params UIElement[] trailing)
@@ -285,6 +291,11 @@ internal static class Ui
     /// <summary>Removes a control from its panel so it can be placed in a newly rendered one.</summary>
     public static T Detach<T>(T element) where T : FrameworkElement
     {
+        if (owners.TryGetValue(element, out var owner))
+        {
+            owner.Children.Remove(element);
+            owners.Remove(element);
+        }
         if (element.Parent is Panel panel)
         {
             panel.Children.Remove(element);

@@ -30,10 +30,12 @@ func TestCaddyfileRoutesSitesAndSubdomains(t *testing.T) {
 	cf := Caddyfile(testConfig())
 
 	for _, want := range []string{
-		"http://plain.test:80, http://*.plain.test:80 {",
-		"https://safe.test:443, https://*.safe.test:443 {",
-		`tls "/c/safe.crt" "/c/safe.key"`,
+		"http://plain.test:80, http://*.plain.test:80, http://*.*.plain.test:80, http://*.*.*.plain.test:80, http://*.*.*.*.plain.test:80 {",
+		"https://safe.test:443, https://*.safe.test:443, https://*.*.safe.test:443, https://*.*.*.safe.test:443, https://*.*.*.*.safe.test:443 {",
+		"get_certificate flock",
 		"redir https://{host}{uri} 308",
+		"https://:443 {",
+		"No secured Flock site is linked for {host}",
 		`php_fastcgi "unix//run/php84.sock"`,
 		`storage file_system "/data/Application Support/caddy"`,
 		"abort @remote",
@@ -75,7 +77,7 @@ func TestCaddyfileBalancesPHPCGIWorkersAndKeepsWindowsPaths(t *testing.T) {
 	for _, want := range []string{
 		`"dial":"127.0.0.1:19840"`, `"dial":"127.0.0.1:19841"`, `"policy":"least_conn"`,
 		`"root":"C:/code/app/public"`,
-		`"certificate":"C:/Users/me/AppData/Roaming/Flock/certs/app.test.crt"`,
+		`"via":"flock"`,
 		`"root":"C:/Users/me/AppData/Roaming/Flock/caddy"`,
 	} {
 		if !strings.Contains(string(json), want) {

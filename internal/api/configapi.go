@@ -15,6 +15,7 @@ import (
 	"flock/internal/config"
 	"flock/internal/node"
 	"flock/internal/php"
+	"flock/internal/project"
 )
 
 // Service is one background service as shown in the Services settings.
@@ -28,9 +29,10 @@ type Service struct {
 	Enabled   bool   `json:"enabled"`
 	Running   bool   `json:"running"`
 	Stoppable bool   `json:"stoppable"`
-	Env       string `json:"env"` // .env snippet to connect a Laravel app
-	Log       string `json:"log"` // name for /v1/logs/services/{name}
-	URL       string `json:"url"` // connection URL (e.g. for TablePlus)
+	Env       string `json:"env"`               // .env snippet to connect a Laravel app
+	Log       string `json:"log"`               // name for /v1/logs/services/{name}
+	URL       string `json:"url"`               // connection URL (e.g. for TablePlus)
+	Problem   string `json:"problem,omitempty"` // why it isn't working, when that isn't simply "stopped"
 }
 
 // ConfigView is config.json plus installed versions, for the settings UI.
@@ -74,6 +76,20 @@ func statusFor(err error) int {
 
 func invalid(format string, args ...any) error {
 	return fmt.Errorf("%w: %s", errInvalid, fmt.Sprintf(format, args...))
+}
+
+// pinSite pins a version into the site's project (see project.PinSite), storing the site when
+// its isolation was lifted.
+func pinSite(cfg *config.Config, site config.Site, tool, version string) error {
+	if _, lifted, err := project.PinSite(cfg, &site, tool, version); err != nil {
+		if errors.Is(err, project.ErrInvalid) {
+			return invalid("%v", err)
+		}
+		return err
+	} else if lifted {
+		cfg.Upsert(site)
+	}
+	return nil
 }
 
 func applySettings(root string, cfg *config.Config, s Settings) error {
@@ -181,6 +197,11 @@ func registerConfig(mux *http.ServeMux, b Backend) {
 				site.PHP = *body.PHP
 			}
 			if body.Node != nil {
+				if *body.Node != "" {
+					if err := project.ValidVersion(project.Node, *body.Node); err != nil {
+						return invalid("%v", err)
+					}
+				}
 				site.Node = *body.Node
 			}
 			// A parked site becomes linked so its settings can be stored.
@@ -190,10 +211,88 @@ func registerConfig(mux *http.ServeMux, b Backend) {
 		})
 	})
 
+	// Extra domains: a subdomain ("tenant1") or an alias ("my-app-2.test"), see config.NormalizeDomain.
+	mux.HandleFunc("POST /v1/sites/{name}/domains", func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			Domain string `json:"domain"`
+		}
+		if err := decodeBody(r, &body); err != nil {
+			writeError(w, http.StatusBadRequest, err)
+			return
+		}
+		mutate(w, func(cfg *config.Config) error {
+			site, ok := cfg.FindSite(r.PathValue("name"))
+			if !ok {
+				return invalid("no site named %s", r.PathValue("name"))
+			}
+			if _, err := cfg.AddDomain(&site, body.Domain); err != nil {
+				return invalid("%v", err)
+			}
+			site.Parked = false // a parked site becomes linked so the domain can be stored
+			cfg.Upsert(site)
+			return nil
+		})
+	})
+
+	mux.HandleFunc("DELETE /v1/sites/{name}/domains/{domain}", func(w http.ResponseWriter, r *http.Request) {
+		mutate(w, func(cfg *config.Config) error {
+			site, ok := cfg.FindSite(r.PathValue("name"))
+			if !ok {
+				return invalid("no site named %s", r.PathValue("name"))
+			}
+			if !cfg.RemoveDomain(&site, r.PathValue("domain")) {
+				return invalid("%s is not an extra domain of %s", r.PathValue("domain"), site.Name)
+			}
+			cfg.Upsert(site)
+			return nil
+		})
+	})
+
+	// Pins a version into the project's files (by default the version the site uses now) and
+	// lifts the site's isolation for that tool, so the project file decides from now on.
+	mux.HandleFunc("POST /v1/sites/{name}/pin", func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			Tool    string `json:"tool"`
+			Version string `json:"version"`
+		}
+		if err := decodeBody(r, &body); err != nil {
+			writeError(w, http.StatusBadRequest, err)
+			return
+		}
+		mutate(w, func(cfg *config.Config) error {
+			site, ok := cfg.FindSite(r.PathValue("name"))
+			if !ok {
+				return invalid("no site named %s", r.PathValue("name"))
+			}
+			return pinSite(cfg, site, body.Tool, body.Version)
+		})
+	})
+
+	mux.HandleFunc("DELETE /v1/sites/{name}/pin/{tool}", func(w http.ResponseWriter, r *http.Request) {
+		mutate(w, func(cfg *config.Config) error {
+			site, ok := cfg.FindSite(r.PathValue("name"))
+			if !ok {
+				return invalid("no site named %s", r.PathValue("name"))
+			}
+			tool := r.PathValue("tool")
+			if tool != project.PHP && tool != project.Node {
+				return invalid("unknown tool %q (php or node)", tool)
+			}
+			changed, err := project.Unpin(site.Path, tool)
+			if err != nil {
+				return err
+			}
+			if len(changed) == 0 {
+				return invalid("%s has no %s version pinned in %s", site.Name, tool, site.Path)
+			}
+			return nil
+		})
+	})
+
 	mux.HandleFunc("DELETE /v1/sites/{name}", func(w http.ResponseWriter, r *http.Request) {
 		mutate(w, func(cfg *config.Config) error {
 			if !cfg.Remove(r.PathValue("name")) {
-				return fmt.Errorf("%w: %s is served from a parked directory; remove the directory from the parked list instead", errConflict, r.PathValue("name"))
+				return fmt.Errorf("%w: %s is served from a parked directory; remove its parent from the project folders instead", errConflict, r.PathValue("name"))
 			}
 			return nil
 		})

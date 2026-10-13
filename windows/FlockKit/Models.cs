@@ -39,8 +39,29 @@ public sealed class Status
     public sealed class DnsStatus
     {
         public string Tld { get; init; } = "";
-        /// <summary>The DNS server's address; empty on Windows, where the hosts file resolves sites.</summary>
+        /// <summary>The DNS server's address; empty when it isn't running.</summary>
         public string Addr { get; init; } = "";
+        /// <summary>
+        /// Every name under the TLD resolves (any subdomain). When false (e.g. a company DNS policy
+        /// overrides Flock's rule), only site domains and extra domains resolve, through the hosts file.
+        /// </summary>
+        public bool Wildcard { get; init; }
+        public string WildcardProblem { get; init; } = "";
+        /// <summary>Subdomain levels below a site (and its aliases) that are served.</summary>
+        public int MaxDepth { get; init; }
+    }
+
+    /// <summary>One of a site's extra domains: a subdomain ("tenant1") or an alias ("my-app-2.test").</summary>
+    public sealed class SiteDomain
+    {
+        /// <summary>As stored, and as the API takes it for removal.</summary>
+        public string Entry { get; init; } = "";
+        /// <summary>The full name, e.g. tenant1.app.test.</summary>
+        public string Host { get; init; } = "";
+        public bool Alias { get; init; }
+        public string? Url { get; init; }
+        /// <summary>Why it isn't served, e.g. another site uses it.</summary>
+        public string? Problem { get; init; }
     }
 
     public sealed class Site
@@ -48,12 +69,44 @@ public sealed class Status
         public string Name { get; init; } = "";
         public string Domain { get; init; } = "";
         public string Path { get; init; } = "";
+        /// <summary>The PHP version the site uses; PhpSource says why (see VersionSource).</summary>
         public string Php { get; init; } = "";
+        public string PhpSource { get; init; } = VersionSource.Default;
+        /// <summary>What the project pins (in PhpFile), also when an isolation wins over it; empty when nothing is pinned.</summary>
+        public string PhpPinned { get; init; } = "";
+        public string PhpFile { get; init; } = "";
+        /// <summary>The Node.js version (usually a major) the site uses; NodeSource says why.</summary>
         public string? Node { get; init; }
+        public string NodeSource { get; init; } = VersionSource.Default;
+        public string NodePinned { get; init; } = "";
+        public string NodeFile { get; init; } = "";
+        /// <summary>A .nvmrc / .node-version that .flockrc's node= wins over, e.g. ".nvmrc: 20".</summary>
+        public string NodeShadowed { get; init; } = "";
         public bool Secured { get; init; }
         public bool Parked { get; init; }
         public string? Url { get; init; }
         public string? Problem { get; init; }
+        public List<SiteDomain> Domains { get; init; } = [];
+
+        /// <summary>The project file pinning PHP sits in the site's own folder (so it can be unpinned here).</summary>
+        [System.Text.Json.Serialization.JsonIgnore]
+        public bool PhpPinnedHere => PhpFile.Length > 0 && SameDir(PhpFile, Path);
+
+        [System.Text.Json.Serialization.JsonIgnore]
+        public bool NodePinnedHere => NodeFile.Length > 0 && SameDir(NodeFile, Path);
+
+        private static bool SameDir(string file, string dir) =>
+            string.Equals(System.IO.Path.GetDirectoryName(file)?.TrimEnd('\\', '/'), dir.TrimEnd('\\', '/'), StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>Where a site's PHP or Node.js version comes from, in this order.</summary>
+    public static class VersionSource
+    {
+        /// <summary>Set for the site in Flock, on this machine only (flock isolate).</summary>
+        public const string Isolated = "isolated";
+        /// <summary>Pinned in the project: .flockrc, or for Node .nvmrc / .node-version (flock pin).</summary>
+        public const string Project = "project";
+        public const string Default = "default";
     }
 
     public sealed class Process

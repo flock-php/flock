@@ -5,7 +5,7 @@ using Microsoft.UI.Xaml.XamlTypeInfo;
 
 namespace Flock.Tray;
 
-public enum WindowKind { Mail, Dumps, Logs, Settings }
+public enum WindowKind { Mail, Dumps, Logs, Settings, Setup }
 
 /// <summary>
 /// The tray app: a notification area icon with a panel (the macOS menu bar extra), plus the
@@ -52,14 +52,31 @@ public sealed partial class App : Application, IXamlMetadataProvider
             tray.MenuRequested += ShowMenu;
 
             Model.Changed += UpdateTray;
+            Model.NeedsSetup = Installation.BundledFlock is not null && !Installation.IsSetUp;
             Model.StartPolling();
 
             // Started by hand: show the panel, so it is clear the app runs (Windows 11 hides new
-            // notification area icons). The sign-in autostart passes --background and stays quiet.
-            if (!Environment.GetCommandLineArgs().Contains(BackgroundArgument))
+            // notification area icons), or the setup on the first start after installing. The
+            // sign-in autostart passes --background and stays quiet.
+            var background = Environment.GetCommandLineArgs().Contains(BackgroundArgument);
+            if (Model.NeedsSetup)
             {
-                panel = new PanelWindow(Model);
-                panel.ShowAtTrayCorner();
+                if (!background)
+                {
+                    Open(WindowKind.Setup);
+                }
+            }
+            else
+            {
+                if (Installation.NeedsUpdate)
+                {
+                    _ = Model.UpdateInstallationAsync();
+                }
+                if (!background)
+                {
+                    panel = new PanelWindow(Model);
+                    panel.ShowAtTrayCorner();
+                }
             }
         }
         catch (Exception e)
@@ -96,7 +113,7 @@ public sealed partial class App : Application, IXamlMetadataProvider
         panel.Toggle();
     }
 
-    private void ShowPanel()
+    public void ShowPanel()
     {
         panel ??= new PanelWindow(Model);
         panel.ShowNearTray();
@@ -108,7 +125,8 @@ public sealed partial class App : Application, IXamlMetadataProvider
         {
             return;
         }
-        string?[] items = ["Open Flock", null, "Mail", "Dumps", "Logs", "Settings…", null, Model.IsRunning ? "Restart Flock" : "Start Flock", "Quit Flock"];
+        var start = Model.NeedsSetup ? "Set Up Flock…" : Model.IsRunning ? "Restart Flock" : "Start Flock";
+        string?[] items = ["Open Flock", null, "Mail", "Dumps", "Logs", "Settings…", null, start, "Quit Flock"];
         switch (tray.ShowMenu(items, defaultItem: 0))
         {
             case 0: ShowPanel(); break;
@@ -116,6 +134,7 @@ public sealed partial class App : Application, IXamlMetadataProvider
             case 3: Open(WindowKind.Dumps); break;
             case 4: Open(WindowKind.Logs); break;
             case 5: Open(WindowKind.Settings); break;
+            case 7 when Model.NeedsSetup: Open(WindowKind.Setup); break;
             case 7: _ = Model.RestartAsync(); break;
             case 8: Quit(); break;
         }
@@ -132,6 +151,7 @@ public sealed partial class App : Application, IXamlMetadataProvider
                 WindowKind.Mail => new MailWindow(Model),
                 WindowKind.Dumps => new DumpsWindow(Model),
                 WindowKind.Logs => new LogsWindow(Model),
+                WindowKind.Setup => new SetupWindow(Model),
                 _ => new SettingsWindow(Model),
             };
             windows[kind] = window;

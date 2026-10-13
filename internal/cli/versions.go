@@ -1,7 +1,10 @@
 package cli
 
 import (
+	"errors"
 	"fmt"
+	"os"
+	"os/signal"
 	"slices"
 
 	"github.com/spf13/cobra"
@@ -9,6 +12,7 @@ import (
 	"flock/internal/daemon"
 	"flock/internal/node"
 	"flock/internal/php"
+	"flock/internal/phpbuild"
 	"flock/internal/postgres"
 )
 
@@ -17,16 +21,21 @@ func newPHPCommand() *cobra.Command {
 
 	var from string
 	install := &cobra.Command{
-		Use:   "install --from <dir|tar.gz>",
-		Short: "Install a PHP build (a directory or .tar.gz with php and php-fpm)",
-		Args:  cobra.NoArgs,
-		RunE: func(cmd *cobra.Command, _ []string) error {
-			if from == "" {
-				return fmt.Errorf("--from is required until Flock publishes PHP builds (build one with build/php/build.sh)")
-			}
+		Use:   "install <version> | --from <dir|tar.gz>",
+		Short: "Install a PHP version (e.g. 8.4, its latest release), or a local build with --from",
+		Args:  cobra.MaximumNArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
 			s, err := load()
 			if err != nil {
 				return err
+			}
+			switch {
+			case from != "" && len(args) > 0:
+				return errors.New("give either a version or --from, not both")
+			case from == "" && len(args) == 0:
+				return errors.New("which version? e.g. `flock php install 8.4`")
+			case from == "":
+				return installPHPVersion(cmd, s, args[0])
 			}
 
 			minor, err := php.InstallFrom(s.root, from)
@@ -69,6 +78,30 @@ func newPHPCommand() *cobra.Command {
 	return cmd
 }
 
+// installPHPVersion installs the latest release of minor through the daemon, which downloads it
+// (Windows) or builds it (macOS), and waits for it. Ctrl+C cancels the build.
+func installPHPVersion(cmd *cobra.Command, s *state, minor string) error {
+	if phpbuild.MinorOf(minor) != minor {
+		return fmt.Errorf("give a version like 8.4 (Flock installs its latest release), not %q", minor)
+	}
+	if installed, _ := php.Installed(s.root); slices.Contains(installed, minor) {
+		cmd.Printf("PHP %s is already installed\n", minor)
+		return nil
+	}
+
+	v, err := phpRelease(cmd.Context(), s.client(), minor)
+	if err != nil {
+		return err
+	}
+	if v.Status == "unsupported" {
+		return fmt.Errorf("PHP %s can't be installed: %s", minor, v.Note)
+	}
+
+	ctx, stop := signal.NotifyContext(cmd.Context(), os.Interrupt)
+	defer stop()
+	return installPHP(ctx, s, minor, cmd.OutOrStdout())
+}
+
 func newUseCommand() *cobra.Command {
 	return &cobra.Command{
 		Use:   "use <php-version>",
@@ -81,7 +114,7 @@ func newUseCommand() *cobra.Command {
 			}
 			installed, _ := php.Installed(s.root)
 			if !slices.Contains(installed, args[0]) {
-				return fmt.Errorf("PHP %s is not installed (installed: %v)", args[0], installed)
+				return &phpMissingError{minor: args[0]}
 			}
 			s.cfg.DefaultPHP = args[0]
 			if err := s.commit(cmd.Context(), cmd.ErrOrStderr()); err != nil {
@@ -105,12 +138,9 @@ func newNodeCommand() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			v, err := (&node.Installer{Root: s.root}).Install(cmd.Context(), args[0])
-			if err != nil {
-				return err
-			}
-			cmd.Printf("installed Node %s\n", v)
-			return nil
+			ctx, stop := signal.NotifyContext(cmd.Context(), os.Interrupt)
+			defer stop()
+			return installNode(ctx, s, args[0], cmd.OutOrStdout())
 		},
 	}
 

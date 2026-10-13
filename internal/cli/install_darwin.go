@@ -1,11 +1,11 @@
 package cli
 
 import (
-	"bytes"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -33,28 +33,46 @@ func writeShims(root, bin string) error {
 	return nil
 }
 
-// addToShellPath prepends the shim dir in ~/.zshrc (and ~/.bash_profile if present), once.
-func addToShellPath(dir string) error {
+// addToShellPath prepends dirs, in this order, in ~/.zshrc (and ~/.bash_profile if present): a
+// marked export line, appended once and rewritten when the directories change (an older Flock
+// only added the shims).
+func addToShellPath(dirs ...string) error {
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return err
 	}
 
-	block := fmt.Sprintf("\n%s\nexport PATH=%q:\"$PATH\"\n", profileMarker, dir)
+	quoted := make([]string, len(dirs))
+	for i, dir := range dirs {
+		quoted[i] = strconv.Quote(dir)
+	}
+	export := fmt.Sprintf("export PATH=%s:\"$PATH\"", strings.Join(quoted, ":"))
 	for _, name := range []string{".zshrc", ".bash_profile"} {
 		path := filepath.Join(home, name)
 		data, err := os.ReadFile(path)
 		if err != nil && name != ".zshrc" {
 			continue
 		}
-		if bytes.Contains(data, []byte(profileMarker)) {
+		lines := strings.Split(string(data), "\n")
+		if i := slices.Index(lines, profileMarker); i >= 0 {
+			if i+1 < len(lines) && lines[i+1] == export {
+				continue
+			}
+			if i+1 < len(lines) && strings.HasPrefix(lines[i+1], "export PATH=") {
+				lines[i+1] = export
+			} else {
+				lines = slices.Insert(lines, i+1, export)
+			}
+			if err := os.WriteFile(path, []byte(strings.Join(lines, "\n")), 0o644); err != nil {
+				return err
+			}
 			continue
 		}
 		f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
 		if err != nil {
 			return err
 		}
-		_, err = f.WriteString(block)
+		_, err = f.WriteString("\n" + profileMarker + "\n" + export + "\n")
 		f.Close()
 		if err != nil {
 			return err
@@ -231,15 +249,17 @@ func newPrivilegedSetupCommand() *cobra.Command {
 }
 
 func newUninstallCommand() *cobra.Command {
-	return &cobra.Command{
+	var purge bool
+	cmd := &cobra.Command{
 		Use:   "uninstall",
-		Short: "Stop the background daemon and remove DNS/CA trust (keeps your data and config)",
+		Short: "Remove Flock: daemon, DNS/CA trust and downloaded files (keeps your sites' settings and databases unless --purge)",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			s, err := load()
 			if err != nil {
 				return err
 			}
+			purge = decidePurge(s.root, purge)
 			if err := uninstallService(); err != nil {
 				return err
 			}
@@ -253,11 +273,22 @@ func newUninstallCommand() *cobra.Command {
 				return err
 			}
 			cmd.Printf("✓ removed %s and CA trust\n", resolverFile(s.cfg.TLD))
-			cmd.Printf("data is kept in %s — remove the PATH line marked %q from your shell profile\n", s.root, profileMarker)
+			if err := finishUninstall(cmd, s.root, purge); err != nil {
+				return err
+			}
+			cmd.Printf("remove the PATH line marked %q from your shell profile\n", profileMarker)
 			return nil
 		},
 	}
+	uninstallFlags(cmd, &purge)
+	return cmd
 }
+
+// appDirs: the macOS app keeps its preferences in UserDefaults, which uninstalling the app handles.
+func appDirs() []string { return nil }
+
+// removeAfterExit is never needed: macOS deletes running programs.
+func removeAfterExit(string) bool { return false }
 
 // restartService makes launchd kill and relaunch the daemon.
 func restartService() error {

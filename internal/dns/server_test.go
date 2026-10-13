@@ -50,11 +50,36 @@ func TestResolvesSitesAndSubdomainsToLoopback(t *testing.T) {
 	}
 }
 
-func TestAnswersAAAAWithIPv6Loopback(t *testing.T) {
+func TestResolvesDeepSubdomains(t *testing.T) {
+	resp := query(t, startServer(t), "udp", "a.b.c.d.watchtower.test", mdns.TypeA)
+
+	if len(resp.Answer) != 1 || !resp.Answer[0].(*mdns.A).A.Equal(net.IPv4(127, 0, 0, 1)) {
+		t.Fatalf("want 127.0.0.1, got %v", resp.Answer)
+	}
+}
+
+// Sites listen on 127.0.0.1 only: an AAAA answer of ::1 would make clients try IPv6 first and wait.
+func TestAnswersAAAAWithNoRecords(t *testing.T) {
 	resp := query(t, startServer(t), "udp", "watchtower.test", mdns.TypeAAAA)
 
-	if len(resp.Answer) != 1 || !resp.Answer[0].(*mdns.AAAA).AAAA.Equal(net.IPv6loopback) {
-		t.Fatalf("want ::1, got %v", resp.Answer)
+	if resp.Rcode != mdns.RcodeSuccess || len(resp.Answer) != 0 {
+		t.Fatalf("want NOERROR with no answers, got rcode=%d answers=%v", resp.Rcode, resp.Answer)
+	}
+}
+
+func TestWatchReportsWhetherANameWasQueried(t *testing.T) {
+	srv := startServer(t)
+
+	seen := srv.Watch("flock-check-1.test")
+	query(t, srv, "udp", "other.test", mdns.TypeA)
+	if seen() {
+		t.Fatal("a query for another name must not count")
+	}
+
+	seen = srv.Watch("flock-check-2.test")
+	query(t, srv, "udp", "FLOCK-CHECK-2.test", mdns.TypeA)
+	if !seen() {
+		t.Fatal("the watched name was queried")
 	}
 }
 

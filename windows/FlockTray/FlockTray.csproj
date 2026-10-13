@@ -18,6 +18,9 @@
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
     <UseWinUI>true</UseWinUI>
     <WindowsPackageType>None</WindowsPackageType>
+    <!-- Generates FlockTray.pri (merging WinUI's resources) even without XAML files; without it,
+         XamlControlsResources cannot find ms-appx:///Microsoft.UI.Xaml/Themes/themeresources.xaml. -->
+    <EnableMsixTooling>true</EnableMsixTooling>
     <WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
     <SelfContained>true</SelfContained>
     <DisableXamlGeneratedMain>true</DisableXamlGeneratedMain>

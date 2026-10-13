@@ -63,14 +63,18 @@ func (s *Services) SetRunning(id string, on bool) {
 	}
 }
 
-// Site is a directory served as <name>.<tld> (and *.<name>.<tld>).
+// Site is a directory served as <name>.<tld> and its subdomains (up to MaxDepth levels).
 type Site struct {
 	Name    string `json:"name"`
 	Path    string `json:"path"`
 	PHP     string `json:"php,omitempty"`  // "8.5"; empty means Config.DefaultPHP
 	Node    string `json:"node,omitempty"` // major, e.g. "22"; empty means Config.DefaultNode
 	Secured bool   `json:"secured"`
-	Parked  bool   `json:"-"` // discovered from a parked directory rather than linked
+	// Domains are extra names for the site (see NormalizeDomain): subdomains ("tenant1") and
+	// aliases ("my-app-2.test"). On Windows they go into the hosts file, so they also work where
+	// wildcard DNS doesn't.
+	Domains []string `json:"domains,omitempty"`
+	Parked  bool     `json:"-"` // discovered from a parked directory rather than linked
 }
 
 // Default returns the config used when none exists yet.

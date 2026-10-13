@@ -30,9 +30,9 @@ internal sealed class GeneralPane(SettingsWindow window, AppModel model) : Pane(
         if (Store.Config is { } config)
         {
             page.Children.Add(Ui.Section("Network",
-                Ui.Setting("Domain", Model.Status?.Dns.Addr.Length > 0
-                        ? "Resolved by Flock's DNS server."
-                        : "Each site is added to the Windows hosts file by the Flock hosts helper service.",
+                Ui.Setting("Domain", Model.Status?.Dns is { Wildcard: true }
+                        ? "Every name, any subdomain included, is resolved by Flock's DNS server. Site domains are also in the hosts file."
+                        : $"Only site domains and the domains added to sites resolve (the hosts file){(Model.Status?.Dns.WildcardProblem is { Length: > 0 } p ? $": {p}" : "")}.",
                     Value($"*.{config.Tld}")),
                 Ui.Setting("HTTP port", null, Value(config.Ports.Http.ToString(System.Globalization.CultureInfo.InvariantCulture))),
                 Ui.Setting("HTTPS port", null, Value(config.Ports.Https.ToString(System.Globalization.CultureInfo.InvariantCulture))),
@@ -75,12 +75,12 @@ internal sealed class GeneralPane(SettingsWindow window, AppModel model) : Pane(
         }
         list.SelectedIndex = selectedParked is null ? -1 : config.Parked.IndexOf(selectedParked);
 
-        var remove = Ui.IconButton(Ui.GlyphRemove, "Remove the selected folder", () =>
+        var remove = Ui.IconButton(Ui.GlyphRemove, "Remove the selected project folder", () =>
         {
             if (selectedParked is { } path)
             {
                 selectedParked = null;
-                _ = Perform(c => c.ForgetAsync(path));
+                _ = Perform(c => c.UnparkAsync(path));
             }
         });
         remove.IsEnabled = selectedParked is not null;
@@ -89,7 +89,7 @@ internal sealed class GeneralPane(SettingsWindow window, AppModel model) : Pane(
             selectedParked = list.SelectedIndex >= 0 && list.SelectedIndex < config.Parked.Count ? config.Parked[list.SelectedIndex] : null;
             remove.IsEnabled = selectedParked is not null;
         };
-        var add = Ui.IconButton(Ui.GlyphAdd, "Park a folder…", async () =>
+        var add = Ui.IconButton(Ui.GlyphAdd, "Add a project folder…", async () =>
         {
             if (await Window.PickFolder() is { } path)
             {
@@ -100,11 +100,11 @@ internal sealed class GeneralPane(SettingsWindow window, AppModel model) : Pane(
         var body = Ui.Column(4, list, Ui.Row(0, add, remove));
         if (config.Parked.Count == 0)
         {
-            body.Children.Insert(0, Ui.Caption("No parked folders"));
+            body.Children.Insert(0, Ui.Caption("No project folders"));
         }
-        return Ui.Section("Parked folders",
+        return Ui.Section("Project folders",
             Ui.Card(body, new Thickness(8)),
-            Footnote($"Every folder inside a parked folder is served as <folder>.{config.Tld}."));
+            Footnote($"Every folder inside a project folder is served as <folder>.{config.Tld} — the same as `flock park`."));
     }
 
     private static TextBlock Value(string text) => Ui.Text(text, foreground: Ui.SecondaryText, wrap: false);

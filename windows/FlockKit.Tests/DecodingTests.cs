@@ -39,6 +39,51 @@ public class DecodingTests
     }
 
     [Fact]
+    public void DecodesWhereASiteVersionComesFrom()
+    {
+        var status = FlockJson.Decode<Status>("""
+            {"version":"dev","pid":1,"started_at":"2026-10-13T14:10:01Z","dns":{"tld":"test","addr":""},
+             "http_port":80,"https_port":443,"mail":"","xdebug":false,"dumps":false,"mail_count":0,"dump_count":0,"processes":[],
+             "sites":[{"name":"shop","domain":"shop.test","path":"C:\\code\\shop","secured":false,"parked":false,
+                       "php":"8.3","php_source":"isolated","php_pinned":"8.4","php_file":"C:\\code\\shop\\.flockrc",
+                       "node":"24","node_source":"project","node_pinned":"24","node_file":"C:\\code\\shop\\.flockrc","node_shadowed":".nvmrc: 20"},
+                      {"name":"blog","domain":"blog.test","path":"C:\\code\\blog","php":"8.5","secured":false,"parked":true}]}
+            """);
+
+        var shop = status.Sites[0];
+        Assert.Equal((Status.VersionSource.Isolated, "8.4"), (shop.PhpSource, shop.PhpPinned));
+        Assert.True(shop.PhpPinnedHere);
+        Assert.Equal((Status.VersionSource.Project, ".nvmrc: 20"), (shop.NodeSource, shop.NodeShadowed));
+        Assert.Equal(Status.VersionSource.Default, status.Sites[1].PhpSource);
+        Assert.False(status.Sites[1].PhpPinnedHere);
+    }
+
+    [Fact]
+    public void DecodesExtraDomainsAndTheWildcardState()
+    {
+        var status = FlockJson.Decode<Status>("""
+            {"version":"dev","pid":1,"started_at":"2026-10-13T14:10:01Z",
+             "dns":{"tld":"test","addr":"127.0.0.1:53","wildcard":false,"wildcard_problem":"your organization manages DNS rules (Group Policy), so Windows ignores Flock's rule for .test","max_depth":4},
+             "http_port":80,"https_port":443,"mail":"","xdebug":false,"dumps":false,"mail_count":0,"dump_count":0,"processes":[],
+             "sites":[{"name":"app","domain":"app.test","path":"C:\\code\\app","php":"8.5","secured":true,"parked":false,"url":"https://app.test",
+                       "domains":[{"entry":"tenant1","host":"tenant1.app.test","alias":false,"url":"https://tenant1.app.test"},
+                                  {"entry":"promo.test","host":"promo.test","alias":true,"problem":"promo.test is already served by promo"}]},
+                      {"name":"blog","domain":"blog.test","path":"C:\\code\\blog","php":"8.5","secured":false,"parked":true,"domains":null}]}
+            """);
+
+        Assert.False(status.Dns.Wildcard);
+        Assert.Contains("Group Policy", status.Dns.WildcardProblem);
+        Assert.Equal(4, status.Dns.MaxDepth);
+        var app = status.Sites[0];
+        Assert.Equal(("tenant1", "tenant1.app.test", false), (app.Domains[0].Entry, app.Domains[0].Host, app.Domains[0].Alias));
+        Assert.Equal("https://tenant1.app.test", app.Domains[0].Url);
+        Assert.True(app.Domains[1].Alias);
+        Assert.Null(app.Domains[1].Url);
+        Assert.NotNull(app.Domains[1].Problem);
+        Assert.Empty(status.Sites[1].Domains);
+    }
+
+    [Fact]
     public void DecodesAMinimalStatusWithOmittedFields()
     {
         var status = FlockJson.Decode<Status>("""

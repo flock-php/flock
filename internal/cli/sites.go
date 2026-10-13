@@ -59,7 +59,7 @@ func newLinkCommand() *cobra.Command {
 
 			site := config.Site{Name: name, Path: cwd, PHP: phpVersion, Secured: secure}
 			if existing, ok := s.cfg.FindSite(name); ok && !existing.Parked {
-				site.Node = existing.Node
+				site.Node, site.Domains = existing.Node, existing.Domains
 				if phpVersion == "" {
 					site.PHP = existing.PHP
 				}
@@ -104,7 +104,7 @@ func newUnlinkCommand() *cobra.Command {
 				return err
 			}
 			if !s.cfg.Remove(site.Name) {
-				return fmt.Errorf("%s is served from a parked directory; use `flock forget` on the parent instead", site.Name)
+				return fmt.Errorf("%s is served from a parked directory; use `flock unpark` on the parent instead", site.Name)
 			}
 
 			if err := s.commit(cmd.Context(), cmd.ErrOrStderr()); err != nil {
@@ -144,11 +144,12 @@ func newParkCommand() *cobra.Command {
 	}
 }
 
-func newForgetCommand() *cobra.Command {
+func newUnparkCommand() *cobra.Command {
 	return &cobra.Command{
-		Use:   "forget [dir]",
-		Short: "Stop serving a parked directory",
-		Args:  cobra.MaximumNArgs(1),
+		Use:     "unpark [dir]",
+		Aliases: []string{"forget"},
+		Short:   "Stop serving a parked directory",
+		Args:    cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			s, err := load()
 			if err != nil {
@@ -236,34 +237,6 @@ func newSecureCommand(on bool) *cobra.Command {
 			if appURL := envValue(filepath.Join(site.Path, ".env"), "APP_URL"); appURL != "" && appURL != url {
 				cmd.Printf("hint: set APP_URL=%s in .env (it is %s) — Laravel's URLs and Vite's HTTPS dev server use it\n", url, appURL)
 			}
-			return nil
-		},
-	}
-}
-
-func newIsolateCommand() *cobra.Command {
-	return &cobra.Command{
-		Use:   "isolate <php-version> [name]",
-		Short: "Pin a site to a PHP version (e.g. `flock isolate 8.4`)",
-		Args:  cobra.RangeArgs(1, 2),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			s, err := load()
-			if err != nil {
-				return err
-			}
-
-			site, err := siteArg(s, args[1:])
-			if err != nil {
-				return err
-			}
-			site.PHP = args[0]
-			site.Parked = false
-			s.cfg.Upsert(site)
-
-			if err := s.commit(cmd.Context(), cmd.ErrOrStderr()); err != nil {
-				return err
-			}
-			cmd.Printf("%s now uses PHP %s\n", site.Name, args[0])
 			return nil
 		},
 	}

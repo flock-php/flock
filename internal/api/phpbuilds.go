@@ -128,6 +128,44 @@ func registerPHPBuilds(mux *http.ServeMux, b Backend) {
 	})
 }
 
+// PHPVersions fetches every PHP version with its install/build state.
+func (c *Client) PHPVersions(ctx context.Context) (PHPVersions, error) {
+	var out PHPVersions
+	err := c.get(ctx, "/v1/php/versions", &out)
+	return out, err
+}
+
+// CheckPHP makes the daemon fetch the latest PHP releases now.
+func (c *Client) CheckPHP(ctx context.Context) (PHPVersions, error) {
+	var out PHPVersions
+	err := c.slow().do(ctx, http.MethodPost, "/v1/php/check", &out)
+	return out, err
+}
+
+// InstallPHP installs the latest release of minor: at once when a build is ready, otherwise the
+// daemon queues a build that installs when it finishes (follow it with PHPVersions).
+func (c *Client) InstallPHP(ctx context.Context, minor string) (PHPVersions, error) {
+	var out PHPVersions
+	err := c.slow().do(ctx, http.MethodPost, "/v1/php/versions/"+minor+"/install", &out)
+	return out, err
+}
+
+// CancelPHPBuild stops a queued or running build of minor.
+func (c *Client) CancelPHPBuild(ctx context.Context, minor string) error {
+	var out PHPVersions
+	return c.do(ctx, http.MethodPost, "/v1/php/versions/"+minor+"/cancel", &out)
+}
+
+// Find returns the version with this minor, if the daemon knows it.
+func (v PHPVersions) Find(minor string) (PHPRelease, bool) {
+	for _, r := range v.Versions {
+		if r.Minor == minor {
+			return r, true
+		}
+	}
+	return PHPRelease{}, false
+}
+
 // checkUninstall refuses to remove the default version or one a linked site is pinned to.
 func checkUninstall(root string, cfg *config.Config, minor string) error {
 	installed, _ := php.Installed(root)

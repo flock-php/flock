@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"os/user"
 	"path/filepath"
+	"slices"
 	"strings"
 	"syscall"
 	"time"
@@ -20,7 +21,9 @@ import (
 	"golang.org/x/sys/windows/registry"
 
 	"flock/internal/certs"
+	"flock/internal/dns"
 	"flock/internal/hosts"
+	"flock/internal/node"
 	"flock/internal/paths"
 )
 
@@ -31,8 +34,9 @@ import (
 //   - <root>\bin on the user's PATH (HKCU\Environment)
 //   - flockd.exe, a copy of flock.exe marked as a GUI program so it runs without a console window,
 //     started at logon by the "Flock Daemon" scheduled task as `flockd daemon --watchdog`
-//   - with administrator rights, once: the hosts helper service (see package hosts) and the
-//     Flock CA in the machine's trusted root store
+//   - with administrator rights, once: the hosts helper service (flock-helper.exe, shipped next
+//     to flock.exe; see package hosts), an NRPT rule sending .<tld> to Flock's DNS server on
+//     127.0.0.1:53 (see package dns) and the Flock CA in the machine's trusted root store
 const (
 	taskName   = "Flock Daemon"
 	runKeyName = "Flock Daemon"
@@ -77,7 +81,9 @@ func placeLink(src, dst string, data []byte) error {
 }
 
 // addToShellPath prepends dir to the user's PATH and tells running programs about it.
-func addToShellPath(dir string) error {
+// addToShellPath puts dirs, in this order, at the front of the user's PATH (moving them there if
+// they are elsewhere in it): Flock's shims must come before the global npm packages' commands.
+func addToShellPath(dirs ...string) error {
 	k, err := registry.OpenKey(registry.CURRENT_USER, "Environment", registry.QUERY_VALUE|registry.SET_VALUE)
 	if err != nil {
 		return err
@@ -91,17 +97,21 @@ func addToShellPath(dir string) error {
 	if kind == 0 {
 		kind = registry.EXPAND_SZ
 	}
-	for _, entry := range filepath.SplitList(current) {
-		if strings.EqualFold(filepath.Clean(entry), filepath.Clean(dir)) {
-			warnSystemPHP(dir)
-			return nil
-		}
+	entries := filepath.SplitList(current)
+	if len(entries) >= len(dirs) && slices.EqualFunc(entries[:len(dirs)], dirs, func(a, b string) bool {
+		return strings.EqualFold(filepath.Clean(a), filepath.Clean(b))
+	}) {
+		warnSystemPHP(dirs[0])
+		return nil
 	}
 
-	value := dir
-	if current != "" {
-		value += ";" + current
+	var rest []string
+	for _, entry := range entries {
+		if entry != "" && !slices.ContainsFunc(dirs, func(d string) bool { return strings.EqualFold(filepath.Clean(entry), filepath.Clean(d)) }) {
+			rest = append(rest, entry)
+		}
 	}
+	value := strings.Join(append(slices.Clone(dirs), rest...), ";")
 	if kind == registry.SZ {
 		err = k.SetStringValue("Path", value)
 	} else {
@@ -111,8 +121,8 @@ func addToShellPath(dir string) error {
 		return err
 	}
 	broadcastEnvironmentChange()
-	fmt.Printf("✓ %s added to your PATH (open a new terminal to use it)\n", dir)
-	warnSystemPHP(dir)
+	fmt.Printf("✓ %s added to your PATH (open a new terminal to use it)\n", strings.Join(dirs, " and "))
+	warnSystemPHP(dirs[0])
 	return nil
 }
 
@@ -348,6 +358,65 @@ func uninstallService() error {
 	return nil
 }
 
+// appUninstallKey is Flock-Setup.exe's entry in Apps & Features (AppId in windows/installer/Flock.iss).
+const appUninstallKey = `Software\Microsoft\Windows\CurrentVersion\Uninstall\{BD44E167-D13B-4AD9-8DA7-E976DEFCFB50}_is1`
+
+// stopApp ends the tray app, so its files can be removed (it can't work without Flock anyway).
+func stopApp() {
+	_ = exec.Command("taskkill", "/F", "/IM", "FlockTray.exe").Run()
+}
+
+// removeApp starts the installed app's uninstaller, which removes FlockTray and its files.
+// /SKIPFLOCK: Flock itself is uninstalled already, so it must not run `flock uninstall` again.
+// It reports false when the app isn't installed.
+func removeApp() (bool, error) {
+	k, err := registry.OpenKey(registry.CURRENT_USER, appUninstallKey, registry.QUERY_VALUE)
+	if err != nil {
+		return false, nil
+	}
+	defer k.Close()
+	uninstaller, _, err := k.GetStringValue("UninstallString")
+	if err != nil {
+		return false, nil
+	}
+	cmd := exec.Command(strings.Trim(uninstaller, `"`), "/VERYSILENT", "/SUPPRESSMSGBOXES", "/SKIPFLOCK")
+	if err := cmd.Start(); err != nil {
+		return true, err
+	}
+	return true, cmd.Process.Release()
+}
+
+// appDirs are the tray app's files (settings, log, WebView2 profile), removed on uninstall.
+func appDirs() []string {
+	if dir, err := os.UserCacheDir(); err == nil { // %LocalAppData%
+		return []string{filepath.Join(dir, "Flock")}
+	}
+	return nil
+}
+
+// removeAfterExit deletes path a few seconds from now, from a hidden cmd.exe: Windows won't delete
+// a running program, and `flock uninstall` usually runs as %AppData%\Flock\bin\flock.exe.
+func removeAfterExit(path string) bool {
+	del := fmt.Sprintf(`del /f /q "%s"`, path)
+	if info, err := os.Stat(path); err == nil && info.IsDir() {
+		del = fmt.Sprintf(`rd /s /q "%s"`, path)
+	}
+	cmd := exec.Command(os.Getenv("ComSpec"))
+	cmd.SysProcAttr = &syscall.SysProcAttr{
+		CmdLine:       fmt.Sprintf(`/d /c "ping -n 4 127.0.0.1 >nul & %s"`, del),
+		CreationFlags: windows.CREATE_NO_WINDOW | windows.CREATE_NEW_PROCESS_GROUP | windows.CREATE_BREAKAWAY_FROM_JOB,
+	}
+	if err := cmd.Start(); err != nil {
+		// The job we run in (an uninstaller's) may not allow breaking away.
+		cmd.SysProcAttr.CreationFlags &^= windows.CREATE_BREAKAWAY_FROM_JOB
+		if err := cmd.Start(); err != nil {
+			return false
+		}
+	}
+	_ = cmd.Process.Release()
+	return true
+}
+
 // stopDaemonProcess ends a daemon that was not started by the scheduled task (Run key fallback)
 // by ending its watchdog, whose job object takes the daemon and its services down.
 func stopDaemonProcess() {
@@ -378,26 +447,58 @@ func restartService() error {
 // ensurePrivileged checks the administrator-owned parts and, if anything is missing or outdated,
 // re-runs flock elevated (Windows shows a UAC prompt) to fix them.
 func ensurePrivileged(cmd *cobra.Command, s *state, bin string, ca *certs.CA) error {
+	helperBin, err := installHelperBinary(bin)
+	if err != nil {
+		return err
+	}
+
 	source := hosts.SourceFile(s.root)
 	helper := hosts.HelperStatus()
-	helperOK := helper.Configured(source, s.cfg.TLD) && helper.Running && sameFile(bin, hosts.HelperExe())
+	helperOK := helper.Configured(source, s.cfg.TLD) && helper.Running && sameFile(helperBin, hosts.HelperExe())
 	trusted := exec.Command("certutil", "-store", "Root", ca.Fingerprint()).Run() == nil
+	ruleOK := dns.NRPTInstalled(s.cfg.TLD)
 
-	if helperOK && trusted {
-		cmd.Printf("✓ *.%s sites are added to the hosts file\n✓ Flock CA is trusted\n", s.cfg.TLD)
+	done := func() {
+		cmd.Printf("✓ every *.%s name (any subdomain) is sent to Flock's DNS server\n", s.cfg.TLD)
+		cmd.Printf("✓ site domains are added to the hosts file (they resolve even where the DNS rule is overridden)\n✓ Flock CA is trusted\n")
+	}
+	if helperOK && trusted && ruleOK {
+		done()
 		return nil
 	}
 
-	cmd.Println("→ installing the hosts helper and trusting the local CA (Windows asks for permission)…")
-	err := runElevated(bin, "privileged-setup", "--tld", s.cfg.TLD, "--ca", ca.CertPath(), "--source", source)
+	cmd.Println("→ setting up DNS for *." + s.cfg.TLD + ", the hosts helper and the local CA (Windows asks for permission)…")
+	err = runElevated(bin, "privileged-setup", "--tld", s.cfg.TLD, "--ca", ca.CertPath(), "--source", source)
 	if err != nil {
 		return fmt.Errorf("privileged setup: %w", err)
 	}
-	cmd.Printf("✓ *.%s sites are added to the hosts file\n✓ Flock CA is trusted\n", s.cfg.TLD)
+	done()
 	return nil
 }
 
-// sameFile reports whether two files have the same contents (the helper is a copy of flock.exe).
+// installHelperBinary copies flock-helper.exe from next to the running flock.exe to next to bin,
+// where the elevated setup picks it up, and returns its path there.
+func installHelperBinary(bin string) (string, error) {
+	dst := filepath.Join(filepath.Dir(bin), hosts.HelperName)
+	self, err := os.Executable()
+	if err != nil {
+		return "", err
+	}
+	if self, err = filepath.EvalSymlinks(self); err != nil {
+		return "", err
+	}
+	src := filepath.Join(filepath.Dir(self), hosts.HelperName)
+	if src == dst {
+		return dst, nil
+	}
+	data, err := os.ReadFile(src)
+	if err != nil {
+		return "", fmt.Errorf("%s must be next to flock.exe: %w", hosts.HelperName, err)
+	}
+	return dst, replaceExecutable(dst, data)
+}
+
+// sameFile reports whether two files have the same contents.
 func sameFile(a, b string) bool {
 	da, err := os.ReadFile(a)
 	if err != nil {
@@ -508,7 +609,7 @@ func privilegedSetup(tld, caPath, source string, remove bool) error {
 	}
 
 	if remove {
-		err := hosts.RemoveHelper()
+		err := errors.Join(hosts.RemoveHelper(), dns.RemoveNRPT())
 		if caPath != "" {
 			if fp, ferr := certs.FileFingerprint(caPath); ferr == nil {
 				_ = exec.Command("certutil", "-delstore", "Root", fp).Run()
@@ -528,8 +629,11 @@ func privilegedSetup(tld, caPath, source string, remove bool) error {
 	if err != nil {
 		return err
 	}
-	if err := hosts.InstallHelper(self, source, tld); err != nil {
+	if err := hosts.InstallHelper(filepath.Join(filepath.Dir(self), hosts.HelperName), source, tld); err != nil {
 		return fmt.Errorf("hosts helper: %w", err)
+	}
+	if err := dns.SetNRPT(tld); err != nil {
+		return fmt.Errorf("DNS rule for .%s: %w", tld, err)
 	}
 
 	out, err := exec.Command("certutil", "-addstore", "-f", "Root", caPath).CombinedOutput()
@@ -540,30 +644,51 @@ func privilegedSetup(tld, caPath, source string, remove bool) error {
 }
 
 func newUninstallCommand() *cobra.Command {
-	return &cobra.Command{
+	var purge, keepApp bool
+	cmd := &cobra.Command{
 		Use:   "uninstall",
-		Short: "Stop the background daemon and remove the hosts helper and CA trust (keeps your data and config)",
+		Short: "Remove Flock: daemon, PATH entry, hosts helper, DNS rule, CA trust and downloaded files (keeps your sites' settings and databases unless --purge)",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			s, err := load()
 			if err != nil {
 				return err
 			}
+			purge = decidePurge(s.root, purge)
 			if err := uninstallService(); err != nil {
 				return err
 			}
 			cmd.Println("✓ background daemon removed")
 
 			removeFromShellPath(filepath.Join(s.root, "bin"))
+			removeFromShellPath(node.GlobalBin(node.CurrentGlobalDir(s.root)))
 			cmd.Println("✓ removed Flock from your PATH")
 
 			self, _ := os.Executable()
 			if err := runElevated(self, "privileged-setup", "--remove", "--ca", filepath.Join(s.root, "certs", "ca.crt")); err != nil {
 				return err
 			}
-			cmd.Println("✓ removed the hosts helper, Flock's hosts entries and CA trust")
-			cmd.Printf("data is kept in %s\n", s.root)
+			cmd.Println("✓ removed the hosts helper, Flock's hosts entries, its DNS rule and CA trust")
+
+			stopApp()
+			if err := finishUninstall(cmd, s.root, purge); err != nil {
+				return err
+			}
+
+			// The app's own uninstaller runs this command with --keep-app and removes the app itself.
+			if !keepApp {
+				switch removed, err := removeApp(); {
+				case err != nil:
+					cmd.Printf("! could not remove the Flock app (%v) — uninstall it in Settings → Apps\n", err)
+				case removed:
+					cmd.Println("✓ removing the Flock app")
+				}
+			}
 			return nil
 		},
 	}
+	uninstallFlags(cmd, &purge)
+	cmd.Flags().BoolVar(&keepApp, "keep-app", false, "leave the Flock app installed (used by its uninstaller)")
+	_ = cmd.Flags().MarkHidden("keep-app")
+	return cmd
 }

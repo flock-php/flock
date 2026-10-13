@@ -60,9 +60,27 @@ public sealed class FlockClient : IDisposable
 
     public Task<Status> UnlinkSiteAsync(string name) => Send<Status>(HttpMethod.Delete, $"/v1/sites/{Escape(name)}");
 
+    /// <summary>Adds an extra domain: a subdomain ("tenant1", "a.b") or an alias ("my-app-2.test").</summary>
+    public Task<Status> AddDomainAsync(string site, string domain) =>
+        Send<Status>(HttpMethod.Post, $"/v1/sites/{Escape(site)}/domains", new { domain });
+
+    /// <summary>Removes an extra domain, given as SiteDomain.Entry (or its full name).</summary>
+    public Task<Status> RemoveDomainAsync(string site, string domain) =>
+        Send<Status>(HttpMethod.Delete, $"/v1/sites/{Escape(site)}/domains/{Escape(domain)}");
+
+    /// <summary>
+    /// Writes a version ("php" or "node"; empty version: the one the site uses now) into the
+    /// site's project files and lifts the site's isolation for that tool.
+    /// </summary>
+    public Task<Status> PinAsync(string site, string tool, string version = "") =>
+        Send<Status>(HttpMethod.Post, $"/v1/sites/{Escape(site)}/pin", new { tool, version });
+
+    /// <summary>Removes a tool's version from the site's project files.</summary>
+    public Task<Status> UnpinAsync(string site, string tool) => Send<Status>(HttpMethod.Delete, $"/v1/sites/{Escape(site)}/pin/{Escape(tool)}");
+
     public Task<Status> ParkAsync(string path) => Send<Status>(HttpMethod.Post, "/v1/parked", new { path });
 
-    public Task<Status> ForgetAsync(string path) => Send<Status>(HttpMethod.Delete, "/v1/parked", new { path });
+    public Task<Status> UnparkAsync(string path) => Send<Status>(HttpMethod.Delete, "/v1/parked", new { path });
 
     /// <summary>Downloads and installs a Node.js version ("20", "20.19" or exact); this can take a minute.</summary>
     public async Task<string> InstallNodeAsync(string version)
@@ -70,6 +88,23 @@ public sealed class FlockClient : IDisposable
         var body = await Raw(HttpMethod.Post, "/v1/node/install", new { version }, timeout: TimeSpan.FromMinutes(5));
         return JsonDocument.Parse(body).RootElement.GetProperty("version").GetString() ?? version;
     }
+
+    // Node.js versions
+
+    public Task<NodeCatalog> NodeVersionsAsync() => Get<NodeCatalog>("/v1/node/versions");
+
+    /// <summary>Installs the newest release of a major line, or updates it; a download of about 30 MB.</summary>
+    public Task<NodeCatalog> InstallNodeMajorAsync(string major) =>
+        Send<NodeCatalog>(HttpMethod.Post, $"/v1/node/versions/{Escape(major)}/install", timeout: TimeSpan.FromMinutes(10));
+
+    /// <summary>Updates a line's npm to the newest version that supports it; its global packages stay.</summary>
+    public Task<NodeCatalog> UpdateNpmAsync(string major) =>
+        Send<NodeCatalog>(HttpMethod.Post, $"/v1/node/versions/{Escape(major)}/npm", timeout: TimeSpan.FromMinutes(10));
+
+    public Task<NodeCatalog> UninstallNodeAsync(string major) => Send<NodeCatalog>(HttpMethod.Delete, $"/v1/node/versions/{Escape(major)}");
+
+    /// <summary>Asks the daemon to check nodejs.org for new releases now.</summary>
+    public Task<NodeCatalog> CheckNodeReleasesAsync() => Send<NodeCatalog>(HttpMethod.Post, "/v1/node/check", timeout: TimeSpan.FromMinutes(1));
 
     // PHP versions
 

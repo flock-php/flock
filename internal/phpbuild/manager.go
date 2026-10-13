@@ -113,8 +113,11 @@ func (m *Manager) readyDir(full string) string {
 }
 
 // LogPath is the build log of a minor version.
-func (m *Manager) LogPath(minor string) string {
-	return filepath.Join(m.root, "log", "php-build-"+minor+".log")
+func (m *Manager) LogPath(minor string) string { return LogPath(m.root, minor) }
+
+// LogPath is the build log of a minor version under Flock's data dir root.
+func LogPath(root, minor string) string {
+	return filepath.Join(root, "log", "php-build-"+minor+".log")
 }
 
 func (m *Manager) load() {
@@ -433,8 +436,15 @@ func (m *Manager) run(parent context.Context, minor string, job *Job) {
 			m.state.Results[latest] = "failed"
 		}
 	default:
-		job.State, job.FullVersion = Succeeded, full
+		job.FullVersion = full
 		m.state.Results[full] = "ok"
+		// A build that installs stays running until it is installed, so a client waiting for the
+		// install never sees it finished while the version is still missing.
+		if job.Install {
+			job.Step = "Installing PHP " + full
+		} else {
+			job.State = Succeeded
+		}
 	}
 	m.save()
 	install := job.Install
@@ -454,11 +464,14 @@ func (m *Manager) run(parent context.Context, minor string, job *Job) {
 		err = os.Rename(dir, m.readyDir(full))
 	}
 	if install {
-		if err := m.installReady(full); err != nil {
-			m.mu.Lock()
+		err := m.installReady(full)
+		m.mu.Lock()
+		if err != nil {
 			job.State, job.Error = Failed, "install: "+err.Error()
-			m.mu.Unlock()
+		} else {
+			job.State = Succeeded
 		}
+		m.mu.Unlock()
 	}
 }
 

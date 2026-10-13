@@ -25,10 +25,11 @@ func NewRootCommand() *cobra.Command {
 	root.AddCommand(
 		newInstallCommand(), newUninstallCommand(), newPrivilegedSetupCommand(),
 		newDaemonCommand(), newRestartCommand(), newStatusCommand(), newLogsCommand(), newVersionCommand(),
-		newSitesCommand(), newLinkCommand(), newUnlinkCommand(), newParkCommand(), newForgetCommand(),
-		newSecureCommand(true), newSecureCommand(false), newIsolateCommand(), newUseCommand(),
+		newSitesCommand(), newLinkCommand(), newUnlinkCommand(), newParkCommand(), newUnparkCommand(),
+		newSecureCommand(true), newSecureCommand(false), newDomainCommand(), newUseCommand(),
+		newIsolateCommand(), newUnisolateCommand(), newIsolatedCommand(), newPinCommand(), newUnpinCommand(),
 		newPHPCommand(), newNodeCommand(), newPostgresCommand(), newRedisCommand(), newXdebugCommand(), newDumpsCommand(), newMailCommand(),
-		newImportCommand(), newExecCommand(), newHostsHelperCommand(),
+		newImportCommand(), newExecCommand(),
 	)
 
 	return root

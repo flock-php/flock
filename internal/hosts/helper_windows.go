@@ -32,8 +32,11 @@ func HelperDir() string {
 	return filepath.Join(dir, "Flock")
 }
 
-// HelperExe is the helper's executable (a copy of flock.exe).
-func HelperExe() string { return filepath.Join(HelperDir(), "flock-helper.exe") }
+// HelperName is the helper's executable name (cmd/flock-helper), shipped next to flock.exe.
+const HelperName = "flock-helper.exe"
+
+// HelperExe is the installed helper's executable.
+func HelperExe() string { return filepath.Join(HelperDir(), HelperName) }
 
 // Status describes the installed helper as any user can see it.
 type Status struct {
@@ -70,7 +73,7 @@ func HelperStatus() Status {
 
 // Args are the helper's service arguments.
 func Args(source, tld string) []string {
-	return []string{"hosts-helper", "--source", source, "--tld", tld}
+	return []string{"--source", source, "--tld", tld}
 }
 
 // Configured reports whether the installed helper runs from HelperExe and reads source for tld.
@@ -83,7 +86,7 @@ func (s Status) Configured(source, tld string) bool {
 	return s.Installed && strings.EqualFold(s.Command, want)
 }
 
-// InstallHelper (administrator only) copies exe to HelperExe and (re)creates the service.
+// InstallHelper (administrator only) copies exe (a flock-helper.exe) to HelperExe and (re)creates the service.
 func InstallHelper(exe, source, tld string) error {
 	m, err := mgr.Connect()
 	if err != nil {
@@ -195,14 +198,42 @@ func copyExe(src, dst string) error {
 }
 
 // RunHelper is the service's main loop: it mirrors source into the hosts file.
-func RunHelper(source, tld string) error {
+// A service has no console, so failures also go to HelperLog.
+func RunHelper(source, tld string) (err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			err = fmt.Errorf("panic: %v", r)
+		}
+		if err != nil {
+			logHelper(err)
+		}
+	}()
 	if !label.MatchString(tld) {
 		return fmt.Errorf("invalid --tld %q", tld)
 	}
-	if inService, err := svc.IsWindowsService(); err != nil || !inService {
-		return errors.New("hosts-helper only runs as the Flock hosts service (installed by `flock install`)")
+	inService, err := svc.IsWindowsService()
+	if err != nil {
+		return fmt.Errorf("detect service: %w", err)
 	}
-	return svc.Run(ServiceName, &helper{source: source, tld: tld})
+	if !inService {
+		return errors.New("flock-helper only runs as the Flock hosts service (installed by `flock install`)")
+	}
+	if err := svc.Run(ServiceName, &helper{source: source, tld: tld}); err != nil {
+		return fmt.Errorf("run service: %w", err)
+	}
+	return nil
+}
+
+// HelperLog is where the helper records why it stopped.
+func HelperLog() string { return filepath.Join(HelperDir(), "hosts-helper.log") }
+
+func logHelper(err error) {
+	f, ferr := os.OpenFile(HelperLog(), os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644)
+	if ferr != nil {
+		return
+	}
+	defer f.Close()
+	fmt.Fprintf(f, "%s %v\n", time.Now().Format(time.RFC3339), err)
 }
 
 type helper struct {
@@ -210,6 +241,12 @@ type helper struct {
 }
 
 func (h *helper) Execute(_ []string, requests <-chan svc.ChangeRequest, status chan<- svc.Status) (bool, uint32) {
+	defer func() {
+		if r := recover(); r != nil {
+			logHelper(fmt.Errorf("panic: %v", r))
+			panic(r)
+		}
+	}()
 	status <- svc.Status{State: svc.StartPending}
 	status <- svc.Status{State: svc.Running, Accepts: svc.AcceptStop | svc.AcceptShutdown}
 

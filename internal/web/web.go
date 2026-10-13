@@ -6,6 +6,7 @@
 package web
 
 import (
+	"crypto/tls"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -16,14 +17,19 @@ import (
 	"github.com/caddyserver/caddy/v2/caddyconfig"
 	_ "github.com/caddyserver/caddy/v2/caddyconfig/httpcaddyfile"
 	_ "github.com/caddyserver/caddy/v2/modules/standard"
+
+	"flock/internal/config"
 )
 
 // Site is one served application.
 type Site struct {
-	Domain   string   // e.g. watchtower.test (also serves *.watchtower.test)
-	Root     string   // document root, e.g. <path>/public
-	FPM      []string // FastCGI upstreams: "unix/<socket>" (PHP-FPM) or "127.0.0.1:<port>" (php-cgi workers)
-	CertFile string   // set when the site is secured
+	Domain  string   // e.g. watchtower.test
+	Aliases []string // other names served like Domain, e.g. watchtower-2.test
+	Root    string   // document root, e.g. <path>/public
+	FPM     []string // FastCGI upstreams: "unix/<socket>" (PHP-FPM) or "127.0.0.1:<port>" (php-cgi workers)
+	// CertFile and KeyFile (from certs.SiteCert, covering Domain and *.Domain) are set when the site
+	// is secured. Deeper subdomains and aliases get certificates from Config.Issue.
+	CertFile string
 	KeyFile  string
 }
 
@@ -37,6 +43,23 @@ type Config struct {
 	// on the wildcard address, so it is empty there and non-local clients are rejected per request.
 	Bind  string
 	Sites []Site
+	// TLD limits the names HTTPS answers for; Issue makes a certificate for one of them.
+	TLD   string
+	Issue func(name string) (*tls.Certificate, error)
+}
+
+// Hosts are the names a site answers to: its domain and aliases, each with up to
+// config.MaxDepth levels of subdomains.
+func (s Site) Hosts() []string {
+	var hosts []string
+	for _, base := range append([]string{s.Domain}, s.Aliases...) {
+		prefix := ""
+		for range config.MaxDepth + 1 {
+			hosts = append(hosts, prefix+base)
+			prefix += "*."
+		}
+	}
+	return hosts
 }
 
 // DocumentRoot picks <path>/public when it has an index.php (Laravel and most frameworks), else path.
@@ -73,12 +96,14 @@ func Caddyfile(cfg Config) string {
 }
 `, cfg.HTTPPort, cfg.HTTPSPort, quote(cfg.StorageDir), quote(cfg.LogFile))
 
+	// Every certificate comes from Flock (see certSource): the site's own file, or one issued for the name.
+	const tlsBlock = "\ttls {\n\t\tget_certificate flock\n\t}\n"
+
 	for _, s := range cfg.Sites {
-		hosts := []string{s.Domain, "*." + s.Domain}
+		hosts := s.Hosts()
 
 		if s.CertFile != "" {
-			fmt.Fprintf(&b, "\n%s {\n\timport flock_site\n\ttls %s %s\n%s}\n",
-				addresses("https", hosts, cfg), quote(s.CertFile), quote(s.KeyFile), app(s))
+			fmt.Fprintf(&b, "\n%s {\n\timport flock_site\n%s%s}\n", addresses("https", hosts, cfg), tlsBlock, app(s))
 			fmt.Fprintf(&b, "\n%s {\n\timport flock_site\n\tredir https://{host}%s{uri} 308\n}\n",
 				addresses("http", hosts, cfg), portSuffix(cfg.HTTPSPort, 443))
 			continue
@@ -89,6 +114,9 @@ func Caddyfile(cfg Config) string {
 
 	fmt.Fprintf(&b, "\n%s {\n\timport flock_site\n\trespond \"No Flock site is linked for {host}. Run `flock link` in the project directory.\" 404\n}\n",
 		addresses("http", []string{""}, cfg))
+	// Without this, https:// to an unknown or unsecured name would fail the handshake (or hang).
+	fmt.Fprintf(&b, "\n%s {\n\timport flock_site\n%s\trespond \"No secured Flock site is linked for {host}. Run `flock link` in the project directory, or `flock secure` to serve it over HTTPS.\" 404\n}\n",
+		addresses("https", []string{""}, cfg), tlsBlock)
 
 	return b.String()
 }
@@ -166,7 +194,16 @@ func Apply(cfg Config) error {
 
 	json = withBind(json, cfg.Bind)
 
-	return caddy.Load(json, true)
+	source, err := newCertSource(cfg)
+	if err != nil {
+		return err
+	}
+	previous := currentCerts.Swap(source)
+	if err := caddy.Load(json, true); err != nil {
+		currentCerts.Store(previous)
+		return err
+	}
+	return nil
 }
 
 // Stop shuts the web server down.

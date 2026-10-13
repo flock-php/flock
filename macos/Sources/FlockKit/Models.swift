@@ -22,20 +22,117 @@ public struct Status: Decodable, Sendable, Equatable {
     public struct DNSStatus: Decodable, Sendable, Equatable {
         public var tld: String
         public var addr: String
+        /// Every name under the TLD resolves (any subdomain). Always true on macOS while the DNS
+        /// server runs; on Windows a company DNS policy can override Flock's rule.
+        public var wildcard: Bool
+        public var wildcardProblem: String
+        /// Subdomain levels below a site (and its aliases) that are served.
+        public var maxDepth: Int
+
+        public init(tld: String, addr: String, wildcard: Bool = false, wildcardProblem: String = "", maxDepth: Int = 4) {
+            self.tld = tld
+            self.addr = addr
+            self.wildcard = wildcard
+            self.wildcardProblem = wildcardProblem
+            self.maxDepth = maxDepth
+        }
+
+        enum CodingKeys: String, CodingKey {
+            case tld, addr, wildcard, wildcardProblem, maxDepth
+        }
+
+        public init(from decoder: Decoder) throws {
+            let c = try decoder.container(keyedBy: CodingKeys.self)
+            tld = try c.decodeIfPresent(String.self, forKey: .tld) ?? ""
+            addr = try c.decodeIfPresent(String.self, forKey: .addr) ?? ""
+            wildcard = try c.decodeIfPresent(Bool.self, forKey: .wildcard) ?? !addr.isEmpty
+            wildcardProblem = try c.decodeIfPresent(String.self, forKey: .wildcardProblem) ?? ""
+            maxDepth = try c.decodeIfPresent(Int.self, forKey: .maxDepth) ?? 4
+        }
+    }
+
+    /// One of a site's extra domains: a subdomain ("tenant1") or an alias ("my-app-2.test").
+    public struct SiteDomain: Decodable, Sendable, Equatable, Identifiable {
+        /// As stored, and as the API takes it for removal.
+        public var entry: String
+        /// The full name, e.g. tenant1.app.test.
+        public var host: String
+        public var alias: Bool
+        public var url: String?
+        /// Why it isn't served, e.g. another site uses it.
+        public var problem: String?
+
+        public var id: String { entry }
     }
 
     public struct Site: Decodable, Sendable, Equatable, Identifiable {
         public var name: String
         public var domain: String
         public var path: String
+        /// The PHP version the site uses; `phpSource` says why.
         public var php: String
+        public var phpSource: VersionSource
+        /// What the project pins (in `phpFile`), also when an isolation wins over it; empty when nothing is pinned.
+        public var phpPinned: String
+        public var phpFile: String
+        /// The Node.js version (usually a major) the site uses; `nodeSource` says why.
         public var node: String?
+        public var nodeSource: VersionSource
+        public var nodePinned: String
+        public var nodeFile: String
+        /// A .nvmrc / .node-version that .flockrc's node= wins over, e.g. ".nvmrc: 20".
+        public var nodeShadowed: String
         public var secured: Bool
         public var parked: Bool
         public var url: String?
         public var problem: String?
+        public var domains: [SiteDomain]
 
         public var id: String { name }
+
+        /// The file pinning PHP sits in the site's own folder (so it can be unpinned there).
+        public var phpPinnedHere: Bool { !phpFile.isEmpty && Self.inFolder(phpFile, path) }
+        public var nodePinnedHere: Bool { !nodeFile.isEmpty && Self.inFolder(nodeFile, path) }
+
+        private static func inFolder(_ file: String, _ folder: String) -> Bool {
+            URL(fileURLWithPath: file).deletingLastPathComponent().standardizedFileURL.path == URL(fileURLWithPath: folder).standardizedFileURL.path
+        }
+
+        enum CodingKeys: String, CodingKey {
+            case name, domain, path, php, phpSource, phpPinned, phpFile, node, nodeSource, nodePinned, nodeFile, nodeShadowed
+            case secured, parked, url, problem, domains
+        }
+
+        public init(from decoder: Decoder) throws {
+            let c = try decoder.container(keyedBy: CodingKeys.self)
+            name = try c.decode(String.self, forKey: .name)
+            domain = try c.decodeIfPresent(String.self, forKey: .domain) ?? ""
+            path = try c.decodeIfPresent(String.self, forKey: .path) ?? ""
+            php = try c.decodeIfPresent(String.self, forKey: .php) ?? ""
+            phpSource = try c.decodeIfPresent(VersionSource.self, forKey: .phpSource) ?? .default
+            phpPinned = try c.decodeIfPresent(String.self, forKey: .phpPinned) ?? ""
+            phpFile = try c.decodeIfPresent(String.self, forKey: .phpFile) ?? ""
+            node = try c.decodeIfPresent(String.self, forKey: .node)
+            nodeSource = try c.decodeIfPresent(VersionSource.self, forKey: .nodeSource) ?? .default
+            nodePinned = try c.decodeIfPresent(String.self, forKey: .nodePinned) ?? ""
+            nodeFile = try c.decodeIfPresent(String.self, forKey: .nodeFile) ?? ""
+            nodeShadowed = try c.decodeIfPresent(String.self, forKey: .nodeShadowed) ?? ""
+            secured = try c.decodeIfPresent(Bool.self, forKey: .secured) ?? false
+            parked = try c.decodeIfPresent(Bool.self, forKey: .parked) ?? false
+            url = try c.decodeIfPresent(String.self, forKey: .url)
+            problem = try c.decodeIfPresent(String.self, forKey: .problem)
+            domains = try c.decodeIfPresent([SiteDomain].self, forKey: .domains) ?? []
+        }
+    }
+
+    /// Where a site's PHP or Node.js version comes from, in this order: set for the site in Flock
+    /// on this machine (`flock isolate`), pinned in the project (`flock pin`), Flock's default.
+    public enum VersionSource: String, Decodable, Sendable {
+        case isolated, project, `default`
+
+        public init(from decoder: Decoder) throws {
+            self = VersionSource(rawValue: try decoder.singleValueContainer().decode(String.self)) ?? .default
+        }
     }
 
     public struct Process: Decodable, Sendable, Equatable, Identifiable {

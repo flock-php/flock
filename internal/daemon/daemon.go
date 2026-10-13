@@ -4,6 +4,7 @@ package daemon
 
 import (
 	"context"
+	"crypto/tls"
 	"errors"
 	"fmt"
 	"net"
@@ -13,6 +14,7 @@ import (
 	"runtime"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"flock/internal/api"
@@ -22,11 +24,13 @@ import (
 	"flock/internal/dumps"
 	"flock/internal/hosts"
 	"flock/internal/mail"
+	"flock/internal/node"
 	"flock/internal/paths"
 	"flock/internal/php"
 	"flock/internal/phpbuild"
 	"flock/internal/ports"
 	"flock/internal/postgres"
+	"flock/internal/project"
 	"flock/internal/supervisor"
 	"flock/internal/valkey"
 	"flock/internal/web"
@@ -53,15 +57,24 @@ type daemon struct {
 	// reloadMu serialises reloads (API requests and the retry loop); mutateMu serialises config edits.
 	reloadMu sync.Mutex
 	mutateMu sync.Mutex
-	dns      *dns.Server
+	dns      *dns.Server // written under reloadMu and mu
+	dnsErr   error       // why the DNS server isn't running (Windows, where it is optional)
 	mail     *mail.Server
 	webUp    bool
 	builds   *phpbuild.Manager
+	// migrateGlobals moves global npm packages out of Node's version directories, once per run.
+	migrateGlobals sync.Once
+
+	// leaves issues certificates for deep subdomains, aliases and unknown names during handshakes.
+	leaves *certs.Leaves
+	// checking is set while a wildcard check runs (see checkWildcard).
+	checking atomic.Bool
 
 	mu       sync.Mutex
 	sites    []api.SiteStatus
 	warnings []string
 	cfg      *config.Config
+	wildcard wildcardState
 }
 
 func (d *daemon) shutdown() {
@@ -124,27 +137,45 @@ func (d *daemon) degraded() bool {
 	return len(d.warnings) > 0
 }
 
-// ensureDNS (re)starts the DNS server when its address or TLD changed. Windows uses the hosts file instead.
+// windowsDNSPort is where the DNS server listens on Windows: NRPT rules can only name port 53.
+// Tests move it out of the way.
+var windowsDNSPort = dns.Port
+
+// ensureDNS (re)starts the DNS server when its address or TLD changed. On Windows it is optional:
+// the hosts file still resolves every site's domains when port 53 is taken, so a failure there is
+// reported through the wildcard check instead of as a warning.
 func (d *daemon) ensureDNS(cfg *config.Config) error {
+	port := cfg.Ports.DNS
 	if runtime.GOOS == "windows" {
-		return nil
+		port = windowsDNSPort
 	}
 
-	addr := fmt.Sprintf("127.0.0.1:%d", cfg.Ports.DNS)
+	addr := fmt.Sprintf("127.0.0.1:%d", port)
 	if d.dns != nil && d.dns.Addr() == addr && d.dns.TLD() == cfg.TLD {
 		return nil
 	}
 	if d.dns != nil {
 		_ = d.dns.Shutdown()
-		d.dns = nil
+		d.setDNS(nil, nil)
 	}
 
 	srv := dns.New(addr, cfg.TLD)
 	if err := srv.Start(); err != nil {
-		return fmt.Errorf("dns: %s", busy(cfg.Ports.DNS, err))
+		err = fmt.Errorf("dns: %s", busy(port, err))
+		d.setDNS(nil, err)
+		if runtime.GOOS == "windows" {
+			return nil
+		}
+		return err
 	}
-	d.dns = srv
+	d.setDNS(srv, nil)
 	return nil
+}
+
+func (d *daemon) setDNS(srv *dns.Server, err error) {
+	d.mu.Lock()
+	d.dns, d.dnsErr = srv, err
+	d.mu.Unlock()
 }
 
 // ensureMail (re)starts the SMTP catcher when its port changed.
@@ -188,7 +219,7 @@ func Run(ctx context.Context, cfg Config) error {
 		return err
 	}
 
-	d := &daemon{root: cfg.Root, version: cfg.Version, startedAt: time.Now(), procs: supervisor.New()}
+	d := &daemon{root: cfg.Root, version: cfg.Version, startedAt: time.Now(), procs: supervisor.New(), leaves: certs.NewLeaves()}
 	defer d.shutdown()
 
 	if workspace, err := phpbuild.DefaultWorkspace(); err == nil && runtime.GOOS != "linux" {
@@ -237,6 +268,14 @@ func Run(ctx context.Context, cfg Config) error {
 	// Retry while degraded, so e.g. the web server comes up by itself once Lerd frees port 80.
 	retry := time.NewTicker(retryInterval)
 	defer retry.Stop()
+	// Wildcard DNS can start or stop working without Flock changing anything (a VPN connects,
+	// a policy arrives, port 53 frees up), so it is checked again regularly.
+	wildcard := time.NewTicker(wildcardInterval)
+	defer wildcard.Stop()
+	// Follow the projects' version files, so a `git pull` that pins another PHP takes effect.
+	watch := time.NewTicker(projectWatchInterval)
+	defer watch.Stop()
+	files := d.projectFiles()
 
 loop:
 	for {
@@ -251,6 +290,15 @@ loop:
 					d.setWarnings([]string{err.Error()})
 				}
 			}
+		case <-wildcard.C:
+			go d.recheckWildcard()
+		case <-watch.C:
+			if current := d.projectFiles(); current != files {
+				files = current
+				if err := d.reload(); err != nil {
+					d.setWarnings([]string{err.Error()})
+				}
+			}
 		}
 	}
 
@@ -258,6 +306,34 @@ loop:
 	defer cancel()
 
 	return apiServer.Shutdown(shutdownCtx)
+}
+
+// projectWatchInterval is how often the sites' project files are checked for changes.
+var projectWatchInterval = 3 * time.Second
+
+// projectFiles fingerprints the sites' project files (.flockrc, .nvmrc, .node-version, also in
+// parent directories) by size and modification time.
+func (d *daemon) projectFiles() string {
+	d.mu.Lock()
+	cfg := d.cfg
+	d.mu.Unlock()
+	if cfg == nil {
+		return ""
+	}
+	var b strings.Builder
+	seen := map[string]bool{}
+	for _, site := range cfg.AllSites() {
+		for _, file := range project.Files(site.Path) {
+			if seen[file] {
+				continue
+			}
+			seen[file] = true
+			if info, err := os.Stat(file); err == nil {
+				fmt.Fprintf(&b, "%s %d %d\n", file, info.Size(), info.ModTime().UnixNano())
+			}
+		}
+	}
+	return b.String()
 }
 
 // Reload implements api.Backend.
@@ -312,6 +388,20 @@ func (d *daemon) reload() error {
 		}
 	}
 
+	// Global npm packages of the default Node.js version are on the user's PATH via this link.
+	if err := node.LinkCurrent(d.root, cfg.DefaultNode); err != nil {
+		warnings = append(warnings, "node: "+err.Error())
+	}
+	d.migrateGlobals.Do(func() {
+		go func() {
+			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+			defer cancel()
+			if err := node.MigrateGlobals(ctx, d.root); err != nil {
+				fmt.Fprintf(os.Stderr, "moving global npm packages into node-global: %v\n", err)
+			}
+		}()
+	})
+
 	var (
 		statuses []api.SiteStatus
 		webSites []web.Site
@@ -327,13 +417,40 @@ func (d *daemon) reload() error {
 		}
 	}
 
-	for _, site := range cfg.AllSites() {
+	sites := cfg.AllSites()
+	extras := cfg.DomainsBySite(sites)
+	for _, site := range sites {
 		domain := cfg.Domain(site)
-		version := cfg.PHPFor(site)
-		status := api.SiteStatus{Name: site.Name, Domain: domain, Path: site.Path, PHP: version, Node: cfg.NodeFor(site), Secured: site.Secured, Parked: site.Parked}
+		phpVersion, nodeVersion := project.PHPFor(cfg, &site, site.Path), project.NodeFor(cfg, &site, site.Path)
+		version := phpVersion.Version
+		status := api.SiteStatus{
+			Name: site.Name, Domain: domain, Path: site.Path, Secured: site.Secured, Parked: site.Parked,
+			PHP: version, PHPSource: phpVersion.Source, PHPPinned: phpVersion.Pinned, PHPFile: phpVersion.File,
+			Node: nodeVersion.Version, NodeSource: nodeVersion.Source, NodePinned: nodeVersion.Pinned, NodeFile: nodeVersion.File,
+			NodeShadowed: nodeVersion.Shadowed, Domains: []api.SiteDomain{},
+		}
+		scheme := "http"
+		if site.Secured {
+			scheme = "https"
+		}
+		var aliases, served []string
+		for _, e := range extras[site.Name] {
+			sd := api.SiteDomain{Entry: e.Entry, Host: e.Host, Alias: e.Alias, Problem: e.Problem}
+			if e.Problem == "" {
+				sd.URL = scheme + "://" + e.Host + portSuffix(scheme, cfg)
+				served = append(served, e.Host)
+				if e.Alias {
+					aliases = append(aliases, e.Host)
+				}
+			}
+			status.Domains = append(status.Domains, sd)
+		}
 
 		if !contains(installed, version) {
 			status.Problem = fmt.Sprintf("PHP %s is not installed", version)
+			if phpVersion.Source == project.Project {
+				status.Problem = fmt.Sprintf("PHP %s (pinned in %s) is not installed", version, filepath.Base(phpVersion.File))
+			}
 			statuses = append(statuses, status)
 			continue
 		}
@@ -359,18 +476,16 @@ func (d *daemon) reload() error {
 			pools[version] = pool.Upstreams
 		}
 
-		ws := web.Site{Domain: domain, Root: web.DocumentRoot(site.Path), FPM: pools[version]}
-		scheme := "http"
+		ws := web.Site{Domain: domain, Aliases: aliases, Root: web.DocumentRoot(site.Path), FPM: pools[version]}
 		if site.Secured {
 			if ws.CertFile, ws.KeyFile, err = ca.SiteCert(domain); err != nil {
 				return fmt.Errorf("certificate for %s: %w", domain, err)
 			}
-			scheme = "https"
 		}
 		status.URL = scheme + "://" + domain + portSuffix(scheme, cfg)
 
 		webSites = append(webSites, ws)
-		domains = append(domains, domain)
+		domains = append(append(domains, domain), served...)
 		statuses = append(statuses, status)
 	}
 
@@ -425,7 +540,7 @@ func (d *daemon) reload() error {
 		bind = ""
 	}
 
-	if err := d.applyWeb(cfg, bind, webSites); err != nil {
+	if err := d.applyWeb(cfg, bind, webSites, ca); err != nil {
 		warnings = append(warnings, "web: "+err.Error())
 	}
 
@@ -433,12 +548,13 @@ func (d *daemon) reload() error {
 	d.cfg, d.sites, d.warnings = cfg, statuses, warnings
 	d.mu.Unlock()
 
+	go d.checkWildcard()
 	return nil
 }
 
 // applyWeb (re)configures Caddy. Before the first successful start it checks the ports itself,
 // because Caddy's own error does not say who holds them.
-func (d *daemon) applyWeb(cfg *config.Config, bind string, sites []web.Site) error {
+func (d *daemon) applyWeb(cfg *config.Config, bind string, sites []web.Site, ca *certs.CA) error {
 	owned := map[int]bool{}
 	if d.webUp && d.cfg != nil {
 		owned[d.cfg.Ports.HTTP], owned[d.cfg.Ports.HTTPS] = true, true
@@ -456,6 +572,8 @@ func (d *daemon) applyWeb(cfg *config.Config, bind string, sites []web.Site) err
 		HTTPSPort:  cfg.Ports.HTTPS,
 		Bind:       bind,
 		Sites:      sites,
+		TLD:        cfg.TLD,
+		Issue:      func(name string) (*tls.Certificate, error) { return d.leaves.Get(ca, name) },
 	})
 	if err != nil {
 		return err
@@ -516,10 +634,12 @@ func (d *daemon) Status() api.Status {
 		st.MailCount = len(messages)
 	}
 	st.DumpCount = dumps.Count(d.root)
+	st.DNS = api.DNSStatus{Wildcard: d.wildcard.ok, WildcardProblem: d.wildcard.problem, MaxDepth: config.MaxDepth}
+	if d.cfg != nil {
+		st.DNS.TLD = d.cfg.TLD
+	}
 	if d.dns != nil {
-		st.DNS = api.DNSStatus{TLD: d.dns.TLD(), Addr: d.dns.Addr()}
-	} else if d.cfg != nil && runtime.GOOS == "windows" {
-		st.DNS = api.DNSStatus{TLD: d.cfg.TLD} // resolved through the hosts file, no DNS server
+		st.DNS.Addr = d.dns.Addr()
 	}
 	if d.cfg != nil {
 		st.HTTPPort, st.HTTPSPort = d.cfg.Ports.HTTP, d.cfg.Ports.HTTPS
@@ -583,7 +703,7 @@ func (d *daemon) ReleasePHP(minor string) {
 func (d *daemon) Services() []api.Service {
 	d.mu.Lock()
 	cfg := d.cfg
-	dnsUp, mailUp, webUp := d.dns != nil, d.mail != nil, d.webUp
+	dnsUp, mailUp, webUp, wildcard := d.dns != nil, d.mail != nil, d.webUp, d.wildcard
 	d.mu.Unlock()
 	if cfg == nil {
 		return []api.Service{}
@@ -601,8 +721,12 @@ func (d *daemon) Services() []api.Service {
 	if runtime.GOOS != "windows" {
 		services = append(services, api.Service{ID: "dns", Name: "DNS (*." + cfg.TLD + ")", Category: "Core", Port: p.DNS, Installed: true, Enabled: true, Running: dnsUp})
 	} else {
+		// Wildcard DNS (any subdomain) needs the DNS server and Windows' DNS rule; the hosts file
+		// resolves the sites' domains and extra domains either way.
+		services = append(services, api.Service{ID: "dns", Name: "DNS (*." + cfg.TLD + ")", Category: "Core", Port: windowsDNSPort,
+			Installed: true, Enabled: true, Running: dnsUp && wildcard.ok, Problem: wildcard.problem})
 		helper := hosts.HelperStatus()
-		services = append(services, api.Service{ID: "dns", Name: "Hosts file (*." + cfg.TLD + ")", Category: "Core", Installed: helper.Installed, Enabled: true, Running: helper.Running})
+		services = append(services, api.Service{ID: "hosts", Name: "Hosts file", Category: "Core", Installed: helper.Installed, Enabled: true, Running: helper.Running})
 	}
 
 	services = append(services, api.Service{

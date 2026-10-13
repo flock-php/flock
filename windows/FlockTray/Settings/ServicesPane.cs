@@ -110,10 +110,16 @@ internal sealed class ServicesPane(SettingsWindow window, AppModel model) : Pane
         var panel = new StackPanel { Spacing = 14 };
         panel.Children.Add(Ui.Row(8, Ui.StatusDot(service.Running), Ui.Text(service.Name, "SubtitleTextBlockStyle")));
 
-        if (service.Id == "dns" && service.Version.Length == 0 && service.Port == 0)
+        if (service.Id == "dns")
+        {
+            panel.Children.Add(Ui.Caption(service.Running
+                ? "Windows sends every name under the Flock domain here (a DNS rule set up by `flock install`), so any subdomain of a site works — tenant1.app.test, a.b.app.test — without adding it."
+                : $"Wildcard subdomains don't resolve: {(service.Problem.Length > 0 ? service.Problem : "the DNS server isn't running")}. Site domains still work through the hosts file; add the subdomains you use to their site (Sites → … → Add Domain…)."));
+        }
+        if (service.Id == "hosts")
         {
             panel.Children.Add(Ui.Caption(service.Installed
-                ? "Windows can't send a whole domain to Flock, so the Flock hosts helper (a small Windows service) adds every site to the hosts file. Subdomains (api.app.test) are not covered — link them as their own site."
+                ? "The Flock hosts helper (a small Windows service) writes every site's domain and added domains into the hosts file, so they resolve even where the DNS rule doesn't apply (company DNS policies, VPNs, browsers with their own secure DNS)."
                 : "The hosts helper is not installed, so site domains don't resolve. Run `flock install` in a terminal once; Windows asks for permission."));
         }
 

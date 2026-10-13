@@ -43,21 +43,49 @@ type Status struct {
 
 // SiteStatus is one served site as the daemon sees it.
 type SiteStatus struct {
-	Name    string `json:"name"`
-	Domain  string `json:"domain"`
-	Path    string `json:"path"`
-	PHP     string `json:"php"`
-	Node    string `json:"node"`
-	Secured bool   `json:"secured"`
-	Parked  bool   `json:"parked"`
-	URL     string `json:"url,omitempty"`
-	Problem string `json:"problem,omitempty"`
+	Name   string `json:"name"`
+	Domain string `json:"domain"`
+	Path   string `json:"path"`
+	// PHP and Node are the versions the site uses. Each Source is "isolated" (set for the site in
+	// Flock), "project" (pinned in the project) or "default". Pinned is what the project pins, in
+	// File, also when an isolation wins over it. NodeShadowed is a .nvmrc / .node-version that
+	// .flockrc's node= wins over, e.g. ".nvmrc: 20".
+	PHP          string `json:"php"`
+	PHPSource    string `json:"php_source"`
+	PHPPinned    string `json:"php_pinned"`
+	PHPFile      string `json:"php_file"`
+	Node         string `json:"node"`
+	NodeSource   string `json:"node_source"`
+	NodePinned   string `json:"node_pinned"`
+	NodeFile     string `json:"node_file"`
+	NodeShadowed string `json:"node_shadowed"`
+	Secured      bool   `json:"secured"`
+	Parked       bool   `json:"parked"`
+	URL          string `json:"url,omitempty"`
+	Problem      string `json:"problem,omitempty"`
+	// Domains are the site's extra domains (subdomains and aliases), in the order they were added.
+	Domains []SiteDomain `json:"domains"`
 }
 
-// DNSStatus describes the embedded DNS server.
+// SiteDomain is one of a site's extra domains.
+type SiteDomain struct {
+	Entry   string `json:"entry"` // as stored and passed to the API: "tenant1" or "my-app-2.test"
+	Host    string `json:"host"`  // the full name: "tenant1.app.test"
+	Alias   bool   `json:"alias"` // a name of its own (with its subdomains) rather than a subdomain
+	URL     string `json:"url,omitempty"`
+	Problem string `json:"problem,omitempty"` // why it isn't served, e.g. another site uses it
+}
+
+// DNSStatus describes how site names resolve.
 type DNSStatus struct {
 	TLD  string `json:"tld"`
-	Addr string `json:"addr"`
+	Addr string `json:"addr"` // the embedded DNS server, when it runs
+	// Wildcard reports whether every name under the TLD resolves (any subdomain, at any depth).
+	// When it doesn't (Windows: the DNS rule is missing or overridden by a policy), only the
+	// sites' domains and extra domains resolve, through the hosts file; WildcardProblem says why.
+	Wildcard        bool   `json:"wildcard"`
+	WildcardProblem string `json:"wildcard_problem,omitempty"`
+	MaxDepth        int    `json:"max_depth"` // subdomain levels below a site that are served
 }
 
 // Settings are the global toggles a UI can change; nil fields stay as they are.
@@ -115,6 +143,7 @@ func NewHandler(b Backend, token string) http.Handler {
 
 	registerConfig(mux, b)
 	registerPHPBuilds(mux, b)
+	registerNodeVersions(mux, b)
 	registerMail(mux, b)
 	registerDumps(mux, b)
 	registerLogs(mux, b)
@@ -177,6 +206,11 @@ func (c *Client) Reload(ctx context.Context) (Status, error) {
 	err := c.do(ctx, http.MethodPost, "/v1/reload", &status)
 
 	return status, err
+}
+
+// slow is the client for requests that wait on the network or copy files (checks, installs).
+func (c *Client) slow() *Client {
+	return &Client{http: &http.Client{Transport: c.http.Transport, Timeout: 2 * time.Minute}}
 }
 
 func (c *Client) get(ctx context.Context, path string, out any) error {

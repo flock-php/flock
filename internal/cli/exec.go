@@ -18,6 +18,7 @@ import (
 	"flock/internal/node"
 	"flock/internal/php"
 	"flock/internal/postgres"
+	"flock/internal/project"
 	"flock/internal/valkey"
 )
 
@@ -53,6 +54,16 @@ func newExecCommand() *cobra.Command {
 			}
 
 			path, argv, env, err := resolveTool(s, cwd, args[0], args[1:])
+			// A missing PHP or Node version: offer to install it, then run the command after all.
+			if err != nil && interactive() {
+				installed, installErr := offerInstall(cmd.Context(), s, err)
+				if installErr != nil {
+					return installErr
+				}
+				if installed {
+					path, argv, env, err = resolveTool(s, cwd, args[0], args[1:])
+				}
+			}
 			if err != nil {
 				return err
 			}
@@ -60,6 +71,19 @@ func newExecCommand() *cobra.Command {
 			return execReplace(path, argv, envutil.Merge(os.Environ(), env))
 		},
 	}
+}
+
+// siteFor is the site dir belongs to, or nil.
+func siteFor(s *state, dir string) *config.Site {
+	if site, ok := s.cfg.SiteForDir(dir); ok {
+		return &site
+	}
+	return nil
+}
+
+func fileExists(path string) bool {
+	_, err := os.Stat(path)
+	return err == nil
 }
 
 // viteTLSEnv hands a secured site's certificate to laravel-vite-plugin, which reads
@@ -84,14 +108,12 @@ func viteTLSEnv(s *state, site config.Site, inSite bool) []string {
 func resolveTool(s *state, cwd, tool string, args []string) (path string, argv, env []string, err error) {
 	switch tool {
 	case "php", "composer":
-		minor := s.cfg.DefaultPHP
-		if site, ok := s.cfg.SiteForDir(cwd); ok {
-			minor = s.cfg.PHPFor(site)
-		}
+		// Isolated for the site, else pinned in the project (.flockrc), else the default.
+		minor := project.PHPFor(s.cfg, siteFor(s, cwd), cwd).Version
 
 		installed, _ := php.Installed(s.root)
 		if !slices.Contains(installed, minor) {
-			return "", nil, nil, fmt.Errorf("PHP %s is not installed (installed: %v)", minor, installed)
+			return "", nil, nil, &phpMissingError{minor: minor}
 		}
 
 		// argv[0] must be the absolute binary path: PHP derives PHP_BINARY from it, and a bare
@@ -110,15 +132,11 @@ func resolveTool(s *state, cwd, tool string, args []string) (path string, argv, 
 	case "node", "npm", "npx":
 		site, inSite := s.cfg.SiteForDir(cwd)
 
-		spec := node.DetectSpec(cwd)
-		if spec == "" {
-			spec = s.cfg.DefaultNode
-			if inSite {
-				spec = s.cfg.NodeFor(site)
-			}
-		}
+		// Isolated for the site, else pinned in the project (.flockrc, .nvmrc, .node-version),
+		// else the default.
+		spec := project.NodeFor(s.cfg, siteFor(s, cwd), cwd).Version
 
-		binDir, _, err := node.Resolve(s.root, spec)
+		binDir, version, err := node.Resolve(s.root, spec)
 		if err != nil {
 			return "", nil, nil, err
 		}
@@ -130,13 +148,16 @@ func resolveTool(s *state, cwd, tool string, args []string) (path string, argv, 
 			name += ".exe"
 		}
 
-		// npm and npx are scripts that look `node` up on PATH.
-		env = []string{
-			"PATH=" + binDir + string(os.PathListSeparator) + os.Getenv("PATH"),
-			"NODE_EXTRA_CA_CERTS=" + filepath.Join(s.root, "certs", "ca.crt"),
-		}
+		// npm and npx are scripts that look `node` up on PATH. Global packages, and an npm updated
+		// with `npm install -g npm`, go to the major's global prefix (see node.GlobalDir).
+		env = append(node.NpmEnv(s.root, version, binDir), "NODE_EXTRA_CA_CERTS="+filepath.Join(s.root, "certs", "ca.crt"))
 		env = append(env, viteTLSEnv(s, site, inSite)...)
 		path = filepath.Join(binDir, name)
+		if tool != "node" {
+			if updated := filepath.Join(node.GlobalBin(node.GlobalDir(s.root, node.MajorOf(version))), name); fileExists(updated) {
+				path = updated
+			}
+		}
 		return path, append([]string{path}, args...), env, nil
 
 	case "redis-cli", "valkey-cli":

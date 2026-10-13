@@ -149,7 +149,16 @@ internal sealed partial class SettingsWindow : FlockWindow
         }
         else
         {
-            container.Children.Add(panes[current].Build());
+            try
+            {
+                container.Children.Add(panes[current].Build());
+            }
+            catch (Exception e)
+            {
+                // Never leave the previous pane's content under this pane's title.
+                App.Log(e);
+                container.Children.Add(Ui.EmptyState(Ui.GlyphWarning, $"{panes[current].Title} couldn't be shown", $"{e.Message}\n\nDetails are in %LocalAppData%\\Flock\\tray.log."));
+            }
         }
         scroller.Content = container;
         return container;
@@ -178,6 +187,35 @@ internal sealed partial class SettingsWindow : FlockWindow
             XamlRoot = Content.XamlRoot,
         };
         return await dialog.ShowAsync() == ContentDialogResult.Primary;
+    }
+
+    /// <summary>Asks for one line of text; null when cancelled or left empty.</summary>
+    public async Task<string?> Ask(string question, string details, string placeholder, string action)
+    {
+        var box = new TextBox { PlaceholderText = placeholder };
+        var content = new StackPanel { Spacing = 12 };
+        content.Children.Add(new TextBlock { Text = details, TextWrapping = TextWrapping.Wrap });
+        content.Children.Add(box);
+        var dialog = new ContentDialog
+        {
+            Title = question,
+            Content = content,
+            PrimaryButtonText = action,
+            CloseButtonText = "Cancel",
+            DefaultButton = ContentDialogButton.Primary,
+            XamlRoot = Content.XamlRoot,
+        };
+        box.KeyDown += (_, e) =>
+        {
+            if (e.Key == Windows.System.VirtualKey.Enter)
+            {
+                box.Tag = "submitted";
+                dialog.Hide();
+            }
+        };
+        var result = await dialog.ShowAsync();
+        var text = box.Text.Trim();
+        return (result == ContentDialogResult.Primary || box.Tag is "submitted") && text.Length > 0 ? text : null;
     }
 
     public XamlRoot XamlRoot => Content.XamlRoot;

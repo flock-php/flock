@@ -206,14 +206,15 @@ internal sealed partial class PanelWindow : Window
     {
         var panel = Ui.Column(5, SectionTitle("Services"));
         panel.Children.Add(ServiceRow("Web", $"http :{status.HttpPort} · https :{status.HttpsPort}", true));
-        if (status.Dns.Addr.Length > 0)
+        if (status.Dns.Wildcard)
         {
             panel.Children.Add(ServiceRow("DNS", $"*.{status.Dns.Tld}", true));
         }
         else if (status.Dns.Tld.Length > 0)
         {
+            // Wildcard DNS is overridden or not set up: only the hosts file's names resolve.
             var helperDown = status.Warnings.Any(w => w.Contains("hosts helper", StringComparison.Ordinal));
-            panel.Children.Add(ServiceRow("Hosts", $"*.{status.Dns.Tld}", !helperDown));
+            panel.Children.Add(ServiceRow("Hosts", "site domains only", !helperDown));
         }
         panel.Children.Add(ServiceRow("Mail", status.Mail.Length == 0 ? "stopped" : $"smtp {status.Mail}", status.Mail.Length > 0));
         if (status.Postgres is { } postgres)
@@ -274,7 +275,7 @@ internal sealed partial class PanelWindow : Window
         var panel = Ui.Column(4, SectionTitle("Sites"));
         if (sites.Count == 0)
         {
-            panel.Children.Add(Ui.Caption("No sites yet — run `flock link` or `flock park`, or link a folder in Settings."));
+            panel.Children.Add(Ui.Caption("No sites yet — run `flock link` or `flock park`, or add a site in Settings."));
             return panel;
         }
 
@@ -368,6 +369,15 @@ internal sealed partial class PanelWindow : Window
 
     private StackPanel NotRunning()
     {
+        if (model.NeedsSetup)
+        {
+            return Ui.Column(8, Ui.Text("Flock isn't set up for this user yet.", foreground: Ui.SecondaryText),
+                Ui.Button("Set Up Flock…", () => App.Current.Open(WindowKind.Setup), accent: true));
+        }
+        if (model.IsUpdating)
+        {
+            return Ui.Column(8, Ui.Text("Updating Flock…", foreground: Ui.SecondaryText), new ProgressBar { IsIndeterminate = true });
+        }
         var start = Ui.Button("Start Flock", () => _ = model.RestartAsync(), accent: true);
         start.IsEnabled = !model.IsRestarting;
         return Ui.Column(8, Ui.Text(model.Error ?? "Flock is not running", foreground: Ui.SecondaryText), start);

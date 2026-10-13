@@ -85,28 +85,28 @@ struct GeneralPane: View {
                         .frame(minHeight: 80)
                         .overlay {
                             if config.parked.isEmpty {
-                                Text("No parked folders").foregroundStyle(.secondary)
+                                Text("No project folders").foregroundStyle(.secondary)
                             }
                         }
                         HStack(spacing: 0) {
                             Button {
-                                for url in SettingsStore.chooseDirectories(prompt: "Park", multiple: true) {
+                                for url in SettingsStore.chooseDirectories(prompt: "Add", multiple: true) {
                                     Task { await store.perform { _ = try await $0.park(url.path) } }
                                 }
                             } label: { Image(systemName: "plus").frame(width: 22, height: 18) }
                             Button {
                                 guard let path = selectedParked else { return }
                                 selectedParked = nil
-                                Task { await store.perform { _ = try await $0.forget(path) } }
+                                Task { await store.perform { _ = try await $0.unpark(path) } }
                             } label: { Image(systemName: "minus").frame(width: 22, height: 18) }
                             .disabled(selectedParked == nil)
                             Spacer()
                         }
                         .buttonStyle(.borderless)
                     } header: {
-                        Text("Parked folders")
+                        Text("Project folders")
                     } footer: {
-                        Text("Every folder inside a parked folder is served as <folder>.\(config.tld).")
+                        Text("Every folder inside a project folder is served as <folder>.\(config.tld) — the same as `flock park`.")
                             .font(.caption).foregroundStyle(.secondary)
                     }
                 }

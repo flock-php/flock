@@ -64,6 +64,8 @@ public sealed class Service
     public string Log { get; init; } = "";
     /// <summary>Connection URL (e.g. for TablePlus).</summary>
     public string Url { get; init; } = "";
+    /// <summary>Why it isn't working, when that isn't simply "stopped".</summary>
+    public string Problem { get; init; } = "";
 
     /// <summary>Is this a database that a GUI client like TablePlus can open?</summary>
     [JsonIgnore]

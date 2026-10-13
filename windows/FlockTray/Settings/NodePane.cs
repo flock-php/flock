@@ -4,117 +4,193 @@ using Microsoft.UI.Xaml.Controls;
 
 namespace Flock.Tray;
 
-internal sealed class NodePane : Pane
+/// <summary>
+/// Node.js lines from nodejs.org, like the PHP pane: install, update, make default and uninstall
+/// them. Exact versions a project pins (.nvmrc) are offered by `node` in the terminal instead.
+/// </summary>
+internal sealed class NodePane(SettingsWindow window, AppModel model) : Pane(window, model)
 {
-    // Kept across renders: the user may be typing while the daemon's state refreshes.
-    private readonly TextBox version = new() { PlaceholderText = "e.g. 20 or 20.19.5", Width = 220 };
-    private readonly Button install;
-    private bool installing;
-    private string? result;
-
-    public NodePane(SettingsWindow window, AppModel model) : base(window, model)
-    {
-        install = Ui.Button("Install", () => _ = Install(), accent: true);
-        version.KeyDown += (_, e) =>
-        {
-            if (e.Key == Windows.System.VirtualKey.Enter)
-            {
-                _ = Install();
-            }
-        };
-        version.TextChanged += (_, _) => install.IsEnabled = !installing && version.Text.Trim().Length > 0;
-    }
+    // Majors with an install or uninstall in flight (and what to show meanwhile); the daemon answers when it's done.
+    private readonly Dictionary<string, string> busy = [];
+    private bool checking;
 
     public override string Title => "Node";
     public override string Subtitle => "node, npm and npx follow the project's .nvmrc / .node-version, then the site's version, then the default.";
 
+    public override void Shown(CancellationToken hidden) => _ = Store.RefreshNodeAsync();
+
     public override UIElement Build()
     {
-        if (Store.Config is not { } config)
+        if (Store.Node is not { } catalog)
         {
-            return new StackPanel();
+            return Ui.Row(10, new ProgressRing { Width = 16, Height = 16 }, Ui.Text("Loading Node.js versions…", foreground: Ui.SecondaryText));
         }
-        var page = new StackPanel();
 
-        // Installed majors plus the configured default, so the picker always has a match.
-        var majors = config.NodeMajors;
-        if (config.DefaultNode.Length > 0 && !majors.Contains(config.DefaultNode))
-        {
-            majors.Insert(0, config.DefaultNode);
-        }
-        var picker = new ComboBox { MinWidth = 140 };
-        foreach (var major in majors)
-        {
-            picker.Items.Add($"Node {major}");
-        }
-        picker.SelectedIndex = majors.IndexOf(config.DefaultNode);
-        picker.SelectionChanged += (_, _) =>
-        {
-            if (picker.SelectedIndex >= 0)
+        var checkedText = catalog.CheckedAt is { } at ? $"Checked {Ui.Relative(at)}" : "Not checked yet";
+        UIElement check = checking
+            ? new ProgressRing { Width = 14, Height = 14 }
+            : Ui.Link("Check now", async () =>
             {
-                var major = majors[picker.SelectedIndex];
-                _ = Perform(c => c.UpdateSettingsAsync(new SettingsChange(DefaultNode: major)));
-            }
-        };
-        page.Children.Add(Ui.Section("Default", Ui.Setting("Default version", "Used outside projects and by projects that don't name a version.", picker)));
+                checking = true;
+                Rerender();
+                await Store.PerformOnNodeAsync(c => c.CheckNodeReleasesAsync());
+                checking = false;
+                Rerender();
+            });
+        var header = Ui.Spread(Ui.Text("Versions", "BodyStrongTextBlockStyle"), Ui.Row(6, Ui.Caption(checkedText, wrap: false), check));
+        header.Margin = new Thickness(1, 0, 0, 6);
 
-        var installed = new List<UIElement>();
-        if (config.Node.Count == 0)
+        var versions = new StackPanel { Spacing = 4, Margin = new Thickness(0, 0, 0, 24) };
+        versions.Children.Add(header);
+        foreach (var release in catalog.Versions)
         {
-            installed.Add(Ui.Card(Ui.Text("No Node.js installed yet.", foreground: Ui.SecondaryText)));
+            versions.Children.Add(Row(release));
         }
-        foreach (var full in config.Node)
+        if (catalog.Versions.Count == 0)
         {
-            var name = Ui.Row(8, Ui.Text($"Node {full}", "BodyStrongTextBlockStyle", wrap: false));
-            if (full.StartsWith(config.DefaultNode + ".", StringComparison.Ordinal))
-            {
-                name.Children.Add(Ui.Badge("Default"));
-            }
-            installed.Add(Ui.Card(Ui.Row(14, Ui.Icon(Ui.GlyphTerminal, 18, Ui.Success), name)));
+            versions.Children.Add(Ui.Card(Ui.Text("No Node.js versions to show yet.", foreground: Ui.SecondaryText)));
         }
-        page.Children.Add(Ui.Section("Installed versions", [.. installed]));
-
-        install.IsEnabled = !installing && version.Text.Trim().Length > 0;
-        version.IsEnabled = !installing;
-        var form = Ui.Row(8, Ui.Detach(version), Ui.Detach(install));
-        if (installing)
+        if (catalog.CheckError.Length > 0)
         {
-            form.Children.Add(new ProgressRing { Width = 16, Height = 16 });
-            form.Children.Add(Ui.Caption("Downloading…", wrap: false));
+            versions.Children.Add(Ui.Row(6, Ui.Icon(Ui.GlyphWarning, 12, Ui.Caution), Ui.Caption($"Couldn't reach nodejs.org: {catalog.CheckError}", Ui.Caution)));
         }
-        var installCard = Ui.Column(8, form);
-        if (result is not null)
-        {
-            installCard.Children.Add(Ui.Caption(result));
-        }
-        page.Children.Add(Ui.Section("Install a version",
-            Ui.Card(installCard),
-            GeneralPane.Footnote("Official builds from nodejs.org, verified against their checksums.")));
-        return page;
+        versions.Children.Add(GeneralPane.Footnote("Official builds from nodejs.org, verified against their checksums. A project that pins an exact version in .nvmrc gets it offered when you run node, npm or npx there. "
+            + "Global packages (npm install -g) belong to a Node line and survive its updates; those of the default version are on your PATH."));
+        return versions;
     }
 
-    private async Task Install()
+    private Border Row(NodeRelease release)
     {
-        var requested = version.Text.Trim();
-        if (requested.Length == 0 || installing)
+        var title = Ui.Row(8, Ui.Text($"Node {release.Major}", "BodyStrongTextBlockStyle", wrap: false), Ui.Caption(VersionText(release), wrap: false));
+        if (release.IsDefault)
         {
-            return;
+            title.Children.Add(Ui.Badge("Default"));
         }
-        installing = true;
-        result = null;
+        if (SupportBadge(release) is { } badge)
+        {
+            title.Children.Add(badge);
+        }
+
+        var icon = Ui.Icon(Ui.GlyphTerminal, 20, release.IsInstalled ? Ui.Accent : Ui.TertiaryText);
+        var info = Ui.Row(14, icon, Ui.Column(2, title, Detail(release)));
+        return Ui.Card(Ui.Spread(info, Actions(release)));
+    }
+
+    private static string VersionText(NodeRelease release) =>
+        release.Update ? $"{release.Installed} → {release.Latest}" : release.IsInstalled ? release.Installed : release.Latest;
+
+    private static Border? SupportBadge(NodeRelease release)
+    {
+        var until = release.EndOfLife.Length > 0 ? $" until {release.EndOfLife}" : "";
+        var (text, tone, tip) = release.Support switch
+        {
+            NodeSupport.Lts => (release.Codename.Length > 0 ? $"LTS · {release.Codename}" : "LTS", Ui.Tone.Accent, $"Long-term support{until}"),
+            NodeSupport.Maintenance => ("Maintenance", Ui.Tone.Neutral, $"Security fixes only{until}"),
+            NodeSupport.Current => ("Current", Ui.Tone.Neutral, $"The newest line, without long-term support{until}"),
+            NodeSupport.EndOfLife => ("End of life", Ui.Tone.Caution, release.EndOfLife.Length > 0 ? $"No more updates since {release.EndOfLife}" : "No more updates"),
+            _ => (null, Ui.Tone.Neutral, ""),
+        };
+        if (text is null)
+        {
+            return null;
+        }
+        var badge = Ui.Badge(text, tone);
+        ToolTipService.SetToolTip(badge, tip);
+        return badge;
+    }
+
+    /// <summary>The status line under the name.</summary>
+    private UIElement Detail(NodeRelease release)
+    {
+        if (busy.TryGetValue(release.Major, out var step))
+        {
+            return Ui.Row(6, new ProgressRing { Width = 12, Height = 12 }, Ui.Caption(step, wrap: false));
+        }
+        var (status, color) = release switch
+        {
+            { Update: true } => ("Update available", Ui.Accent),
+            { IsInstalled: true } => ("Up to date", Ui.SecondaryText),
+            _ => ("Not installed", Ui.SecondaryText),
+        };
+        var line = Ui.Row(0, Ui.Caption(status, color, wrap: false));
+        if (release.Npm.Length > 0)
+        {
+            line.Children.Add(Ui.Caption($" · npm {release.Npm}", wrap: false));
+            if (release.NpmLatest.Length > 0)
+            {
+                line.Children.Add(Ui.Caption($" (npm {release.NpmLatest} available)", Ui.Accent, wrap: false));
+            }
+        }
+        return line;
+    }
+
+    private StackPanel Actions(NodeRelease release)
+    {
+        var actions = Ui.Row(8);
+        if (busy.ContainsKey(release.Major))
+        {
+            return actions;
+        }
+        if (!release.IsInstalled)
+        {
+            actions.Children.Add(Ui.Button("Install", () => _ = Run(release.Major, $"Downloading Node.js {release.Latest}…", c => c.InstallNodeMajorAsync(release.Major)),
+                glyph: Ui.GlyphDownload, tooltip: $"Downloads Node.js {release.Latest} from nodejs.org"));
+            return actions;
+        }
+        if (release.Update)
+        {
+            actions.Children.Add(Ui.Button($"Update to {release.Latest}", () => _ = Run(release.Major, $"Downloading Node.js {release.Latest}…", c => c.InstallNodeMajorAsync(release.Major)),
+                accent: true, glyph: Ui.GlyphDownload, tooltip: $"Downloads Node.js {release.Latest}, then removes {release.Installed}. Global packages stay."));
+        }
+        if (release.NpmLatest.Length > 0)
+        {
+            actions.Children.Add(Ui.Button($"Update npm", () => _ = Run(release.Major, $"Updating npm to {release.NpmLatest}…", c => c.UpdateNpmAsync(release.Major)),
+                glyph: Ui.GlyphDownload, tooltip: $"Installs npm {release.NpmLatest}, the newest npm that supports Node.js {release.Installed}, for Node {release.Major}"));
+        }
+        if (!release.IsDefault)
+        {
+            actions.Children.Add(Ui.Button("Make Default", () => _ = MakeDefault(release.Major)));
+        }
+        actions.Children.Add(More(release));
+        return actions;
+    }
+
+    private Button More(NodeRelease release)
+    {
+        var uninstall = new MenuFlyoutItem { Text = "Uninstall…", IsEnabled = !release.IsDefault };
+        uninstall.Click += async (_, _) =>
+        {
+            if (await Window.Confirm($"Uninstall Node {release.Major}?",
+                    $"Its global npm packages are removed too. Projects and sites that use Node {release.Major} fall back to the default version until you install it again.", "Uninstall"))
+            {
+                await Run(release.Major, "Uninstalling…", c => c.UninstallNodeAsync(release.Major));
+            }
+        };
+        var menu = new MenuFlyout();
+        menu.Items.Add(uninstall);
+        var button = Ui.IconButton(Ui.GlyphMore, "More", () => { });
+        button.Flyout = menu;
+        return button;
+    }
+
+    private async Task Run(string major, string step, Func<FlockClient, Task<NodeCatalog>> action)
+    {
+        busy[major] = step;
         Rerender();
         try
         {
-            var full = await Store.Client.InstallNodeAsync(requested);
-            result = $"Installed Node {full}.";
-            version.Text = "";
+            await Store.PerformOnNodeAsync(action);
         }
-        catch (FlockException e)
+        finally
         {
-            Store.ShowError(e.Message);
+            busy.Remove(major);
+            Rerender();
         }
-        installing = false;
-        await Store.RefreshAsync();
-        Rerender();
+    }
+
+    private async Task MakeDefault(string major)
+    {
+        await Perform(c => c.UpdateSettingsAsync(new SettingsChange(DefaultNode: major)));
+        await Store.RefreshNodeAsync();
     }
 }
