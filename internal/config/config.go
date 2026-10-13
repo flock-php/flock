@@ -22,8 +22,10 @@ type Config struct {
 	Services    Services `json:"services"`
 	Xdebug      bool     `json:"xdebug"`
 	Dumps       bool     `json:"dumps"`
-	Parked      []string `json:"parked"`
-	Sites       []Site   `json:"sites"`
+	// PHPAutoBuild builds patch updates and new PHP versions in the background.
+	PHPAutoBuild bool     `json:"php_auto_build"`
+	Parked       []string `json:"parked"`
+	Sites        []Site   `json:"sites"`
 }
 
 // Ports are the local ports Flock's services listen on.
@@ -74,10 +76,11 @@ type Site struct {
 // Default returns the config used when none exists yet.
 func Default() *Config {
 	return &Config{
-		TLD:         "test",
-		DefaultPHP:  "8.5",
-		DefaultNode: "22",
-		Ports:       Ports{HTTP: 80, HTTPS: 443, DNS: 53535, SMTP: 2525, Postgres: 5432, Redis: 6379, Dumps: 9912, API: 53531},
+		TLD:          "test",
+		DefaultPHP:   "8.5",
+		DefaultNode:  "22",
+		PHPAutoBuild: true,
+		Ports:        Ports{HTTP: 80, HTTPS: 443, DNS: 53535, SMTP: 2525, Postgres: 5432, Redis: 6379, Dumps: 9912, API: 53531},
 	}
 }
 

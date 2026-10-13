@@ -12,13 +12,17 @@ import (
 
 	"flock/internal/config"
 	"flock/internal/dumps"
+	"flock/internal/phpbuild"
 )
 
 // fakeBackend applies mutations to config.json in root, like the daemon, without running services.
 type fakeBackend struct {
-	root  string
-	sites []SiteStatus
+	root   string
+	sites  []SiteStatus
+	builds *phpbuild.Manager
 }
+
+func (f *fakeBackend) PHPBuilds() *phpbuild.Manager { return f.builds }
 
 func (f *fakeBackend) Status() Status      { return Status{Sites: f.sites} }
 func (f *fakeBackend) Reload() error       { return nil }

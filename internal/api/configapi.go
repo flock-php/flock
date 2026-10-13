@@ -8,10 +8,8 @@ import (
 	"io"
 	"net/http"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"slices"
-	"strings"
 	"time"
 
 	"flock/internal/config"
@@ -37,16 +35,17 @@ type Service struct {
 
 // ConfigView is config.json plus installed versions, for the settings UI.
 type ConfigView struct {
-	TLD         string       `json:"tld"`
-	DefaultPHP  string       `json:"default_php"`
-	DefaultNode string       `json:"default_node"`
-	Xdebug      bool         `json:"xdebug"`
-	Dumps       bool         `json:"dumps"`
-	Root        string       `json:"root"`
-	Ports       config.Ports `json:"ports"`
-	Parked      []string     `json:"parked"`
-	PHP         []PHPVersion `json:"php"`
-	Node        []string     `json:"node"`
+	TLD          string       `json:"tld"`
+	DefaultPHP   string       `json:"default_php"`
+	DefaultNode  string       `json:"default_node"`
+	Xdebug       bool         `json:"xdebug"`
+	Dumps        bool         `json:"dumps"`
+	PHPAutoBuild bool         `json:"php_auto_build"`
+	Root         string       `json:"root"`
+	Ports        config.Ports `json:"ports"`
+	Parked       []string     `json:"parked"`
+	PHP          []PHPVersion `json:"php"`
+	Node         []string     `json:"node"`
 }
 
 // PHPVersion is one installed PHP minor version.
@@ -90,6 +89,9 @@ func applySettings(root string, cfg *config.Config, s Settings) error {
 			return invalid("PHP %s is not installed", *s.DefaultPHP)
 		}
 		cfg.DefaultPHP = *s.DefaultPHP
+	}
+	if s.PHPAutoBuild != nil {
+		cfg.PHPAutoBuild = *s.PHPAutoBuild
 	}
 	if s.DefaultNode != nil {
 		if *s.DefaultNode == "" {
@@ -305,7 +307,7 @@ func registerConfig(mux *http.ServeMux, b Backend) {
 func configView(root string, cfg *config.Config) ConfigView {
 	view := ConfigView{
 		TLD: cfg.TLD, DefaultPHP: cfg.DefaultPHP, DefaultNode: cfg.DefaultNode,
-		Xdebug: cfg.Xdebug, Dumps: cfg.Dumps, Root: root, Ports: cfg.Ports,
+		Xdebug: cfg.Xdebug, Dumps: cfg.Dumps, PHPAutoBuild: cfg.PHPAutoBuild, Root: root, Ports: cfg.Ports,
 		Parked: cfg.Parked, PHP: []PHPVersion{}, Node: []string{},
 	}
 	if view.Parked == nil {
@@ -317,7 +319,7 @@ func configView(root string, cfg *config.Config) ConfigView {
 		_, xdebugErr := os.Stat(php.ExtensionPath(root, v, "xdebug"))
 		view.PHP = append(view.PHP, PHPVersion{
 			Version:         v,
-			FullVersion:     fullPHPVersion(php.Binary(root, v)),
+			FullVersion:     php.FullVersion(root, v),
 			Ini:             php.IniPath(root, v),
 			XdebugAvailable: xdebugErr == nil,
 		})
@@ -327,12 +329,4 @@ func configView(root string, cfg *config.Config) ConfigView {
 		view.Node = versions
 	}
 	return view
-}
-
-func fullPHPVersion(binary string) string {
-	out, err := exec.Command(binary, "-n", "-r", "echo PHP_VERSION;").Output()
-	if err != nil {
-		return ""
-	}
-	return strings.TrimSpace(string(out))
 }

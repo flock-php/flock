@@ -255,3 +255,8 @@ func tailLines(path string, n int) (string, error) {
 	}
 	return strings.Join(lines, "\n") + "\n", nil
 }
+
+func fileExists(path string) bool {
+	_, err := os.Stat(path)
+	return err == nil
+}

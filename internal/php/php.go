@@ -22,6 +22,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"syscall"
 
 	"flock/internal/supervisor"
@@ -361,8 +362,11 @@ clear_env = no
 		Name: "php" + minor + "-fpm",
 		Path: FPMBinary(root, minor),
 		Args: []string{"--nodaemonize", "--fpm-config", conf, "-c", IniPath(root, minor)},
-		// FLOCK_XDEBUG changes the spec when Xdebug is toggled, so the supervisor restarts FPM.
-		Env:        append(append(Env(root, minor), fmt.Sprintf("FLOCK_XDEBUG=%t", XdebugEnabled(root, minor))), extraEnv...),
+		// FLOCK_XDEBUG and FLOCK_PHP_VERSION change the spec when Xdebug is toggled or a patch
+		// update is installed, so the supervisor restarts FPM with the new setup.
+		Env: append(append(Env(root, minor),
+			fmt.Sprintf("FLOCK_XDEBUG=%t", XdebugEnabled(root, minor)),
+			"FLOCK_PHP_VERSION="+FullVersion(root, minor)), extraEnv...),
 		LogFile:    logFile,
 		StopSignal: syscall.SIGQUIT, // graceful: finish in-flight requests
 	}, nil
@@ -375,6 +379,36 @@ func Env(root, minor string) []string {
 		"PHPRC=" + IniPath(root, minor),
 		"PHP_INI_SCAN_DIR=" + filepath.Join(Dir(root, minor), "conf.d"),
 	}
+}
+
+var fullVersions sync.Map // binary path + mtime → version
+
+// FullVersion returns the exact version of an installed minor ("8.5.11"), cached per binary.
+func FullVersion(root, minor string) string {
+	bin := Binary(root, minor)
+	info, err := os.Stat(bin)
+	if err != nil {
+		return ""
+	}
+	key := bin + "@" + info.ModTime().String()
+	if v, ok := fullVersions.Load(key); ok {
+		return v.(string)
+	}
+	out, err := exec.Command(bin, "-n", "-r", "echo PHP_VERSION;").Output()
+	if err != nil {
+		return ""
+	}
+	version := strings.TrimSpace(string(out))
+	fullVersions.Store(key, version)
+	return version
+}
+
+// Uninstall removes a PHP version including its php.ini.
+func Uninstall(root, minor string) error {
+	if !minorPattern.MatchString(minor) {
+		return fmt.Errorf("invalid version %q", minor)
+	}
+	return os.RemoveAll(Dir(root, minor))
 }
 
 // ComposerPhar is where the Composer phar lives.

@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"flock/internal/config"
+	"flock/internal/phpbuild"
 	"flock/internal/supervisor"
 )
 
@@ -61,10 +62,11 @@ type DNSStatus struct {
 
 // Settings are the global toggles a UI can change; nil fields stay as they are.
 type Settings struct {
-	Xdebug      *bool   `json:"xdebug"`
-	Dumps       *bool   `json:"dumps"`
-	DefaultPHP  *string `json:"default_php"`
-	DefaultNode *string `json:"default_node"`
+	Xdebug       *bool   `json:"xdebug"`
+	Dumps        *bool   `json:"dumps"`
+	DefaultPHP   *string `json:"default_php"`
+	DefaultNode  *string `json:"default_node"`
+	PHPAutoBuild *bool   `json:"php_auto_build"`
 }
 
 // Backend is what the API needs from the daemon.
@@ -76,6 +78,8 @@ type Backend interface {
 	Mutate(change func(*config.Config) error) error
 	// Services describes every service with its live state.
 	Services() []Service
+	// PHPBuilds manages PHP releases and builds (nil when unavailable).
+	PHPBuilds() *phpbuild.Manager
 }
 
 // NewHandler builds the API routes. A non-empty token requires `Authorization: Bearer <token>`
@@ -108,6 +112,7 @@ func NewHandler(b Backend, token string) http.Handler {
 	})
 
 	registerConfig(mux, b)
+	registerPHPBuilds(mux, b)
 	registerMail(mux, b)
 	registerDumps(mux, b)
 	registerLogs(mux, b)

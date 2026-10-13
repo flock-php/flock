@@ -23,6 +23,7 @@ import (
 	"flock/internal/mail"
 	"flock/internal/paths"
 	"flock/internal/php"
+	"flock/internal/phpbuild"
 	"flock/internal/ports"
 	"flock/internal/postgres"
 	"flock/internal/supervisor"
@@ -54,6 +55,7 @@ type daemon struct {
 	dns      *dns.Server
 	mail     *mail.Server
 	webUp    bool
+	builds   *phpbuild.Manager
 
 	mu       sync.Mutex
 	sites    []api.SiteStatus
@@ -184,6 +186,18 @@ func Run(ctx context.Context, cfg Config) error {
 
 	d := &daemon{root: cfg.Root, version: cfg.Version, startedAt: time.Now(), procs: supervisor.New()}
 	defer d.shutdown()
+
+	if runtime.GOOS == "darwin" {
+		d.builds = phpbuild.NewManager(cfg.Root, phpbuild.DefaultSources(), phpbuild.Hooks{
+			Installed: d.installedPHP,
+			Install:   d.installPHP,
+			AutoBuild: func() bool {
+				c, err := config.Load(d.root)
+				return err == nil && c.PHPAutoBuild
+			},
+		})
+		go d.builds.Run(ctx)
+	}
 
 	// A broken config or a busy port must not kill the daemon: launchd would restart it in a loop
 	// and `flock status` could not explain what is wrong. Problems become warnings instead.
@@ -506,6 +520,26 @@ func (d *daemon) Status() api.Status {
 	}
 
 	return st
+}
+
+// PHPBuilds implements api.Backend.
+func (d *daemon) PHPBuilds() *phpbuild.Manager { return d.builds }
+
+func (d *daemon) installedPHP() map[string]string {
+	installed, _ := php.Installed(d.root)
+	out := map[string]string{}
+	for _, minor := range installed {
+		out[minor] = php.FullVersion(d.root, minor)
+	}
+	return out
+}
+
+// installPHP installs a finished build and restarts that version's FPM pool.
+func (d *daemon) installPHP(dir string) error {
+	if _, err := php.InstallFrom(d.root, dir); err != nil {
+		return err
+	}
+	return d.reload()
 }
 
 // Services implements api.Backend.
