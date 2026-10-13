@@ -1,7 +1,7 @@
 VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
 LDFLAGS := -s -w -X flock/internal/cli.Version=$(VERSION)
 
-.PHONY: build build-all test lint app
+.PHONY: build build-all test lint app windows windows-test
 
 build:
 	go build -ldflags "$(LDFLAGS)" -o bin/flock ./cmd/flock
@@ -21,3 +21,12 @@ lint:
 
 app:
 	macos/build-app.sh
+
+# flock.exe for Windows (copy it to the Windows machine and run `flock.exe install`).
+windows:
+	GOOS=windows GOARCH=amd64 go build -ldflags "$(LDFLAGS)" -o dist/windows-amd64/flock.exe ./cmd/flock
+	GOOS=windows GOARCH=arm64 go build -ldflags "$(LDFLAGS)" -o dist/windows-arm64/flock.exe ./cmd/flock
+
+# The tray app's models and API client (windows/FlockKit) run on any OS; the app itself is built on Windows (windows/build.ps1).
+windows-test:
+	dotnet test windows/FlockKit.Tests

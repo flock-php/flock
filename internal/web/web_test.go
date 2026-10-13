@@ -14,8 +14,8 @@ func testConfig() Config {
 		HTTPPort:   80,
 		HTTPSPort:  443,
 		Sites: []Site{
-			{Domain: "plain.test", Root: "/code/plain/public", FPM: "unix//run/php85.sock"},
-			{Domain: "safe.test", Root: "/code/safe/public", FPM: "unix//run/php84.sock", CertFile: "/c/safe.crt", KeyFile: "/c/safe.key"},
+			{Domain: "plain.test", Root: "/code/plain/public", FPM: []string{"unix//run/php85.sock"}},
+			{Domain: "safe.test", Root: "/code/safe/public", FPM: []string{"unix//run/php84.sock"}, CertFile: "/c/safe.crt", KeyFile: "/c/safe.key"},
 		},
 	}
 }
@@ -52,5 +52,34 @@ func TestWithBindQualifiesListenAddresses(t *testing.T) {
 	}
 	if got := string(withBind(in, "")); got != string(in) {
 		t.Fatalf("empty bind must not change config, got %s", got)
+	}
+}
+
+func TestCaddyfileBalancesPHPCGIWorkersAndKeepsWindowsPaths(t *testing.T) {
+	cfg := Config{
+		StorageDir: `C:\Users\me\AppData\Roaming\Flock\caddy`,
+		LogFile:    `C:\Users\me\AppData\Roaming\Flock\log\web.log`,
+		HTTPPort:   80,
+		HTTPSPort:  443,
+		Sites: []Site{{
+			Domain: "app.test", Root: `C:\code\app\public`,
+			FPM:      []string{"127.0.0.1:19840", "127.0.0.1:19841"},
+			CertFile: `C:\Users\me\AppData\Roaming\Flock\certs\app.test.crt`, KeyFile: `C:\Users\me\AppData\Roaming\Flock\certs\app.test.key`,
+		}},
+	}
+
+	json, _, err := caddyconfig.GetAdapter("caddyfile").Adapt([]byte(Caddyfile(cfg)), nil)
+	if err != nil {
+		t.Fatalf("%v\n%s", err, Caddyfile(cfg))
+	}
+	for _, want := range []string{
+		`"dial":"127.0.0.1:19840"`, `"dial":"127.0.0.1:19841"`, `"policy":"least_conn"`,
+		`"root":"C:/code/app/public"`,
+		`"certificate":"C:/Users/me/AppData/Roaming/Flock/certs/app.test.crt"`,
+		`"root":"C:/Users/me/AppData/Roaming/Flock/caddy"`,
+	} {
+		if !strings.Contains(string(json), want) {
+			t.Errorf("missing %s in:\n%s", want, json)
+		}
 	}
 }

@@ -80,6 +80,8 @@ type Backend interface {
 	Services() []Service
 	// PHPBuilds manages PHP releases and builds (nil when unavailable).
 	PHPBuilds() *phpbuild.Manager
+	// ReleasePHP stops whatever runs a PHP version so its files can be removed (Windows locks them).
+	ReleasePHP(minor string)
 }
 
 // NewHandler builds the API routes. A non-empty token requires `Authorization: Bearer <token>`

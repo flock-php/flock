@@ -1,4 +1,4 @@
-// Package php manages installed PHP versions: their binaries, php.ini and PHP-FPM pools.
+// Package php manages installed PHP versions: their binaries, php.ini and FastCGI pools.
 //
 // Layout under the Flock root:
 //
@@ -6,14 +6,20 @@
 //	php/<minor>/php.ini            user-editable, created once
 //	php/<minor>/php-fpm.conf       regenerated on every start
 //	run/php<minor>.sock            FPM socket the web server connects to
+//
+// Windows has no PHP-FPM: there bin/ holds the official windows.php.net build (php.exe,
+// php-cgi.exe and their DLLs), ext/ its extension DLLs, conf.d/00-flock.ini loads them,
+// and every version runs a few php-cgi.exe workers on loopback ports instead of an FPM pool.
 package php
 
 import (
 	"archive/tar"
+	"archive/zip"
 	"compress/gzip"
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -24,6 +30,7 @@ import (
 	"strings"
 	"sync"
 	"syscall"
+	"time"
 
 	"flock/internal/supervisor"
 )
@@ -39,6 +46,11 @@ func Binary(root, minor string) string { return filepath.Join(Dir(root, minor), 
 // FPMBinary is the FPM binary of a version.
 func FPMBinary(root, minor string) string {
 	return filepath.Join(Dir(root, minor), "bin", exe("php-fpm"))
+}
+
+// CGIBinary is the FastCGI binary used on Windows instead of FPM.
+func CGIBinary(root, minor string) string {
+	return filepath.Join(Dir(root, minor), "bin", exe("php-cgi"))
 }
 
 // IniPath is the php.ini used by both CLI (via PHPRC) and FPM.
@@ -82,7 +94,8 @@ func Installed(root string) ([]string, error) {
 	return versions, nil
 }
 
-// InstallFrom installs a PHP build from a directory or .tar.gz containing `php` and `php-fpm`.
+// InstallFrom installs a PHP build from a directory or .tar.gz containing `php` and `php-fpm`
+// (on Windows: a directory or .zip with php.exe, php-cgi.exe, their DLLs and ext/).
 // It returns the installed minor version, detected by running the binary.
 func InstallFrom(root, src string) (string, error) {
 	staging, err := os.MkdirTemp(root, ".php-install-")
@@ -106,9 +119,15 @@ func InstallFrom(root, src string) (string, error) {
 		return "", err
 	}
 
-	if strings.HasSuffix(src, ".tar.gz") || strings.HasSuffix(src, ".tgz") {
+	switch {
+	case strings.HasSuffix(src, ".tar.gz") || strings.HasSuffix(src, ".tgz"):
 		err = extractBinaries(src, bin, ext)
-	} else {
+	case strings.HasSuffix(strings.ToLower(src), ".zip"):
+		unpacked := filepath.Join(staging, "zip")
+		if err = ExtractZip(src, unpacked); err == nil {
+			err = copyBinaries(unpacked, bin, ext)
+		}
+	default:
 		err = copyBinaries(src, bin, ext)
 	}
 	if err != nil {
@@ -138,10 +157,19 @@ func InstallFrom(root, src string) (string, error) {
 		}
 	}
 
+	if runtime.GOOS == "windows" {
+		if err := writeExtensionsIni(root, minor); err != nil {
+			return "", err
+		}
+	}
+
 	return minor, nil
 }
 
 func copyBinaries(src, dst, extDst string) error {
+	if runtime.GOOS == "windows" {
+		return copyWindowsBuild(src, dst, extDst)
+	}
 	if sos, _ := filepath.Glob(filepath.Join(src, "ext", "*"+sharedSuffix())); len(sos) > 0 {
 		for _, so := range sos {
 			if err := copyFile(so, filepath.Join(extDst, filepath.Base(so)), 0o755); err != nil {
@@ -215,6 +243,83 @@ func extractBinaries(archive, dst, extDst string) error {
 	return nil
 }
 
+// copyWindowsBuild copies an official Windows build: every top-level file (php.exe, php-cgi.exe
+// and the DLLs they and the extensions load from their own directory) plus ext/.
+func copyWindowsBuild(src, dst, extDst string) error {
+	for _, name := range []string{"php.exe", "php-cgi.exe"} {
+		if _, err := os.Stat(filepath.Join(src, name)); err != nil {
+			return fmt.Errorf("%s not found in %s", name, src)
+		}
+	}
+
+	// OpenSSL key generation (openssl_pkey_new, e.g. `php artisan passport:keys`) needs a config file.
+	if cnf := filepath.Join(src, "extras", "ssl", "openssl.cnf"); fileExists(cnf) {
+		if err := copyFile(cnf, filepath.Join(dst, "openssl.cnf"), 0o644); err != nil {
+			return err
+		}
+	}
+
+	for from, to := range map[string]string{src: dst, filepath.Join(src, "ext"): extDst} {
+		entries, err := os.ReadDir(from)
+		if err != nil {
+			return err
+		}
+		for _, e := range entries {
+			if !e.Type().IsRegular() {
+				continue
+			}
+			if err := copyFile(filepath.Join(from, e.Name()), filepath.Join(to, e.Name()), 0o755); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+// ExtractZip unpacks a .zip into dest, rejecting entries that would escape it.
+func ExtractZip(archive, dest string) error {
+	zr, err := zip.OpenReader(archive)
+	if err != nil {
+		return err
+	}
+	defer zr.Close()
+
+	clean := filepath.Clean(dest) + string(filepath.Separator)
+	for _, f := range zr.File {
+		target := filepath.Join(dest, filepath.FromSlash(f.Name))
+		if !strings.HasPrefix(target, clean) {
+			return fmt.Errorf("illegal path in archive: %s", f.Name)
+		}
+		if f.FileInfo().IsDir() {
+			if err := os.MkdirAll(target, 0o755); err != nil {
+				return err
+			}
+			continue
+		}
+		if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
+			return err
+		}
+		rc, err := f.Open()
+		if err != nil {
+			return err
+		}
+		out, err := os.OpenFile(target, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o755)
+		if err != nil {
+			rc.Close()
+			return err
+		}
+		_, err = io.Copy(out, rc)
+		rc.Close()
+		if cerr := out.Close(); err == nil {
+			err = cerr
+		}
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func copyFile(src, dst string, mode os.FileMode) error {
 	in, err := os.Open(src)
 	if err != nil {
@@ -240,9 +345,42 @@ func sharedSuffix() string {
 	return ".so"
 }
 
-// ExtensionPath is where a shared extension of a version lives, e.g. xdebug.so.
+// ExtensionPath is where a shared extension of a version lives, e.g. xdebug.so
+// (php_xdebug.dll on Windows, following the official builds' naming).
 func ExtensionPath(root, minor, name string) string {
+	if runtime.GOOS == "windows" {
+		name = "php_" + name
+	}
 	return filepath.Join(Dir(root, minor), "ext", name+sharedSuffix())
+}
+
+// windowsExtensions are loaded from ext/ when the build ships them (8.5 compiles opcache in).
+// The official builds keep almost everything shared; this is what Laravel apps commonly need.
+var windowsExtensions = []string{
+	"bz2", "curl", "exif", "fileinfo", "ftp", "gd", "gettext", "gmp", "intl", "mbstring", "mysqli",
+	"openssl", "pdo_mysql", "pdo_pgsql", "pdo_sqlite", "pgsql", "sockets", "sodium", "sqlite3", "xsl", "zip",
+	"igbinary", "redis",
+}
+
+// writeExtensionsIni (re)writes conf.d/00-flock.ini, which points PHP at ext/ and loads the
+// extensions present there. It is Flock's file; php.ini stays the user's.
+func writeExtensionsIni(root, minor string) error {
+	dir := filepath.Join(Dir(root, minor), "conf.d")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return err
+	}
+
+	var b strings.Builder
+	fmt.Fprintf(&b, "; Managed by Flock — regenerated on install, edit php.ini instead.\nextension_dir = \"%s\"\n", filepath.Join(Dir(root, minor), "ext"))
+	if _, err := os.Stat(ExtensionPath(root, minor, "opcache")); err == nil {
+		b.WriteString("zend_extension = opcache\n")
+	}
+	for _, name := range windowsExtensions {
+		if _, err := os.Stat(ExtensionPath(root, minor, name)); err == nil {
+			fmt.Fprintf(&b, "extension = %s\n", name)
+		}
+	}
+	return os.WriteFile(filepath.Join(dir, "00-flock.ini"), []byte(b.String()), 0o644)
 }
 
 func xdebugIni(root, minor string) string {
@@ -308,7 +446,7 @@ opcache.revalidate_freq = 0
 opcache.memory_consumption = 256
 opcache.max_accelerated_files = 50000
 
-; Static builds don't know the OS trust store; this bundle is the system roots plus Flock's CA.
+; PHP's OpenSSL doesn't use the OS trust store; this bundle is the system roots plus Flock's CA.
 openssl.cafile = "%s"
 curl.cainfo = "%s"
 `, ca, ca)
@@ -316,6 +454,11 @@ curl.cainfo = "%s"
 
 // EnsureIni creates php.ini for a version when it does not exist yet.
 func EnsureIni(root, minor string) error {
+	if runtime.GOOS == "windows" {
+		if err := writeExtensionsIni(root, minor); err != nil {
+			return err
+		}
+	}
 	path := IniPath(root, minor)
 	if _, err := os.Stat(path); err == nil {
 		return nil
@@ -372,13 +515,112 @@ clear_env = no
 	}, nil
 }
 
+// Pool is a version's FastCGI pool: the processes to supervise and the addresses
+// ("unix/<socket>" or "127.0.0.1:<port>") the web server sends requests to.
+type Pool struct {
+	Specs     []supervisor.Spec
+	Upstreams []string
+}
+
+// PoolFor returns the pool of a version: one PHP-FPM master, or php-cgi workers on Windows.
+func PoolFor(root, minor string, extraEnv ...string) (Pool, error) {
+	if runtime.GOOS == "windows" {
+		return CGIPool(root, minor, extraEnv...)
+	}
+	spec, err := FPMSpec(root, minor, extraEnv...)
+	if err != nil {
+		return Pool{}, err
+	}
+	return Pool{Specs: []supervisor.Spec{spec}, Upstreams: []string{"unix/" + Socket(root, minor)}}, nil
+}
+
+// CGIWorkers is how many php-cgi processes serve a version on Windows. Each handles one request
+// at a time, so a paused Xdebug session or a slow request only blocks its own worker.
+const CGIWorkers = 6
+
+// CGIPort is the loopback port of a php-cgi worker: 19000 + major*100 + minor*10 + worker,
+// e.g. 19840-19845 for PHP 8.4.
+func CGIPort(minor string, worker int) int {
+	major, rest, _ := strings.Cut(minor, ".")
+	ma, _ := strconv.Atoi(major)
+	mi, _ := strconv.Atoi(rest)
+	return 19000 + ma*100 + mi*10 + worker
+}
+
+// CGIPool runs CGIWorkers php-cgi processes for a version (Windows has no PHP-FPM).
+func CGIPool(root, minor string, extraEnv ...string) (Pool, error) {
+	if err := EnsureIni(root, minor); err != nil {
+		return Pool{}, err
+	}
+
+	env := append(append(Env(root, minor),
+		fmt.Sprintf("FLOCK_XDEBUG=%t", XdebugEnabled(root, minor)),
+		"FLOCK_PHP_VERSION="+FullVersion(root, minor),
+		// php-cgi exits after 500 requests by default; the restart would briefly take a worker away.
+		"PHP_FCGI_MAX_REQUESTS=0",
+		"PHP_FCGI_CHILDREN=0"), extraEnv...)
+
+	var pool Pool
+	for i := range CGIWorkers {
+		addr := fmt.Sprintf("127.0.0.1:%d", CGIPort(minor, i))
+		pool.Specs = append(pool.Specs, supervisor.Spec{
+			Name:    fmt.Sprintf("php%s-cgi-%d", minor, i+1),
+			Path:    CGIBinary(root, minor),
+			Args:    []string{"-b", addr, "-c", IniPath(root, minor)},
+			Env:     env,
+			LogFile: filepath.Join(root, "log", "php"+minor+"-cgi.log"),
+		})
+		pool.Upstreams = append(pool.Upstreams, addr)
+	}
+	return pool, nil
+}
+
+// PoolLog is the log name (`flock logs <name>`) of a version's pool.
+func PoolLog(minor string) string {
+	if runtime.GOOS == "windows" {
+		return "php" + minor + "-cgi"
+	}
+	return "php" + minor + "-fpm"
+}
+
+// WaitReady polls until every upstream accepts connections, or the timeout passes.
+func WaitReady(upstreams []string, timeout time.Duration) bool {
+	deadline := time.Now().Add(timeout)
+	for _, upstream := range upstreams {
+		network, addr := "tcp", upstream
+		if path, ok := strings.CutPrefix(upstream, "unix/"); ok {
+			network, addr = "unix", path
+		}
+		for {
+			if conn, err := net.DialTimeout(network, addr, 100*time.Millisecond); err == nil {
+				_ = conn.Close()
+				break
+			}
+			if time.Now().After(deadline) {
+				return false
+			}
+			time.Sleep(25 * time.Millisecond)
+		}
+	}
+	return true
+}
+
 // Env pins php.ini and the scan dir so a static build never picks up another PHP's
 // config from its compiled-in default paths (e.g. /usr/local/etc/php).
 func Env(root, minor string) []string {
-	return []string{
+	env := []string{
 		"PHPRC=" + IniPath(root, minor),
 		"PHP_INI_SCAN_DIR=" + filepath.Join(Dir(root, minor), "conf.d"),
 	}
+	if cnf := filepath.Join(Dir(root, minor), "bin", "openssl.cnf"); runtime.GOOS == "windows" && fileExists(cnf) {
+		env = append(env, "OPENSSL_CONF="+cnf)
+	}
+	return env
+}
+
+func fileExists(path string) bool {
+	_, err := os.Stat(path)
+	return err == nil
 }
 
 var fullVersions sync.Map // binary path + mtime → version

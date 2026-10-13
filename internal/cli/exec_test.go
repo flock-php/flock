@@ -165,3 +165,19 @@ func TestRedisCLIUsesTheConfiguredPort(t *testing.T) {
 		t.Fatalf("got %v %v", argv, err)
 	}
 }
+
+func TestShimToolRecognisesShimNames(t *testing.T) {
+	for argv0, want := range map[string]string{
+		`C:\Users\me\AppData\Roaming\Flock\bin\php.exe`: "php",
+		`C:\Users\me\AppData\Roaming\Flock\bin\PHP.EXE`: "php",
+		"composer":             "composer",
+		"/usr/local/bin/flock": "",
+		`C:\x\flock.exe`:       "",
+		`C:\x\flockd.exe`:      "",
+	} {
+		// filepath.Base only splits on the host separator; normalise for the test on macOS.
+		if got := ShimTool(strings.ReplaceAll(argv0, `\`, "/")); got != want {
+			t.Errorf("%s: got %q, want %q", argv0, got, want)
+		}
+	}
+}

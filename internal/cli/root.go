@@ -28,7 +28,7 @@ func NewRootCommand() *cobra.Command {
 		newSitesCommand(), newLinkCommand(), newUnlinkCommand(), newParkCommand(), newForgetCommand(),
 		newSecureCommand(true), newSecureCommand(false), newIsolateCommand(), newUseCommand(),
 		newPHPCommand(), newNodeCommand(), newPostgresCommand(), newRedisCommand(), newXdebugCommand(), newDumpsCommand(), newMailCommand(),
-		newImportCommand(), newExecCommand(),
+		newImportCommand(), newExecCommand(), newHostsHelperCommand(),
 	)
 
 	return root

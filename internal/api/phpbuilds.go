@@ -91,6 +91,7 @@ func registerPHPBuilds(mux *http.ServeMux, b Backend) {
 			err = b.Mutate(func(cfg *config.Config) error { return checkUninstall(b.Root(), cfg, v) })
 		}
 		if err == nil {
+			b.ReleasePHP(v)
 			err = php.Uninstall(b.Root(), v)
 			if err == nil {
 				err = b.Reload()

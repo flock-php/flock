@@ -1,0 +1,372 @@
+using System.Diagnostics;
+using System.Runtime.InteropServices;
+using Microsoft.Win32;
+
+namespace Flock.Tray;
+
+/// <summary>Win32 calls WinUI has no API for: the notification area icon, its menu, consoles.</summary>
+internal static partial class Native
+{
+    public const int WM_APP = 0x8000;
+    public const int WM_TRAY = WM_APP + 1;
+    public const int WM_SHOW_PANEL = WM_APP + 2;
+    private const int WM_NULL = 0x0000;
+    private const int WM_LBUTTONUP = 0x0202;
+    private const int WM_RBUTTONUP = 0x0205;
+    private const int WM_CONTEXTMENU = 0x007B;
+
+    /// <summary>Class name of the tray icon's hidden window (also how a second instance finds the first).</summary>
+    public const string TrayWindowClass = "Flock.Tray.NotifyWindow";
+
+    [DllImport("kernel32.dll")]
+    private static extern bool AttachConsole(int processId);
+
+    /// <summary>Lets a GUI program print to the console it was started from (`FlockTray --selftest`).</summary>
+    public static void AttachParentConsole() => AttachConsole(-1);
+
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+    private static extern IntPtr FindWindow(string className, string? windowName);
+
+    [DllImport("user32.dll")]
+    private static extern bool PostMessage(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam);
+
+    /// <summary>Asks the running instance to show its panel.</summary>
+    public static void SignalRunningInstance()
+    {
+        var hwnd = FindWindow(TrayWindowClass, null);
+        if (hwnd != IntPtr.Zero)
+        {
+            PostMessage(hwnd, WM_SHOW_PANEL, IntPtr.Zero, IntPtr.Zero);
+        }
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    public struct POINT
+    {
+        public int X;
+        public int Y;
+    }
+
+    [DllImport("user32.dll")]
+    private static extern bool GetCursorPos(out POINT point);
+
+    public static POINT CursorPosition() => GetCursorPos(out var p) ? p : default;
+
+    [DllImport("user32.dll")]
+    public static extern uint GetDpiForWindow(IntPtr hwnd);
+
+    [DllImport("user32.dll")]
+    public static extern bool SetForegroundWindow(IntPtr hwnd);
+
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+    private static extern int MessageBox(IntPtr hwnd, string text, string caption, uint type);
+
+    /// <summary>A plain error dialog, for when WinUI itself could not start.</summary>
+    public static void ShowError(string caption, string text) => MessageBox(IntPtr.Zero, text, caption, 0x10 /* MB_ICONERROR */);
+
+    // Opening things
+
+    /// <summary>Opens a file, folder or URL with its default program.</summary>
+    public static void Open(string target)
+    {
+        try
+        {
+            Process.Start(new ProcessStartInfo(target) { UseShellExecute = true });
+        }
+        catch (Exception e) when (e is System.ComponentModel.Win32Exception or InvalidOperationException)
+        {
+            // Nothing is registered for it (e.g. an editor URL scheme); there is nothing to fall back to.
+        }
+    }
+
+    /// <summary>Shows a file or folder in Explorer (selected in its parent folder).</summary>
+    public static void Reveal(string path)
+    {
+        if (Directory.Exists(path) && !File.Exists(path))
+        {
+            Process.Start(new ProcessStartInfo("explorer.exe", $"\"{path}\"") { UseShellExecute = true });
+        }
+        else
+        {
+            Process.Start(new ProcessStartInfo("explorer.exe", $"/select,\"{path}\"") { UseShellExecute = true });
+        }
+    }
+
+    // Start at sign-in
+
+    private const string RunKey = @"Software\Microsoft\Windows\CurrentVersion\Run";
+    private const string RunValue = "Flock";
+
+    public static bool StartsAtSignIn
+    {
+        get
+        {
+            using var key = Registry.CurrentUser.OpenSubKey(RunKey);
+            return key?.GetValue(RunValue) is string;
+        }
+        set
+        {
+            using var key = Registry.CurrentUser.CreateSubKey(RunKey);
+            if (value)
+            {
+                key.SetValue(RunValue, $"\"{Environment.ProcessPath}\" {App.BackgroundArgument}");
+            }
+            else
+            {
+                key.DeleteValue(RunValue, throwOnMissingValue: false);
+            }
+        }
+    }
+
+    // Notification area icon
+
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+    private struct NOTIFYICONDATAW
+    {
+        public int cbSize;
+        public IntPtr hWnd;
+        public int uID;
+        public int uFlags;
+        public int uCallbackMessage;
+        public IntPtr hIcon;
+        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 128)]
+        public string szTip;
+        public int dwState;
+        public int dwStateMask;
+        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 256)]
+        public string szInfo;
+        public int uVersion;
+        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 64)]
+        public string szInfoTitle;
+        public int dwInfoFlags;
+        public Guid guidItem;
+        public IntPtr hBalloonIcon;
+    }
+
+    private const int NIM_ADD = 0, NIM_MODIFY = 1, NIM_DELETE = 2;
+    private const int NIF_MESSAGE = 0x1, NIF_ICON = 0x2, NIF_TIP = 0x4;
+
+    [DllImport("shell32.dll", CharSet = CharSet.Unicode)]
+    private static extern bool Shell_NotifyIcon(int message, ref NOTIFYICONDATAW data);
+
+    private delegate IntPtr WndProc(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam);
+
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+    private struct WNDCLASSEXW
+    {
+        public int cbSize;
+        public int style;
+        public IntPtr lpfnWndProc;
+        public int cbClsExtra;
+        public int cbWndExtra;
+        public IntPtr hInstance;
+        public IntPtr hIcon;
+        public IntPtr hCursor;
+        public IntPtr hbrBackground;
+        public string? lpszMenuName;
+        public string lpszClassName;
+        public IntPtr hIconSm;
+    }
+
+    [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    private static extern ushort RegisterClassEx(ref WNDCLASSEXW wc);
+
+    [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    private static extern IntPtr CreateWindowEx(int exStyle, string className, string windowName, int style,
+        int x, int y, int width, int height, IntPtr parent, IntPtr menu, IntPtr instance, IntPtr param);
+
+    [DllImport("user32.dll")]
+    private static extern bool DestroyWindow(IntPtr hwnd);
+
+    [DllImport("user32.dll")]
+    private static extern IntPtr DefWindowProc(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam);
+
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+    private static extern int RegisterWindowMessage(string name);
+
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode)]
+    private static extern IntPtr GetModuleHandle(string? name);
+
+    [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    private static extern IntPtr LoadImage(IntPtr instance, string name, int type, int cx, int cy, int flags);
+
+    [DllImport("user32.dll")]
+    private static extern bool DestroyIcon(IntPtr icon);
+
+    [DllImport("user32.dll")]
+    private static extern int GetSystemMetricsForDpi(int index, uint dpi);
+
+    [DllImport("user32.dll")]
+    private static extern IntPtr CreatePopupMenu();
+
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+    private static extern bool AppendMenu(IntPtr menu, int flags, IntPtr id, string? text);
+
+    [DllImport("user32.dll")]
+    private static extern int TrackPopupMenuEx(IntPtr menu, int flags, int x, int y, IntPtr hwnd, IntPtr tpm);
+
+    [DllImport("user32.dll")]
+    private static extern bool DestroyMenu(IntPtr menu);
+
+    [DllImport("user32.dll")]
+    private static extern bool SetMenuDefaultItem(IntPtr menu, int item, int byPosition);
+
+    /// <summary>
+    /// The icon in the notification area. A hidden top-level window receives its clicks (and
+    /// "TaskbarCreated", to come back after Explorer restarts) through the UI thread's message loop.
+    /// </summary>
+    public sealed class TrayIcon : IDisposable
+    {
+        private static WndProc? proc; // kept alive: Windows calls it for as long as the class exists
+        private static TrayIcon? instance;
+
+        private readonly IntPtr hwnd;
+        private readonly int taskbarCreated;
+        private IntPtr icon;
+        private string iconPath;
+        private string tooltip;
+
+        public event Action? Clicked;
+        public event Action? MenuRequested;
+        public event Action? ShowRequested;
+
+        public TrayIcon(string iconPath, string tooltip)
+        {
+            this.iconPath = iconPath;
+            this.tooltip = tooltip;
+            instance = this;
+            taskbarCreated = RegisterWindowMessage("TaskbarCreated");
+
+            proc = Dispatch;
+            var wc = new WNDCLASSEXW
+            {
+                cbSize = Marshal.SizeOf<WNDCLASSEXW>(),
+                lpfnWndProc = Marshal.GetFunctionPointerForDelegate(proc),
+                hInstance = GetModuleHandle(null),
+                lpszClassName = TrayWindowClass,
+            };
+            RegisterClassEx(ref wc);
+            hwnd = CreateWindowEx(0, TrayWindowClass, "Flock", 0, 0, 0, 0, 0, IntPtr.Zero, IntPtr.Zero, wc.hInstance, IntPtr.Zero);
+
+            icon = Load(iconPath);
+            Notify(NIM_ADD);
+        }
+
+        public IntPtr Handle => hwnd;
+
+        /// <summary>Changes the icon (normal, warning, stopped) and tooltip.</summary>
+        public void Update(string newIconPath, string newTooltip)
+        {
+            if (newIconPath == iconPath && newTooltip == tooltip)
+            {
+                return;
+            }
+            if (newIconPath != iconPath)
+            {
+                var old = icon;
+                icon = Load(newIconPath);
+                iconPath = newIconPath;
+                Notify(NIM_MODIFY);
+                DestroyIcon(old);
+            }
+            tooltip = newTooltip;
+            Notify(NIM_MODIFY);
+        }
+
+        /// <summary>Shows a native menu at the cursor and returns the chosen item's index, or -1.</summary>
+        public int ShowMenu(IReadOnlyList<string?> items, int defaultItem = -1)
+        {
+            var menu = CreatePopupMenu();
+            try
+            {
+                for (var i = 0; i < items.Count; i++)
+                {
+                    const int MF_STRING = 0x0, MF_SEPARATOR = 0x800;
+                    AppendMenu(menu, items[i] is null ? MF_SEPARATOR : MF_STRING, i + 1, items[i]);
+                }
+                if (defaultItem >= 0)
+                {
+                    SetMenuDefaultItem(menu, defaultItem + 1, 0);
+                }
+
+                // Without this the menu does not close when clicking elsewhere.
+                SetForegroundWindow(hwnd);
+                var cursor = CursorPosition();
+                const int TPM_RETURNCMD = 0x100, TPM_RIGHTBUTTON = 0x2, TPM_BOTTOMALIGN = 0x20;
+                var chosen = TrackPopupMenuEx(menu, TPM_RETURNCMD | TPM_RIGHTBUTTON | TPM_BOTTOMALIGN, cursor.X, cursor.Y, hwnd, IntPtr.Zero);
+                PostMessage(hwnd, WM_NULL, IntPtr.Zero, IntPtr.Zero);
+                return chosen - 1;
+            }
+            finally
+            {
+                DestroyMenu(menu);
+            }
+        }
+
+        private IntPtr Load(string path)
+        {
+            const int IMAGE_ICON = 1, LR_LOADFROMFILE = 0x10, SM_CXSMICON = 49;
+            var dpi = hwnd == IntPtr.Zero ? 96u : Math.Max(96u, GetDpiForWindow(hwnd));
+            var size = GetSystemMetricsForDpi(SM_CXSMICON, dpi);
+            return LoadImage(IntPtr.Zero, path, IMAGE_ICON, size, size, LR_LOADFROMFILE);
+        }
+
+        private void Notify(int message)
+        {
+            var data = new NOTIFYICONDATAW
+            {
+                cbSize = Marshal.SizeOf<NOTIFYICONDATAW>(),
+                hWnd = hwnd,
+                uID = 1,
+                uFlags = NIF_MESSAGE | NIF_ICON | NIF_TIP,
+                uCallbackMessage = WM_TRAY,
+                hIcon = icon,
+                szTip = tooltip.Length > 127 ? tooltip[..127] : tooltip,
+                szInfo = "",
+                szInfoTitle = "",
+            };
+            Shell_NotifyIcon(message, ref data);
+        }
+
+        private static IntPtr Dispatch(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam)
+        {
+            var self = instance;
+            if (self is not null && hwnd == self.hwnd)
+            {
+                if (msg == WM_TRAY)
+                {
+                    switch ((int)(lParam.ToInt64() & 0xFFFF))
+                    {
+                        case WM_LBUTTONUP:
+                            self.Clicked?.Invoke();
+                            break;
+                        case WM_RBUTTONUP:
+                        case WM_CONTEXTMENU:
+                            self.MenuRequested?.Invoke();
+                            break;
+                    }
+                    return IntPtr.Zero;
+                }
+                if (msg == WM_SHOW_PANEL)
+                {
+                    self.ShowRequested?.Invoke();
+                    return IntPtr.Zero;
+                }
+                if (msg == self.taskbarCreated)
+                {
+                    self.Notify(NIM_ADD); // Explorer restarted and forgot every icon
+                    return IntPtr.Zero;
+                }
+            }
+            return DefWindowProc(hwnd, msg, wParam, lParam);
+        }
+
+        public void Dispose()
+        {
+            Notify(NIM_DELETE);
+            DestroyIcon(icon);
+            DestroyWindow(hwnd);
+            instance = null;
+        }
+    }
+}

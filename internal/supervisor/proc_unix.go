@@ -19,3 +19,6 @@ func terminate(cmd *exec.Cmd, sig os.Signal) {
 	}
 	_ = cmd.Process.Signal(sig)
 }
+
+// started is a no-op on unix: children live in their own process group, stopped by terminate.
+func started(*exec.Cmd) {}

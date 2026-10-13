@@ -149,12 +149,6 @@ func uninstallService() error {
 	return nil
 }
 
-func xmlEscape(s string) string {
-	var b bytes.Buffer
-	_ = xmlEscapeText(&b, s)
-	return b.String()
-}
-
 func resolverFile(tld string) string { return "/etc/resolver/" + tld }
 
 func resolverContent(dnsPort int) string {

@@ -3,6 +3,7 @@ package php
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -53,5 +54,32 @@ func TestFPMSpecChangesWhenXdebugIsToggled(t *testing.T) {
 
 	if strings.Join(off.Env, " ") == strings.Join(on.Env, " ") {
 		t.Fatal("spec must differ so the supervisor restarts FPM")
+	}
+}
+
+func TestCGIPoolRunsWorkersOnDistinctPortsPerVersion(t *testing.T) {
+	root := t.TempDir()
+	if err := os.MkdirAll(Dir(root, "8.4"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	pool, err := CGIPool(root, "8.4", "VAR_DUMPER_FORMAT=server")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(pool.Specs) != CGIWorkers || len(pool.Upstreams) != CGIWorkers {
+		t.Fatalf("got %d specs, %d upstreams", len(pool.Specs), len(pool.Upstreams))
+	}
+	if pool.Upstreams[0] != "127.0.0.1:19840" || pool.Specs[1].Name != "php8.4-cgi-2" {
+		t.Fatalf("got %v / %s", pool.Upstreams, pool.Specs[1].Name)
+	}
+	if args := pool.Specs[0].Args; args[0] != "-b" || args[1] != "127.0.0.1:19840" {
+		t.Fatalf("args %v", args)
+	}
+	if !slices.Contains(pool.Specs[0].Env, "PHP_FCGI_MAX_REQUESTS=0") || !slices.Contains(pool.Specs[0].Env, "VAR_DUMPER_FORMAT=server") {
+		t.Fatalf("env %v", pool.Specs[0].Env)
+	}
+	if CGIPort("8.5", 0) == CGIPort("8.4", 0) || CGIPort("8.4", CGIWorkers-1) >= CGIPort("8.5", 0) {
+		t.Fatal("versions must not share ports")
 	}
 }

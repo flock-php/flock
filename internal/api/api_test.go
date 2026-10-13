@@ -27,6 +27,7 @@ func (f *fakeBackend) PHPBuilds() *phpbuild.Manager { return f.builds }
 func (f *fakeBackend) Status() Status      { return Status{Sites: f.sites} }
 func (f *fakeBackend) Reload() error       { return nil }
 func (f *fakeBackend) Root() string        { return f.root }
+func (f *fakeBackend) ReleasePHP(string)   {}
 func (f *fakeBackend) Services() []Service { return []Service{} }
 func (f *fakeBackend) Mutate(change func(*config.Config) error) error {
 	cfg, err := config.Load(f.root)

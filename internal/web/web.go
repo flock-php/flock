@@ -1,5 +1,5 @@
 // Package web is Flock's HTTP(S) front: an embedded Caddy that routes each
-// site's domain (and subdomains) to the site's PHP-FPM pool.
+// site's domain (and subdomains) to the site's PHP FastCGI pool.
 //
 // Caddy runs in-process, so there is no separate web server binary to ship,
 // and it works the same on macOS and Windows.
@@ -20,10 +20,10 @@ import (
 
 // Site is one served application.
 type Site struct {
-	Domain   string // e.g. watchtower.test (also serves *.watchtower.test)
-	Root     string // document root, e.g. <path>/public
-	FPM      string // php-fpm address: "unix/<socket>" or "127.0.0.1:9085"
-	CertFile string // set when the site is secured
+	Domain   string   // e.g. watchtower.test (also serves *.watchtower.test)
+	Root     string   // document root, e.g. <path>/public
+	FPM      []string // FastCGI upstreams: "unix/<socket>" (PHP-FPM) or "127.0.0.1:<port>" (php-cgi workers)
+	CertFile string   // set when the site is secured
 	KeyFile  string
 }
 
@@ -94,7 +94,17 @@ func Caddyfile(cfg Config) string {
 }
 
 func app(s Site) string {
-	return fmt.Sprintf("\troot * %s\n\tphp_fastcgi %s\n\tfile_server\n", quote(s.Root), quote(s.FPM))
+	upstreams := make([]string, len(s.FPM))
+	for i, u := range s.FPM {
+		upstreams[i] = quote(u)
+	}
+	// php-cgi workers (Windows) serve one request at a time: send each request to the least busy
+	// one and wait briefly for a free worker instead of failing.
+	balance := ""
+	if len(s.FPM) > 1 {
+		balance = " {\n\t\tlb_policy least_conn\n\t\tlb_try_duration 30s\n\t}"
+	}
+	return fmt.Sprintf("\troot * %s\n\tphp_fastcgi %s%s\n\tfile_server\n", quote(s.Root), strings.Join(upstreams, " "), balance)
 }
 
 func addresses(scheme string, hosts []string, cfg Config) string {
@@ -117,8 +127,17 @@ func portSuffix(port, standard int) string {
 	return ":" + strconv.Itoa(port)
 }
 
+// quote makes a Caddyfile token. Windows paths get forward slashes, which Caddy and Windows
+// both accept: strconv.Quote would double every backslash, and the Caddyfile lexer keeps them.
 func quote(s string) string {
+	if isWindowsPath(s) {
+		s = strings.ReplaceAll(s, `\`, "/")
+	}
 	return strconv.Quote(s)
+}
+
+func isWindowsPath(s string) bool {
+	return strings.HasPrefix(s, `\\`) || (len(s) > 2 && s[1] == ':' && (s[2] == '\\' || s[2] == '/'))
 }
 
 // Apply (re)loads Caddy with cfg. Safe to call repeatedly; Caddy swaps configs gracefully.

@@ -1,4 +1,4 @@
-// Package daemon runs Flock's long-lived services — DNS, web server, PHP-FPM pools,
+// Package daemon runs Flock's long-lived services — DNS, web server, PHP pools,
 // mail catcher, databases — and exposes them through the local API.
 package daemon
 
@@ -20,6 +20,7 @@ import (
 	"flock/internal/config"
 	"flock/internal/dns"
 	"flock/internal/dumps"
+	"flock/internal/hosts"
 	"flock/internal/mail"
 	"flock/internal/paths"
 	"flock/internal/php"
@@ -166,8 +167,11 @@ func (d *daemon) ensureMail(cfg *config.Config) error {
 }
 
 // busy turns "address already in use" into a message naming the program that holds the port.
+// The last two are Windows' wording of EADDRINUSE and EACCES.
 func busy(port int, err error) string {
-	if strings.Contains(err.Error(), "address already in use") || strings.Contains(err.Error(), "permission denied") {
+	msg := err.Error()
+	if strings.Contains(msg, "address already in use") || strings.Contains(msg, "permission denied") ||
+		strings.Contains(msg, "Only one usage of each socket address") || strings.Contains(msg, "forbidden by its access permissions") {
 		return ports.Describe(port)
 	}
 	return err.Error()
@@ -187,7 +191,7 @@ func Run(ctx context.Context, cfg Config) error {
 	d := &daemon{root: cfg.Root, version: cfg.Version, startedAt: time.Now(), procs: supervisor.New()}
 	defer d.shutdown()
 
-	if workspace, err := phpbuild.DefaultWorkspace(); err == nil && runtime.GOOS == "darwin" {
+	if workspace, err := phpbuild.DefaultWorkspace(); err == nil && runtime.GOOS != "linux" {
 		d.builds = phpbuild.NewManager(cfg.Root, workspace, phpbuild.DefaultSources(), phpbuild.Hooks{
 			Installed: d.installedPHP,
 			Install:   d.installPHP,
@@ -297,7 +301,7 @@ func (d *daemon) reload() error {
 	if err != nil {
 		return fmt.Errorf("certificate authority: %w", err)
 	}
-	if err := ca.WriteBundle(php.CABundle(d.root), "/etc/ssl/cert.pem"); err != nil {
+	if err := ca.WriteBundle(php.CABundle(d.root), certs.SystemRoots()); err != nil {
 		return err
 	}
 
@@ -311,8 +315,9 @@ func (d *daemon) reload() error {
 	var (
 		statuses []api.SiteStatus
 		webSites []web.Site
+		domains  []string
 		keep     = map[string]bool{}
-		pools    = map[string]bool{}
+		pools    = map[string][]string{} // version → FastCGI upstreams
 	)
 
 	installed, _ := php.Installed(d.root)
@@ -333,26 +338,28 @@ func (d *daemon) reload() error {
 			continue
 		}
 
-		if !pools[version] {
+		if pools[version] == nil {
 			var extraEnv []string
 			if cfg.Dumps {
 				extraEnv = dumps.Env(cfg.Ports.Dumps)
 			}
-			spec, err := php.FPMSpec(d.root, version, extraEnv...)
+			pool, err := php.PoolFor(d.root, version, extraEnv...)
 			if err != nil {
 				return err
 			}
-			if d.procs.Ensure(spec) {
-				// Don't route requests to a pool that isn't listening yet (Caddy would answer 502).
-				if !waitForSocket(php.Socket(d.root, version), 5*time.Second) {
-					warnings = append(warnings, fmt.Sprintf("php %s: FPM did not start — see `flock logs php%s-fpm`", version, version))
-				}
+			restarted := false
+			for _, spec := range pool.Specs {
+				restarted = d.procs.Ensure(spec) || restarted
+				keep[spec.Name] = true
 			}
-			keep[spec.Name] = true
-			pools[version] = true
+			// Don't route requests to a pool that isn't listening yet (Caddy would answer 502).
+			if restarted && !php.WaitReady(pool.Upstreams, 5*time.Second) {
+				warnings = append(warnings, fmt.Sprintf("php %s: PHP did not start — see `flock logs %s`", version, php.PoolLog(version)))
+			}
+			pools[version] = pool.Upstreams
 		}
 
-		ws := web.Site{Domain: domain, Root: web.DocumentRoot(site.Path), FPM: "unix/" + php.Socket(d.root, version)}
+		ws := web.Site{Domain: domain, Root: web.DocumentRoot(site.Path), FPM: pools[version]}
 		scheme := "http"
 		if site.Secured {
 			if ws.CertFile, ws.KeyFile, err = ca.SiteCert(domain); err != nil {
@@ -363,7 +370,12 @@ func (d *daemon) reload() error {
 		status.URL = scheme + "://" + domain + portSuffix(scheme, cfg)
 
 		webSites = append(webSites, ws)
+		domains = append(domains, domain)
 		statuses = append(statuses, status)
+	}
+
+	if runtime.GOOS == "windows" {
+		warnings = append(warnings, d.syncHosts(cfg, domains)...)
 	}
 
 	if v := cfg.Services.Postgres; v != "" && cfg.Services.Running("postgres") {
@@ -506,6 +518,8 @@ func (d *daemon) Status() api.Status {
 	st.DumpCount = dumps.Count(d.root)
 	if d.dns != nil {
 		st.DNS = api.DNSStatus{TLD: d.dns.TLD(), Addr: d.dns.Addr()}
+	} else if d.cfg != nil && runtime.GOOS == "windows" {
+		st.DNS = api.DNSStatus{TLD: d.cfg.TLD} // resolved through the hosts file, no DNS server
 	}
 	if d.cfg != nil {
 		st.HTTPPort, st.HTTPSPort = d.cfg.Ports.HTTP, d.cfg.Ports.HTTPS
@@ -534,12 +548,35 @@ func (d *daemon) installedPHP() map[string]string {
 	return out
 }
 
-// installPHP installs a finished build and restarts that version's FPM pool.
+// installPHP installs a finished build and restarts that version's pool.
 func (d *daemon) installPHP(dir string) error {
+	if runtime.GOOS == "windows" {
+		// Windows locks the files of running programs: stop every PHP process first.
+		// The minor of the build isn't known yet; reload brings everything back right after.
+		d.ReleasePHP("")
+	}
 	if _, err := php.InstallFrom(d.root, dir); err != nil {
+		_ = d.reload()
 		return err
 	}
 	return d.reload()
+}
+
+// ReleasePHP implements api.Backend: on Windows it stops the processes that run a PHP version
+// ("" for all), so its files can be replaced or deleted. The next reload starts what is needed.
+func (d *daemon) ReleasePHP(minor string) {
+	if runtime.GOOS != "windows" {
+		return
+	}
+	d.reloadMu.Lock()
+	defer d.reloadMu.Unlock()
+
+	keep := map[string]bool{}
+	for _, name := range d.procs.Running() {
+		usesPHP := name == "dump-server" || strings.HasPrefix(name, "php"+minor)
+		keep[name] = !usesPHP
+	}
+	d.procs.Retain(keep)
 }
 
 // Services implements api.Backend.
@@ -563,6 +600,9 @@ func (d *daemon) Services() []api.Service {
 	}
 	if runtime.GOOS != "windows" {
 		services = append(services, api.Service{ID: "dns", Name: "DNS (*." + cfg.TLD + ")", Category: "Core", Port: p.DNS, Installed: true, Enabled: true, Running: dnsUp})
+	} else {
+		helper := hosts.HelperStatus()
+		services = append(services, api.Service{ID: "dns", Name: "Hosts file (*." + cfg.TLD + ")", Category: "Core", Installed: helper.Installed, Enabled: true, Running: helper.Running})
 	}
 
 	services = append(services, api.Service{
@@ -580,15 +620,21 @@ func (d *daemon) Services() []api.Service {
 	return services
 }
 
-// waitForSocket polls until something accepts connections on a unix socket.
-func waitForSocket(path string, timeout time.Duration) bool {
-	for deadline := time.Now().Add(timeout); time.Now().Before(deadline); time.Sleep(25 * time.Millisecond) {
-		if conn, err := net.DialTimeout("unix", path, 100*time.Millisecond); err == nil {
-			_ = conn.Close()
-			return true
-		}
+// syncHosts hands the site domains to the hosts helper (Windows) and explains when it can't apply them.
+func (d *daemon) syncHosts(cfg *config.Config, domains []string) []string {
+	if err := hosts.WriteSource(d.root, domains); err != nil {
+		return []string{"hosts: " + err.Error()}
 	}
-	return false
+	helper := hosts.HelperStatus()
+	switch {
+	case !helper.Installed:
+		return []string{fmt.Sprintf("*.%s domains don't resolve: the Flock hosts helper is not installed — run `flock install`", cfg.TLD)}
+	case !helper.Running:
+		return []string{fmt.Sprintf("*.%s domains don't resolve: the Flock hosts helper service is stopped — run `flock install`", cfg.TLD)}
+	case !helper.Configured(hosts.SourceFile(d.root), cfg.TLD):
+		return []string{fmt.Sprintf("the Flock hosts helper is set up for another domain or user — run `flock install` to switch it to *.%s", cfg.TLD)}
+	}
+	return nil
 }
 
 func portSuffix(scheme string, cfg *config.Config) string {

@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"sort"
 	"syscall"
 
@@ -22,21 +23,30 @@ var versionPattern = regexp.MustCompile(`v=(\d+\.\d+\.\d+)`)
 func Dir(root, version string) string { return filepath.Join(root, "services", "valkey", version) }
 
 // Server and CLI are the binaries of a version.
-func Server(root, version string) string { return filepath.Join(Dir(root, version), "valkey-server") }
-func CLI(root, version string) string    { return filepath.Join(Dir(root, version), "valkey-cli") }
+func Server(root, version string) string {
+	return filepath.Join(Dir(root, version), exe("valkey-server"))
+}
+func CLI(root, version string) string { return filepath.Join(Dir(root, version), exe("valkey-cli")) }
+
+func exe(name string) string {
+	if runtime.GOOS == "windows" {
+		return name + ".exe"
+	}
+	return name
+}
 
 // DataDir is shared across versions so upgrades keep the data.
 func DataDir(root string) string { return filepath.Join(root, "services", "valkey", "data") }
 
 // InstallFrom installs valkey-server and valkey-cli from a build directory and returns the version.
 func InstallFrom(root, src string) (string, error) {
-	for _, bin := range []string{"valkey-server", "valkey-cli"} {
+	for _, bin := range []string{exe("valkey-server"), exe("valkey-cli")} {
 		if _, err := os.Stat(filepath.Join(src, bin)); err != nil {
 			return "", fmt.Errorf("%s not found in %s", bin, src)
 		}
 	}
 
-	out, err := exec.Command(filepath.Join(src, "valkey-server"), "--version").Output()
+	out, err := exec.Command(filepath.Join(src, exe("valkey-server")), "--version").Output()
 	if err != nil {
 		return "", fmt.Errorf("run valkey-server: %w", err)
 	}

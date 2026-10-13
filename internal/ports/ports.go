@@ -42,6 +42,47 @@ func Owner(port int) string {
 			return ""
 		}
 		return fmt.Sprintf("%s (pid %s)", name, pid)
+	case "windows":
+		return windowsOwner(port)
+	}
+	return ""
+}
+
+// windowsOwner finds the listener with netstat and names it with tasklist.
+func windowsOwner(port int) string {
+	out, err := exec.Command("netstat", "-ano", "-p", "TCP").Output()
+	if err != nil {
+		return ""
+	}
+	pid := listenerPID(string(out), port)
+	if pid == "" {
+		return ""
+	}
+	if pid == "4" {
+		// PID 4 is the kernel: something registered the port with http.sys (IIS, Skype, WinRM, ...).
+		return "Windows' HTTP service (http.sys, pid 4 — e.g. IIS or the World Wide Web Publishing Service)"
+	}
+
+	out, err = exec.Command("tasklist", "/FI", "PID eq "+pid, "/FO", "CSV", "/NH").Output()
+	if err != nil {
+		return "pid " + pid
+	}
+	name, _, _ := strings.Cut(strings.TrimSpace(string(out)), ",")
+	name = strings.Trim(name, `"`)
+	if name == "" || strings.HasPrefix(name, "INFO:") {
+		return "pid " + pid
+	}
+	return fmt.Sprintf("%s (pid %s)", name, pid)
+}
+
+// listenerPID picks the PID listening on port from `netstat -ano` output.
+func listenerPID(netstat string, port int) string {
+	suffix := ":" + strconv.Itoa(port)
+	for _, line := range strings.Split(netstat, "\n") {
+		fields := strings.Fields(line)
+		if len(fields) == 5 && fields[0] == "TCP" && fields[3] == "LISTENING" && strings.HasSuffix(fields[1], suffix) {
+			return fields[4]
+		}
 	}
 	return ""
 }

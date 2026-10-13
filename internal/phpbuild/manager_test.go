@@ -205,3 +205,21 @@ func TestAutoBuildsNewVersionsOnlyWhenEnabled(t *testing.T) {
 		t.Fatal("older versions must not be built automatically")
 	}
 }
+
+func TestAutoBuildsOnlyTheNewestVersionWhenNothingIsInstalled(t *testing.T) {
+	t.Setenv("FAKE_VERSION", "8.5.11")
+	hooks := &fakeHooks{installed: map[string]string{}, auto: true}
+	m := newTestManager(t, hooks, []Release{{"8.5", "8.5.11", true}, {"8.4", "8.4.26", true}, {"8.3", "8.3.35", true}},
+		map[string]bool{"8.5": true, "8.4": true, "8.3": true})
+
+	m.scheduleAuto()
+	waitJob(t, m, "8.5", Succeeded)
+
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for _, minor := range []string{"8.4", "8.3"} {
+		if _, queued := m.jobs[minor]; queued {
+			t.Fatalf("PHP %s must not be prepared while nothing is installed", minor)
+		}
+	}
+}

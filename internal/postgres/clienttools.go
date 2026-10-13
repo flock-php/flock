@@ -24,7 +24,7 @@ func ClientDir(root, version string) string {
 
 // InstallClientFrom installs client tools built by build/postgres-client/build.sh and returns their version.
 func InstallClientFrom(root, src string) (string, error) {
-	psql := filepath.Join(src, "bin", "psql")
+	psql := filepath.Join(src, "bin", exe("psql"))
 	out, err := exec.Command(psql, "--version").Output()
 	if err != nil {
 		return "", fmt.Errorf("run %s: %w", psql, err)
@@ -50,7 +50,7 @@ func InstalledClients(root string) ([]string, error) {
 
 	var versions []string
 	for _, e := range entries {
-		if _, err := os.Stat(filepath.Join(ClientDir(root, e.Name()), "bin", "psql")); err == nil {
+		if _, err := os.Stat(filepath.Join(ClientDir(root, e.Name()), "bin", exe("psql"))); err == nil {
 			versions = append(versions, e.Name())
 		}
 	}

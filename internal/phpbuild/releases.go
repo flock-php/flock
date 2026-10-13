@@ -32,17 +32,21 @@ type Release struct {
 
 // Sources are the URLs version information is read from (overridable in tests).
 type Sources struct {
-	PHPNet    string // https://www.php.net
-	StaticPHP string // directory listing of static-php-cli's own builds
-	HTTP      *http.Client
+	PHPNet     string // https://www.php.net
+	StaticPHP  string // directory listing of static-php-cli's own builds
+	WindowsPHP string // windows.php.net's releases directory (Windows builds)
+	Xdebug     string // https://xdebug.org (Xdebug DLLs for Windows)
+	HTTP       *http.Client
 }
 
-// DefaultSources point at php.net and static-php.dev.
+// DefaultSources point at php.net, static-php.dev, windows.php.net and xdebug.org.
 func DefaultSources() Sources {
 	return Sources{
-		PHPNet:    "https://www.php.net",
-		StaticPHP: "https://dl.static-php.dev/static-php-cli/bulk/",
-		HTTP:      &http.Client{Timeout: 30 * time.Second},
+		PHPNet:     "https://www.php.net",
+		StaticPHP:  "https://dl.static-php.dev/static-php-cli/bulk/",
+		WindowsPHP: "https://windows.php.net/downloads/releases",
+		Xdebug:     "https://xdebug.org",
+		HTTP:       &http.Client{Timeout: 30 * time.Second},
 	}
 }
 

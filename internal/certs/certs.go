@@ -5,6 +5,7 @@
 package certs
 
 import (
+	"bytes"
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
@@ -61,6 +62,15 @@ func (ca *CA) keyPath() string { return filepath.Join(ca.dir, "ca.key") }
 // Fingerprint is the SHA-1 of the root, as shown by Keychain Access and certutil.
 func (ca *CA) Fingerprint() string {
 	return fmt.Sprintf("%X", sha1.Sum(ca.cert.Raw))
+}
+
+// FileFingerprint is the SHA-1 of the certificate in a PEM file, like Fingerprint.
+func FileFingerprint(path string) (string, error) {
+	cert, err := readCert(path)
+	if err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("%X", sha1.Sum(cert.Raw)), nil
 }
 
 func (ca *CA) load() error {
@@ -198,25 +208,24 @@ func (ca *CA) leafIsCurrent(path, domain string) bool {
 	return cert.CheckSignatureFrom(ca.cert) == nil
 }
 
-// WriteBundle writes extra (e.g. the OS bundle at /etc/ssl/cert.pem) followed by the Flock root to path.
-// PHP and Node use it so they trust both public sites and other local .test sites.
-func (ca *CA) WriteBundle(path string, extra ...string) error {
-	var out []byte
-	for _, f := range extra {
-		data, err := os.ReadFile(f)
-		if err != nil {
-			continue
-		}
-		out = append(out, data...)
-		out = append(out, '\n')
-	}
-
+// WriteBundle writes system (PEM roots, see SystemRoots) followed by the Flock root to path,
+// leaving the file alone when it is already current. PHP and Node use it so they trust both
+// public sites and other local .test sites.
+func (ca *CA) WriteBundle(path string, system []byte) error {
 	root, err := os.ReadFile(ca.CertPath())
 	if err != nil {
 		return err
 	}
+
+	out := append([]byte{}, system...)
+	if len(out) > 0 && out[len(out)-1] != '\n' {
+		out = append(out, '\n')
+	}
 	out = append(out, root...)
 
+	if current, err := os.ReadFile(path); err == nil && bytes.Equal(current, out) {
+		return nil
+	}
 	return os.WriteFile(path, out, 0o644)
 }
 

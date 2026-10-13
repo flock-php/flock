@@ -1,0 +1,120 @@
+using System.Reflection;
+using Flock.Kit;
+using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Controls;
+
+namespace Flock.Tray;
+
+internal sealed class MailPane(SettingsWindow window, AppModel model) : Pane(window, model)
+{
+    public override string Title => "Mail";
+    public override string Subtitle => "Flock catches every email your apps send — nothing leaves your PC.";
+
+    public override UIElement Build()
+    {
+        var mail = Store.Services.FirstOrDefault(s => s.Id == "mail");
+        var port = Store.Config?.Ports.Smtp ?? mail?.Port ?? 0;
+        var running = mail?.Running ?? false;
+
+        return Ui.Column(0,
+            Ui.Section("SMTP server",
+                Ui.Setting("Host", null, Ui.Text("127.0.0.1", foreground: Ui.SecondaryText, wrap: false)),
+                Ui.Setting("Port", null, Ui.Text(port.ToString(System.Globalization.CultureInfo.InvariantCulture), foreground: Ui.SecondaryText, wrap: false)),
+                Ui.Setting("Status", null, Ui.Row(8, Ui.StatusDot(running), Ui.Text(running ? "Running" : "Stopped", wrap: false)))),
+            Ui.Section("Environment variables",
+                Ui.Card(Ui.CodeBlock(mail?.Env ?? "")),
+                GeneralPane.Footnote("MAIL_USERNAME picks the inbox, so every project gets its own.")),
+            Ui.Section(null,
+                Ui.Setting("Caught emails", (Model.Status?.MailCount ?? 0).ToString(System.Globalization.CultureInfo.CurrentCulture),
+                    Ui.Button("Open Mail", () => App.Current.Open(WindowKind.Mail)))));
+    }
+}
+
+internal sealed class DumpsPane(SettingsWindow window, AppModel model) : Pane(window, model)
+{
+    public override string Title => "Dumps";
+    public override string Subtitle => "Send dump() and dd() output to Flock instead of the page or terminal — no changes to your projects.";
+
+    public override UIElement Build()
+    {
+        var capture = new ToggleSwitch { IsOn = Model.Status?.Dumps == true };
+        capture.Toggled += (_, _) => _ = Model.SetDumpsAsync(capture.IsOn);
+
+        var editor = new ComboBox { MinWidth = 160 };
+        foreach (var e in EditorInfo.All)
+        {
+            editor.Items.Add(e.Name());
+        }
+        editor.SelectedIndex = EditorInfo.All.ToList().IndexOf(Preferences.Shared.EditorChoice);
+        editor.SelectionChanged += (_, _) =>
+        {
+            if (editor.SelectedIndex >= 0)
+            {
+                Preferences.Shared.EditorChoice = EditorInfo.All[editor.SelectedIndex];
+            }
+        };
+
+        return Ui.Column(0,
+            Ui.Section(null,
+                Ui.Setting("Capture dumps", "Works by setting VAR_DUMPER_FORMAT=server for PHP; turn it off to see dumps in the page again.", capture),
+                Ui.Setting("Captured", (Model.Status?.DumpCount ?? 0).ToString(System.Globalization.CultureInfo.CurrentCulture),
+                    Ui.Button("Open Dumps", () => App.Current.Open(WindowKind.Dumps)))),
+            Ui.Section("Sources", Ui.Setting("Open files in", "Used when clicking a dump's file and line.", editor)));
+    }
+}
+
+internal sealed class DebuggerPane(SettingsWindow window, AppModel model) : Pane(window, model)
+{
+    public override string Title => "Debugger";
+    public override string Subtitle => "Step through requests and commands with Xdebug.";
+
+    public override UIElement Build()
+    {
+        var load = new ToggleSwitch { IsOn = Model.Status?.Xdebug == true };
+        load.Toggled += (_, _) => _ = Model.SetXdebugAsync(load.IsOn);
+
+        var availability = new List<UIElement>();
+        foreach (var php in Store.Config?.Php ?? [])
+        {
+            UIElement state = php.XdebugAvailable
+                ? Ui.Row(6, Ui.Icon("\uE73E", 12, Ui.Success), Ui.Text("Available", wrap: false))
+                : Ui.Row(6, Ui.Icon("\uE711", 12, Ui.SecondaryText), Ui.Text("Not in this build", foreground: Ui.SecondaryText, wrap: false));
+            availability.Add(Ui.Setting($"PHP {php.Version}", null, state));
+        }
+
+        return Ui.Column(0,
+            Ui.Section(null, Ui.Setting("Load Xdebug", "Loading Xdebug slows every request down, so keep it off when you don't need it.", load)),
+            Ui.Section("Connect your IDE",
+                Ui.Setting("Client port", null, Ui.Text("9003", foreground: Ui.SecondaryText, wrap: false)),
+                Ui.Setting("Mode", null, Ui.Text("debug, develop", foreground: Ui.SecondaryText, wrap: false)),
+                Ui.Setting("Start a session", "Use the Xdebug browser extension, add ?XDEBUG_TRIGGER=1 to the URL, or run `$env:XDEBUG_TRIGGER=1; php artisan …` in PowerShell.", null)),
+            Ui.Section("Availability", [.. availability]));
+    }
+}
+
+internal sealed class AboutPane(SettingsWindow window, AppModel model) : Pane(window, model)
+{
+    public override string Title => "About";
+    public override string Subtitle => "A native local development environment for Laravel.";
+
+    public override UIElement Build()
+    {
+        var icon = new Image
+        {
+            Source = new Microsoft.UI.Xaml.Media.Imaging.BitmapImage(new Uri(Path.Combine(AppContext.BaseDirectory, "Assets", "AppIcon.ico"))),
+            Width = 72,
+            Height = 72,
+        };
+        var version = Assembly.GetExecutingAssembly().GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion ?? "dev";
+
+        var header = Ui.Row(20, icon, Ui.Column(2, Ui.Text("Flock", "TitleLargeTextBlockStyle"), Ui.Text("A native local development environment for Laravel.", foreground: Ui.SecondaryText)));
+        header.Margin = new Thickness(0, 0, 0, 24);
+
+        return Ui.Column(0, header,
+            Ui.Section(null,
+                Ui.Setting("App", null, Ui.Text(version.Split('+')[0], foreground: Ui.SecondaryText, wrap: false)),
+                Ui.Setting("Daemon", null, Ui.Text(Model.Status?.Version ?? "not running", foreground: Ui.SecondaryText, wrap: false)),
+                Ui.Setting("Data folder", FlockPaths.Root, Ui.Button("Show in Explorer", () => Native.Reveal(FlockPaths.Root))),
+                Ui.Setting("Laravel documentation", null, Ui.Button("Open", () => Native.Open("https://laravel.com/docs")))));
+    }
+}

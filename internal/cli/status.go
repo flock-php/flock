@@ -27,6 +27,8 @@ func newStatusCommand() *cobra.Command {
 			fmt.Fprintf(out, "daemon    running (pid %d, %s, up %s)\n", st.PID, st.Version, time.Since(st.StartedAt).Round(time.Second))
 			if st.DNS.Addr != "" {
 				fmt.Fprintf(out, "dns       *.%s → 127.0.0.1 (server on %s)\n", st.DNS.TLD, st.DNS.Addr)
+			} else if st.DNS.TLD != "" {
+				fmt.Fprintf(out, "dns       *.%s → 127.0.0.1 (hosts file, one entry per site)\n", st.DNS.TLD)
 			}
 			fmt.Fprintf(out, "web       http :%d, https :%d\n", st.HTTPPort, st.HTTPSPort)
 			fmt.Fprintf(out, "mail      smtp://%s\n", st.Mail)

@@ -180,6 +180,7 @@ func (p *proc) once() error {
 		fmt.Fprintf(log, "[flock] start failed: %v\n", err)
 		return err
 	}
+	started(cmd)
 
 	exited := make(chan error, 1)
 	go func() { exited <- cmd.Wait() }()

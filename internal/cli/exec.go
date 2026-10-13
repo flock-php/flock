@@ -7,6 +7,7 @@ import (
 	"runtime"
 	"slices"
 	"strconv"
+	"strings"
 
 	"github.com/spf13/cobra"
 
@@ -22,6 +23,16 @@ import (
 
 // tools are the commands Flock puts on PATH as shims.
 var tools = append([]string{"php", "composer", "node", "npm", "npx", "redis-cli", "valkey-cli"}, postgres.ClientTools...)
+
+// ShimTool returns the tool a shim executable stands for ("php" for ...\bin\php.exe), or "".
+func ShimTool(argv0 string) string {
+	name := strings.ToLower(filepath.Base(argv0))
+	name = strings.TrimSuffix(name, ".exe")
+	if slices.Contains(tools, name) {
+		return name
+	}
+	return ""
+}
 
 func newExecCommand() *cobra.Command {
 	return &cobra.Command{

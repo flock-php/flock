@@ -1,25 +1,19 @@
 package phpbuild
 
 import (
-	"bufio"
 	"context"
 	_ "embed"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"slices"
-	"strings"
 	"sync"
 	"time"
 )
-
-//go:embed build.sh
-var buildScript []byte // a var so tests can swap in a fake build
 
 // CheckInterval is how often php.net is asked for new releases.
 var CheckInterval = 6 * time.Hour
@@ -104,7 +98,8 @@ func NewManager(root, workspace string, sources Sources, hooks Hooks) *Manager {
 	return m
 }
 
-// DefaultWorkspace is ~/Library/Caches/dev.flock/php-build: a cache (safe to delete) without spaces.
+// DefaultWorkspace is ~/Library/Caches/dev.flock/php-build (%LocalAppData%\dev.flock\php-build on
+// Windows): a cache (safe to delete) without spaces.
 func DefaultWorkspace() (string, error) {
 	cache, err := os.UserCacheDir()
 	if err != nil {
@@ -168,7 +163,7 @@ func (m *Manager) Check(ctx context.Context) error {
 	releases, err := m.sources.Releases(ctx)
 	var static map[string]bool
 	if err == nil {
-		static, err = m.sources.StaticPHPMinors(ctx)
+		static, releases, err = m.platformMinors(ctx, releases)
 	}
 
 	m.mu.Lock()
@@ -198,14 +193,18 @@ func (m *Manager) scheduleAuto() {
 		}
 	}
 
+	// Versions are newest first. With nothing installed yet every version is newer than the
+	// newest installed one; prepare only the newest, not every release since 7.4.
+	preparedFirst := false
 	for _, v := range m.Versions() {
 		if v.Job != nil || v.Status == "unsupported" || v.Status == "failed" {
 			continue
 		}
 		update := v.Status == "update" && !v.UpdateReady
-		brandNew := v.Installed == "" && v.Status == "likely" && Compare(v.Minor, newest) > 0
+		brandNew := v.Installed == "" && v.Status == "likely" && Compare(v.Minor, newest) > 0 && !(newest == "" && preparedFirst)
 		if update || brandNew {
 			m.enqueue(v.Minor, false, true)
+			preparedFirst = preparedFirst || brandNew
 		}
 	}
 }
@@ -273,7 +272,7 @@ func (m *Manager) Versions() []Version {
 // buildable: static-php-cli has built this minor itself, or it lies within the range of minors
 // it has built, or Flock built it before. Must hold m.mu.
 func (m *Manager) buildable(minor, minStatic, maxStatic string) bool {
-	if Compare(minor, MinimumBuildable) < 0 {
+	if runtime.GOOS != "windows" && Compare(minor, MinimumBuildable) < 0 {
 		return false
 	}
 	if m.state.StaticMinors[minor] || (maxStatic != "" && Compare(minor, minStatic) >= 0 && Compare(minor, maxStatic) <= 0) {
@@ -288,6 +287,9 @@ func (m *Manager) buildable(minor, minStatic, maxStatic string) bool {
 }
 
 func unsupportedNote(minor, minStatic string) string {
+	if runtime.GOOS == "windows" {
+		return fmt.Sprintf("windows.php.net publishes no Windows build of PHP %s.", minor)
+	}
 	if Compare(minor, MinimumBuildable) < 0 || (minStatic != "" && Compare(minor, minStatic) < 0) {
 		return fmt.Sprintf("PHP %s no longer compiles with current libraries and Apple's compiler (e.g. libxml2), so it can't be built.", minor)
 	}
@@ -467,80 +469,6 @@ func (m *Manager) latestLocked(minor string) string {
 		}
 	}
 	return ""
-}
-
-// build runs the embedded script and returns the built version and its output directory.
-func (m *Manager) build(ctx context.Context, minor string, job *Job) (string, string, error) {
-	if err := exec.Command("xcode-select", "-p").Run(); err != nil {
-		return "", "", errors.New("the Xcode Command Line Tools are required — run `xcode-select --install`")
-	}
-
-	ws := m.workspace
-	if strings.ContainsAny(ws, " \t") {
-		return "", "", fmt.Errorf("the build directory %q contains spaces, which static-php-cli cannot handle", ws)
-	}
-	if err := os.MkdirAll(ws, 0o755); err != nil {
-		return "", "", err
-	}
-	script := filepath.Join(ws, "build.sh")
-	if err := os.WriteFile(script, buildScript, 0o755); err != nil {
-		return "", "", err
-	}
-	if err := os.MkdirAll(filepath.Dir(m.LogPath(minor)), 0o700); err != nil {
-		return "", "", err
-	}
-	logFile, err := os.Create(m.LogPath(minor))
-	if err != nil {
-		return "", "", err
-	}
-	defer logFile.Close()
-	fmt.Fprintf(logFile, "[flock] building PHP %s at %s\n", minor, time.Now().Format(time.RFC3339))
-
-	reader, writer := io.Pipe()
-	cmd := buildCommand(ctx, script, minor, ws)
-	cmd.Stdout, cmd.Stderr = writer, writer
-
-	var full, dir, lastLine string
-	githubRefused := false
-	done := make(chan struct{})
-	go func() {
-		defer close(done)
-		scanner := bufio.NewScanner(reader)
-		scanner.Buffer(make([]byte, 64<<10), 1<<20)
-		for scanner.Scan() {
-			line := ansi.ReplaceAllString(scanner.Text(), "")
-			fmt.Fprintln(logFile, line)
-			trimmed := strings.TrimSpace(line)
-			if trimmed == "" {
-				continue
-			}
-			if b := builtLine.FindStringSubmatch(trimmed); b != nil {
-				full, dir = b[1], b[2]
-			}
-			if strings.Contains(trimmed, "returned error: 403") {
-				githubRefused = true
-			}
-			lastLine = trimmed
-			m.mu.Lock()
-			job.Step = shorten(strings.TrimPrefix(trimmed, "==> "), 140)
-			m.mu.Unlock()
-		}
-	}()
-
-	runErr := cmd.Run()
-	writer.Close()
-	<-done
-
-	if runErr != nil {
-		if githubRefused {
-			return "", "", errRateLimited
-		}
-		return "", "", fmt.Errorf("build failed: %s (see the build log)", shorten(lastLine, 200))
-	}
-	if full == "" || dir == "" {
-		return "", "", errors.New("build finished without output (see the build log)")
-	}
-	return full, dir, nil
 }
 
 func shorten(s string, n int) string {

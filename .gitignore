@@ -20,3 +20,6 @@
 /build/valkey/*.log
 /macos/.build/
 /build/macos/
+/windows/**/bin/
+/windows/**/obj/
+/windows/dist/

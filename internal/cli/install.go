@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/spf13/cobra"
 
@@ -99,11 +100,33 @@ func installBinary(root string) (string, error) {
 		return "", err
 	}
 	// Write then rename: replacing a running binary in place would crash it.
-	tmp := dst + ".new"
-	if err := os.WriteFile(tmp, data, 0o755); err != nil {
-		return "", err
+	return dst, replaceExecutable(dst, data)
+}
+
+// replaceExecutable writes data to path via a temporary file and a rename. Windows refuses to
+// replace an executable that is running (e.g. a shim or the daemon), but lets it be renamed, so
+// the running one is moved aside first; leftovers are removed on the next install.
+func replaceExecutable(path string, data []byte) error {
+	if old, _ := filepath.Glob(path + ".old*"); len(old) > 0 {
+		for _, o := range old {
+			_ = os.Remove(o)
+		}
 	}
-	return dst, os.Rename(tmp, dst)
+
+	tmp := path + ".new"
+	if err := os.WriteFile(tmp, data, 0o755); err != nil {
+		return err
+	}
+	err := os.Rename(tmp, path)
+	if err == nil {
+		return nil
+	}
+	aside := fmt.Sprintf("%s.old%d", path, time.Now().UnixNano())
+	if os.Rename(path, aside) != nil {
+		_ = os.Remove(tmp)
+		return err
+	}
+	return os.Rename(tmp, path)
 }
 
 func ensureComposer(ctx context.Context, root string) error {
