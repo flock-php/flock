@@ -3,3 +3,10 @@
 *.test
 *.out
 .DS_Store
+/build/php/spc
+/build/php/buildroot/
+/build/php/source/
+/build/php/downloads/
+/build/php/pkgroot/
+/build/php/log/
+/build/php/out/

@@ -17,7 +17,14 @@ func NewRootCommand() *cobra.Command {
 		SilenceErrors: false,
 	}
 
-	root.AddCommand(newDaemonCommand(), newStatusCommand(), newVersionCommand())
+	root.AddCommand(
+		newInstallCommand(), newUninstallCommand(), newPrivilegedSetupCommand(),
+		newDaemonCommand(), newStatusCommand(), newVersionCommand(),
+		newSitesCommand(), newLinkCommand(), newUnlinkCommand(), newParkCommand(), newForgetCommand(),
+		newSecureCommand(true), newSecureCommand(false), newIsolateCommand(), newUseCommand(),
+		newPHPCommand(), newNodeCommand(), newPostgresCommand(), newMailCommand(),
+		newImportCommand(), newExecCommand(),
+	)
 
 	return root
 }

@@ -3,11 +3,17 @@ package daemon
 import (
 	"context"
 	"errors"
+	"io"
+	"net"
+	"net/http"
 	"os"
+	"strconv"
+	"strings"
 	"testing"
 	"time"
 
 	"flock/internal/api"
+	"flock/internal/config"
 	"flock/internal/paths"
 )
 
@@ -25,24 +31,56 @@ func shortTempDir(t *testing.T) string {
 	return dir
 }
 
-func startDaemon(t *testing.T, root string) (*api.Client, chan error) {
+func freePort(t *testing.T) int {
+	t.Helper()
+
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ln.Close()
+
+	return ln.Addr().(*net.TCPAddr).Port
+}
+
+// testRoot writes a config.json that only uses free high ports.
+func testRoot(t *testing.T, mutate func(*config.Config)) (string, *config.Config) {
+	t.Helper()
+
+	root := shortTempDir(t)
+	cfg := config.Default()
+	cfg.Ports = config.Ports{HTTP: freePort(t), HTTPS: freePort(t), DNS: freePort(t), SMTP: freePort(t), Postgres: freePort(t)}
+	if mutate != nil {
+		mutate(cfg)
+	}
+	if err := cfg.Save(root); err != nil {
+		t.Fatal(err)
+	}
+
+	return root, cfg
+}
+
+func startDaemon(t *testing.T, root string) *api.Client {
 	t.Helper()
 
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan error, 1)
-	go func() {
-		done <- Run(ctx, Config{Root: root, TLD: "test", DNSAddr: "127.0.0.1:0", Version: "dev"})
-	}()
+	go func() { done <- Run(ctx, Config{Root: root, Version: "dev"}) }()
 	t.Cleanup(func() {
 		cancel()
 		<-done
 	})
 
 	client := api.NewClient(paths.Socket(root))
-	deadline := time.Now().Add(3 * time.Second)
+	deadline := time.Now().Add(5 * time.Second)
 	for {
 		if _, err := client.Status(context.Background()); err == nil {
-			return client, done
+			return client
+		}
+		select {
+		case err := <-done:
+			t.Fatalf("daemon exited: %v", err)
+		default:
 		}
 		if time.Now().After(deadline) {
 			t.Fatal("daemon did not become ready")
@@ -52,30 +90,67 @@ func startDaemon(t *testing.T, root string) (*api.Client, chan error) {
 }
 
 func TestStatusReportsRunningServices(t *testing.T) {
-	client, _ := startDaemon(t, shortTempDir(t))
+	root, cfg := testRoot(t, nil)
+	client := startDaemon(t, root)
 
 	status, err := client.Status(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	if status.PID != os.Getpid() || status.Version != "dev" || status.DNS.TLD != "test" || status.DNS.Addr == "" {
+	if status.PID != os.Getpid() || status.Version != "dev" || status.DNS.TLD != "test" || status.Mail == "" || status.HTTPPort != cfg.Ports.HTTP {
 		t.Fatalf("unexpected status: %+v", status)
 	}
 }
 
-func TestRefusesToStartTwice(t *testing.T) {
-	root := shortTempDir(t)
+func TestUnknownHostsGetTheCatchAllPage(t *testing.T) {
+	root, cfg := testRoot(t, nil)
 	startDaemon(t, root)
 
-	err := Run(context.Background(), Config{Root: root, TLD: "test", DNSAddr: "127.0.0.1:0"})
+	req, _ := http.NewRequest(http.MethodGet, "http://127.0.0.1:"+strconv.Itoa(cfg.Ports.HTTP)+"/", nil)
+	req.Host = "nothing.test"
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(resp.Body)
+
+	if resp.StatusCode != http.StatusNotFound || !strings.Contains(string(body), "nothing.test") {
+		t.Fatalf("got %d %q", resp.StatusCode, body)
+	}
+}
+
+func TestReloadReportsSitesWithMissingPHP(t *testing.T) {
+	root, cfg := testRoot(t, nil)
+	client := startDaemon(t, root)
+
+	cfg.Upsert(config.Site{Name: "app", Path: t.TempDir(), PHP: "7.0"})
+	if err := cfg.Save(root); err != nil {
+		t.Fatal(err)
+	}
+
+	status, err := client.Reload(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(status.Sites) != 1 || status.Sites[0].Problem != "PHP 7.0 is not installed" {
+		t.Fatalf("unexpected sites: %+v", status.Sites)
+	}
+}
+
+func TestRefusesToStartTwice(t *testing.T) {
+	root, _ := testRoot(t, nil)
+	startDaemon(t, root)
+
+	err := Run(context.Background(), Config{Root: root})
 	if !errors.Is(err, ErrAlreadyRunning) {
 		t.Fatalf("want ErrAlreadyRunning, got %v", err)
 	}
 }
 
 func TestRemovesStaleSocket(t *testing.T) {
-	root := shortTempDir(t)
+	root, _ := testRoot(t, nil)
 	if err := os.WriteFile(paths.Socket(root), nil, 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -90,3 +165,4 @@ func TestClientReportsDaemonNotRunning(t *testing.T) {
 		t.Fatalf("want ErrDaemonNotRunning, got %v", err)
 	}
 }
+
