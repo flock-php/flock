@@ -35,7 +35,8 @@ private let sample = """
 @Test func htmlShowsRequestsNewestFirstAndDumpsInOrder() throws {
     let html = DumpTimeline.html(dumps: try dumps(sample), header: "<script>HEADER</script>", editor: .phpstorm)
 
-    let request = try #require(html.range(of: "GET https://shop.test/cart"))
+    #expect(html.contains("<span class=\"verb get\">GET</span>"))
+    let request = try #require(html.range(of: "https://shop.test/cart"))
     let cli = try #require(html.range(of: "artisan tinker"))
     #expect(request.lowerBound < cli.lowerBound)
 
@@ -52,4 +53,12 @@ private let sample = """
     #expect(Editor.vscode.url(file: "/a b/c.php", line: 3)?.absoluteString == "vscode://file/a%20b/c.php:3")
     #expect(Editor.phpstorm.url(file: "/x.blade.php", line: 0)?.absoluteString == "phpstorm://open?file=/x.blade.php")
     #expect(Editor.none.url(file: "/x.php", line: 1) == nil)
+}
+
+@Test func legacyBodiesLoseTheirStylesheet() throws {
+    var dump = try dumps(sample)[0]
+    dump.html = "<style>pre.sf-dump{color:red}</style><script>Sfdump=1</script><pre class=sf-dump>x</pre>"
+    let body = DumpTimeline.cleanedHTML(of: dump)
+    #expect(!body.contains("<style"))
+    #expect(body.contains("<pre class=sf-dump>x</pre>"))
 }

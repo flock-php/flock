@@ -2,7 +2,7 @@ import AppKit
 import WebKit
 
 /// Development aid: `FlockBar --snapshot <mail|dumps|logs> <file.png>` opens that window,
-/// renders it into a PNG from inside the app (no screen recording permission needed) and exits.
+/// (optionally `--appearance light|dark`) renders it into a PNG from inside the app (no screen recording permission needed) and exits.
 @MainActor
 enum Snapshot {
     static let target: String? = argument(after: "--snapshot", offset: 1)
@@ -18,6 +18,9 @@ enum Snapshot {
 
     static func captureIfRequested(_ id: String) async {
         guard target == id, let path else { return }
+        if let name = argument(after: "--appearance", offset: 1) {
+            NSApp.appearance = NSAppearance(named: name == "dark" ? .darkAqua : .aqua)
+        }
         try? await Task.sleep(for: .seconds(4))
 
         guard let window = NSApp.windows.first(where: { $0.isVisible && $0.identifier?.rawValue.contains(id) == true })

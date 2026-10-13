@@ -35,8 +35,6 @@ struct DumpsWindow: View {
                     }
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .background(Color(red: 0.094, green: 0.09, blue: 0.106))
-                .environment(\.colorScheme, .dark)
             } else {
                 WebView(html: DumpTimeline.html(dumps: visible, header: store.header, editor: editor),
                         allowsJavaScript: true, blocksRemoteContent: true)
