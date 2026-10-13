@@ -165,4 +165,3 @@ func TestClientReportsDaemonNotRunning(t *testing.T) {
 		t.Fatalf("want ErrDaemonNotRunning, got %v", err)
 	}
 }
-
