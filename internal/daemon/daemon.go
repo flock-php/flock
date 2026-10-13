@@ -48,8 +48,9 @@ type daemon struct {
 	startedAt time.Time
 	procs     *supervisor.Supervisor
 
-	// reloadMu serialises reloads (API requests and the retry loop).
+	// reloadMu serialises reloads (API requests and the retry loop); mutateMu serialises config edits.
 	reloadMu sync.Mutex
+	mutateMu sync.Mutex
 	dns      *dns.Server
 	mail     *mail.Server
 	webUp    bool
@@ -247,17 +248,18 @@ func (d *daemon) Reload() error { return d.reload() }
 // Root implements api.Backend.
 func (d *daemon) Root() string { return d.root }
 
-// UpdateSettings implements api.Backend: it edits config.json and applies it.
-func (d *daemon) UpdateSettings(s api.Settings) error {
+// Mutate implements api.Backend: it edits config.json and applies it.
+// Changes are serialised so two UI requests cannot overwrite each other's edits.
+func (d *daemon) Mutate(change func(*config.Config) error) error {
+	d.mutateMu.Lock()
+	defer d.mutateMu.Unlock()
+
 	cfg, err := config.Load(d.root)
 	if err != nil {
 		return err
 	}
-	if s.Xdebug != nil {
-		cfg.Xdebug = *s.Xdebug
-	}
-	if s.Dumps != nil {
-		cfg.Dumps = *s.Dumps
+	if err := change(cfg); err != nil {
+		return err
 	}
 	if err := cfg.Save(d.root); err != nil {
 		return err
@@ -309,7 +311,7 @@ func (d *daemon) reload() error {
 	for _, site := range cfg.AllSites() {
 		domain := cfg.Domain(site)
 		version := cfg.PHPFor(site)
-		status := api.SiteStatus{Name: site.Name, Domain: domain, Path: site.Path, PHP: version, Secured: site.Secured, Parked: site.Parked}
+		status := api.SiteStatus{Name: site.Name, Domain: domain, Path: site.Path, PHP: version, Node: cfg.NodeFor(site), Secured: site.Secured, Parked: site.Parked}
 
 		if !contains(installed, version) {
 			status.Problem = fmt.Sprintf("PHP %s is not installed", version)
@@ -350,7 +352,7 @@ func (d *daemon) reload() error {
 		statuses = append(statuses, status)
 	}
 
-	if v := cfg.Services.Postgres; v != "" {
+	if v := cfg.Services.Postgres; v != "" && cfg.Services.Running("postgres") {
 		spec, err := d.postgresSpec(cfg, v)
 		switch {
 		case err != nil:
@@ -377,7 +379,7 @@ func (d *daemon) reload() error {
 		}
 	}
 
-	if v := cfg.Services.Redis; v != "" {
+	if v := cfg.Services.Redis; v != "" && cfg.Services.Running("redis") {
 		spec, err := valkey.Spec(d.root, v, cfg.Ports.Redis)
 		switch {
 		case err != nil:
@@ -504,6 +506,44 @@ func (d *daemon) Status() api.Status {
 	}
 
 	return st
+}
+
+// Services implements api.Backend.
+func (d *daemon) Services() []api.Service {
+	d.mu.Lock()
+	cfg := d.cfg
+	dnsUp, mailUp, webUp := d.dns != nil, d.mail != nil, d.webUp
+	d.mu.Unlock()
+	if cfg == nil {
+		return []api.Service{}
+	}
+	p := cfg.Ports
+
+	services := []api.Service{
+		{ID: "web", Name: "Web server (Caddy)", Category: "Core", Port: p.HTTPS, Installed: true, Enabled: true, Running: webUp, Log: "web"},
+		{ID: "mail", Name: "Mail (SMTP)", Category: "Mail", Port: p.SMTP, Installed: true, Enabled: true, Running: mailUp,
+			Env: fmt.Sprintf("MAIL_MAILER=smtp\nMAIL_HOST=127.0.0.1\nMAIL_PORT=%d\nMAIL_USERNAME=${APP_NAME}\nMAIL_PASSWORD=null\nMAIL_SCHEME=null", p.SMTP),
+			URL: fmt.Sprintf("smtp://127.0.0.1:%d", p.SMTP)},
+		{ID: "dumps", Name: "Dump server", Category: "Debugging", Port: p.Dumps, Installed: true, Enabled: cfg.Dumps, Running: d.procUp("dump-server"), Stoppable: true,
+			Env: fmt.Sprintf("VAR_DUMPER_FORMAT=server\nVAR_DUMPER_SERVER=127.0.0.1:%d", p.Dumps), Log: "dump-server"},
+	}
+	if runtime.GOOS != "windows" {
+		services = append(services, api.Service{ID: "dns", Name: "DNS (*." + cfg.TLD + ")", Category: "Core", Port: p.DNS, Installed: true, Enabled: true, Running: dnsUp})
+	}
+
+	services = append(services, api.Service{
+		ID: "postgres", Name: "PostgreSQL", Category: "Database", Version: cfg.Services.Postgres, Port: p.Postgres,
+		Installed: cfg.Services.Postgres != "", Enabled: cfg.Services.Running("postgres"), Running: d.procUp("postgres"), Stoppable: true,
+		Env: fmt.Sprintf("DB_CONNECTION=pgsql\nDB_HOST=127.0.0.1\nDB_PORT=%d\nDB_DATABASE=laravel\nDB_USERNAME=postgres\nDB_PASSWORD=", p.Postgres),
+		Log: "postgres", URL: fmt.Sprintf("postgres://postgres@127.0.0.1:%d", p.Postgres),
+	}, api.Service{
+		ID: "redis", Name: "Redis (Valkey)", Category: "Cache & Queue", Version: cfg.Services.Redis, Port: p.Redis,
+		Installed: cfg.Services.Redis != "", Enabled: cfg.Services.Running("redis"), Running: d.procUp("valkey"), Stoppable: true,
+		Env: fmt.Sprintf("REDIS_CLIENT=phpredis\nREDIS_HOST=127.0.0.1\nREDIS_PASSWORD=null\nREDIS_PORT=%d", p.Redis),
+		Log: "valkey", URL: fmt.Sprintf("redis://127.0.0.1:%d", p.Redis),
+	})
+
+	return services
 }
 
 // waitForSocket polls until something accepts connections on a unix socket.

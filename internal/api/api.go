@@ -13,6 +13,7 @@ import (
 	"net/http"
 	"time"
 
+	"flock/internal/config"
 	"flock/internal/supervisor"
 )
 
@@ -45,6 +46,7 @@ type SiteStatus struct {
 	Domain  string `json:"domain"`
 	Path    string `json:"path"`
 	PHP     string `json:"php"`
+	Node    string `json:"node"`
 	Secured bool   `json:"secured"`
 	Parked  bool   `json:"parked"`
 	URL     string `json:"url,omitempty"`
@@ -57,18 +59,23 @@ type DNSStatus struct {
 	Addr string `json:"addr"`
 }
 
-// Settings are the toggles a UI can change; nil fields stay as they are.
+// Settings are the global toggles a UI can change; nil fields stay as they are.
 type Settings struct {
-	Xdebug *bool `json:"xdebug"`
-	Dumps  *bool `json:"dumps"`
+	Xdebug      *bool   `json:"xdebug"`
+	Dumps       *bool   `json:"dumps"`
+	DefaultPHP  *string `json:"default_php"`
+	DefaultNode *string `json:"default_node"`
 }
 
 // Backend is what the API needs from the daemon.
 type Backend interface {
 	Status() Status
 	Reload() error
-	UpdateSettings(Settings) error
 	Root() string
+	// Mutate loads config.json, applies change, saves it and reloads the daemon.
+	Mutate(change func(*config.Config) error) error
+	// Services describes every service with its live state.
+	Services() []Service
 }
 
 // NewHandler builds the API routes. A non-empty token requires `Authorization: Bearer <token>`
@@ -92,13 +99,15 @@ func NewHandler(b Backend, token string) http.Handler {
 			writeError(w, http.StatusBadRequest, fmt.Errorf("invalid settings: %w", err))
 			return
 		}
-		if err := b.UpdateSettings(settings); err != nil {
-			writeError(w, http.StatusInternalServerError, err)
+		err := b.Mutate(func(cfg *config.Config) error { return applySettings(b.Root(), cfg, settings) })
+		if err != nil {
+			writeError(w, statusFor(err), err)
 			return
 		}
 		writeJSON(w, http.StatusOK, b.Status())
 	})
 
+	registerConfig(mux, b)
 	registerMail(mux, b)
 	registerDumps(mux, b)
 	registerLogs(mux, b)

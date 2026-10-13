@@ -10,21 +10,38 @@ import (
 	"strings"
 	"testing"
 
+	"flock/internal/config"
 	"flock/internal/dumps"
 )
 
+// fakeBackend applies mutations to config.json in root, like the daemon, without running services.
 type fakeBackend struct {
-	root     string
-	sites    []SiteStatus
-	settings []Settings
+	root  string
+	sites []SiteStatus
 }
 
-func (f *fakeBackend) Status() Status { return Status{Sites: f.sites} }
-func (f *fakeBackend) Reload() error  { return nil }
-func (f *fakeBackend) Root() string   { return f.root }
-func (f *fakeBackend) UpdateSettings(s Settings) error {
-	f.settings = append(f.settings, s)
-	return nil
+func (f *fakeBackend) Status() Status      { return Status{Sites: f.sites} }
+func (f *fakeBackend) Reload() error       { return nil }
+func (f *fakeBackend) Root() string        { return f.root }
+func (f *fakeBackend) Services() []Service { return []Service{} }
+func (f *fakeBackend) Mutate(change func(*config.Config) error) error {
+	cfg, err := config.Load(f.root)
+	if err != nil {
+		return err
+	}
+	if err := change(cfg); err != nil {
+		return err
+	}
+	return cfg.Save(f.root)
+}
+
+func (f *fakeBackend) config(t *testing.T) *config.Config {
+	t.Helper()
+	cfg, err := config.Load(f.root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return cfg
 }
 
 func serve(t *testing.T, b Backend, token string) *httptest.Server {
@@ -70,8 +87,11 @@ func TestSettingsOnlyChangeGivenKeys(t *testing.T) {
 	if resp, body := call(t, "POST", srv.URL+"/v1/settings", "", `{"dumps":true}`); resp.StatusCode != http.StatusOK {
 		t.Fatalf("%d %s", resp.StatusCode, body)
 	}
-	if len(b.settings) != 1 || b.settings[0].Xdebug != nil || b.settings[0].Dumps == nil || !*b.settings[0].Dumps {
-		t.Fatalf("got %+v", b.settings)
+	if cfg := b.config(t); !cfg.Dumps || cfg.Xdebug {
+		t.Fatalf("got %+v", cfg)
+	}
+	if resp, _ := call(t, "POST", srv.URL+"/v1/settings", "", `{"default_php":"5.6"}`); resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("uninstalled default PHP must be rejected, got %d", resp.StatusCode)
 	}
 }
 
@@ -157,5 +177,78 @@ func TestLogsEndpoints(t *testing.T) {
 	}
 	if _, body := call(t, "GET", srv.URL+"/v1/logs/sites/shop", "", ""); !strings.Contains(body, `"level":"error"`) {
 		t.Fatalf("site log: %s", body)
+	}
+}
+
+func TestSiteAndParkedEndpoints(t *testing.T) {
+	b := &fakeBackend{root: t.TempDir()}
+	srv := serve(t, b, "")
+	project := t.TempDir()
+
+	if resp, body := call(t, "POST", srv.URL+"/v1/sites", "", `{"path":"`+project+`","name":"My App"}`); resp.StatusCode != http.StatusOK {
+		t.Fatalf("link: %d %s", resp.StatusCode, body)
+	}
+	if site, ok := b.config(t).FindSite("my-app"); !ok || site.Path != project {
+		t.Fatalf("site not linked: %+v", b.config(t).Sites)
+	}
+
+	if resp, body := call(t, "PATCH", srv.URL+"/v1/sites/my-app", "", `{"secured":true,"node":"20"}`); resp.StatusCode != http.StatusOK {
+		t.Fatalf("patch: %d %s", resp.StatusCode, body)
+	}
+	if site, _ := b.config(t).FindSite("my-app"); !site.Secured || site.Node != "20" {
+		t.Fatalf("patch not applied: %+v", site)
+	}
+	if resp, _ := call(t, "PATCH", srv.URL+"/v1/sites/my-app", "", `{"php":"5.6"}`); resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("uninstalled PHP must be rejected, got %d", resp.StatusCode)
+	}
+	if resp, _ := call(t, "POST", srv.URL+"/v1/sites", "", `{"path":"relative/dir"}`); resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("relative path must be rejected, got %d", resp.StatusCode)
+	}
+
+	parent := filepath.Dir(project)
+	if resp, body := call(t, "POST", srv.URL+"/v1/parked", "", `{"path":"`+parent+`"}`); resp.StatusCode != http.StatusOK {
+		t.Fatalf("park: %d %s", resp.StatusCode, body)
+	}
+	if resp, _ := call(t, "DELETE", srv.URL+"/v1/sites/"+filepath.Base(t.TempDir()), "", ""); resp.StatusCode != http.StatusConflict {
+		t.Fatalf("unlinking a parked-only site must be a conflict, got %d", resp.StatusCode)
+	}
+	if resp, _ := call(t, "DELETE", srv.URL+"/v1/sites/my-app", "", ""); resp.StatusCode != http.StatusOK {
+		t.Fatalf("unlink: %d", resp.StatusCode)
+	}
+	if resp, _ := call(t, "DELETE", srv.URL+"/v1/parked", "", `{"path":"`+parent+`"}`); resp.StatusCode != http.StatusOK || len(b.config(t).Parked) != 0 {
+		t.Fatalf("forget: %d %v", resp.StatusCode, b.config(t).Parked)
+	}
+}
+
+func TestServiceStartStopAndPorts(t *testing.T) {
+	b := &fakeBackend{root: t.TempDir()}
+	srv := serve(t, b, "")
+
+	if resp, _ := call(t, "POST", srv.URL+"/v1/services/postgres/stop", "", ""); resp.StatusCode != http.StatusOK || b.config(t).Services.Running("postgres") {
+		t.Fatalf("stop: %d", resp.StatusCode)
+	}
+	if resp, _ := call(t, "POST", srv.URL+"/v1/services/postgres/start", "", ""); resp.StatusCode != http.StatusOK || !b.config(t).Services.Running("postgres") {
+		t.Fatalf("start: %d", resp.StatusCode)
+	}
+	if resp, _ := call(t, "POST", srv.URL+"/v1/services/web/stop", "", ""); resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("web must not be stoppable, got %d", resp.StatusCode)
+	}
+	if resp, _ := call(t, "PATCH", srv.URL+"/v1/services/redis", "", `{"port":6380}`); resp.StatusCode != http.StatusOK || b.config(t).Ports.Redis != 6380 {
+		t.Fatalf("port: %d", resp.StatusCode)
+	}
+	if resp, _ := call(t, "PATCH", srv.URL+"/v1/services/redis", "", `{"port":80}`); resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("privileged port must be rejected, got %d", resp.StatusCode)
+	}
+}
+
+func TestConfigView(t *testing.T) {
+	b := &fakeBackend{root: t.TempDir()}
+	srv := serve(t, b, "")
+
+	_, body := call(t, "GET", srv.URL+"/v1/config", "", "")
+	for _, want := range []string{`"tld":"test"`, `"php":[]`, `"node":[]`, `"parked":[]`, `"redis":6379`} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("missing %s in %s", want, body)
+		}
 	}
 }

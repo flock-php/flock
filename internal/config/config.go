@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 )
@@ -42,6 +43,22 @@ type Services struct {
 	Postgres       string `json:"postgres,omitempty"`        // e.g. "18.6.0"
 	PostgresClient string `json:"postgres_client,omitempty"` // psql, pg_dump, ... e.g. "18.6"
 	Redis          string `json:"redis,omitempty"`           // Valkey version, e.g. "9.1.2"
+
+	// Stopped lists installed services the user switched off ("postgres", "redis").
+	Stopped []string `json:"stopped,omitempty"`
+}
+
+// Running reports whether an installed service should run.
+func (s Services) Running(id string) bool {
+	return !slices.Contains(s.Stopped, id)
+}
+
+// SetRunning starts or stops a service by editing Stopped.
+func (s *Services) SetRunning(id string, on bool) {
+	s.Stopped = slices.DeleteFunc(s.Stopped, func(x string) bool { return x == id })
+	if !on {
+		s.Stopped = append(s.Stopped, id)
+	}
 }
 
 // Site is a directory served as <name>.<tld> (and *.<name>.<tld>).
