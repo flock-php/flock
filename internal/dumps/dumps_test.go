@@ -60,17 +60,13 @@ func TestListTrimsAndOrdersNewestFirst(t *testing.T) {
 	}
 }
 
-// TestServerReceivesDumps needs a PHP binary; it uses the one from PATH or FLOCK_TEST_PHP.
+// TestServerReceivesDumps needs a native PHP binary given in FLOCK_TEST_PHP.
 func TestServerReceivesDumps(t *testing.T) {
+	// PATH's php may be a wrapper around a container (e.g. Lerd) that cannot see this machine's
+	// temp dirs or ports, so the test only runs against an explicitly given native PHP.
 	php := os.Getenv("FLOCK_TEST_PHP")
 	if php == "" {
-		var err error
-		if php, err = exec.LookPath("php"); err != nil {
-			t.Skip("no php available")
-		}
-	}
-	if err := exec.Command(php, "-n", "-r", "exit(PHP_VERSION_ID >= 80400 ? 0 : 1);").Run(); err != nil {
-		t.Skipf("%s is not a working PHP >= 8.4 (set FLOCK_TEST_PHP)", php)
+		t.Skip("set FLOCK_TEST_PHP to a native PHP >= 8.4 binary")
 	}
 
 	root := t.TempDir()
