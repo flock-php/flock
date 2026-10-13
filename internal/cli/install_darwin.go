@@ -264,3 +264,15 @@ func newUninstallCommand() *cobra.Command {
 		},
 	}
 }
+
+// restartService makes launchd kill and relaunch the daemon.
+func restartService() error {
+	target := "gui/" + strconv.Itoa(os.Getuid()) + "/" + launchLabel
+	if err := exec.Command("launchctl", "print", target).Run(); err != nil {
+		return fmt.Errorf("the background daemon is not installed — run `flock install`")
+	}
+	if out, err := exec.Command("launchctl", "kickstart", "-k", target).CombinedOutput(); err != nil {
+		return fmt.Errorf("launchctl kickstart: %v: %s", err, out)
+	}
+	return nil
+}

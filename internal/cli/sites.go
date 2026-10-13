@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 
 	"github.com/spf13/cobra"
 
@@ -173,6 +174,21 @@ func newForgetCommand() *cobra.Command {
 	}
 }
 
+// envValue reads one KEY=value from a .env file, without quotes; "" when absent.
+func envValue(path, key string) string {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return ""
+	}
+	for _, line := range strings.Split(string(data), "\n") {
+		k, v, ok := strings.Cut(strings.TrimSpace(line), "=")
+		if ok && strings.TrimSpace(k) == key {
+			return strings.Trim(strings.TrimSpace(v), `"'`)
+		}
+	}
+	return ""
+}
+
 func dirArg(args []string) (string, error) {
 	dir := "."
 	if len(args) > 0 {
@@ -215,7 +231,11 @@ func newSecureCommand(on bool) *cobra.Command {
 			if on {
 				scheme = "https"
 			}
-			cmd.Printf("%s → %s://%s\n", site.Name, scheme, s.cfg.Domain(site))
+			url := scheme + "://" + s.cfg.Domain(site)
+			cmd.Printf("%s → %s\n", site.Name, url)
+			if appURL := envValue(filepath.Join(site.Path, ".env"), "APP_URL"); appURL != "" && appURL != url {
+				cmd.Printf("hint: set APP_URL=%s in .env (it is %s) — Laravel's URLs and Vite's HTTPS dev server use it\n", url, appURL)
+			}
 			return nil
 		},
 	}

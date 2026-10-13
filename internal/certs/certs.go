@@ -138,9 +138,8 @@ func (ca *CA) create(tld string) error {
 // SiteCert returns cert/key paths for domain (covering domain and *.domain),
 // issuing a new one when missing, expiring soon, or signed by a different CA.
 func (ca *CA) SiteCert(domain string) (certPath, keyPath string, err error) {
-	dir := filepath.Join(ca.dir, "sites")
-	certPath = filepath.Join(dir, domain+".crt")
-	keyPath = filepath.Join(dir, domain+".key")
+	certPath, keyPath = SitePaths(ca.dir, domain)
+	dir := filepath.Dir(certPath)
 
 	if ca.leafIsCurrent(certPath, domain) {
 		if _, err := os.Stat(keyPath); err == nil {
@@ -180,6 +179,12 @@ func (ca *CA) SiteCert(domain string) (certPath, keyPath string, err error) {
 	}
 
 	return certPath, keyPath, nil
+}
+
+// SitePaths is where SiteCert stores a site's certificate and key inside the CA dir.
+func SitePaths(caDir, domain string) (certPath, keyPath string) {
+	dir := filepath.Join(caDir, "sites")
+	return filepath.Join(dir, domain+".crt"), filepath.Join(dir, domain+".key")
 }
 
 func (ca *CA) leafIsCurrent(path, domain string) bool {

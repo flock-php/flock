@@ -17,6 +17,7 @@ func writeShims(string, string) error     { return errWindowsTODO }
 func addToShellPath(string) error         { return errWindowsTODO }
 func installService(string, string) error { return errWindowsTODO }
 func uninstallService() error             { return errWindowsTODO }
+func restartService() error               { return errWindowsTODO }
 func newPrivilegedSetupCommand() *cobra.Command {
 	return &cobra.Command{Use: "privileged-setup", Hidden: true}
 }

@@ -32,6 +32,11 @@ func TestRestartsCrashedProcessAndStopsIt(t *testing.T) {
 	s.Ensure(Spec{Name: "crashy", Path: "/bin/sh", Args: []string{"-c", "echo hello; exit 1"}, LogFile: log})
 
 	waitFor(t, func() bool { return countLines(log, "hello") >= 2 })
+
+	st := s.Status()
+	if len(st) != 1 || st[0].Restarts < 1 || !strings.Contains(st[0].LastErr, "exit status 1: hello") {
+		t.Fatalf("crash not reported: %+v", st)
+	}
 	s.StopAll()
 
 	if len(s.Running()) != 0 {

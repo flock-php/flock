@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"sync"
 	"time"
 
@@ -21,6 +22,7 @@ import (
 	"flock/internal/mail"
 	"flock/internal/paths"
 	"flock/internal/php"
+	"flock/internal/ports"
 	"flock/internal/postgres"
 	"flock/internal/supervisor"
 	"flock/internal/web"
@@ -32,6 +34,9 @@ type Config struct {
 	Version string
 }
 
+// retryInterval is how often a degraded daemon tries to start what failed.
+var retryInterval = 15 * time.Second
+
 // ErrAlreadyRunning is returned when another daemon owns the socket.
 var ErrAlreadyRunning = errors.New("flock daemon is already running")
 
@@ -40,13 +45,95 @@ type daemon struct {
 	version   string
 	startedAt time.Time
 	procs     *supervisor.Supervisor
-	dns       *dns.Server
-	mail      *mail.Server
+
+	// reloadMu serialises reloads (API requests and the retry loop).
+	reloadMu sync.Mutex
+	dns      *dns.Server
+	mail     *mail.Server
+	webUp    bool
 
 	mu       sync.Mutex
 	sites    []api.SiteStatus
 	warnings []string
 	cfg      *config.Config
+}
+
+func (d *daemon) shutdown() {
+	d.reloadMu.Lock()
+	defer d.reloadMu.Unlock()
+
+	if d.webUp {
+		_ = web.Stop()
+	}
+	if d.dns != nil {
+		_ = d.dns.Shutdown()
+	}
+	if d.mail != nil {
+		_ = d.mail.Shutdown()
+	}
+	d.procs.StopAll()
+}
+
+func (d *daemon) setWarnings(w []string) {
+	d.mu.Lock()
+	d.warnings = w
+	d.mu.Unlock()
+}
+
+func (d *daemon) degraded() bool {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	return len(d.warnings) > 0
+}
+
+// ensureDNS (re)starts the DNS server when its address or TLD changed. Windows uses the hosts file instead.
+func (d *daemon) ensureDNS(cfg *config.Config) error {
+	if runtime.GOOS == "windows" {
+		return nil
+	}
+
+	addr := fmt.Sprintf("127.0.0.1:%d", cfg.Ports.DNS)
+	if d.dns != nil && d.dns.Addr() == addr && d.dns.TLD() == cfg.TLD {
+		return nil
+	}
+	if d.dns != nil {
+		_ = d.dns.Shutdown()
+		d.dns = nil
+	}
+
+	srv := dns.New(addr, cfg.TLD)
+	if err := srv.Start(); err != nil {
+		return fmt.Errorf("dns: %s", busy(cfg.Ports.DNS, err))
+	}
+	d.dns = srv
+	return nil
+}
+
+// ensureMail (re)starts the SMTP catcher when its port changed.
+func (d *daemon) ensureMail(cfg *config.Config) error {
+	addr := fmt.Sprintf("127.0.0.1:%d", cfg.Ports.SMTP)
+	if d.mail != nil && d.mail.Addr() == addr {
+		return nil
+	}
+	if d.mail != nil {
+		_ = d.mail.Shutdown()
+		d.mail = nil
+	}
+
+	srv := mail.New(addr, filepath.Join(d.root, "mail"))
+	if err := srv.Start(); err != nil {
+		return fmt.Errorf("mail: %s", busy(cfg.Ports.SMTP, err))
+	}
+	d.mail = srv
+	return nil
+}
+
+// busy turns "address already in use" into a message naming the program that holds the port.
+func busy(port int, err error) string {
+	if strings.Contains(err.Error(), "address already in use") || strings.Contains(err.Error(), "permission denied") {
+		return ports.Describe(port)
+	}
+	return err.Error()
 }
 
 // Run starts all services and blocks until ctx is cancelled.
@@ -60,33 +147,14 @@ func Run(ctx context.Context, cfg Config) error {
 		return err
 	}
 
-	settings, err := config.Load(cfg.Root)
-	if err != nil {
-		return err
-	}
-
 	d := &daemon{root: cfg.Root, version: cfg.Version, startedAt: time.Now(), procs: supervisor.New()}
-	defer d.procs.StopAll()
+	defer d.shutdown()
 
-	// Windows resolves .test through the hosts file, so it does not need the DNS server.
-	if runtime.GOOS != "windows" {
-		d.dns = dns.New(fmt.Sprintf("127.0.0.1:%d", settings.Ports.DNS), settings.TLD)
-		if err := d.dns.Start(); err != nil {
-			return err
-		}
-		defer d.dns.Shutdown()
-	}
-
-	d.mail = mail.New(fmt.Sprintf("127.0.0.1:%d", settings.Ports.SMTP), filepath.Join(cfg.Root, "mail"))
-	if err := d.mail.Start(); err != nil {
-		return err
-	}
-	defer d.mail.Shutdown()
-
+	// A broken config or a busy port must not kill the daemon: launchd would restart it in a loop
+	// and `flock status` could not explain what is wrong. Problems become warnings instead.
 	if err := d.reload(); err != nil {
-		return err
+		d.setWarnings([]string{err.Error()})
 	}
-	defer web.Stop()
 
 	ln, err := net.Listen("unix", socket)
 	if err != nil {
@@ -102,10 +170,24 @@ func Run(ctx context.Context, cfg Config) error {
 	serveErr := make(chan error, 1)
 	go func() { serveErr <- apiServer.Serve(ln) }()
 
-	select {
-	case <-ctx.Done():
-	case err := <-serveErr:
-		return fmt.Errorf("api server: %w", err)
+	// Retry while degraded, so e.g. the web server comes up by itself once Lerd frees port 80.
+	retry := time.NewTicker(retryInterval)
+	defer retry.Stop()
+
+loop:
+	for {
+		select {
+		case <-ctx.Done():
+			break loop
+		case err := <-serveErr:
+			return fmt.Errorf("api server: %w", err)
+		case <-retry.C:
+			if d.degraded() {
+				if err := d.reload(); err != nil {
+					d.setWarnings([]string{err.Error()})
+				}
+			}
+		}
 	}
 
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -114,8 +196,13 @@ func Run(ctx context.Context, cfg Config) error {
 	return apiServer.Shutdown(shutdownCtx)
 }
 
-// reload re-reads config.json and reconciles PHP pools, databases and the web server with it.
+// reload re-reads config.json and reconciles every service with it.
+// It only returns an error when the config itself is unusable; a service that fails
+// to start is reported as a warning and retried later.
 func (d *daemon) reload() error {
+	d.reloadMu.Lock()
+	defer d.reloadMu.Unlock()
+
 	cfg, err := config.Load(d.root)
 	if err != nil {
 		return err
@@ -129,8 +216,14 @@ func (d *daemon) reload() error {
 		return err
 	}
 
+	var warnings []string
+	for _, ensure := range []func(*config.Config) error{d.ensureDNS, d.ensureMail} {
+		if err := ensure(cfg); err != nil {
+			warnings = append(warnings, err.Error())
+		}
+	}
+
 	var (
-		warnings []string
 		statuses []api.SiteStatus
 		webSites []web.Site
 		keep     = map[string]bool{}
@@ -174,9 +267,14 @@ func (d *daemon) reload() error {
 	}
 
 	if v := cfg.Services.Postgres; v != "" {
-		if spec, err := d.postgresSpec(cfg, v); err != nil {
+		spec, err := d.postgresSpec(cfg, v)
+		switch {
+		case err != nil:
 			warnings = append(warnings, "postgres: "+err.Error())
-		} else {
+		case !d.procUp(spec.Name) && !ports.Free("127.0.0.1", cfg.Ports.Postgres):
+			// Starting would only crash-loop on "could not bind".
+			warnings = append(warnings, "postgres: "+ports.Describe(cfg.Ports.Postgres))
+		default:
 			d.procs.Ensure(spec)
 			keep[spec.Name] = true
 		}
@@ -189,16 +287,8 @@ func (d *daemon) reload() error {
 		bind = ""
 	}
 
-	err = web.Apply(web.Config{
-		StorageDir: filepath.Join(d.root, "caddy"),
-		LogFile:    filepath.Join(d.root, "log", "web.log"),
-		HTTPPort:   cfg.Ports.HTTP,
-		HTTPSPort:  cfg.Ports.HTTPS,
-		Bind:       bind,
-		Sites:      webSites,
-	})
-	if err != nil {
-		return fmt.Errorf("web server: %w", err)
+	if err := d.applyWeb(cfg, bind, webSites); err != nil {
+		warnings = append(warnings, "web: "+err.Error())
 	}
 
 	d.mu.Lock()
@@ -206,6 +296,43 @@ func (d *daemon) reload() error {
 	d.mu.Unlock()
 
 	return nil
+}
+
+// applyWeb (re)configures Caddy. Before the first successful start it checks the ports itself,
+// because Caddy's own error does not say who holds them.
+func (d *daemon) applyWeb(cfg *config.Config, bind string, sites []web.Site) error {
+	owned := map[int]bool{}
+	if d.webUp && d.cfg != nil {
+		owned[d.cfg.Ports.HTTP], owned[d.cfg.Ports.HTTPS] = true, true
+	}
+	for _, port := range []int{cfg.Ports.HTTP, cfg.Ports.HTTPS} {
+		if !owned[port] && !ports.Free(bind, port) {
+			return errors.New(ports.Describe(port))
+		}
+	}
+
+	err := web.Apply(web.Config{
+		StorageDir: filepath.Join(d.root, "caddy"),
+		LogFile:    filepath.Join(d.root, "log", "web.log"),
+		HTTPPort:   cfg.Ports.HTTP,
+		HTTPSPort:  cfg.Ports.HTTPS,
+		Bind:       bind,
+		Sites:      sites,
+	})
+	if err != nil {
+		return err
+	}
+	d.webUp = true
+	return nil
+}
+
+func (d *daemon) procUp(name string) bool {
+	for _, p := range d.procs.Status() {
+		if p.Name == name {
+			return p.Up
+		}
+	}
+	return false
 }
 
 func (d *daemon) postgresSpec(cfg *config.Config, version string) (supervisor.Spec, error) {
@@ -240,9 +367,11 @@ func (d *daemon) status() api.Status {
 		PID:       os.Getpid(),
 		StartedAt: d.startedAt,
 		Sites:     d.sites,
-		Processes: d.procs.Running(),
+		Processes: d.procs.Status(),
 		Warnings:  d.warnings,
-		Mail:      d.mail.Addr(),
+	}
+	if d.mail != nil {
+		st.Mail = d.mail.Addr()
 	}
 	if d.dns != nil {
 		st.DNS = api.DNSStatus{TLD: d.dns.TLD(), Addr: d.dns.Addr()}

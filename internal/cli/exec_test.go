@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"flock/internal/certs"
 	"flock/internal/config"
 	"flock/internal/php"
 )
@@ -75,5 +76,46 @@ func TestResolveToolExplainsMissingVersions(t *testing.T) {
 	}
 	if _, _, _, err := resolveTool(s, "/x", "node", nil); err == nil {
 		t.Fatal("expected error for missing node")
+	}
+}
+
+func TestNodeGetsTheSiteCertificateForViteWhenSecured(t *testing.T) {
+	root := t.TempDir()
+	binDir := filepath.Join(root, "node", "22.1.0", "bin")
+	if err := os.MkdirAll(binDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(binDir, "node"), nil, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg := config.Default()
+	cfg.Upsert(config.Site{Name: "shop", Path: "/code/shop", Secured: true})
+	cfg.Upsert(config.Site{Name: "blog", Path: "/code/blog"})
+	s := &state{root: root, cfg: cfg}
+
+	certPath, keyPath := certs.SitePaths(filepath.Join(root, "certs"), "shop.test")
+	for _, p := range []string{certPath, keyPath} {
+		if err := os.MkdirAll(filepath.Dir(p), 0o700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(p, nil, 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	t.Setenv("VITE_DEV_SERVER_KEY", "")
+
+	_, _, env, err := resolveTool(s, "/code/shop", "npm", []string{"run", "dev"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	joined := strings.Join(env, "\n")
+	if !strings.Contains(joined, "VITE_DEV_SERVER_KEY="+keyPath) || !strings.Contains(joined, "VITE_DEV_SERVER_CERT="+certPath) {
+		t.Fatalf("vite TLS env missing: %v", env)
+	}
+
+	_, _, env, _ = resolveTool(s, "/code/blog", "npm", nil)
+	if strings.Contains(strings.Join(env, "\n"), "VITE_DEV_SERVER") {
+		t.Fatalf("unsecured site must not get vite TLS env: %v", env)
 	}
 }

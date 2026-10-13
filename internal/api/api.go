@@ -10,6 +10,8 @@ import (
 	"net"
 	"net/http"
 	"time"
+
+	"flock/internal/supervisor"
 )
 
 // ErrDaemonNotRunning is returned when nothing is listening on the socket.
@@ -17,17 +19,17 @@ var ErrDaemonNotRunning = errors.New("flock daemon is not running (start it with
 
 // Status describes the running daemon.
 type Status struct {
-	Version   string       `json:"version"`
-	PID       int          `json:"pid"`
-	StartedAt time.Time    `json:"started_at"`
-	DNS       DNSStatus    `json:"dns"`
-	HTTPPort  int          `json:"http_port"`
-	HTTPSPort int          `json:"https_port"`
-	Mail      string       `json:"mail"`
-	Postgres  string       `json:"postgres,omitempty"`
-	Sites     []SiteStatus `json:"sites"`
-	Processes []string     `json:"processes"`
-	Warnings  []string     `json:"warnings,omitempty"`
+	Version   string                  `json:"version"`
+	PID       int                     `json:"pid"`
+	StartedAt time.Time               `json:"started_at"`
+	DNS       DNSStatus               `json:"dns"`
+	HTTPPort  int                     `json:"http_port"`
+	HTTPSPort int                     `json:"https_port"`
+	Mail      string                  `json:"mail"`
+	Postgres  string                  `json:"postgres,omitempty"`
+	Sites     []SiteStatus            `json:"sites"`
+	Processes []supervisor.ProcStatus `json:"processes"`
+	Warnings  []string                `json:"warnings,omitempty"`
 }
 
 // SiteStatus is one served site as the daemon sees it.

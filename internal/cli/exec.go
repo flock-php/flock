@@ -9,6 +9,8 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"flock/internal/certs"
+	"flock/internal/config"
 	"flock/internal/node"
 	"flock/internal/php"
 )
@@ -44,6 +46,24 @@ func newExecCommand() *cobra.Command {
 	}
 }
 
+// viteTLSEnv hands a secured site's certificate to laravel-vite-plugin, which reads
+// VITE_DEV_SERVER_KEY/CERT from the environment, so `npm run dev` serves over HTTPS
+// without any vite.config.js changes. The host comes from APP_URL in the project's .env.
+func viteTLSEnv(s *state, site config.Site, inSite bool) []string {
+	if !inSite || !site.Secured || os.Getenv("VITE_DEV_SERVER_KEY") != "" {
+		return nil
+	}
+
+	certPath, keyPath := certs.SitePaths(filepath.Join(s.root, "certs"), s.cfg.Domain(site))
+	for _, p := range []string{certPath, keyPath} {
+		if _, err := os.Stat(p); err != nil {
+			return nil
+		}
+	}
+
+	return []string{"VITE_DEV_SERVER_KEY=" + keyPath, "VITE_DEV_SERVER_CERT=" + certPath}
+}
+
 // resolveTool decides which binary a shim runs, with which arguments and extra environment.
 func resolveTool(s *state, cwd, tool string, args []string) (path string, argv, env []string, err error) {
 	switch tool {
@@ -69,10 +89,12 @@ func resolveTool(s *state, cwd, tool string, args []string) (path string, argv, 
 		return path, append([]string{path}, args...), env, nil
 
 	case "node", "npm", "npx":
+		site, inSite := s.cfg.SiteForDir(cwd)
+
 		spec := node.DetectSpec(cwd)
 		if spec == "" {
 			spec = s.cfg.DefaultNode
-			if site, ok := s.cfg.SiteForDir(cwd); ok {
+			if inSite {
 				spec = s.cfg.NodeFor(site)
 			}
 		}
@@ -94,6 +116,7 @@ func resolveTool(s *state, cwd, tool string, args []string) (path string, argv, 
 			"PATH=" + binDir + string(os.PathListSeparator) + os.Getenv("PATH"),
 			"NODE_EXTRA_CA_CERTS=" + filepath.Join(s.root, "certs", "ca.crt"),
 		}
+		env = append(env, viteTLSEnv(s, site, inSite)...)
 		path = filepath.Join(binDir, name)
 		return path, append([]string{path}, args...), env, nil
 	}

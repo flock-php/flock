@@ -33,7 +33,15 @@ func newStatusCommand() *cobra.Command {
 			if st.Postgres != "" {
 				fmt.Fprintf(out, "postgres  %s\n", st.Postgres)
 			}
-			fmt.Fprintf(out, "processes %v\n", st.Processes)
+			for _, p := range st.Processes {
+				state := "up"
+				if !p.Up {
+					state = fmt.Sprintf("DOWN (restarted %d×, last error: %s)", p.Restarts, p.LastErr)
+				} else if p.Restarts > 0 {
+					state = fmt.Sprintf("up (restarted %d×)", p.Restarts)
+				}
+				fmt.Fprintf(out, "process   %s %s\n", p.Name, state)
+			}
 			for _, w := range st.Warnings {
 				fmt.Fprintf(out, "warning   %s\n", w)
 			}

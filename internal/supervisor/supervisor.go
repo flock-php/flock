@@ -9,6 +9,8 @@ import (
 	"os/exec"
 	"path/filepath"
 	"reflect"
+	"sort"
+	"strings"
 	"sync"
 	"time"
 )
@@ -34,6 +36,19 @@ type proc struct {
 	spec Spec
 	stop chan struct{}
 	done chan struct{}
+
+	mu       sync.Mutex
+	up       bool
+	restarts int
+	lastErr  string
+}
+
+// ProcStatus is the health of one supervised process.
+type ProcStatus struct {
+	Name     string `json:"name"`
+	Up       bool   `json:"up"`
+	Restarts int    `json:"restarts"`
+	LastErr  string `json:"last_error,omitempty"` // why it last exited, plus the tail of its log
 }
 
 // New creates an empty supervisor.
@@ -70,6 +85,22 @@ func (s *Supervisor) Running() []string {
 	return names
 }
 
+// Status reports every supervised process, sorted by name.
+func (s *Supervisor) Status() []ProcStatus {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	out := make([]ProcStatus, 0, len(s.procs))
+	for name, p := range s.procs {
+		p.mu.Lock()
+		out = append(out, ProcStatus{Name: name, Up: p.up, Restarts: p.restarts, LastErr: p.lastErr})
+		p.mu.Unlock()
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
+
+	return out
+}
+
 // Retain stops every process whose name is not in keep.
 func (s *Supervisor) Retain(keep map[string]bool) {
 	s.mu.Lock()
@@ -103,6 +134,12 @@ func (p *proc) run() {
 		if err == errStopped {
 			return
 		}
+
+		p.mu.Lock()
+		p.up = false
+		p.restarts++
+		p.lastErr = fmt.Sprintf("%v%s", err, lastLine(p.spec.LogFile))
+		p.mu.Unlock()
 
 		// A process that ran for a while gets a fresh backoff.
 		if time.Since(started) > time.Minute {
@@ -143,6 +180,10 @@ func (p *proc) once() error {
 	exited := make(chan error, 1)
 	go func() { exited <- cmd.Wait() }()
 
+	p.mu.Lock()
+	p.up = true
+	p.mu.Unlock()
+
 	select {
 	case err := <-exited:
 		fmt.Fprintf(log, "[flock] %s exited: %v\n", p.spec.Name, err)
@@ -158,6 +199,27 @@ func (p *proc) once() error {
 		fmt.Fprintf(log, "[flock] %s stopped\n", p.spec.Name)
 		return errStopped
 	}
+}
+
+// lastLine returns the last meaningful line the process logged (Flock's own markers skipped),
+// which usually explains a crash ("could not bind ... Address already in use").
+func lastLine(path string) string {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return ""
+	}
+	if len(data) > 8192 {
+		data = data[len(data)-8192:]
+	}
+
+	lines := strings.Split(strings.TrimSpace(string(data)), "\n")
+	for i := len(lines) - 1; i >= 0; i-- {
+		line := strings.TrimSpace(lines[i])
+		if line != "" && !strings.HasPrefix(line, "[flock]") {
+			return ": " + line
+		}
+	}
+	return ""
 }
 
 func openLog(path string) (io.WriteCloser, error) {

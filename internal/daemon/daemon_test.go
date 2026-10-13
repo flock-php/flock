@@ -165,3 +165,60 @@ func TestClientReportsDaemonNotRunning(t *testing.T) {
 		t.Fatalf("want ErrDaemonNotRunning, got %v", err)
 	}
 }
+
+func TestBusyPortsBecomeWarningsAndRecover(t *testing.T) {
+	retryInterval = 100 * time.Millisecond
+	t.Cleanup(func() { retryInterval = 15 * time.Second })
+
+	root, cfg := testRoot(t, nil)
+	blocker, err := net.Listen("tcp", "127.0.0.1:"+strconv.Itoa(cfg.Ports.HTTP))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	client := startDaemon(t, root)
+	status, _ := client.Status(context.Background())
+	if !containsText(status.Warnings, "web: port "+strconv.Itoa(cfg.Ports.HTTP)+" is used by") {
+		t.Fatalf("busy web port not reported: %v", status.Warnings)
+	}
+
+	blocker.Close()
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		status, _ = client.Status(context.Background())
+		if len(status.Warnings) == 0 {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("web server did not recover: %v", status.Warnings)
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+}
+
+func TestReloadMovesServicesToNewPorts(t *testing.T) {
+	root, cfg := testRoot(t, nil)
+	client := startDaemon(t, root)
+
+	cfg.Ports.SMTP = freePort(t)
+	if err := cfg.Save(root); err != nil {
+		t.Fatal(err)
+	}
+
+	status, err := client.Reload(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if status.Mail != "127.0.0.1:"+strconv.Itoa(cfg.Ports.SMTP) {
+		t.Fatalf("mail did not move: %s (warnings %v)", status.Mail, status.Warnings)
+	}
+}
+
+func containsText(list []string, needle string) bool {
+	for _, s := range list {
+		if strings.Contains(s, needle) {
+			return true
+		}
+	}
+	return false
+}
