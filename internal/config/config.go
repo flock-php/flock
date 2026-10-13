@@ -19,6 +19,7 @@ type Config struct {
 	DefaultNode string   `json:"default_node"`
 	Ports       Ports    `json:"ports"`
 	Services    Services `json:"services"`
+	Xdebug      bool     `json:"xdebug"`
 	Parked      []string `json:"parked"`
 	Sites       []Site   `json:"sites"`
 }
@@ -30,11 +31,14 @@ type Ports struct {
 	DNS      int `json:"dns"`
 	SMTP     int `json:"smtp"`
 	Postgres int `json:"postgres"`
+	Redis    int `json:"redis"`
 }
 
 // Services are optional background services; an empty version means not installed.
 type Services struct {
-	Postgres string `json:"postgres,omitempty"` // e.g. "18.6.0"
+	Postgres       string `json:"postgres,omitempty"`        // e.g. "18.6.0"
+	PostgresClient string `json:"postgres_client,omitempty"` // psql, pg_dump, ... e.g. "18.6"
+	Redis          string `json:"redis,omitempty"`           // Valkey version, e.g. "9.1.2"
 }
 
 // Site is a directory served as <name>.<tld> (and *.<name>.<tld>).
@@ -53,7 +57,7 @@ func Default() *Config {
 		TLD:         "test",
 		DefaultPHP:  "8.5",
 		DefaultNode: "22",
-		Ports:       Ports{HTTP: 80, HTTPS: 443, DNS: 53535, SMTP: 2525, Postgres: 5432},
+		Ports:       Ports{HTTP: 80, HTTPS: 443, DNS: 53535, SMTP: 2525, Postgres: 5432, Redis: 6379},
 	}
 }
 

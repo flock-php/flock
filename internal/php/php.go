@@ -100,10 +100,15 @@ func InstallFrom(root, src string) (string, error) {
 		return "", err
 	}
 
+	ext := filepath.Join(staging, "ext")
+	if err := os.MkdirAll(ext, 0o755); err != nil {
+		return "", err
+	}
+
 	if strings.HasSuffix(src, ".tar.gz") || strings.HasSuffix(src, ".tgz") {
-		err = extractBinaries(src, bin)
+		err = extractBinaries(src, bin, ext)
 	} else {
-		err = copyBinaries(src, bin)
+		err = copyBinaries(src, bin, ext)
 	}
 	if err != nil {
 		return "", err
@@ -122,18 +127,28 @@ func InstallFrom(root, src string) (string, error) {
 	if err := os.MkdirAll(target, 0o755); err != nil {
 		return "", err
 	}
-	// Replace only the binaries so an existing php.ini survives upgrades.
-	if err := os.RemoveAll(filepath.Join(target, "bin")); err != nil {
-		return "", err
-	}
-	if err := os.Rename(bin, filepath.Join(target, "bin")); err != nil {
-		return "", err
+	// Replace only binaries and shared extensions so an existing php.ini survives upgrades.
+	for name, dir := range map[string]string{"bin": bin, "ext": ext} {
+		if err := os.RemoveAll(filepath.Join(target, name)); err != nil {
+			return "", err
+		}
+		if err := os.Rename(dir, filepath.Join(target, name)); err != nil {
+			return "", err
+		}
 	}
 
 	return minor, nil
 }
 
-func copyBinaries(src, dst string) error {
+func copyBinaries(src, dst, extDst string) error {
+	if sos, _ := filepath.Glob(filepath.Join(src, "ext", "*"+sharedSuffix())); len(sos) > 0 {
+		for _, so := range sos {
+			if err := copyFile(so, filepath.Join(extDst, filepath.Base(so)), 0o755); err != nil {
+				return err
+			}
+		}
+	}
+
 	for _, name := range []string{exe("php"), exe("php-fpm")} {
 		from := filepath.Join(src, name)
 		if _, err := os.Stat(from); err != nil {
@@ -149,7 +164,7 @@ func copyBinaries(src, dst string) error {
 	return nil
 }
 
-func extractBinaries(archive, dst string) error {
+func extractBinaries(archive, dst, extDst string) error {
 	f, err := os.Open(archive)
 	if err != nil {
 		return err
@@ -172,10 +187,16 @@ func extractBinaries(archive, dst string) error {
 			return err
 		}
 		name := filepath.Base(hdr.Name)
-		if hdr.Typeflag != tar.TypeReg || (name != exe("php") && name != exe("php-fpm")) {
+		target := filepath.Join(dst, name)
+		switch {
+		case hdr.Typeflag != tar.TypeReg:
+			continue
+		case filepath.Base(filepath.Dir(hdr.Name)) == "ext" && strings.HasSuffix(name, sharedSuffix()):
+			target = filepath.Join(extDst, name)
+		case name != exe("php") && name != exe("php-fpm"):
 			continue
 		}
-		out, err := os.OpenFile(filepath.Join(dst, name), os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o755)
+		out, err := os.OpenFile(target, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o755)
 		if err != nil {
 			return err
 		}
@@ -209,6 +230,59 @@ func copyFile(src, dst string, mode os.FileMode) error {
 		return err
 	}
 	return out.Close()
+}
+
+func sharedSuffix() string {
+	if runtime.GOOS == "windows" {
+		return ".dll"
+	}
+	return ".so"
+}
+
+// ExtensionPath is where a shared extension of a version lives, e.g. xdebug.so.
+func ExtensionPath(root, minor, name string) string {
+	return filepath.Join(Dir(root, minor), "ext", name+sharedSuffix())
+}
+
+func xdebugIni(root, minor string) string {
+	return filepath.Join(Dir(root, minor), "conf.d", "xdebug.ini")
+}
+
+// XdebugEnabled reports whether Xdebug is loaded for a version.
+func XdebugEnabled(root, minor string) bool {
+	_, err := os.Stat(xdebugIni(root, minor))
+	return err == nil
+}
+
+// SetXdebug loads or unloads Xdebug for a version (CLI and FPM) via conf.d/xdebug.ini.
+// It is off by default: merely loading Xdebug slows every request down noticeably.
+// With mode=debug,develop and start_with_request=trigger, a debugger session starts only
+// when the request carries XDEBUG_TRIGGER (browser extension, ?XDEBUG_TRIGGER=1 or the env var).
+func SetXdebug(root, minor string, on bool) error {
+	ini := xdebugIni(root, minor)
+	if !on {
+		if err := os.Remove(ini); err != nil && !errors.Is(err, os.ErrNotExist) {
+			return err
+		}
+		return nil
+	}
+
+	so := ExtensionPath(root, minor, "xdebug")
+	if _, err := os.Stat(so); err != nil {
+		return fmt.Errorf("PHP %s was installed without xdebug — reinstall it from a newer build", minor)
+	}
+	if err := os.MkdirAll(filepath.Dir(ini), 0o755); err != nil {
+		return err
+	}
+
+	body := fmt.Sprintf(`; Managed by Flock (flock xdebug on|off)
+zend_extension = "%s"
+xdebug.mode = debug,develop
+xdebug.start_with_request = trigger
+xdebug.client_host = 127.0.0.1
+xdebug.client_port = 9003
+`, so)
+	return os.WriteFile(ini, []byte(body), 0o644)
 }
 
 // DefaultIni is written once per version; afterwards the file belongs to the user.
@@ -283,10 +357,11 @@ clear_env = no
 	}
 
 	return supervisor.Spec{
-		Name:       "php" + minor + "-fpm",
-		Path:       FPMBinary(root, minor),
-		Args:       []string{"--nodaemonize", "--fpm-config", conf, "-c", IniPath(root, minor)},
-		Env:        Env(root, minor),
+		Name: "php" + minor + "-fpm",
+		Path: FPMBinary(root, minor),
+		Args: []string{"--nodaemonize", "--fpm-config", conf, "-c", IniPath(root, minor)},
+		// FLOCK_XDEBUG changes the spec when Xdebug is toggled, so the supervisor restarts FPM.
+		Env:        append(Env(root, minor), fmt.Sprintf("FLOCK_XDEBUG=%t", XdebugEnabled(root, minor))),
 		LogFile:    logFile,
 		StopSignal: syscall.SIGQUIT, // graceful: finish in-flight requests
 	}, nil

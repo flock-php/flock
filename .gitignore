@@ -10,3 +10,11 @@
 /build/php/pkgroot/
 /build/php/log/
 /build/php/out/
+/build/valkey/src/
+/build/valkey/out/
+/build/postgres-client/src/
+/build/postgres-client/stage/
+/build/postgres-client/out/
+/build/postgres-client/*.log
+/build/php/*.log
+/build/valkey/*.log

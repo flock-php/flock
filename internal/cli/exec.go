@@ -6,17 +6,21 @@ import (
 	"path/filepath"
 	"runtime"
 	"slices"
+	"strconv"
 
 	"github.com/spf13/cobra"
 
 	"flock/internal/certs"
 	"flock/internal/config"
+	"flock/internal/envutil"
 	"flock/internal/node"
 	"flock/internal/php"
+	"flock/internal/postgres"
+	"flock/internal/valkey"
 )
 
 // tools are the commands Flock puts on PATH as shims.
-var tools = []string{"php", "composer", "node", "npm", "npx"}
+var tools = append([]string{"php", "composer", "node", "npm", "npx", "redis-cli", "valkey-cli"}, postgres.ClientTools...)
 
 func newExecCommand() *cobra.Command {
 	return &cobra.Command{
@@ -41,7 +45,7 @@ func newExecCommand() *cobra.Command {
 				return err
 			}
 
-			return execReplace(path, argv, append(os.Environ(), env...))
+			return execReplace(path, argv, envutil.Merge(os.Environ(), env))
 		},
 	}
 }
@@ -118,6 +122,33 @@ func resolveTool(s *state, cwd, tool string, args []string) (path string, argv, 
 		}
 		env = append(env, viteTLSEnv(s, site, inSite)...)
 		path = filepath.Join(binDir, name)
+		return path, append([]string{path}, args...), env, nil
+
+	case "redis-cli", "valkey-cli":
+		versions, _ := valkey.Installed(s.root)
+		if len(versions) == 0 {
+			return "", nil, nil, fmt.Errorf("redis is not installed — run `flock redis install`")
+		}
+		path = valkey.CLI(s.root, versions[0])
+		if s.cfg.Ports.Redis != 6379 && !slices.Contains(args, "-p") {
+			args = append([]string{"-p", strconv.Itoa(s.cfg.Ports.Redis)}, args...)
+		}
+		return path, append([]string{path}, args...), nil, nil
+	}
+
+	if slices.Contains(postgres.ClientTools, tool) {
+		versions, _ := postgres.InstalledClients(s.root)
+		if len(versions) == 0 {
+			return "", nil, nil, fmt.Errorf("PostgreSQL client tools are not installed — run `flock postgres install-client`")
+		}
+		path = filepath.Join(postgres.ClientDir(s.root, versions[0]), "bin", tool)
+
+		// Default to Flock's server; explicit flags or PG* variables still win.
+		for key, value := range map[string]string{"PGHOST": "127.0.0.1", "PGPORT": strconv.Itoa(s.cfg.Ports.Postgres), "PGUSER": "postgres"} {
+			if os.Getenv(key) == "" {
+				env = append(env, key+"="+value)
+			}
+		}
 		return path, append([]string{path}, args...), env, nil
 	}
 

@@ -209,6 +209,6 @@ func newPostgresCommand() *cobra.Command {
 		},
 	}
 
-	cmd.AddCommand(install, createDB)
+	cmd.AddCommand(install, createDB, newPostgresClientCommand())
 	return cmd
 }

@@ -16,10 +16,15 @@ if [[ ! -x ./spc ]]; then
 fi
 
 ./spc doctor --auto-fix
-./spc download --with-php="$PHP_MINOR" --for-extensions="$EXTENSIONS" --prefer-pre-built
+# Xdebug is a Zend extension and cannot be compiled in statically; it is built as xdebug.so
+# and only loaded when debugging is switched on (`flock xdebug on`).
+SHARED="xdebug"
+
+rm -rf buildroot/modules
+./spc download --with-php="$PHP_MINOR" --for-extensions="$EXTENSIONS,$SHARED" --prefer-pre-built --ignore-cache-sources=php-src,xdebug
 # spc's post-build sanity checks are stricter than Flock needs (e.g. the pre-built sqlite lacks
 # SQLITE_ENABLE_COLUMN_METADATA), so don't fail on them; verify the modules ourselves below.
-./spc build "$EXTENSIONS" --build-cli --build-fpm || echo "spc build reported a problem, verifying binaries…"
+./spc build "$EXTENSIONS" --build-shared="$SHARED" --build-cli --build-fpm || echo "spc build reported a problem, verifying binaries…"
 
 for bin in buildroot/bin/php buildroot/bin/php-fpm; do
   [[ -x "$bin" ]] || { echo "missing $bin" >&2; exit 1; }
@@ -31,7 +36,14 @@ for ext in ${EXTENSIONS//,/ }; do
   grep -qx "$ext" <<<"$modules" || { echo "extension $ext missing from build" >&2; exit 1; }
 done
 
-version="$(./buildroot/bin/php -r 'echo PHP_VERSION;')"
+version="$(./buildroot/bin/php -n -r 'echo PHP_VERSION;')"
+[[ "$version" == "$PHP_MINOR".* ]] || { echo "built PHP $version, expected $PHP_MINOR" >&2; exit 1; }
 mkdir -p "out/$version"
 cp buildroot/bin/php buildroot/bin/php-fpm "out/$version/"
+mkdir -p "out/$version/ext"
+for ext in ${SHARED//,/ }; do
+  so="$(find buildroot/modules buildroot/lib/php -name "$ext.so" 2>/dev/null | head -1)"
+  [[ -n "$so" ]] || { echo "shared extension $ext.so not found" >&2; exit 1; }
+  cp "$so" "out/$version/ext/"
+done
 echo "built PHP $version → build/php/out/$version"

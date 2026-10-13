@@ -25,6 +25,7 @@ import (
 	"flock/internal/ports"
 	"flock/internal/postgres"
 	"flock/internal/supervisor"
+	"flock/internal/valkey"
 	"flock/internal/web"
 )
 
@@ -231,6 +232,12 @@ func (d *daemon) reload() error {
 	)
 
 	installed, _ := php.Installed(d.root)
+	for _, version := range installed {
+		if err := php.SetXdebug(d.root, version, cfg.Xdebug); err != nil {
+			warnings = append(warnings, "xdebug: "+err.Error())
+		}
+	}
+
 	for _, site := range cfg.AllSites() {
 		domain := cfg.Domain(site)
 		version := cfg.PHPFor(site)
@@ -247,7 +254,12 @@ func (d *daemon) reload() error {
 			if err != nil {
 				return err
 			}
-			d.procs.Ensure(spec)
+			if d.procs.Ensure(spec) {
+				// Don't route requests to a pool that isn't listening yet (Caddy would answer 502).
+				if !waitForSocket(php.Socket(d.root, version), 5*time.Second) {
+					warnings = append(warnings, fmt.Sprintf("php %s: FPM did not start — see `flock logs php%s-fpm`", version, version))
+				}
+			}
 			keep[spec.Name] = true
 			pools[version] = true
 		}
@@ -274,6 +286,19 @@ func (d *daemon) reload() error {
 		case !d.procUp(spec.Name) && !ports.Free("127.0.0.1", cfg.Ports.Postgres):
 			// Starting would only crash-loop on "could not bind".
 			warnings = append(warnings, "postgres: "+ports.Describe(cfg.Ports.Postgres))
+		default:
+			d.procs.Ensure(spec)
+			keep[spec.Name] = true
+		}
+	}
+
+	if v := cfg.Services.Redis; v != "" {
+		spec, err := valkey.Spec(d.root, v, cfg.Ports.Redis)
+		switch {
+		case err != nil:
+			warnings = append(warnings, "redis: "+err.Error())
+		case !d.procUp(spec.Name) && !ports.Free("127.0.0.1", cfg.Ports.Redis):
+			warnings = append(warnings, "redis: "+ports.Describe(cfg.Ports.Redis))
 		default:
 			d.procs.Ensure(spec)
 			keep[spec.Name] = true
@@ -381,9 +406,24 @@ func (d *daemon) status() api.Status {
 		if d.cfg.Services.Postgres != "" {
 			st.Postgres = fmt.Sprintf("%s on 127.0.0.1:%d", d.cfg.Services.Postgres, d.cfg.Ports.Postgres)
 		}
+		if d.cfg.Services.Redis != "" {
+			st.Redis = fmt.Sprintf("Valkey %s on 127.0.0.1:%d", d.cfg.Services.Redis, d.cfg.Ports.Redis)
+		}
+		st.Xdebug = d.cfg.Xdebug
 	}
 
 	return st
+}
+
+// waitForSocket polls until something accepts connections on a unix socket.
+func waitForSocket(path string, timeout time.Duration) bool {
+	for deadline := time.Now().Add(timeout); time.Now().Before(deadline); time.Sleep(25 * time.Millisecond) {
+		if conn, err := net.DialTimeout("unix", path, 100*time.Millisecond); err == nil {
+			_ = conn.Close()
+			return true
+		}
+	}
+	return false
 }
 
 func portSuffix(scheme string, cfg *config.Config) string {

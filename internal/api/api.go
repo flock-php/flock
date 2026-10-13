@@ -27,6 +27,8 @@ type Status struct {
 	HTTPSPort int                     `json:"https_port"`
 	Mail      string                  `json:"mail"`
 	Postgres  string                  `json:"postgres,omitempty"`
+	Redis     string                  `json:"redis,omitempty"`
+	Xdebug    bool                    `json:"xdebug"`
 	Sites     []SiteStatus            `json:"sites"`
 	Processes []supervisor.ProcStatus `json:"processes"`
 	Warnings  []string                `json:"warnings,omitempty"`

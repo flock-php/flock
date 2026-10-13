@@ -33,6 +33,12 @@ func newStatusCommand() *cobra.Command {
 			if st.Postgres != "" {
 				fmt.Fprintf(out, "postgres  %s\n", st.Postgres)
 			}
+			if st.Redis != "" {
+				fmt.Fprintf(out, "redis     %s\n", st.Redis)
+			}
+			if st.Xdebug {
+				fmt.Fprintln(out, "xdebug    on (port 9003, start with XDEBUG_TRIGGER)")
+			}
 			for _, p := range st.Processes {
 				state := "up"
 				if !p.Up {

@@ -13,6 +13,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"flock/internal/envutil"
 )
 
 // Spec describes a process to keep running. Two specs with equal fields are the same process.
@@ -57,13 +59,14 @@ func New() *Supervisor {
 }
 
 // Ensure starts spec, or restarts it when it is running with a different spec.
-func (s *Supervisor) Ensure(spec Spec) {
+// It reports whether a (re)start happened.
+func (s *Supervisor) Ensure(spec Spec) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	if p, ok := s.procs[spec.Name]; ok {
 		if reflect.DeepEqual(p.spec, spec) {
-			return
+			return false
 		}
 		p.halt()
 	}
@@ -71,6 +74,7 @@ func (s *Supervisor) Ensure(spec Spec) {
 	p := &proc{spec: spec, stop: make(chan struct{}), done: make(chan struct{})}
 	s.procs[spec.Name] = p
 	go p.run()
+	return true
 }
 
 // Running lists the names of supervised processes.
@@ -166,7 +170,7 @@ func (p *proc) once() error {
 
 	cmd := exec.Command(p.spec.Path, p.spec.Args...)
 	cmd.Dir = p.spec.Dir
-	cmd.Env = append(os.Environ(), p.spec.Env...)
+	cmd.Env = envutil.Merge(os.Environ(), p.spec.Env)
 	cmd.Stdout = log
 	cmd.Stderr = log
 	configure(cmd)
