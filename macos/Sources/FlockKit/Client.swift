@@ -38,10 +38,24 @@ public actor FlockClient {
     private let session: URLSession
     private var config: APIConfig?
 
+    /// Default timeout of a request; slow endpoints pass their own.
+    static let defaultTimeout: TimeInterval = 5
+    /// Changing PHP versions waits for the daemon's work, like the Go CLI (2 minutes).
+    static let phpChangeTimeout: TimeInterval = 120
+    /// Installing or updating a PostgreSQL major downloads it first (10 minutes).
+    static let postgresInstallTimeout: TimeInterval = 600
+    /// Switching or uninstalling a PostgreSQL major stops and starts servers (2 minutes).
+    static let postgresChangeTimeout: TimeInterval = 120
+
     public init(configPath: URL = FlockPaths.apiJSON) {
+        self.init(configPath: configPath, configuration: .ephemeral)
+    }
+
+    /// Tests pass a configuration with a stub URLProtocol.
+    init(configPath: URL, configuration: URLSessionConfiguration) {
         self.configPath = configPath
-        let configuration = URLSessionConfiguration.ephemeral
-        configuration.timeoutIntervalForRequest = 5
+        // Each request sets its own timeout; the session's must not cut the slow ones short.
+        configuration.timeoutIntervalForRequest = 600
         configuration.connectionProxyDictionary = [:] // never send localhost traffic through a proxy
         self.session = URLSession(configuration: configuration)
     }
@@ -165,20 +179,20 @@ public actor FlockClient {
 
     /// Installs a version: instantly when a verified build is waiting, otherwise it queues a build that installs when done.
     public func installPHP(_ minor: String) async throws -> PHPCatalog {
-        try await decode(PHPCatalog.self, "POST", "/v1/php/versions/\(escape(minor))/install")
+        try await decode(PHPCatalog.self, "POST", "/v1/php/versions/\(escape(minor))/install", timeout: Self.phpChangeTimeout)
     }
 
     /// Builds a version without installing it, to verify it or prepare an instant install.
     public func buildPHP(_ minor: String) async throws -> PHPCatalog {
-        try await decode(PHPCatalog.self, "POST", "/v1/php/versions/\(escape(minor))/build")
+        try await decode(PHPCatalog.self, "POST", "/v1/php/versions/\(escape(minor))/build", timeout: Self.phpChangeTimeout)
     }
 
     public func cancelPHPBuild(_ minor: String) async throws -> PHPCatalog {
-        try await decode(PHPCatalog.self, "POST", "/v1/php/versions/\(escape(minor))/cancel")
+        try await decode(PHPCatalog.self, "POST", "/v1/php/versions/\(escape(minor))/cancel", timeout: Self.phpChangeTimeout)
     }
 
     public func uninstallPHP(_ minor: String) async throws -> PHPCatalog {
-        try await decode(PHPCatalog.self, "DELETE", "/v1/php/versions/\(escape(minor))")
+        try await decode(PHPCatalog.self, "DELETE", "/v1/php/versions/\(escape(minor))", timeout: Self.phpChangeTimeout)
     }
 
     /// Asks the daemon to check php.net for new releases now.
@@ -188,6 +202,124 @@ public actor FlockClient {
 
     public func phpBuildLog(_ minor: String) async throws -> String {
         String(decoding: try await send("GET", "/v1/php/versions/\(escape(minor))/log"), as: UTF8.self)
+    }
+
+    // MARK: PostgreSQL versions
+
+    /// Cached on the daemon side; it never waits on the network.
+    public func postgresVersions() async throws -> PostgresVersions {
+        try await decode(PostgresVersions.self, "GET", "/v1/postgres/versions")
+    }
+
+    /// Asks the daemon to look for new PostgreSQL releases now.
+    public func checkPostgres() async throws -> PostgresVersions {
+        try await decode(PostgresVersions.self, "POST", "/v1/postgres/check", timeout: 60)
+    }
+
+    /// Downloads and installs the newest release of a major; the first one installed becomes active and starts.
+    public func installPostgres(_ major: String) async throws -> PostgresVersions {
+        try await decode(PostgresVersions.self, "POST", "/v1/postgres/versions/\(escape(major))/install", timeout: Self.postgresInstallTimeout)
+    }
+
+    /// Installs the newest minor of a major; its databases stay, and it restarts when active.
+    public func updatePostgres(_ major: String) async throws -> PostgresVersions {
+        try await decode(PostgresVersions.self, "POST", "/v1/postgres/versions/\(escape(major))/update", timeout: Self.postgresInstallTimeout)
+    }
+
+    /// Makes an installed major the one that runs (with its own databases).
+    public func activatePostgres(_ major: String) async throws -> PostgresVersions {
+        try await decode(PostgresVersions.self, "POST", "/v1/postgres/versions/\(escape(major))/activate", timeout: Self.postgresChangeTimeout)
+    }
+
+    /// Uninstalls a major; its databases stay unless `deleteData` is set.
+    public func uninstallPostgres(_ major: String, deleteData: Bool = false) async throws -> PostgresVersions {
+        try await decode(PostgresVersions.self, "DELETE", "/v1/postgres/versions/\(escape(major))",
+                         query: deleteData ? [URLQueryItem(name: "delete_data", value: "1")] : [], timeout: Self.postgresChangeTimeout)
+    }
+
+    // MARK: Catalog (MySQL, MariaDB, Redis, MongoDB, Meilisearch, Typesense, RustFS)
+
+    public func serviceCatalog() async throws -> ServiceCatalog {
+        try await decode(ServiceCatalog.self, "GET", "/v1/catalog")
+    }
+
+    /// Asks the daemon to look for new releases of the catalog services now.
+    public func checkServiceCatalog() async throws -> ServiceCatalog {
+        try await decode(ServiceCatalog.self, "POST", "/v1/catalog/check", timeout: 60)
+    }
+
+    /// Starts installing the newest release of `line` on `port` in the background (nil for the
+    /// installed line or newest, and the configured or suggested port); poll for the job.
+    public func installCatalogService(_ id: String, line: String? = nil, port: Int? = nil) async throws -> ServiceCatalog {
+        let body = try JSONEncoder().encode(CatalogInstall(line: line ?? "", port: port ?? 0))
+        return try await decode(ServiceCatalog.self, "POST", "/v1/catalog/\(escape(id))/install", body: body)
+    }
+
+    public func cancelCatalogJob(_ id: String) async throws -> ServiceCatalog {
+        try await decode(ServiceCatalog.self, "POST", "/v1/catalog/\(escape(id))/cancel")
+    }
+
+    /// Dismisses a failed install.
+    public func dismissCatalogJob(_ id: String) async throws -> ServiceCatalog {
+        try await decode(ServiceCatalog.self, "DELETE", "/v1/catalog/\(escape(id))/job")
+    }
+
+    /// Uninstalls a catalog service; its data stays unless `deleteData` is set.
+    public func uninstallCatalogService(_ id: String, deleteData: Bool = false) async throws -> ServiceCatalog {
+        try await decode(ServiceCatalog.self, "DELETE", "/v1/catalog/\(escape(id))",
+                         query: deleteData ? [URLQueryItem(name: "delete_data", value: "1")] : [], timeout: 60)
+    }
+
+    /// The tail of the current or last install's output; empty when there is none.
+    public func catalogLog(_ id: String) async throws -> String {
+        do {
+            return String(decoding: try await send("GET", "/v1/catalog/\(escape(id))/log"), as: UTF8.self)
+        } catch FlockError.server(404, _) {
+            return ""
+        }
+    }
+
+    private struct CatalogInstall: Encodable {
+        var line: String
+        var port: Int
+    }
+
+    // MARK: Components (Valkey, PostgreSQL command-line tools)
+
+    public func components() async throws -> ComponentCatalog {
+        try await decode(ComponentCatalog.self, "GET", "/v1/components")
+    }
+
+    /// Asks the daemon to look for new releases of the components now.
+    public func checkComponents() async throws -> ComponentCatalog {
+        try await decode(ComponentCatalog.self, "POST", "/v1/components/check", timeout: 60)
+    }
+
+    /// Starts installing (or updating) a component in the background; poll `components()` for the job.
+    public func installComponent(_ id: String) async throws -> ComponentCatalog {
+        try await decode(ComponentCatalog.self, "POST", "/v1/components/\(escape(id))/install")
+    }
+
+    public func cancelComponentJob(_ id: String) async throws -> ComponentCatalog {
+        try await decode(ComponentCatalog.self, "POST", "/v1/components/\(escape(id))/cancel")
+    }
+
+    /// Dismisses a failed job.
+    public func dismissComponentJob(_ id: String) async throws -> ComponentCatalog {
+        try await decode(ComponentCatalog.self, "DELETE", "/v1/components/\(escape(id))/job")
+    }
+
+    public func uninstallComponent(_ id: String) async throws -> ComponentCatalog {
+        try await decode(ComponentCatalog.self, "DELETE", "/v1/components/\(escape(id))", timeout: 30)
+    }
+
+    /// The tail of the current or last job's output; empty when there is none.
+    public func componentLog(_ id: String) async throws -> String {
+        do {
+            return String(decoding: try await send("GET", "/v1/components/\(escape(id))/log"), as: UTF8.self)
+        } catch FlockError.server(404, _) {
+            return ""
+        }
     }
 
     public func mail() async throws -> [MailSummary] {
@@ -253,7 +385,7 @@ public actor FlockClient {
     private func send(_ method: String, _ path: String, query: [URLQueryItem] = [], body: Data? = nil, timeout: TimeInterval? = nil) async throws -> Data {
         do {
             return try await attempt(method, path, query: query, body: body, timeout: timeout, config: try loadConfig(force: false))
-        } catch let error as URLError where error.code != .timedOut {
+        } catch let error as URLError where error.code != .timedOut && error.code != .cancelled {
             config = nil
             do {
                 return try await attempt(method, path, query: query, body: body, timeout: timeout, config: try loadConfig(force: true))
@@ -274,9 +406,7 @@ public actor FlockClient {
 
         var request = URLRequest(url: components.url!)
         request.httpMethod = method
-        if let timeout {
-            request.timeoutInterval = timeout
-        }
+        request.timeoutInterval = timeout ?? Self.defaultTimeout
         request.setValue("Bearer \(config.token)", forHTTPHeaderField: "Authorization")
         if let body {
             request.httpBody = body

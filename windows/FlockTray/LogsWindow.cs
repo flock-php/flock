@@ -6,7 +6,10 @@ using Microsoft.UI.Xaml.Media;
 
 namespace Flock.Tray;
 
-/// <summary>Laravel logs of every site and the logs of Flock's services.</summary>
+/// <summary>
+/// Laravel logs of every site and the logs of Flock's services, with a search, a level filter
+/// (site logs) and an auto-refresh of the selected log.
+/// </summary>
 internal sealed partial class LogsWindow : FlockWindow
 {
     private readonly LogStore store;
@@ -18,8 +21,14 @@ internal sealed partial class LogsWindow : FlockWindow
         VerticalContentAlignment = VerticalAlignment.Stretch,
     };
     private readonly AppBarButton clear = new() { Icon = new SymbolIcon(Symbol.Delete), Label = "Clear", Visibility = Visibility.Collapsed };
+    private readonly AutoSuggestBox search = new() { PlaceholderText = "Search messages and context", QueryIcon = new SymbolIcon(Symbol.Find), Width = 260 };
+    private readonly ComboBox levels = new() { MinWidth = 170, IsEnabled = false };
+    private readonly AppBarToggleButton autoRefresh = new() { Icon = new SymbolIcon(Symbol.Sync), Label = "Auto-refresh" };
     private readonly InfoBar error = Ui.ErrorBar();
     private LogStore.Source? selection;
+    // What the detail shows now; an auto-refresh that changes nothing leaves it (and its scroll position) alone.
+    private (LogStore.Source? Source, object? Data, string Query, LogLevelFilter Level)? rendered;
+    private CancellationTokenSource? polling;
 
     public LogsWindow(AppModel model) : base("Logs", 1000, 660)
     {
@@ -33,14 +42,38 @@ internal sealed partial class LogsWindow : FlockWindow
         };
         clear.Click += async (_, _) =>
         {
-            if (selection is LogStore.SiteSource site)
+            if (selection is LogStore.SiteSource site
+                && await Confirm($"Clear the log of {site.Name}?", $"The Laravel log files in storage\\logs of {site.Name} are emptied. This can't be undone.", "Clear", destructive: true))
             {
                 await store.ClearAsync(site.Name);
             }
         };
+        autoRefresh.Click += (_, _) =>
+        {
+            polling?.Cancel();
+            polling = autoRefresh.IsChecked == true ? new CancellationTokenSource() : null;
+            if (polling is not null)
+            {
+                _ = Poll(polling.Token);
+            }
+        };
+        ToolTipService.SetToolTip(autoRefresh, "Reload the selected log every 2 seconds while this window is open");
         var toolbar = new CommandBar { DefaultLabelPosition = CommandBarDefaultLabelPosition.Right, HorizontalAlignment = HorizontalAlignment.Right };
+        toolbar.PrimaryCommands.Add(autoRefresh);
         toolbar.PrimaryCommands.Add(refresh);
         toolbar.PrimaryCommands.Add(clear);
+
+        foreach (var (_, name) in LogFilter.Choices)
+        {
+            levels.Items.Add(name);
+        }
+        levels.SelectedIndex = 0;
+        levels.SelectionChanged += (_, _) => Render();
+        ToolTipService.SetToolTip(levels, "Levels of a site's Laravel log to show");
+        Ui.AutomationName(levels, "Level");
+        search.TextChanged += (_, _) => Render();
+        var filters = Ui.Row(8, search, levels);
+        filters.Margin = new Thickness(16, 0, 0, 0);
 
         sources.SelectionChanged += async (_, _) =>
         {
@@ -51,6 +84,8 @@ internal sealed partial class LogsWindow : FlockWindow
             }
             selection = source;
             clear.Visibility = source is LogStore.SiteSource ? Visibility.Visible : Visibility.Collapsed;
+            levels.IsEnabled = source is LogStore.SiteSource;
+            rendered = null;
             content.Content = new ProgressRing { Width = 32, Height = 32 };
             await Reload();
         };
@@ -77,14 +112,42 @@ internal sealed partial class LogsWindow : FlockWindow
         root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         Grid.SetRow(split, 1);
         Grid.SetRow(error, 2);
-        root.Children.Add(toolbar);
+        root.Children.Add(Ui.Spread(filters, toolbar));
         root.Children.Add(split);
         root.Children.Add(error);
         Body = root;
+        Ui.SettingsShortcut(root);
 
         store.Changed += Render;
-        Closed += (_, _) => store.Changed -= Render;
+        Closed += (_, _) =>
+        {
+            polling?.Cancel();
+            store.Changed -= Render;
+        };
         _ = store.LoadIndexAsync();
+    }
+
+    private LogLevelFilter Level => levels.SelectedIndex >= 0 ? LogFilter.Choices[levels.SelectedIndex].Filter : LogLevelFilter.All;
+
+    /// <summary>Reloads the selected log every 2 seconds while the window is shown (not minimized or hidden).</summary>
+    private async Task Poll(CancellationToken stop)
+    {
+        while (!stop.IsCancellationRequested)
+        {
+            try
+            {
+                await Task.Delay(TimeSpan.FromSeconds(2), stop);
+            }
+            catch (TaskCanceledException)
+            {
+                return;
+            }
+            var minimized = AppWindow.Presenter is Microsoft.UI.Windowing.OverlappedPresenter { State: Microsoft.UI.Windowing.OverlappedPresenterState.Minimized };
+            if (Visible && !minimized && !stop.IsCancellationRequested)
+            {
+                await Reload();
+            }
+        }
     }
 
     private async Task Reload()
@@ -100,15 +163,27 @@ internal sealed partial class LogsWindow : FlockWindow
         Ui.ShowError(error, store.Error);
         RenderSources();
 
+        var query = search.Text ?? "";
+        var key = (selection, selection is LogStore.ServiceSource ? store.ServiceText : (object)store.Entries, query, Level);
+        if (selection is null || (rendered is { } shown && shown.Equals(key)))
+        {
+            return;
+        }
+        rendered = key;
+
         switch (selection)
         {
             case LogStore.SiteSource site:
+                var entries = LogFilter.Filter(store.Entries, query, Level);
                 content.Content = store.Entries.Count == 0
                     ? Ui.EmptyState(Ui.GlyphDocument, "No log entries", $"storage\\logs of {site.Name} is empty.")
-                    : Entries(store.Entries);
+                    : entries.Count == 0
+                        ? Ui.EmptyState(Ui.GlyphSearch, "No matching log entries", "Nothing in the latest entries matches the search and level.")
+                        : Entries(entries);
                 break;
             case LogStore.ServiceSource:
-                var text = MailDetailView.Monospaced(store.ServiceText.Length == 0 ? "(empty)" : store.ServiceText);
+                var lines = LogFilter.FilterLines(store.ServiceText, query);
+                var text = MailDetailView.Monospaced(store.ServiceText.Length == 0 ? "(empty)" : lines.Length == 0 ? "(no matching lines)" : lines);
                 content.Content = text;
                 // Logs grow at the bottom: start there.
                 text.Loaded += (_, _) => text.ChangeView(null, text.ScrollableHeight, null, disableAnimation: true);

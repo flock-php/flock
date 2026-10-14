@@ -6,6 +6,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -89,4 +90,48 @@ func freePort(t *testing.T) int {
 	defer l.Close()
 
 	return l.Addr().(*net.TCPAddr).Port
+}
+
+// TestStopFastShutsDownCleanly runs against installed binaries:
+// FLOCK_PG_BIN=~/Library/Application\ Support/Flock/services/postgres/18.6.0/bin go test ./internal/postgres -run StopFast -v
+func TestStopFastShutsDownCleanly(t *testing.T) {
+	bin := os.Getenv("FLOCK_PG_BIN")
+	if bin == "" {
+		t.Skip("set FLOCK_PG_BIN to a postgres bin directory to run")
+	}
+
+	root, err := os.MkdirTemp("", "pg")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(root)
+	data := filepath.Join(root, "data")
+	if err := InitDB(bin, data); err != nil {
+		t.Fatal(err)
+	}
+
+	port := freePort(t)
+	logFile := filepath.Join(root, "pg.log")
+	spec := Spec(bin, data, root, logFile, port)
+	spec.Stop = func() error { return StopFast(bin, data) } // what Windows uses
+	sup := supervisor.New()
+	sup.Ensure(spec)
+
+	ctx := context.Background()
+	deadline := time.Now().Add(30 * time.Second)
+	for Exec(ctx, port, "postgres", "SELECT 1") != nil {
+		if time.Now().After(deadline) {
+			log, _ := os.ReadFile(logFile)
+			t.Fatalf("postgres did not start:\n%s", log)
+		}
+		time.Sleep(200 * time.Millisecond)
+	}
+
+	start := time.Now()
+	sup.StopAll()
+	log, _ := os.ReadFile(logFile)
+	if time.Since(start) > 9*time.Second || !strings.Contains(string(log), "fast shutdown request") ||
+		strings.Contains(string(log), "graceful stop of postgres failed") {
+		t.Fatalf("no clean fast shutdown:\n%s", log)
+	}
 }

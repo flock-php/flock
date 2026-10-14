@@ -9,7 +9,7 @@ windows/
   FlockKit/         models + API client (net10.0, no UI — the macOS app's FlockKit)
   FlockKit.Tests/   xUnit tests, run anywhere: dotnet test windows/FlockKit.Tests
   FlockTray/        the WinUI 3 app (unpackaged, self-contained Windows App SDK)
-  build.ps1         tests + publishes FlockTray to windows\dist\FlockTray-<arch>\
+  build.ps1         tests + publishes FlockTray to windows\dist\FlockTray-x64\
 ```
 
 The UI is written in C# instead of XAML markup, the way the macOS app is written in SwiftUI. It
@@ -37,14 +37,35 @@ Running and publishing it needs Windows (the Windows App SDK's packaging tools a
 CA. It asks again only when the helper is outdated (after updating Flock), the rule is missing, or
 either is set up for another TLD.
 
-Redis (Valkey) and the PostgreSQL client tools still install from local builds with `--from`, as on
-macOS. The PostgreSQL server (zonky builds) and Node.js (nodejs.org) download on Windows too.
+Everything downloads on Windows, verified by the vendors' published checksums — nothing is built from source:
+
+| Service | macOS | Windows |
+| --- | --- | --- |
+| PostgreSQL server | zonky builds (Maven Central) | zonky builds (Maven Central) |
+| PostgreSQL client tools (`flock postgres install-client`) | built with `build/postgres-client/build.sh`, `--from` | EDB's official [binaries zip](https://www.enterprisedb.com/download-postgresql-binaries) (PostgreSQL 18.6, ~330 MB download); Flock keeps only `psql`, `pg_dump`, `pg_dumpall`, `pg_restore`, `createdb`, `dropdb`, their DLLs and the license files (~12 MB) |
+| Valkey (`flock valkey install`) | built from source | not available (no established Windows build) — use Redis |
+| Redis (`flock services install redis [8.10\|8.4\|7.4\|7.2]`) | built from source | built from the upstream tags with MSYS2 by the public CI of [redis-windows/redis-windows](https://github.com/redis-windows/redis-windows) (~10 MB). A Redis that an older Flock installed moves over (line 7.2, with its data). |
+| MySQL, MariaDB, MongoDB (`flock services install <id> [version]`) | MySQL, MongoDB: official builds; MariaDB: built from source | the official zips (MySQL ~330 MB, MariaDB ~100 MB, MongoDB ~800 MB — Flock drops the debug symbols) |
+| Meilisearch, RustFS | official binaries | official binaries |
+| Typesense | official builds | not available (no Windows build) |
+| Node.js | nodejs.org | nodejs.org |
+
+`--from <dir>` still works on Windows for your own builds. Running `psql` in a terminal before
+the tools are installed offers to download them; `redis-cli` talks to the installed Redis. The PostgreSQL tools, like PHP, need
+the [Visual C++ Redistributable](https://aka.ms/vs/17/release/vc_redist.x64.exe).
+
+Windows PHP builds don't include the phpredis extension, so Flock suggests `REDIS_CLIENT=predis`
+there (macOS: `phpredis`); add the client to the project with `composer require predis/predis`.
+
+Services are stopped gracefully, as on macOS, although Windows has no signals: PostgreSQL through
+`pg_ctl stop -m fast`, Redis with a `SHUTDOWN` command (which saves its snapshot). Only when that
+fails, or a service hasn't exited after 10 seconds, it is killed. php-cgi workers are just killed.
 
 ## Trying it on a Windows machine
 
 1. **Build the CLI** (on any machine with Go): `make windows`, which writes `flock.exe` and
-   `flock-helper.exe` to `dist/windows-amd64/` and `dist/windows-arm64/`. Copy the right folder to
-   the Windows machine (both files, side by side).
+   `flock-helper.exe` to `dist/windows-amd64/`. Copy the folder to the Windows machine (both files,
+   side by side). Only x64 is built for now; Windows on ARM runs it under emulation.
 2. **Install**: in PowerShell, `.\flock.exe install`. Expect a UAC prompt. Then open a **new**
    terminal so the PATH change applies.
 3. **PHP**: `flock php install 8.5`, or the tray app (step 4) → Settings → PHP → Install. In a
@@ -67,6 +88,10 @@ macOS. The PostgreSQL server (zonky builds) and Node.js (nodejs.org) download on
 - [ ] `composer install` reaches packagist (CA bundle with the Windows roots)
 - [ ] Settings → PHP: install 8.4, switch a site to it, uninstall it again (files must not be locked)
 - [ ] Xdebug toggle restarts the workers; a breakpoint hits with `?XDEBUG_TRIGGER=1`
+- [ ] `flock services install redis` downloads Redis and starts it; `redis-cli ping` → PONG; `flock postgres install-client` → `psql -c "select 1"`
+- [ ] Upgrading from a Flock that had Redis: it keeps running from `services\redis\7.2.16` with its data
+- [ ] Settings → Services → All: install MySQL, MariaDB (port suggested as 3307 next to MySQL), MongoDB, Meilisearch, RustFS; each starts and its connection works; Typesense and Valkey show as not available
+- [ ] Stopping Redis/MySQL/MariaDB/PostgreSQL in Services (or `flock restart`) logs a clean shutdown (redis.log: "Redis is now ready to exit"; mysql.log: "Shutdown complete"; postgres.log: "database system is shut down"), not a kill
 - [ ] Mail: send from tinker → appears in Mail, HTML view, attachments save
 - [ ] Dumps: `dump()` in a route → Dumps window, the file link opens the editor
 - [ ] `flock restart` and the tray's Restart bring the daemon back with a new pid
@@ -74,7 +99,7 @@ macOS. The PostgreSQL server (zonky builds) and Node.js (nodejs.org) download on
 - [ ] Sign out and in → daemon starts; with "Open Flock at sign-in" on, the tray icon too
 - [ ] `flock uninstall` removes the task, PATH entry, hosts block, helper service, CA and Flock's
       files (binaries, PHP/Node versions, certificates, logs, caches), keeping only `config.json`
-      and the PostgreSQL/Redis data; `flock uninstall --purge` removes those too
+      and the services' data (PostgreSQL, MySQL, Redis, ...); `flock uninstall --purge` removes those too
 
 Logs: `%AppData%\Flock\log\` (daemon.log, web.log, php8.x-cgi.log, php-build-8.x.log) and
 `%LocalAppData%\Flock\tray.log` for unexpected errors in the tray app.

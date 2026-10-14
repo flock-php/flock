@@ -124,13 +124,17 @@ internal sealed class NodePane(SettingsWindow window, AppModel model) : Pane(win
         return line;
     }
 
+    /// <summary>The row's buttons; disabled while its request runs (the status line shows the progress).</summary>
     private StackPanel Actions(NodeRelease release)
     {
+        var actions = BuildActions(release);
+        Ui.SetEnabled(actions, !busy.ContainsKey(release.Major));
+        return actions;
+    }
+
+    private StackPanel BuildActions(NodeRelease release)
+    {
         var actions = Ui.Row(8);
-        if (busy.ContainsKey(release.Major))
-        {
-            return actions;
-        }
         if (!release.IsInstalled)
         {
             actions.Children.Add(Ui.Button("Install", () => _ = Run(release.Major, $"Downloading Node.js {release.Latest}…", c => c.InstallNodeMajorAsync(release.Major)),
@@ -190,7 +194,17 @@ internal sealed class NodePane(SettingsWindow window, AppModel model) : Pane(win
 
     private async Task MakeDefault(string major)
     {
-        await Perform(c => c.UpdateSettingsAsync(new SettingsChange(DefaultNode: major)));
-        await Store.RefreshNodeAsync();
+        busy[major] = "Making it the default…";
+        Rerender();
+        try
+        {
+            await Perform(c => c.UpdateSettingsAsync(new SettingsChange(DefaultNode: major)));
+            await Store.RefreshNodeAsync();
+        }
+        finally
+        {
+            busy.Remove(major);
+            Rerender();
+        }
     }
 }

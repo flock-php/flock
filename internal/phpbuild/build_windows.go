@@ -4,11 +4,7 @@ package phpbuild
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
-	"errors"
 	"fmt"
-	"io"
 	"net/http"
 	"os"
 	"os/exec"
@@ -17,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"flock/internal/download"
 	"flock/internal/php"
 )
 
@@ -129,64 +126,9 @@ func (m *Manager) build(ctx context.Context, minor string, job *Job) (string, st
 // download streams url to dest, verifying sha256 when given. Large files get no overall timeout
 // (only the context), unlike the API requests that share Sources.HTTP.
 func (m *Manager) download(ctx context.Context, url, dest, sha string, progress func(done, total int64)) error {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
-	if err != nil {
-		return err
-	}
 	client := &http.Client{}
 	if m.sources.HTTP != nil {
 		client.Transport = m.sources.HTTP.Transport
 	}
-	resp, err := client.Do(req)
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("GET %s: %s", url, resp.Status)
-	}
-
-	tmp := dest + ".part"
-	f, err := os.Create(tmp)
-	if err != nil {
-		return err
-	}
-	defer os.Remove(tmp)
-
-	hash := sha256.New()
-	var done int64
-	last := time.Time{}
-	buf := make([]byte, 256<<10)
-	for {
-		n, readErr := resp.Body.Read(buf)
-		if n > 0 {
-			if _, err := f.Write(buf[:n]); err != nil {
-				f.Close()
-				return err
-			}
-			hash.Write(buf[:n])
-			done += int64(n)
-			if progress != nil && time.Since(last) > 500*time.Millisecond {
-				progress(done, resp.ContentLength)
-				last = time.Now()
-			}
-		}
-		if errors.Is(readErr, io.EOF) {
-			break
-		}
-		if readErr != nil {
-			f.Close()
-			return fmt.Errorf("download %s: %w", path.Base(url), readErr)
-		}
-	}
-	if err := f.Close(); err != nil {
-		return err
-	}
-
-	if sha != "" {
-		if got := hex.EncodeToString(hash.Sum(nil)); got != sha {
-			return fmt.Errorf("checksum mismatch for %s: got %s, want %s", path.Base(url), got, sha)
-		}
-	}
-	return os.Rename(tmp, dest)
+	return download.File(ctx, client, url, dest, sha, progress)
 }

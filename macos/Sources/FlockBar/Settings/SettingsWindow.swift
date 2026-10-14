@@ -55,10 +55,10 @@ enum SettingsPane: String, CaseIterable, Identifiable {
 /// bleed under its floating sidebar on current macOS.
 struct SettingsWindow: View {
     @Environment(AppModel.self) private var model
-    private let paneState = State<SettingsPane>(initialValue: Snapshot.pane.flatMap(SettingsPane.init(rawValue:)) ?? .general)
+    @Environment(\.openWindow) private var openWindow
     private var pane: SettingsPane {
-        get { paneState.wrappedValue }
-        nonmutating set { paneState.wrappedValue = newValue }
+        get { model.settingsPane }
+        nonmutating set { model.settingsPane = newValue }
     }
 
     var body: some View {
@@ -85,15 +85,23 @@ struct SettingsWindow: View {
             VStack(spacing: 0) {
                 content
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-                SettingsError(message: store.error) { store.error = nil }
+                // The daemon's buttons here (Start, Restart) report through the model; "not running"
+                // is already what the pane shows.
+                SettingsError(message: (store.error == model.error ? nil : store.error) ?? model.actionError) {
+                    store.error = nil
+                    model.actionError = nil
+                }
             }
             .background(Color(nsColor: .windowBackgroundColor))
         }
         .ignoresSafeArea(.container, edges: .top)
-        .frame(minWidth: 760, minHeight: 480)
+        .frame(minWidth: 810, minHeight: 480)
         .task { await Snapshot.captureIfRequested(WindowID.settings) }
         .task {
             store.isVisible = true
+            if Snapshot.isFixture {
+                SnapshotFixtures.load(into: store)
+            }
             await store.refresh()
         }
         .onDisappear { store.isVisible = false }
@@ -102,12 +110,23 @@ struct SettingsWindow: View {
     @ViewBuilder
     private var content: some View {
         if model.status == nil, pane != .about {
-            ContentUnavailableView {
-                Label("Flock is not running", systemImage: "bird")
-            } description: {
-                Text("Start the daemon to change its settings.")
-            } actions: {
-                Button("Start Flock") { Task { await model.restart() } }
+            if model.needsSetup {
+                ContentUnavailableView {
+                    Label("Flock isn't set up yet", systemImage: "bird")
+                } description: {
+                    Text("Set Flock up to run your sites and change its settings.")
+                } actions: {
+                    Button("Set Up Flock…") { openWindow.activating(WindowID.setup) }
+                }
+            } else {
+                ContentUnavailableView {
+                    Label("Flock is not running", systemImage: "bird")
+                } description: {
+                    Text(model.error ?? "Start the daemon to change its settings.")
+                } actions: {
+                    Button("Start Flock") { Task { await model.restart() } }
+                        .disabled(model.isRestarting)
+                }
             }
         } else {
             switch pane {

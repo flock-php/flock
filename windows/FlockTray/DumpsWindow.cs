@@ -19,7 +19,7 @@ internal sealed partial class DumpsWindow : FlockWindow
     private readonly AppBarToggleButton capture = new() { Icon = new SymbolIcon(Symbol.Download), Label = "Capture Dumps" };
     private readonly AppBarToggleButton latestOnly = new() { Icon = new SymbolIcon(Symbol.Clock), Label = "Latest Request Only" };
     private readonly AppBarButton clear = new() { Icon = new SymbolIcon(Symbol.Delete), Label = "Clear" };
-    private readonly InfoBar error = Ui.ErrorBar();
+    private readonly InfoBar error;
     private bool rendering;
 
     public DumpsWindow(AppModel model) : base("Dumps", 920, 620)
@@ -27,6 +27,13 @@ internal sealed partial class DumpsWindow : FlockWindow
         this.model = model;
         store = model.Dumps;
         var prefs = Preferences.Shared;
+        // Shows the dumps list's errors and the capture toggle's (which belong to the model).
+        error = Ui.ErrorBar(() =>
+        {
+            store.Error = null;
+            model.DismissError();
+            Render();
+        });
 
         capture.Click += (_, _) =>
         {
@@ -56,7 +63,13 @@ internal sealed partial class DumpsWindow : FlockWindow
         var editorButton = new AppBarButton { Icon = new SymbolIcon(Symbol.Edit), Label = "Editor", Flyout = editors };
         ToolTipService.SetToolTip(editorButton, "Editor used when clicking a dump's file and line");
 
-        clear.Click += (_, _) => _ = store.ClearAsync();
+        clear.Click += async (_, _) =>
+        {
+            if (await Confirm("Clear all dumps?", "Every captured dump is deleted, from all sites and commands.", "Clear", destructive: true))
+            {
+                await store.ClearAsync();
+            }
+        };
 
         var toolbar = new CommandBar { DefaultLabelPosition = CommandBarDefaultLabelPosition.Right, HorizontalAlignment = HorizontalAlignment.Right };
         foreach (var command in new ICommandBarElement[] { capture, latestOnly, editorButton, clear })
@@ -78,6 +91,7 @@ internal sealed partial class DumpsWindow : FlockWindow
         root.Children.Add(content);
         root.Children.Add(error);
         Body = root;
+        Ui.SettingsShortcut(root);
 
         store.Changed += Render;
         model.Changed += Render;
@@ -103,11 +117,11 @@ internal sealed partial class DumpsWindow : FlockWindow
         capture.IsEnabled = model.Status is not null;
         clear.IsEnabled = store.Dumps.Count > 0;
         rendering = false;
-        Ui.ShowError(error, store.Error);
+        Ui.ShowError(error, store.Error ?? model.ActionError);
 
         var source = Preferences.Shared.DumpsLatestOnly ? DumpTimeline.LatestGroup(store.Dumps) : store.Dumps;
         var visible = DumpTimeline.Filter(source, search.Text ?? "");
-        Title = visible.Count == 0 ? "Dumps" : $"Dumps ({visible.Count})";
+        Heading = visible.Count == 0 ? "Dumps" : $"Dumps ({visible.Count})";
 
         if (visible.Count == 0)
         {

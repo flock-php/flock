@@ -361,6 +361,72 @@ internal static class Ui
         bar.IsOpen = message is not null;
     }
 
+    /// <summary>
+    /// Asks before doing something: a question, a one-line consequence, the action and Cancel (the
+    /// default). A destructive action's button is red, like the macOS app's destructive role. An
+    /// extra control (such as an "Also delete…" check box) goes under the consequence.
+    /// </summary>
+    public static async Task<bool> Confirm(XamlRoot root, string question, string details, string action, bool destructive = false, UIElement? extra = null)
+    {
+        UIElement content = new TextBlock { Text = details, TextWrapping = TextWrapping.Wrap };
+        if (extra is not null)
+        {
+            content = Column(16, content, extra);
+        }
+        var dialog = new ContentDialog
+        {
+            Title = question,
+            Content = content,
+            PrimaryButtonText = action,
+            CloseButtonText = "Cancel",
+            DefaultButton = ContentDialogButton.Close,
+            XamlRoot = root,
+        };
+        if (destructive)
+        {
+            // The accent button style, recolored through the resources its template looks up (the
+            // same red in both themes, so white text stays readable).
+            dialog.PrimaryButtonStyle = Resource<Style>("AccentButtonStyle");
+            var white = new SolidColorBrush(Colors.White);
+            foreach (var (state, red) in new[] { ("", Rgb(196, 43, 28)), ("PointerOver", Rgb(178, 38, 25)), ("Pressed", Rgb(160, 34, 22)) })
+            {
+                dialog.Resources["AccentButtonBackground" + state] = new SolidColorBrush(red);
+                dialog.Resources["AccentButtonBorderBrush" + state] = new SolidColorBrush(red);
+                dialog.Resources["AccentButtonForeground" + state] = white;
+            }
+        }
+        return await dialog.ShowAsync() == ContentDialogResult.Primary;
+    }
+
+    /// <summary>Enables or disables every control in a panel (a row's buttons while its request runs).</summary>
+    public static void SetEnabled(Panel panel, bool enabled)
+    {
+        foreach (var control in panel.Children.OfType<Control>())
+        {
+            control.IsEnabled = enabled;
+        }
+    }
+
+    /// <summary>
+    /// Ctrl+, opens Settings from anywhere in the element, like ⌘, on macOS. (Keys typed into a
+    /// web view, such as a mail body, stay in the web view.)
+    /// </summary>
+    public static void SettingsShortcut(UIElement element) =>
+        Shortcut(element, (Windows.System.VirtualKey)0xBC /* VK_OEM_COMMA */, Windows.System.VirtualKeyModifiers.Control, () => App.Current.Open(WindowKind.Settings));
+
+    public static void Shortcut(UIElement element, Windows.System.VirtualKey key, Windows.System.VirtualKeyModifiers modifiers, Action invoked)
+    {
+        var accelerator = new Microsoft.UI.Xaml.Input.KeyboardAccelerator { Key = key, Modifiers = modifiers };
+        accelerator.Invoked += (_, e) =>
+        {
+            e.Handled = true;
+            invoked();
+        };
+        element.KeyboardAccelerators.Add(accelerator);
+        // No "Ctrl+," tooltip on the element itself.
+        element.KeyboardAcceleratorPlacementMode = Microsoft.UI.Xaml.Input.KeyboardAcceleratorPlacementMode.Hidden;
+    }
+
     /// <summary>"3 minutes ago", "yesterday", like SwiftUI's relative date format.</summary>
     public static string Relative(DateTimeOffset date)
     {
@@ -381,7 +447,8 @@ internal static class Ui
     {
         < 1024 => $"{size} bytes",
         < 1024 * 1024 => $"{size / 1024.0:0.#} KB",
-        _ => $"{size / (1024.0 * 1024):0.#} MB",
+        < 1024L * 1024 * 1024 => $"{size / (1024.0 * 1024):0.#} MB",
+        _ => $"{size / (1024.0 * 1024 * 1024):0.#} GB",
     };
 
     public static Color Rgb(byte r, byte g, byte b) => Color.FromArgb(255, r, g, b);

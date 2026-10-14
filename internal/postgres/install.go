@@ -26,7 +26,8 @@ import (
 	"github.com/ulikunitz/xz"
 )
 
-// DefaultVersion is the PostgreSQL version Flock installs unless told otherwise.
+// DefaultVersion is a known-good release (the integration test installs it); Flock itself
+// installs the newest release of a major, see Catalog.
 const DefaultVersion = "18.6.0"
 
 // DefaultBaseURL is the Maven Central directory holding zonky's postgres binaries.

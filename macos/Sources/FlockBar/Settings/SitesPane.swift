@@ -8,8 +8,8 @@ import SwiftUI
 struct SitesPane: View {
     @Environment(AppModel.self) private var model
     private let selectionState = State<Status.Site.ID?>(initialValue: nil)
-    private let confirmState = State<PinAction?>(initialValue: nil)
-    private var confirm: PinAction? {
+    private let confirmState = State<ConfirmAction?>(initialValue: nil)
+    private var confirm: ConfirmAction? {
         get { confirmState.wrappedValue }
         nonmutating set { confirmState.wrappedValue = newValue }
     }
@@ -39,6 +39,15 @@ struct SitesPane: View {
                 .padding(.bottom, 6)
             }
 
+            if let dns = model.status?.dns, !dns.wildcard, !dns.wildcardProblem.isEmpty, !sites.isEmpty {
+                Label("Subdomains only work when you add them to a site (\(Image(systemName: "network")) → Add Domain…): \(dns.wildcardProblem).",
+                      systemImage: "info.circle.fill")
+                    .font(.caption).foregroundStyle(.orange)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.horizontal, 24)
+                    .padding(.top, 8)
+            }
+
             Table(sites, selection: selectionState.projectedValue) {
                 TableColumn("Site") { site in
                     VStack(alignment: .leading, spacing: 1) {
@@ -52,8 +61,11 @@ struct SitesPane: View {
                             Label(problem, systemImage: "exclamationmark.triangle.fill")
                                 .font(.caption).foregroundStyle(.orange)
                         } else {
-                            Text(site.path).font(.caption).foregroundStyle(.secondary)
+                            Text(site.url ?? site.domain).font(.caption).foregroundStyle(.secondary)
                                 .lineLimit(1).truncationMode(.middle)
+                            Text(site.path).font(.caption).foregroundStyle(.tertiary)
+                                .lineLimit(1).truncationMode(.middle)
+                                .help(site.path)
                         }
                         ForEach(site.domains) { domain in
                             if let problem = domain.problem {
@@ -108,7 +120,10 @@ struct SitesPane: View {
                         pinMenu(site)
                         if !site.parked {
                             Button {
-                                Task { await store.perform { _ = try await $0.unlinkSite(site.name) } }
+                                confirm = ConfirmAction(
+                                    title: "Remove \(site.name)?", button: "Remove", destructive: true,
+                                    message: "Flock stops serving \(site.domain). The project in \(site.path) is not touched.",
+                                    run: { [name = site.name] client in try await client.unlinkSite(name) })
                             } label: { Image(systemName: "minus.circle") }
                                 .help("Remove site")
                         }
@@ -134,9 +149,10 @@ struct SitesPane: View {
                 .padding(.vertical, 10)
         }
         .confirmationDialog(confirm?.title ?? "", isPresented: Binding(get: { confirm != nil }, set: { if !$0 { confirm = nil } }), presenting: confirm) { action in
-            Button(action.button) {
+            Button(action.button, role: action.destructive ? .destructive : nil) {
                 Task { await store.perform { _ = try await action.run($0) } }
             }
+            Button("Cancel", role: .cancel) {}
         } message: { action in
             Text(action.message)
         }
@@ -167,14 +183,16 @@ struct SitesPane: View {
     }
 
     private func domainMenu(_ site: Status.Site) -> some View {
-        let store = model.settings
-        return Menu {
+        Menu {
             Button("Add Domain…") { adding = site.name }
             if !site.domains.isEmpty {
                 Divider()
                 ForEach(site.domains) { domain in
-                    Button("Remove \(domain.host)") {
-                        Task { await store.perform { [name = site.name, entry = domain.entry] client in _ = try await client.removeDomain(site: name, domain: entry) } }
+                    Button("Remove \(domain.host)…") {
+                        confirm = ConfirmAction(
+                            title: "Remove \(domain.host)?", button: "Remove", destructive: true,
+                            message: "\(domain.host) is no longer served by \(site.name).",
+                            run: { [name = site.name, entry = domain.entry] client in try await client.removeDomain(site: name, domain: entry) })
                     }
                 }
             }
@@ -252,7 +270,7 @@ struct SitesPane: View {
         return Menu {
             if canPinPHP {
                 Button("Pin PHP \(site.php) to Project…") {
-                    confirm = PinAction(
+                    confirm = ConfirmAction(
                         title: "Pin PHP \(site.php) to \(site.name)?", button: "Pin",
                         message: "Writes php=\(site.php) to .flockrc in \(site.path). Commit it, and everyone using Flock on this project gets PHP \(site.php). This changes a file in your project.",
                         run: { [name = site.name, php = site.php] client in try await client.pin(site: name, tool: "php", version: php) })
@@ -260,7 +278,7 @@ struct SitesPane: View {
             }
             if canPinNode {
                 Button("Pin Node \(nodeMajor) to Project…") {
-                    confirm = PinAction(
+                    confirm = ConfirmAction(
                         title: "Pin Node \(nodeMajor) to \(site.name)?", button: "Pin",
                         message: "Writes \(nodeMajor) to \(nodeFile) in \(site.path). Commit it, and Flock, nvm and other Node tools use Node \(nodeMajor) for this project. This changes a file in your project.",
                         run: { [name = site.name] client in try await client.pin(site: name, tool: "node", version: nodeMajor) })
@@ -271,7 +289,7 @@ struct SitesPane: View {
             }
             if site.phpPinnedHere {
                 Button("Unpin PHP (\(fileName(site.phpFile)))…") {
-                    confirm = PinAction(
+                    confirm = ConfirmAction(
                         title: "Unpin PHP from \(site.name)?", button: "Unpin",
                         message: "Removes the PHP version from \(site.phpFile). The site then uses Flock's default PHP. This changes files in your project.",
                         run: { [name = site.name] client in try await client.unpin(site: name, tool: "php") })
@@ -279,7 +297,7 @@ struct SitesPane: View {
             }
             if site.nodePinnedHere {
                 Button("Unpin Node (\(fileName(site.nodeFile)))…") {
-                    confirm = PinAction(
+                    confirm = ConfirmAction(
                         title: "Unpin Node from \(site.name)?", button: "Unpin",
                         message: "Removes the Node.js version from .flockrc and deletes .nvmrc / .node-version in \(site.path). The site then uses Flock's default Node.js. This changes files in your project.",
                         run: { [name = site.name] client in try await client.unpin(site: name, tool: "node") })
@@ -301,10 +319,11 @@ struct SitesPane: View {
     private func major(_ version: String) -> String { String(version.split(separator: ".").first ?? "") }
 }
 
-/// A pin or unpin waiting for confirmation (it changes files in the project).
-private struct PinAction: Identifiable, Sendable {
+/// A change waiting for confirmation: a pin or unpin (it changes files in the project), or a removal.
+private struct ConfirmAction: Identifiable, Sendable {
     let title: String
     let button: String
+    var destructive = false
     let message: String
     let run: @Sendable (FlockClient) async throws -> Status
     var id: String { title }

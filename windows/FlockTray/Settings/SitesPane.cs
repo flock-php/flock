@@ -69,9 +69,15 @@ internal sealed class SitesPane(SettingsWindow window, AppModel model) : Pane(wi
         }
         foreach (var domain in site.Domains)
         {
-            info.Children.Add(domain.Problem is { } domainProblem
-                ? Ui.Row(4, Ui.Icon(Ui.GlyphWarning, 12, Ui.Caution), Ui.Caption($"{domain.Host}: {domainProblem}", Ui.Caution, wrap: false))
-                : DomainLink(domain));
+            // A domain with neither a URL nor a problem (the site itself isn't served) has nothing to show.
+            if (domain.Problem is { } domainProblem)
+            {
+                info.Children.Add(Ui.Row(4, Ui.Icon(Ui.GlyphWarning, 12, Ui.Caution), Ui.Caption($"{domain.Host}: {domainProblem}", Ui.Caution, wrap: false)));
+            }
+            else if (domain.Url is { Length: > 0 } url)
+            {
+                info.Children.Add(DomainLink(domain, url));
+            }
         }
         foreach (var hint in Hints(site))
         {
@@ -93,7 +99,13 @@ internal sealed class SitesPane(SettingsWindow window, AppModel model) : Pane(wi
         var actions = Ui.Row(0, open, Ui.IconButton(Ui.GlyphFolder, "Show in Explorer", () => Native.Reveal(site.Path)), More(site));
         if (!site.Parked)
         {
-            actions.Children.Add(Ui.IconButton(Ui.GlyphDelete, "Remove site", () => _ = Perform(c => c.UnlinkSiteAsync(site.Name))));
+            actions.Children.Add(Ui.IconButton(Ui.GlyphDelete, "Remove site", async () =>
+            {
+                if (await Window.Confirm($"Remove {site.Name}?", $"{site.Domain} stops being served. The project's files stay where they are.", "Remove", destructive: true))
+                {
+                    await Perform(c => c.UnlinkSiteAsync(site.Name));
+                }
+            }));
         }
 
         return Ui.Card(Ui.Spread(info, Ui.Column(6, php, node), https, actions));
@@ -157,17 +169,11 @@ internal sealed class SitesPane(SettingsWindow window, AppModel model) : Pane(wi
         }
     }
 
-    private static HyperlinkButton DomainLink(Status.SiteDomain domain)
+    private static HyperlinkButton DomainLink(Status.SiteDomain domain, string url)
     {
-        var link = Ui.Link(domain.Alias ? $"{domain.Host} (alias)" : domain.Host, () =>
-        {
-            if (domain.Url is { Length: > 0 } url)
-            {
-                Native.Open(url);
-            }
-        });
+        var link = Ui.Link(domain.Alias ? $"{domain.Host} (alias)" : domain.Host, () => Native.Open(url));
         link.Padding = new Thickness(0);
-        ToolTipService.SetToolTip(link, $"Open {domain.Url}");
+        ToolTipService.SetToolTip(link, $"Open {url}");
         return link;
     }
 
@@ -200,7 +206,8 @@ internal sealed class SitesPane(SettingsWindow window, AppModel model) : Pane(wi
         var nodeMajor = Major(site.Node ?? "");
         var nodeFile = site.NodePinnedHere ? System.IO.Path.GetFileName(site.NodeFile) : ".nvmrc";
 
-        if (!(site.PhpSource == Status.VersionSource.Project && site.PhpPinnedHere))
+        // Pin and unpin items appear only when there is something to pin or unpin (the menu always has the domain items).
+        if (site.Php.Length > 0 && !(site.PhpSource == Status.VersionSource.Project && site.PhpPinnedHere))
         {
             menu.Items.Add(Item($"Pin PHP {site.Php} to Project…", () => _ = Pin(site, "php", site.Php,
                 $"Writes php={site.Php} to .flockrc in {site.Path}. Commit it, and everyone using Flock on this project gets PHP {site.Php}.")));
@@ -235,7 +242,13 @@ internal sealed class SitesPane(SettingsWindow window, AppModel model) : Pane(wi
         menu.Items.Add(Item("Add Domain…", () => _ = AddDomain(site)));
         foreach (var domain in site.Domains)
         {
-            menu.Items.Add(Item($"Remove {domain.Host}", () => _ = Perform(c => c.RemoveDomainAsync(site.Name, domain.Entry))));
+            menu.Items.Add(Item($"Remove {domain.Host}…", async () =>
+            {
+                if (await Window.Confirm($"Remove {domain.Host}?", $"{domain.Host} no longer opens {site.Name}.", "Remove", destructive: true))
+                {
+                    await Perform(c => c.RemoveDomainAsync(site.Name, domain.Entry));
+                }
+            }));
         }
 
         var button = Ui.IconButton(Ui.GlyphMore, "Domains and project versions", () => { });

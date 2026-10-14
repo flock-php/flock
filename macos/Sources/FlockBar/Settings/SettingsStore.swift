@@ -16,6 +16,16 @@ final class SettingsStore {
     private(set) var php: PHPCatalog?
     /// Node.js lines from nodejs.org with install state; loaded by the Node pane.
     private(set) var node: NodeCatalog?
+    /// PostgreSQL majors with install state; loaded by the Services pane.
+    private(set) var postgres: PostgresVersions?
+    /// Valkey and the PostgreSQL command-line tools; loaded by the Services pane.
+    private(set) var components: ComponentCatalog?
+    /// MySQL, MariaDB, Redis, MongoDB, Meilisearch, Typesense, RustFS; loaded by the Services pane.
+    private(set) var catalog: ServiceCatalog?
+    /// Catalog services this window asked to install that the daemon hasn't reported a job for yet.
+    private(set) var catalogPending: Set<String> = []
+    /// PostgreSQL operations this window started that haven't answered yet, by major.
+    private(set) var postgresPending: [String: PostgresMajor.Busy] = [:]
     var error: String?
     private(set) var isBusy = false
     var isVisible = false
@@ -25,6 +35,7 @@ final class SettingsStore {
     }
 
     func refresh() async {
+        if Snapshot.isFixture { return }
         do {
             let (config, services) = try await (client.config(), client.services())
             if config != self.config {
@@ -119,6 +130,134 @@ final class SettingsStore {
             self.error = error.localizedDescription
         }
         await refresh()
+    }
+
+    // MARK: PostgreSQL versions and components (Services pane)
+
+    /// Reloads PostgreSQL versions, components (Valkey, client tools) and the catalog; the
+    /// Services pane needs them.
+    func refreshInstalls() async {
+        if Snapshot.isFixture { return }
+        do {
+            async let postgres = client.postgresVersions()
+            async let components = client.components()
+            async let catalog = client.serviceCatalog()
+            let fresh = try await (postgres, components, catalog)
+            adopt(fresh.0)
+            if fresh.1 != self.components {
+                self.components = fresh.1
+            }
+            adopt(fresh.2)
+        } catch {
+            self.error = error.localizedDescription
+        }
+    }
+
+    /// Reloads them only when the Services pane has loaded them before.
+    func refreshInstallsIfLoaded() async {
+        if isVisible, postgres != nil || components != nil || catalog != nil {
+            await refreshInstalls()
+        }
+    }
+
+    /// A PostgreSQL operation, or a component job, runs — so the Services pane polls.
+    var installsBusy: Bool {
+        !postgresPending.isEmpty || (postgres?.isBusy ?? false) || (components?.hasRunningJob ?? false)
+            || !catalogPending.isEmpty || (catalog?.hasRunningJob ?? false)
+    }
+
+    /// What a major is doing: the daemon's state, or what this window just asked for while the
+    /// daemon hasn't reported it yet.
+    func busy(_ major: PostgresMajor) -> PostgresMajor.Busy {
+        major.isBusy ? major.busy : (postgresPending[major.major] ?? .idle)
+    }
+
+    /// Runs a PostgreSQL action (installs can take minutes) and adopts the versions it returns.
+    /// Polling during the request shows the daemon's own busy state.
+    func performOnPostgres(_ major: String, _ pending: PostgresMajor.Busy, _ change: @escaping @Sendable (FlockClient) async throws -> PostgresVersions) async {
+        postgresPending[major] = pending
+        defer { postgresPending[major] = nil }
+        do {
+            adopt(try await change(client))
+            error = nil
+        } catch {
+            self.error = error.localizedDescription
+        }
+        await refresh()
+        await onChange?()
+    }
+
+    /// "Check for Updates": asks for new PostgreSQL, component and catalog releases at once.
+    func checkForUpdates() async {
+        if Snapshot.isFixture { return }
+        do {
+            async let postgres = client.checkPostgres()
+            async let components = client.checkComponents()
+            async let catalog = client.checkServiceCatalog()
+            let fresh = try await (postgres, components, catalog)
+            adopt(fresh.0)
+            self.components = fresh.1
+            adopt(fresh.2)
+            error = nil
+        } catch {
+            self.error = error.localizedDescription
+        }
+    }
+
+    /// Runs a catalog action for service `id` and adopts the catalog it returns.
+    func performOnCatalog(_ id: String, _ change: @escaping @Sendable (FlockClient) async throws -> ServiceCatalog) async {
+        catalogPending.insert(id)
+        defer { catalogPending.remove(id) }
+        do {
+            adopt(try await change(client))
+            error = nil
+        } catch {
+            self.error = error.localizedDescription
+        }
+        await refresh()
+        await onChange?()
+    }
+
+    func catalogLog(_ id: String) async -> String {
+        if Snapshot.isFixture { return SnapshotFixtures.log }
+        return (try? await client.catalogLog(id)) ?? ""
+    }
+
+    /// Runs a component action and adopts the catalog it returns.
+    func performOnComponents(_ change: @escaping @Sendable (FlockClient) async throws -> ComponentCatalog) async {
+        do {
+            components = try await change(client)
+            error = nil
+        } catch {
+            self.error = error.localizedDescription
+        }
+        await refresh()
+        await onChange?()
+    }
+
+    func componentLog(_ id: String) async -> String {
+        if Snapshot.isFixture { return SnapshotFixtures.log }
+        return (try? await client.componentLog(id)) ?? ""
+    }
+
+    private func adopt(_ fresh: PostgresVersions) {
+        if fresh != postgres {
+            postgres = fresh
+        }
+    }
+
+    private func adopt(_ fresh: ServiceCatalog) {
+        if fresh != catalog {
+            catalog = fresh
+        }
+    }
+
+    /// Fills the store with fixture data for `--snapshot` renders of the Services pane.
+    func loadFixture(services: [Service], postgres: PostgresVersions?, components: ComponentCatalog?, catalog: ServiceCatalog? = nil) {
+        self.services = services
+        self.postgres = postgres
+        self.components = components
+        self.catalog = catalog
     }
 
     func phpBuildLog(_ minor: String) async -> String {

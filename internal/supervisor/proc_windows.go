@@ -18,7 +18,8 @@ func configure(cmd *exec.Cmd) {
 	cmd.SysProcAttr = &syscall.SysProcAttr{CreationFlags: windows.CREATE_NO_WINDOW}
 }
 
-// terminate kills the process; Windows has no portable graceful signal for console-less children.
+// terminate kills the process: Windows has no portable graceful signal for console-less children
+// (services that can be asked to exit another way set Spec.Stop).
 func terminate(cmd *exec.Cmd, _ os.Signal) {
 	_ = cmd.Process.Kill()
 }

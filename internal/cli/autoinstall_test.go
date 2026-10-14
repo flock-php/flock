@@ -69,3 +69,12 @@ func TestPHPQuestionSaysWhatInstallingTakes(t *testing.T) {
 		t.Errorf("unsupported versions must not prompt but explain: %v", err)
 	}
 }
+
+func TestWildcardNoteMentionsTheHostsFileOnlyOnWindows(t *testing.T) {
+	var out strings.Builder
+	wildcardNote(&out, api.DNSStatus{TLD: "test", WildcardProblem: "something is off"})
+	hosts := strings.Contains(out.String(), "hosts file")
+	if hosts != (runtime.GOOS == "windows") || !strings.Contains(out.String(), "something is off") {
+		t.Fatalf("on %s: %q", runtime.GOOS, out.String())
+	}
+}

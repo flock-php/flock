@@ -37,8 +37,8 @@ func (d *daemon) recheckWildcard() {
 
 // checkWildcard looks up a random name under the TLD through the system resolver, the way browsers
 // and PHP do, and checks that the query reached Flock's DNS server. On Windows that only happens
-// when the NRPT rule from `flock install` is in effect; Group Policy, VPN clients and security
-// software can override it without Flock noticing otherwise.
+// when the NRPT rule from `flock install` is in effect, on macOS when /etc/resolver/<tld> is;
+// Group Policy, VPN clients and security software can override either without Flock noticing otherwise.
 func (d *daemon) checkWildcard() {
 	if !d.checking.CompareAndSwap(false, true) {
 		return
@@ -58,9 +58,15 @@ func (d *daemon) checkWildcard() {
 		state.problem = fmt.Sprintf("Flock's DNS server isn't running (%v)", dnsErr)
 	case srv == nil:
 		state.problem = "Flock's DNS server isn't running"
+	case runtime.GOOS == "darwin":
+		state.problem = dns.ResolverProblem(cfg.TLD, cfg.Ports.DNS)
+		if state.problem == "" && !reaches(srv, cfg.TLD) {
+			state.problem = fmt.Sprintf("macOS doesn't send .%s lookups to Flock (a VPN or DNS filter may be overriding /etc/resolver)", cfg.TLD)
+		}
+		state.ok = state.problem == ""
 	case runtime.GOOS != "windows":
-		state.ok = true // /etc/resolver sends the TLD here; there is nothing else in the way
-	case lookupReaches(srv, cfg.TLD):
+		state.ok = true // nothing to check elsewhere (Flock runs on macOS and Windows)
+	case reaches(srv, cfg.TLD):
 		state.ok = true
 	default:
 		state.problem = windowsWildcardProblem(cfg.TLD)
@@ -69,6 +75,12 @@ func (d *daemon) checkWildcard() {
 	d.mu.Lock()
 	d.wildcard = state
 	d.mu.Unlock()
+}
+
+// reaches is lookupReaches with one retry: a single lookup can get lost while the network changes
+// (sleep/wake, Wi-Fi switch), which isn't worth a warning. Tests replace it.
+var reaches = func(srv *dns.Server, tld string) bool {
+	return lookupReaches(srv, tld) || lookupReaches(srv, tld)
 }
 
 // lookupReaches resolves a fresh name (so no cache answers it) and reports whether srv received it.
@@ -80,7 +92,8 @@ func lookupReaches(srv *dns.Server, tld string) bool {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
-	// PreferGo false: ask Windows' resolver (which applies NRPT rules), as browsers and PHP do.
+	// PreferGo false: ask the system resolver (which applies NRPT rules on Windows, /etc/resolver
+	// on macOS), as browsers and PHP do. On macOS that is libSystem's, with or without cgo.
 	addrs, err := (&net.Resolver{PreferGo: false}).LookupHost(ctx, name)
 	return seen() && err == nil && slices.Contains(addrs, "127.0.0.1")
 }

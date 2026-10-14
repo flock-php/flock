@@ -1,6 +1,7 @@
 package config
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"testing"
@@ -62,5 +63,50 @@ func TestSiteForDirPicksDeepestMatch(t *testing.T) {
 func TestSiteNameSanitisesDirectoryNames(t *testing.T) {
 	if got := SiteName("My_App.v2"); got != "my-app-v2" {
 		t.Fatalf("got %q", got)
+	}
+}
+
+func TestMigrateMovesRedisToValkeyOnMacOS(t *testing.T) {
+	data := []byte(`{"ports":{"redis":6380},"services":{"redis":"9.1.2","stopped":["redis","postgres"]}}`)
+	cfg := Default()
+	if err := json.Unmarshal(data, cfg); err != nil {
+		t.Fatal(err)
+	}
+	if err := migrate(cfg, data, "darwin"); err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Services.Valkey != "9.1.2" || cfg.Ports.Valkey != 6380 || cfg.Services.Running("valkey") || !cfg.Services.Running("redis") || cfg.Services.Running("postgres") {
+		t.Fatalf("unexpected migration: %+v %+v", cfg.Services, cfg.Ports)
+	}
+}
+
+func TestMigrateMakesRedisACatalogServiceOnWindows(t *testing.T) {
+	data := []byte(`{"ports":{"redis":6379},"services":{"redis":"7.2.16","stopped":["redis"]}}`)
+	cfg := Default()
+	if err := json.Unmarshal(data, cfg); err != nil {
+		t.Fatal(err)
+	}
+	if err := migrate(cfg, data, "windows"); err != nil {
+		t.Fatal(err)
+	}
+	if x, ok := cfg.Services.Extra("redis"); !ok || x.Version != "7.2.16" || x.Port != 6379 || cfg.Services.Valkey != "" || cfg.Services.Running("redis") {
+		t.Fatalf("unexpected migration: %+v", cfg.Services)
+	}
+}
+
+func TestMigrateLeavesNewConfigsAlone(t *testing.T) {
+	data := []byte(`{"ports":{"valkey":6390},"services":{"valkey":"9.1.2","extras":{"redis":{"version":"8.2.1","port":6380}}}}`)
+	cfg := Default()
+	if err := json.Unmarshal(data, cfg); err != nil {
+		t.Fatal(err)
+	}
+	if err := migrate(cfg, data, "darwin"); err != nil {
+		t.Fatal(err)
+	}
+	if x, _ := cfg.Services.Extra("redis"); cfg.Ports.Valkey != 6390 || x.Port != 6380 {
+		t.Fatalf("unexpected: %+v %+v", cfg.Ports, cfg.Services)
+	}
+	if used := cfg.UsedPorts(""); used[6380] != "redis" || used[6390] != "valkey" || used[443] != "web" {
+		t.Fatalf("used ports: %v", used)
 	}
 }

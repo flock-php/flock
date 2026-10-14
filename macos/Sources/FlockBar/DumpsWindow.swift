@@ -14,6 +14,12 @@ struct DumpsWindow: View {
         nonmutating set { queryState.wrappedValue = newValue }
     }
 
+    private let confirmClearState = State<Bool>(initialValue: false)
+    private var confirmClear: Bool {
+        get { confirmClearState.wrappedValue }
+        nonmutating set { confirmClearState.wrappedValue = newValue }
+    }
+
     private var editor: Editor { Editor(rawValue: editorID) ?? .phpstorm }
 
     var body: some View {
@@ -31,7 +37,7 @@ struct DumpsWindow: View {
                         : "Capture is off — turn it on with the antenna button to collect dump() and dd() output here.")
                 } actions: {
                     if !capturing {
-                        Button("Start Capturing") { Task { await model.setDumps(true) } }
+                        Button("Start Capturing") { Task { await model.setDumps(true, from: .dumps) } }
                     }
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -43,7 +49,7 @@ struct DumpsWindow: View {
         .searchable(text: queryState.projectedValue, placement: .toolbar, prompt: "Search dumps")
         .toolbar {
             ToolbarItemGroup {
-                Toggle(isOn: Binding(get: { capturing }, set: { on in Task { await model.setDumps(on) } })) {
+                Toggle(isOn: Binding(get: { capturing }, set: { on in Task { await model.setDumps(on, from: .dumps) } })) {
                     Label(capturing ? "Capturing" : "Capture Dumps", systemImage: "antenna.radiowaves.left.and.right")
                 }
                 .help(capturing ? "Stop intercepting dump() and dd()" : "Intercept dump() and dd()")
@@ -66,12 +72,20 @@ struct DumpsWindow: View {
                 .help("Editor used when clicking a dump's file and line")
 
                 Button("Clear", systemImage: "trash") {
-                    Task { await store.clear() }
+                    confirmClear = true
                 }
                 .disabled(store.dumps.isEmpty)
             }
         }
         .navigationTitle(visible.isEmpty ? "Dumps" : "Dumps (\(visible.count))")
+        .confirmationDialog("Clear all dumps?", isPresented: confirmClearState.projectedValue) {
+            Button("Clear", role: .destructive) {
+                Task { await store.clear() }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Every captured dump is deleted, from all requests and commands.")
+        }
         .safeAreaInset(edge: .bottom) {
             ErrorBanner(message: store.error)
         }

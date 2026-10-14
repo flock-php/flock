@@ -118,6 +118,105 @@ internal static partial class Native
         }
     }
 
+    // Choosing folders
+
+    /// <summary>
+    /// The shell's folder dialog with several folders selectable at once (WinUI's FolderPicker picks
+    /// one). An empty list when cancelled; COMException when the dialog isn't available.
+    /// </summary>
+    public static List<string> PickFolders(IntPtr owner, string title)
+    {
+        const uint FOS_PICKFOLDERS = 0x20, FOS_FORCEFILESYSTEM = 0x40, FOS_ALLOWMULTISELECT = 0x200, FOS_PATHMUSTEXIST = 0x800;
+        const uint SIGDN_FILESYSPATH = 0x80058000;
+        const int ERROR_CANCELLED = unchecked((int)0x800704C7);
+
+        var dialog = (IFileOpenDialog)new FileOpenDialog();
+        try
+        {
+            dialog.GetOptions(out var options);
+            dialog.SetOptions(options | FOS_PICKFOLDERS | FOS_FORCEFILESYSTEM | FOS_ALLOWMULTISELECT | FOS_PATHMUSTEXIST);
+            dialog.SetTitle(title);
+            var hr = dialog.Show(owner);
+            if (hr == ERROR_CANCELLED)
+            {
+                return [];
+            }
+            Marshal.ThrowExceptionForHR(hr);
+
+            dialog.GetResults(out var items);
+            items.GetCount(out var count);
+            var paths = new List<string>();
+            for (uint i = 0; i < count; i++)
+            {
+                items.GetItemAt(i, out var item);
+                item.GetDisplayName(SIGDN_FILESYSPATH, out var path);
+                paths.Add(path);
+            }
+            return paths;
+        }
+        finally
+        {
+            Marshal.ReleaseComObject(dialog);
+        }
+    }
+
+    [ComImport, Guid("DC1C5A9C-E88A-4dde-A5A1-60F82A20AEF7")]
+    private class FileOpenDialog;
+
+    // Vtable order matters: IModalWindow, then IFileDialog, then IFileOpenDialog (shobjidl_core.h).
+    [ComImport, Guid("d57c7288-d4ad-4768-be02-9d969532d960"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+    private interface IFileOpenDialog
+    {
+        [PreserveSig] int Show(IntPtr parent);
+        void SetFileTypes(uint count, IntPtr filterSpec);
+        void SetFileTypeIndex(uint index);
+        void GetFileTypeIndex(out uint index);
+        void Advise(IntPtr events, out uint cookie);
+        void Unadvise(uint cookie);
+        void SetOptions(uint options);
+        void GetOptions(out uint options);
+        void SetDefaultFolder(IShellItem item);
+        void SetFolder(IShellItem item);
+        void GetFolder(out IShellItem item);
+        void GetCurrentSelection(out IShellItem item);
+        void SetFileName([MarshalAs(UnmanagedType.LPWStr)] string name);
+        void GetFileName([MarshalAs(UnmanagedType.LPWStr)] out string name);
+        void SetTitle([MarshalAs(UnmanagedType.LPWStr)] string title);
+        void SetOkButtonLabel([MarshalAs(UnmanagedType.LPWStr)] string text);
+        void SetFileNameLabel([MarshalAs(UnmanagedType.LPWStr)] string label);
+        void GetResult(out IShellItem item);
+        void AddPlace(IShellItem item, int place);
+        void SetDefaultExtension([MarshalAs(UnmanagedType.LPWStr)] string extension);
+        void Close(int hr);
+        void SetClientGuid(ref Guid guid);
+        void ClearClientData();
+        void SetFilter(IntPtr filter);
+        void GetResults(out IShellItemArray items);
+        void GetSelectedItems(out IShellItemArray items);
+    }
+
+    [ComImport, Guid("43826d1e-e718-42ee-bc55-a1e261c37bfe"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+    private interface IShellItem
+    {
+        void BindToHandler(IntPtr bindContext, ref Guid handler, ref Guid riid, out IntPtr result);
+        void GetParent(out IShellItem parent);
+        void GetDisplayName(uint form, [MarshalAs(UnmanagedType.LPWStr)] out string name);
+        void GetAttributes(uint mask, out uint attributes);
+        void Compare(IShellItem other, uint hint, out int order);
+    }
+
+    [ComImport, Guid("b63ea76d-1f85-456f-a19c-48159efa858b"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+    private interface IShellItemArray
+    {
+        void BindToHandler(IntPtr bindContext, ref Guid handler, ref Guid riid, out IntPtr result);
+        void GetPropertyStore(int flags, ref Guid riid, out IntPtr result);
+        void GetPropertyDescriptionList(IntPtr keyType, ref Guid riid, out IntPtr result);
+        void GetAttributes(int flags, uint mask, out uint attributes);
+        void GetCount(out uint count);
+        void GetItemAt(uint index, out IShellItem item);
+        void EnumItems(out IntPtr items);
+    }
+
     // Notification area icon
 
     [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]

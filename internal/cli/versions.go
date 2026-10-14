@@ -9,11 +9,9 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"flock/internal/daemon"
 	"flock/internal/node"
 	"flock/internal/php"
 	"flock/internal/phpbuild"
-	"flock/internal/postgres"
 )
 
 func newPHPCommand() *cobra.Command {
@@ -179,66 +177,5 @@ func newNodeCommand() *cobra.Command {
 	}
 
 	cmd.AddCommand(install, list, def)
-	return cmd
-}
-
-func newPostgresCommand() *cobra.Command {
-	cmd := &cobra.Command{Use: "postgres", Short: "Manage the PostgreSQL service"}
-
-	install := &cobra.Command{
-		Use:   "install [version]",
-		Short: "Install and start PostgreSQL (user postgres, no password, port 5432)",
-		Args:  cobra.MaximumNArgs(1),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			version := postgres.DefaultVersion
-			if len(args) > 0 {
-				version = args[0]
-			}
-			s, err := load()
-			if err != nil {
-				return err
-			}
-
-			inst, err := postgres.NewInstaller(s.root)
-			if err != nil {
-				return err
-			}
-			cmd.Printf("installing PostgreSQL %s…\n", version)
-			if err := inst.Install(cmd.Context(), version); err != nil {
-				return err
-			}
-			if err := postgres.InitDB(inst.BinDir(version), daemon.PostgresDataDir(s.root)); err != nil {
-				return err
-			}
-
-			s.cfg.Services.Postgres = version
-			if err := s.commit(cmd.Context(), cmd.ErrOrStderr()); err != nil {
-				return err
-			}
-			cmd.Printf("PostgreSQL %s on 127.0.0.1:%d (user postgres, no password)\n", version, s.cfg.Ports.Postgres)
-			return nil
-		},
-	}
-
-	createDB := &cobra.Command{
-		Use:   "create-db <name>...",
-		Short: "Create databases (no-op when they exist)",
-		Args:  cobra.MinimumNArgs(1),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			s, err := load()
-			if err != nil {
-				return err
-			}
-			for _, name := range args {
-				if err := postgres.CreateDatabase(cmd.Context(), s.cfg.Ports.Postgres, name); err != nil {
-					return fmt.Errorf("create %s: %w", name, err)
-				}
-				cmd.Printf("database %s ready\n", name)
-			}
-			return nil
-		},
-	}
-
-	cmd.AddCommand(install, createDB, newPostgresClientCommand())
 	return cmd
 }

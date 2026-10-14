@@ -11,6 +11,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"flock/internal/catalog"
 	"flock/internal/certs"
 	"flock/internal/config"
 	"flock/internal/dumps"
@@ -54,7 +55,8 @@ func newExecCommand() *cobra.Command {
 			}
 
 			path, argv, env, err := resolveTool(s, cwd, args[0], args[1:])
-			// A missing PHP or Node version: offer to install it, then run the command after all.
+			// A missing PHP or Node version (on Windows also Redis or the PostgreSQL client tools): offer
+			// to install it, then run the command after all.
 			if err != nil && interactive() {
 				installed, installErr := offerInstall(cmd.Context(), s, err)
 				if installErr != nil {
@@ -161,13 +163,18 @@ func resolveTool(s *state, cwd, tool string, args []string) (path string, argv, 
 		return path, append([]string{path}, args...), env, nil
 
 	case "redis-cli", "valkey-cli":
-		versions, _ := valkey.Installed(s.root)
-		if len(versions) == 0 {
-			return "", nil, nil, fmt.Errorf("redis is not installed — run `flock redis install`")
+		// redis-cli talks to Redis when it is installed, else to Valkey (whose CLI is the same);
+		// valkey-cli always to Valkey.
+		port := s.cfg.Ports.Valkey
+		if x, ok := s.cfg.Services.Extra("redis"); ok && tool == "redis-cli" && fileExists(catalog.RedisCLI(s.root, x.Version)) {
+			path, port = catalog.RedisCLI(s.root, x.Version), x.Port
+		} else if versions, _ := valkey.Installed(s.root); len(versions) > 0 {
+			path = valkey.CLI(s.root, versions[0])
+		} else {
+			return "", nil, nil, errRedisMissing
 		}
-		path = valkey.CLI(s.root, versions[0])
-		if s.cfg.Ports.Redis != 6379 && !slices.Contains(args, "-p") {
-			args = append([]string{"-p", strconv.Itoa(s.cfg.Ports.Redis)}, args...)
+		if port != 6379 && !slices.Contains(args, "-p") {
+			args = append([]string{"-p", strconv.Itoa(port)}, args...)
 		}
 		return path, append([]string{path}, args...), nil, nil
 	}
@@ -175,9 +182,9 @@ func resolveTool(s *state, cwd, tool string, args []string) (path string, argv, 
 	if slices.Contains(postgres.ClientTools, tool) {
 		versions, _ := postgres.InstalledClients(s.root)
 		if len(versions) == 0 {
-			return "", nil, nil, fmt.Errorf("PostgreSQL client tools are not installed — run `flock postgres install-client`")
+			return "", nil, nil, errPostgresClientMissing
 		}
-		path = filepath.Join(postgres.ClientDir(s.root, versions[0]), "bin", tool)
+		path = postgres.ClientTool(s.root, versions[0], tool)
 
 		// Default to Flock's server; explicit flags or PG* variables still win.
 		for key, value := range map[string]string{"PGHOST": "127.0.0.1", "PGPORT": strconv.Itoa(s.cfg.Ports.Postgres), "PGUSER": "postgres"} {

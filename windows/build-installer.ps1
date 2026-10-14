@@ -1,18 +1,15 @@
-# Builds Flock-Setup-<arch>.exe into windows\dist\: the flock CLI and hosts helper, the tray app
+# Builds Flock-Setup-x64.exe into windows\dist\: the flock CLI and hosts helper, the tray app
 # (via build.ps1, which also runs the FlockKit tests) and the Inno Setup installer around them.
 #
-#   .\windows\build-installer.ps1               # for this machine's architecture
-#   .\windows\build-installer.ps1 -Arch arm64
+#   .\windows\build-installer.ps1
 #
+# Only x64 is built for now; Windows on ARM installs and runs it under emulation.
 # Needs Go, the .NET 10 SDK and Inno Setup 6 (winget install GoLang.Go Microsoft.DotNet.SDK.10 JRSoftware.InnoSetup).
-param(
-    [ValidateSet("x64", "arm64")]
-    [string]$Arch = $(if ($env:PROCESSOR_ARCHITECTURE -eq "ARM64") { "arm64" } else { "x64" })
-)
 $ErrorActionPreference = "Stop"
 
+$Arch = "x64"
 $repo = Split-Path $PSScriptRoot -Parent
-$goArch = if ($Arch -eq "arm64") { "arm64" } else { "amd64" }
+$goArch = "amd64"
 $version = git -C $repo describe --tags --always --dirty 2>$null
 if (-not $version) { $version = "dev" }
 
@@ -36,7 +33,7 @@ finally {
     Pop-Location
 }
 
-& (Join-Path $PSScriptRoot "build.ps1") -Arch $Arch
+& (Join-Path $PSScriptRoot "build.ps1")
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
 & $iscc /Q "/DAppVersion=$version" "/DArch=$Arch" "/DGoArch=$goArch" (Join-Path $PSScriptRoot "installer\Flock.iss")

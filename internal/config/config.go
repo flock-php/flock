@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"sort"
 	"strings"
@@ -35,7 +36,7 @@ type Ports struct {
 	DNS      int `json:"dns"`
 	SMTP     int `json:"smtp"`
 	Postgres int `json:"postgres"`
-	Redis    int `json:"redis"`
+	Valkey   int `json:"valkey"`
 	Dumps    int `json:"dumps"`
 	API      int `json:"api"` // token-protected HTTP API for the native apps
 }
@@ -44,10 +45,43 @@ type Ports struct {
 type Services struct {
 	Postgres       string `json:"postgres,omitempty"`        // e.g. "18.6.0"
 	PostgresClient string `json:"postgres_client,omitempty"` // psql, pg_dump, ... e.g. "18.6"
-	Redis          string `json:"redis,omitempty"`           // Valkey version, e.g. "9.1.2"
+	Valkey         string `json:"valkey,omitempty"`          // e.g. "9.1.2"
 
-	// Stopped lists installed services the user switched off ("postgres", "redis").
+	// Extras are the services of the catalog (MySQL, Redis, Meilisearch, ...) that are installed,
+	// by id. Each runs one version on its own port.
+	Extras map[string]Extra `json:"extras,omitempty"`
+
+	// Stopped lists installed services the user switched off ("postgres", "valkey", "mysql").
 	Stopped []string `json:"stopped,omitempty"`
+}
+
+// Extra is an installed catalog service.
+type Extra struct {
+	Version string `json:"version"` // e.g. "8.4.6"
+	Port    int    `json:"port"`
+}
+
+// Extra returns the installed catalog service id.
+func (s Services) Extra(id string) (Extra, bool) {
+	x, ok := s.Extras[id]
+	return x, ok && x.Version != ""
+}
+
+// SetExtra records an installed catalog service.
+func (s *Services) SetExtra(id string, x Extra) {
+	if s.Extras == nil {
+		s.Extras = map[string]Extra{}
+	}
+	s.Extras[id] = x
+}
+
+// RemoveExtra forgets a catalog service, and that it was switched off.
+func (s *Services) RemoveExtra(id string) {
+	delete(s.Extras, id)
+	if len(s.Extras) == 0 {
+		s.Extras = nil
+	}
+	s.SetRunning(id, true)
 }
 
 // Running reports whether an installed service should run.
@@ -84,7 +118,7 @@ func Default() *Config {
 		DefaultPHP:   "8.5",
 		DefaultNode:  "22",
 		PHPAutoBuild: true,
-		Ports:        Ports{HTTP: 80, HTTPS: 443, DNS: 53535, SMTP: 2525, Postgres: 5432, Redis: 6379, Dumps: 9912, API: 53531},
+		Ports:        Ports{HTTP: 80, HTTPS: 443, DNS: 53535, SMTP: 2525, Postgres: 5432, Valkey: 6379, Dumps: 9912, API: 53531},
 	}
 }
 
@@ -107,8 +141,76 @@ func Load(root string) (*Config, error) {
 	if err := json.Unmarshal(data, cfg); err != nil {
 		return nil, fmt.Errorf("parse %s: %w", file(root), err)
 	}
+	if err := migrate(cfg, data, runtime.GOOS); err != nil {
+		return nil, fmt.Errorf("parse %s: %w", file(root), err)
+	}
 
 	return cfg, nil
+}
+
+// migrate moves what older versions stored as "redis" to where it belongs now. That was Valkey
+// on macOS, which is its own service now, and Redis itself on Windows, which is a catalog
+// service (the catalog package moves its files).
+func migrate(cfg *Config, data []byte, goos string) error {
+	var legacy struct {
+		Ports struct {
+			Redis  int `json:"redis"`
+			Valkey int `json:"valkey"`
+		} `json:"ports"`
+		Services struct {
+			Redis string `json:"redis"`
+		} `json:"services"`
+	}
+	if err := json.Unmarshal(data, &legacy); err != nil {
+		return err
+	}
+	if legacy.Ports.Redis == 0 && legacy.Services.Redis == "" {
+		return nil
+	}
+
+	port := legacy.Ports.Redis
+	if port == 0 {
+		port = Default().Ports.Valkey
+	}
+	if goos == "windows" {
+		if _, ok := cfg.Services.Extra("redis"); !ok && legacy.Services.Redis != "" {
+			cfg.Services.SetExtra("redis", Extra{Version: legacy.Services.Redis, Port: port})
+		}
+		return nil
+	}
+
+	if legacy.Ports.Valkey == 0 {
+		cfg.Ports.Valkey = port
+	}
+	if cfg.Services.Valkey == "" && legacy.Services.Redis != "" {
+		cfg.Services.Valkey = legacy.Services.Redis
+	}
+	if !cfg.Services.Running("redis") {
+		cfg.Services.SetRunning("redis", true)
+		cfg.Services.SetRunning("valkey", false)
+	}
+	return nil
+}
+
+// UsedPorts maps every port a Flock service is configured for to that service's id, leaving out
+// the catalog service except.
+func (c *Config) UsedPorts(except string) map[int]string {
+	used := map[int]string{
+		c.Ports.HTTP: "web", c.Ports.HTTPS: "web", c.Ports.DNS: "dns", c.Ports.SMTP: "mail",
+		c.Ports.Dumps: "dumps", c.Ports.API: "api",
+	}
+	if c.Services.Postgres != "" {
+		used[c.Ports.Postgres] = "postgres"
+	}
+	if c.Services.Valkey != "" {
+		used[c.Ports.Valkey] = "valkey"
+	}
+	for id, x := range c.Services.Extras {
+		if id != except && x.Version != "" {
+			used[x.Port] = id
+		}
+	}
+	return used
 }
 
 // Save writes the config atomically.

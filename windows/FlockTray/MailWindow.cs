@@ -71,6 +71,7 @@ internal sealed partial class MailWindow : FlockWindow
         root.Children.Add(split);
         root.Children.Add(error);
         Body = root;
+        Ui.SettingsShortcut(root);
 
         store.Changed += Render;
         store.IsVisible = true;

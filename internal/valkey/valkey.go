@@ -1,17 +1,21 @@
-// Package valkey runs Valkey, the open-source Redis fork, as Flock's Redis service.
+// Package valkey runs Valkey, the open-source Redis fork, as one of Flock's services (macOS).
 // It speaks the Redis protocol, so Laravel's phpredis/predis clients work unchanged.
 package valkey
 
 import (
+	"bufio"
 	"errors"
 	"fmt"
+	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"regexp"
 	"runtime"
 	"sort"
+	"strings"
 	"syscall"
+	"time"
 
 	"flock/internal/fsutil"
 	"flock/internal/supervisor"
@@ -99,5 +103,30 @@ func Spec(root, version string, port int) (supervisor.Spec, error) {
 		},
 		LogFile:    filepath.Join(root, "log", "valkey.log"),
 		StopSignal: syscall.SIGTERM, // valkey saves a snapshot on SIGTERM
+		Stop:       StopFunc(port),
 	}, nil
+}
+
+// Shutdown sends SHUTDOWN to the server on 127.0.0.1:port, which saves a snapshot and exits. It
+// returns once the server has accepted the command: it closes the connection when it exits, so
+// no answer (within a short wait for an error reply) means it is shutting down.
+func Shutdown(port int) error {
+	conn, err := net.DialTimeout("tcp", fmt.Sprintf("127.0.0.1:%d", port), 2*time.Second)
+	if err != nil {
+		return err
+	}
+	defer conn.Close()
+
+	_ = conn.SetDeadline(time.Now().Add(2 * time.Second))
+	if _, err := conn.Write([]byte("*1\r\n$8\r\nSHUTDOWN\r\n")); err != nil {
+		return err
+	}
+	line, err := bufio.NewReader(conn).ReadString('\n')
+	switch {
+	case strings.HasPrefix(line, "-"):
+		return fmt.Errorf("SHUTDOWN: %s", strings.TrimSpace(line[1:]))
+	case err != nil:
+		return nil // closed (or still saving): the server is going away
+	}
+	return fmt.Errorf("SHUTDOWN: unexpected reply %q", strings.TrimSpace(line))
 }

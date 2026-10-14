@@ -3,6 +3,7 @@
 package api
 
 import (
+	"bytes"
 	"context"
 	"crypto/subtle"
 	"encoding/json"
@@ -13,8 +14,11 @@ import (
 	"net/http"
 	"time"
 
+	"flock/internal/catalog"
+	"flock/internal/components"
 	"flock/internal/config"
 	"flock/internal/phpbuild"
+	"flock/internal/postgres"
 	"flock/internal/supervisor"
 )
 
@@ -34,11 +38,22 @@ type Status struct {
 	MailCount int                     `json:"mail_count"`
 	DumpCount int                     `json:"dump_count"`
 	Postgres  string                  `json:"postgres,omitempty"`
-	Redis     string                  `json:"redis,omitempty"`
+	Valkey    string                  `json:"valkey,omitempty"`
+	Extras    []ExtraStatus           `json:"extras,omitempty"` // installed catalog services
 	Xdebug    bool                    `json:"xdebug"`
 	Sites     []SiteStatus            `json:"sites"`
 	Processes []supervisor.ProcStatus `json:"processes"`
 	Warnings  []string                `json:"warnings,omitempty"`
+}
+
+// ExtraStatus is an installed catalog service (MySQL, Redis, ...).
+type ExtraStatus struct {
+	ID      string `json:"id"`
+	Name    string `json:"name"`
+	Version string `json:"version"`
+	Port    int    `json:"port"`
+	Enabled bool   `json:"enabled"`
+	Up      bool   `json:"up"`
 }
 
 // SiteStatus is one served site as the daemon sees it.
@@ -81,8 +96,9 @@ type DNSStatus struct {
 	TLD  string `json:"tld"`
 	Addr string `json:"addr"` // the embedded DNS server, when it runs
 	// Wildcard reports whether every name under the TLD resolves (any subdomain, at any depth).
-	// When it doesn't (Windows: the DNS rule is missing or overridden by a policy), only the
-	// sites' domains and extra domains resolve, through the hosts file; WildcardProblem says why.
+	// When it doesn't, WildcardProblem says why. On Windows (the DNS rule is missing or overridden
+	// by a policy) the sites' domains and extra domains still resolve, through the hosts file; on
+	// macOS (/etc/resolver/<tld> missing or overridden) nothing under the TLD does.
 	Wildcard        bool   `json:"wildcard"`
 	WildcardProblem string `json:"wildcard_problem,omitempty"`
 	MaxDepth        int    `json:"max_depth"` // subdomain levels below a site that are served
@@ -110,6 +126,12 @@ type Backend interface {
 	PHPBuilds() *phpbuild.Manager
 	// ReleasePHP stops whatever runs a PHP version so its files can be removed (Windows locks them).
 	ReleasePHP(minor string)
+	// PostgresVersions manages the PostgreSQL majors (nil when unavailable).
+	PostgresVersions() *postgres.Manager
+	// Components manages Valkey and the PostgreSQL client tools (nil when unavailable).
+	Components() *components.Manager
+	// Catalog manages MySQL, Redis, Meilisearch and the other catalog services (nil when unavailable).
+	Catalog() *catalog.Manager
 }
 
 // NewHandler builds the API routes. A non-empty token requires `Authorization: Bearer <token>`
@@ -144,6 +166,9 @@ func NewHandler(b Backend, token string) http.Handler {
 	registerConfig(mux, b)
 	registerPHPBuilds(mux, b)
 	registerNodeVersions(mux, b)
+	registerPostgresVersions(mux, b)
+	registerComponents(mux, b)
+	registerCatalog(mux, b)
 	registerMail(mux, b)
 	registerDumps(mux, b)
 	registerLogs(mux, b)
@@ -210,7 +235,12 @@ func (c *Client) Reload(ctx context.Context) (Status, error) {
 
 // slow is the client for requests that wait on the network or copy files (checks, installs).
 func (c *Client) slow() *Client {
-	return &Client{http: &http.Client{Transport: c.http.Transport, Timeout: 2 * time.Minute}}
+	return c.timeout(2 * time.Minute)
+}
+
+// timeout is the client for requests that may take up to d (installs, switching servers).
+func (c *Client) timeout(d time.Duration) *Client {
+	return &Client{http: &http.Client{Transport: c.http.Transport, Timeout: d}}
 }
 
 func (c *Client) get(ctx context.Context, path string, out any) error {
@@ -218,9 +248,25 @@ func (c *Client) get(ctx context.Context, path string, out any) error {
 }
 
 func (c *Client) do(ctx context.Context, method, path string, out any) error {
-	req, err := http.NewRequestWithContext(ctx, method, "http://flockd"+path, nil)
+	return c.send(ctx, method, path, nil, out)
+}
+
+// send makes a request with body (encoded as JSON unless nil) and decodes the answer into out.
+func (c *Client) send(ctx context.Context, method, path string, body, out any) error {
+	var reader io.Reader
+	if body != nil {
+		data, err := json.Marshal(body)
+		if err != nil {
+			return err
+		}
+		reader = bytes.NewReader(data)
+	}
+	req, err := http.NewRequestWithContext(ctx, method, "http://flockd"+path, reader)
 	if err != nil {
 		return err
+	}
+	if body != nil {
+		req.Header.Set("Content-Type", "application/json")
 	}
 
 	resp, err := c.http.Do(req)

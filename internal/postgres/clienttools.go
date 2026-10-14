@@ -22,6 +22,11 @@ func ClientDir(root, version string) string {
 	return filepath.Join(root, "services", "postgres-client", version)
 }
 
+// ClientTool is the path of an installed client tool ("psql").
+func ClientTool(root, version, tool string) string {
+	return filepath.Join(ClientDir(root, version), "bin", exe(tool))
+}
+
 // InstallClientFrom installs client tools built by build/postgres-client/build.sh and returns their version.
 func InstallClientFrom(root, src string) (string, error) {
 	psql := filepath.Join(src, "bin", exe("psql"))
@@ -50,10 +55,10 @@ func InstalledClients(root string) ([]string, error) {
 
 	var versions []string
 	for _, e := range entries {
-		if _, err := os.Stat(filepath.Join(ClientDir(root, e.Name()), "bin", exe("psql"))); err == nil {
+		if _, err := os.Stat(ClientTool(root, e.Name(), "psql")); err == nil {
 			versions = append(versions, e.Name())
 		}
 	}
-	sort.Sort(sort.Reverse(sort.StringSlice(versions)))
+	sort.Slice(versions, func(i, j int) bool { return Newer(versions[i], versions[j]) })
 	return versions, nil
 }

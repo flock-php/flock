@@ -75,12 +75,13 @@ internal sealed class GeneralPane(SettingsWindow window, AppModel model) : Pane(
         }
         list.SelectedIndex = selectedParked is null ? -1 : config.Parked.IndexOf(selectedParked);
 
-        var remove = Ui.IconButton(Ui.GlyphRemove, "Remove the selected project folder", () =>
+        var remove = Ui.IconButton(Ui.GlyphRemove, "Remove the selected project folder", async () =>
         {
-            if (selectedParked is { } path)
+            if (selectedParked is { } path
+                && await Window.Confirm($"Remove {path} from project folders?", "Its folders stop being served as sites. Nothing is deleted from disk.", "Remove", destructive: true))
             {
                 selectedParked = null;
-                _ = Perform(c => c.UnparkAsync(path));
+                await Perform(c => c.UnparkAsync(path));
             }
         });
         remove.IsEnabled = selectedParked is not null;
@@ -89,11 +90,18 @@ internal sealed class GeneralPane(SettingsWindow window, AppModel model) : Pane(
             selectedParked = list.SelectedIndex >= 0 && list.SelectedIndex < config.Parked.Count ? config.Parked[list.SelectedIndex] : null;
             remove.IsEnabled = selectedParked is not null;
         };
-        var add = Ui.IconButton(Ui.GlyphAdd, "Add a project folder…", async () =>
+        var add = Ui.IconButton(Ui.GlyphAdd, "Add project folders…", async () =>
         {
-            if (await Window.PickFolder() is { } path)
+            var paths = await Window.PickFolders("Add Project Folders");
+            if (paths.Count > 0)
             {
-                await Perform(c => c.ParkAsync(path));
+                await Perform(async c =>
+                {
+                    foreach (var path in paths)
+                    {
+                        await c.ParkAsync(path);
+                    }
+                });
             }
         });
 

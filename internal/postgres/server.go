@@ -6,6 +6,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strconv"
+	"strings"
 
 	"flock/internal/supervisor"
 )
@@ -41,5 +42,18 @@ func Spec(binDir, dataDir, runDir, logFile string, port int) supervisor.Spec {
 		Args:       append(args, socketArgs(runDir)...),
 		LogFile:    logFile,
 		StopSignal: stopSignal,
+		Stop:       stopFunc(binDir, dataDir),
 	}
+}
+
+// StopFast requests postgres' "fast" shutdown (roll back open transactions, checkpoint, exit)
+// through pg_ctl, which signals the postmaster of dataDir: with SIGINT on unix, over its named
+// pipe on Windows, which has no signals. It does not wait (-W); the caller waits for the exit.
+func StopFast(binDir, dataDir string) error {
+	cmd := exec.Command(filepath.Join(binDir, exe("pg_ctl")), "stop", "-D", dataDir, "-m", "fast", "-W")
+	hideWindow(cmd)
+	if out, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("pg_ctl stop: %v: %s", err, strings.TrimSpace(string(out)))
+	}
+	return nil
 }

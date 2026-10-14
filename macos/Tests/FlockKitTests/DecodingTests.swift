@@ -20,7 +20,8 @@ private func decode<T: Decodable>(_ type: T.Type, _ json: String) throws -> T {
     let status = try decode(Status.self, """
     {"version":"0893ae2","pid":91994,"started_at":"2026-10-13T14:10:01.123456+02:00",
      "dns":{"tld":"test","addr":"127.0.0.1:53535"},"http_port":80,"https_port":443,
-     "mail":"127.0.0.1:2525","postgres":"18.6.0 on 127.0.0.1:5432","redis":"Valkey 9.1.2 on 127.0.0.1:6379",
+     "mail":"127.0.0.1:2525","postgres":"18.6.0 on 127.0.0.1:5432","valkey":"9.1.2 on 127.0.0.1:6379",
+     "extras":[{"id":"mysql","name":"MySQL","version":"8.4.6","port":3306,"enabled":true,"up":true},{"id":"redis"}],
      "xdebug":true,"dumps":false,"mail_count":3,"dump_count":12,
      "sites":[{"name":"watchtower","domain":"watchtower.test","path":"/code/watchtower","php":"8.5","secured":true,"parked":false,"url":"https://watchtower.test"},
               {"name":"legacy","domain":"legacy.test","path":"/code/legacy","php":"7.4","secured":false,"parked":true,"problem":"PHP 7.4 is not installed"}],
@@ -29,6 +30,9 @@ private func decode<T: Decodable>(_ type: T.Type, _ json: String) throws -> T {
     """)
 
     #expect(status.httpsPort == 443)
+    #expect(status.valkey == "9.1.2 on 127.0.0.1:6379")
+    #expect(status.extras.map(\.id) == ["mysql", "redis"] && status.extras[0].up && status.extras[0].port == 3306)
+    #expect(status.extras[1].name == "redis" && !status.extras[1].up && status.extras[1].enabled)
     #expect(status.mailCount == 3 && status.dumpCount == 12)
     #expect(status.sites[0].url == "https://watchtower.test")
     #expect(status.sites[1].url == nil && status.sites[1].problem != nil)
@@ -62,7 +66,7 @@ private func decode<T: Decodable>(_ type: T.Type, _ json: String) throws -> T {
      "mail_count":0,"dump_count":0,"sites":null,"processes":[]}
     """)
 
-    #expect(status.postgres == nil && status.redis == nil)
+    #expect(status.postgres == nil && status.valkey == nil && status.extras.isEmpty)
     #expect(status.sites.isEmpty && status.warnings.isEmpty)
     #expect(!status.isDegraded)
 }

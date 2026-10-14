@@ -25,7 +25,19 @@ type Spec struct {
 	Env        []string // added to the daemon's environment
 	Dir        string
 	LogFile    string    // stdout+stderr are appended here
-	StopSignal os.Signal // graceful stop signal; ignored on Windows (processes are killed)
+	StopSignal os.Signal // graceful stop signal; ignored on Windows (see Stop)
+
+	// Stop, when set, asks the process to exit instead of StopSignal, for processes signals can't
+	// reach (Windows). It returns once the request is made; the supervisor then waits for the exit
+	// as usual. When it fails, the process gets StopSignal (unix) or is killed (Windows).
+	// It is not compared by Ensure.
+	Stop func() error
+}
+
+// same reports whether a and b describe the same process (Stop aside: funcs never compare equal).
+func same(a, b Spec) bool {
+	a.Stop, b.Stop = nil, nil
+	return reflect.DeepEqual(a, b)
 }
 
 // Supervisor manages a set of named processes.
@@ -65,7 +77,7 @@ func (s *Supervisor) Ensure(spec Spec) bool {
 	defer s.mu.Unlock()
 
 	if p, ok := s.procs[spec.Name]; ok {
-		if reflect.DeepEqual(p.spec, spec) {
+		if same(p.spec, spec) {
 			return false
 		}
 		p.halt()
@@ -194,7 +206,7 @@ func (p *proc) once() error {
 		fmt.Fprintf(log, "[flock] %s exited: %v\n", p.spec.Name, err)
 		return err
 	case <-p.stop:
-		terminate(cmd, p.spec.StopSignal)
+		p.terminate(cmd, log)
 		select {
 		case <-exited:
 		case <-time.After(10 * time.Second):
@@ -204,6 +216,18 @@ func (p *proc) once() error {
 		fmt.Fprintf(log, "[flock] %s stopped\n", p.spec.Name)
 		return errStopped
 	}
+}
+
+// terminate asks cmd to exit: through Spec.Stop when set, falling back to the platform's way.
+func (p *proc) terminate(cmd *exec.Cmd, log io.Writer) {
+	if p.spec.Stop != nil {
+		err := p.spec.Stop()
+		if err == nil {
+			return
+		}
+		fmt.Fprintf(log, "[flock] graceful stop of %s failed: %v\n", p.spec.Name, err)
+	}
+	terminate(cmd, p.spec.StopSignal)
 }
 
 // lastLine returns the last meaningful line the process logged (Flock's own markers skipped),

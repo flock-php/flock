@@ -1,11 +1,15 @@
 package cli
 
 import (
+	"context"
+	"errors"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
+	"flock/internal/catalog"
 	"flock/internal/certs"
 	"flock/internal/config"
 	"flock/internal/php"
@@ -124,7 +128,7 @@ func TestNodeGetsTheSiteCertificateForViteWhenSecured(t *testing.T) {
 
 func TestPostgresToolsDefaultToFlocksServer(t *testing.T) {
 	root := t.TempDir()
-	psql := filepath.Join(postgres.ClientDir(root, "18.6"), "bin", "psql")
+	psql := postgres.ClientTool(root, "18.6", "psql") // psql.exe on Windows
 	if err := os.MkdirAll(filepath.Dir(psql), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -157,12 +161,29 @@ func TestRedisCLIUsesTheConfiguredPort(t *testing.T) {
 		}
 	}
 	cfg := config.Default()
-	cfg.Ports.Redis = 6380
+	cfg.Ports.Valkey = 6380
 	s := &state{root: root, cfg: cfg}
 
 	_, argv, _, err := resolveTool(s, "/x", "redis-cli", []string{"ping"})
 	if err != nil || strings.Join(argv[1:], " ") != "-p 6380 ping" {
 		t.Fatalf("got %v %v", argv, err)
+	}
+
+	// With Redis installed, redis-cli talks to it; valkey-cli still to Valkey.
+	redisCLI := catalog.RedisCLI(root, "8.2.2")
+	if err := os.MkdirAll(filepath.Dir(redisCLI), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(redisCLI, nil, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	cfg.Services.SetExtra("redis", config.Extra{Version: "8.2.2", Port: 6381})
+	path, argv, _, err := resolveTool(s, "/x", "redis-cli", []string{"ping"})
+	if err != nil || path != redisCLI || strings.Join(argv[1:], " ") != "-p 6381 ping" {
+		t.Fatalf("got %s %v %v", path, argv, err)
+	}
+	if path, _, _, _ := resolveTool(s, "/x", "valkey-cli", nil); path != cli {
+		t.Fatalf("valkey-cli resolved to %s", path)
 	}
 }
 
@@ -178,6 +199,23 @@ func TestShimToolRecognisesShimNames(t *testing.T) {
 		// filepath.Base only splits on the host separator; normalise for the test on macOS.
 		if got := ShimTool(strings.ReplaceAll(argv0, `\`, "/")); got != want {
 			t.Errorf("%s: got %q, want %q", argv0, got, want)
+		}
+	}
+}
+
+func TestMissingRedisAndPostgresClientAreOfferedOnlyWhereFlockCanDownloadThem(t *testing.T) {
+	s := &state{root: t.TempDir(), cfg: config.Default()}
+	for tool, want := range map[string]error{"redis-cli": errRedisMissing, "pg_dump": errPostgresClientMissing} {
+		if _, _, _, err := resolveTool(s, "/x", tool, nil); !errors.Is(err, want) {
+			t.Fatalf("%s: got %v, want %v", tool, err, want)
+		}
+	}
+	if runtime.GOOS == "windows" {
+		return // offerInstall would prompt
+	}
+	for _, err := range []error{errRedisMissing, errPostgresClientMissing} {
+		if installed, installErr := offerInstall(context.Background(), s, err); installed || installErr != nil {
+			t.Fatalf("macOS has no prebuilt build to offer: %v %v", installed, installErr)
 		}
 	}
 }

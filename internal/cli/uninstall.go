@@ -17,10 +17,10 @@ import (
 // somewhere unexpected can't take other files with it.
 var (
 	// rebuildable: programs, downloads, certificates, logs and runtime files.
-	rebuildable = []string{"bin", "caddy", "certs", "log", "mail", "dumps", "tools", "php", "node", "node-global", "run",
+	rebuildable = []string{"bin", "cache", "caddy", "certs", "log", "mail", "dumps", "tools", "php", "node", "node-global", "run",
 		"api.json", "flockd.sock", "hosts.txt", "hosts.txt.tmp", "config.json.tmp"}
 	// userData survives a plain uninstall: sites, parked folders and settings, and in services/
-	// each service's data/ (the PostgreSQL and Redis databases).
+	// each service's data/ (the PostgreSQL, Valkey, MySQL, Redis, ... databases; per version line).
 	userData = []string{"config.json", "services"}
 )
 
@@ -34,7 +34,7 @@ func decidePurge(root string, purge bool) bool {
 	if purge || !interactive() || !hasUserData(root) {
 		return purge
 	}
-	return confirm("Also delete your sites' settings and your PostgreSQL and Redis databases?", false)
+	return confirm("Also delete your sites' settings and your databases (PostgreSQL, MySQL, Redis, ...)?", false)
 }
 
 // hasUserData reports whether a plain uninstall would keep anything.
@@ -129,15 +129,15 @@ func cleanServices(dir string) ([]string, error) {
 		}
 		hasData := false
 		for _, e := range entries {
-			if e.Name() == "data" && e.IsDir() {
+			// data.migrating is a PostgreSQL cluster halfway through its move into data/<major>.
+			if (e.Name() == "data" || e.Name() == "data.migrating") && e.IsDir() {
 				hasData = true
+				kept = append(kept, filepath.Join(serviceDir, e.Name()))
 				continue
 			}
 			errs = append(errs, remove(filepath.Join(serviceDir, e.Name())))
 		}
-		if hasData {
-			kept = append(kept, filepath.Join(serviceDir, "data"))
-		} else {
+		if !hasData {
 			errs = append(errs, remove(serviceDir))
 		}
 	}

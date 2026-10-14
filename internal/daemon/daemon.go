@@ -18,7 +18,9 @@ import (
 	"time"
 
 	"flock/internal/api"
+	"flock/internal/catalog"
 	"flock/internal/certs"
+	"flock/internal/components"
 	"flock/internal/config"
 	"flock/internal/dns"
 	"flock/internal/dumps"
@@ -62,6 +64,11 @@ type daemon struct {
 	mail     *mail.Server
 	webUp    bool
 	builds   *phpbuild.Manager
+	// pg manages the PostgreSQL versions, components Valkey and the PostgreSQL client tools,
+	// catalog the other services (MySQL, Redis, Meilisearch, ...).
+	pg         *postgres.Manager
+	components *components.Manager
+	catalog    *catalog.Manager
 	// migrateGlobals moves global npm packages out of Node's version directories, once per run.
 	migrateGlobals sync.Once
 
@@ -73,6 +80,7 @@ type daemon struct {
 	mu       sync.Mutex
 	sites    []api.SiteStatus
 	warnings []string
+	problems map[string]string // why an installed catalog service or Valkey isn't running, by id
 	cfg      *config.Config
 	wildcard wildcardState
 }
@@ -233,6 +241,18 @@ func Run(ctx context.Context, cfg Config) error {
 		})
 		go d.builds.Run(ctx)
 	}
+
+	if pg, err := postgres.NewManager(cfg.Root, pgService{d}); err == nil {
+		d.pg = pg
+		go pg.Catalog.Run(ctx)
+	}
+	d.components = components.NewManager(cfg.Root, components.Drivers(cfg.Root, d.Mutate))
+	go d.components.Run(ctx)
+	if err := catalog.MigrateLegacy(cfg.Root); err != nil {
+		fmt.Fprintf(os.Stderr, "moving Redis into the catalog: %v\n", err)
+	}
+	d.catalog = catalog.NewManager(cfg.Root, catalog.Kinds(runtime.GOOS, runtime.GOARCH), d.Mutate)
+	go d.catalog.Run(ctx)
 
 	// A broken config or a busy port must not kill the daemon: launchd would restart it in a loop
 	// and `flock status` could not explain what is wrong. Problems become warnings instead.
@@ -520,16 +540,38 @@ func (d *daemon) reload() error {
 		}
 	}
 
-	if v := cfg.Services.Redis; v != "" && cfg.Services.Running("redis") {
-		spec, err := valkey.Spec(d.root, v, cfg.Ports.Redis)
+	problems := map[string]string{}
+	// start runs an optional service on port, unless another Flock service is configured for
+	// that port or something else holds it (it would only crash-loop on "address in use").
+	start := func(id string, port int, spec supervisor.Spec, err error) {
+		problem := ""
+		if other, taken := cfg.UsedPorts(id)[port]; taken && other != id && err == nil {
+			err = fmt.Errorf("port %d is also configured for %s — change one of the ports", port, serviceName(other))
+		}
 		switch {
 		case err != nil:
-			warnings = append(warnings, "redis: "+err.Error())
-		case !d.procUp(spec.Name) && !ports.Free("127.0.0.1", cfg.Ports.Redis):
-			warnings = append(warnings, "redis: "+ports.Describe(cfg.Ports.Redis))
+			problem = err.Error()
+		case !d.procUp(spec.Name) && !ports.Free("127.0.0.1", port):
+			problem = ports.Describe(port)
 		default:
 			d.procs.Ensure(spec)
 			keep[spec.Name] = true
+			return
+		}
+		problems[id] = problem
+		warnings = append(warnings, id+": "+problem)
+	}
+
+	if v := cfg.Services.Valkey; v != "" && cfg.Services.Running(components.Valkey) {
+		spec, err := valkey.Spec(d.root, v, cfg.Ports.Valkey)
+		start(components.Valkey, cfg.Ports.Valkey, spec, err)
+	}
+	if d.catalog != nil {
+		for _, k := range d.catalog.Kinds() {
+			if x, ok := cfg.Services.Extra(k.ID); ok && cfg.Services.Running(k.ID) {
+				spec, err := catalog.Spec(d.root, k, x)
+				start(k.ID, x.Port, spec, err)
+			}
 		}
 	}
 
@@ -545,7 +587,7 @@ func (d *daemon) reload() error {
 	}
 
 	d.mu.Lock()
-	d.cfg, d.sites, d.warnings = cfg, statuses, warnings
+	d.cfg, d.sites, d.warnings, d.problems = cfg, statuses, warnings, problems
 	d.mu.Unlock()
 
 	go d.checkWildcard()
@@ -600,7 +642,11 @@ func (d *daemon) postgresSpec(cfg *config.Config, version string) (supervisor.Sp
 		return supervisor.Spec{}, fmt.Errorf("version %s is not installed", version)
 	}
 
-	data := PostgresDataDir(d.root)
+	// Older versions kept one cluster for every version; each major has its own now.
+	if err := postgres.MigrateLegacyDataDir(d.root); err != nil {
+		return supervisor.Spec{}, err
+	}
+	data := postgres.DataDir(d.root, postgres.MajorOf(version))
 	if err := postgres.InitDB(inst.BinDir(version), data); err != nil {
 		return supervisor.Spec{}, err
 	}
@@ -609,10 +655,70 @@ func (d *daemon) postgresSpec(cfg *config.Config, version string) (supervisor.Sp
 		filepath.Join(d.root, "log", "postgres.log"), cfg.Ports.Postgres), nil
 }
 
-// PostgresDataDir is where the database cluster lives (shared across minor upgrades).
-func PostgresDataDir(root string) string {
-	return filepath.Join(root, "services", "postgres", "data")
+// PostgresVersions implements api.Backend.
+func (d *daemon) PostgresVersions() *postgres.Manager { return d.pg }
+
+// Components implements api.Backend.
+func (d *daemon) Components() *components.Manager { return d.components }
+
+// Catalog implements api.Backend.
+func (d *daemon) Catalog() *catalog.Manager { return d.catalog }
+
+// serviceName names a service for messages: "MySQL" for "mysql".
+func serviceName(id string) string {
+	switch id {
+	case "web":
+		return "the web server"
+	case "dns", "api":
+		return "Flock's " + strings.ToUpper(id)
+	case "mail":
+		return "the mail catcher"
+	case "dumps":
+		return "the dump server"
+	case "postgres":
+		return "PostgreSQL"
+	case components.Valkey:
+		return "Valkey"
+	}
+	for _, k := range catalog.Kinds(runtime.GOOS, runtime.GOARCH) {
+		if k.ID == id {
+			return k.Name
+		}
+	}
+	return id
 }
+
+// pgService lets the postgres.Manager change the service through config.json and reloads.
+type pgService struct{ d *daemon }
+
+func (s pgService) Active() (string, bool) {
+	cfg, err := config.Load(s.d.root)
+	if err != nil {
+		return "", false
+	}
+	return cfg.Services.Postgres, cfg.Services.Running("postgres")
+}
+
+func (s pgService) Apply(version string, enable bool) error {
+	return s.d.Mutate(func(cfg *config.Config) error {
+		cfg.Services.Postgres = version
+		if enable {
+			cfg.Services.SetRunning("postgres", true)
+		}
+		return nil
+	})
+}
+
+func (s pgService) Running() bool { return s.d.procUp("postgres") }
+
+func (s pgService) Port() int {
+	if cfg, err := config.Load(s.d.root); err == nil {
+		return cfg.Ports.Postgres
+	}
+	return config.Default().Ports.Postgres
+}
+
+func (s pgService) Live() bool { return true }
 
 // Status implements api.Backend.
 func (d *daemon) Status() api.Status {
@@ -646,8 +752,16 @@ func (d *daemon) Status() api.Status {
 		if d.cfg.Services.Postgres != "" {
 			st.Postgres = fmt.Sprintf("%s on 127.0.0.1:%d", d.cfg.Services.Postgres, d.cfg.Ports.Postgres)
 		}
-		if d.cfg.Services.Redis != "" {
-			st.Redis = fmt.Sprintf("Valkey %s on 127.0.0.1:%d", d.cfg.Services.Redis, d.cfg.Ports.Redis)
+		if d.cfg.Services.Valkey != "" {
+			st.Valkey = fmt.Sprintf("%s on 127.0.0.1:%d", d.cfg.Services.Valkey, d.cfg.Ports.Valkey)
+		}
+		if d.catalog != nil {
+			for _, k := range d.catalog.Kinds() {
+				if x, ok := d.cfg.Services.Extra(k.ID); ok {
+					st.Extras = append(st.Extras, api.ExtraStatus{ID: k.ID, Name: k.Name, Version: x.Version, Port: x.Port,
+						Enabled: d.cfg.Services.Running(k.ID), Up: d.procUp(k.ID)})
+				}
+			}
 		}
 		st.Xdebug = d.cfg.Xdebug
 		st.Dumps = d.cfg.Dumps
@@ -703,7 +817,7 @@ func (d *daemon) ReleasePHP(minor string) {
 func (d *daemon) Services() []api.Service {
 	d.mu.Lock()
 	cfg := d.cfg
-	dnsUp, mailUp, webUp, wildcard := d.dns != nil, d.mail != nil, d.webUp, d.wildcard
+	dnsUp, mailUp, webUp, wildcard, problems := d.dns != nil, d.mail != nil, d.webUp, d.wildcard, d.problems
 	d.mu.Unlock()
 	if cfg == nil {
 		return []api.Service{}
@@ -719,7 +833,8 @@ func (d *daemon) Services() []api.Service {
 			Env: fmt.Sprintf("VAR_DUMPER_FORMAT=server\nVAR_DUMPER_SERVER=127.0.0.1:%d", p.Dumps), Log: "dump-server"},
 	}
 	if runtime.GOOS != "windows" {
-		services = append(services, api.Service{ID: "dns", Name: "DNS (*." + cfg.TLD + ")", Category: "Core", Port: p.DNS, Installed: true, Enabled: true, Running: dnsUp})
+		services = append(services, api.Service{ID: "dns", Name: "DNS (*." + cfg.TLD + ")", Category: "Core", Port: p.DNS, Installed: true, Enabled: true, Running: dnsUp,
+			Problem: wildcard.problem})
 	} else {
 		// Wildcard DNS (any subdomain) needs the DNS server and Windows' DNS rule; the hosts file
 		// resolves the sites' domains and extra domains either way.
@@ -734,12 +849,36 @@ func (d *daemon) Services() []api.Service {
 		Installed: cfg.Services.Postgres != "", Enabled: cfg.Services.Running("postgres"), Running: d.procUp("postgres"), Stoppable: true,
 		Env: fmt.Sprintf("DB_CONNECTION=pgsql\nDB_HOST=127.0.0.1\nDB_PORT=%d\nDB_DATABASE=laravel\nDB_USERNAME=postgres\nDB_PASSWORD=", p.Postgres),
 		Log: "postgres", URL: fmt.Sprintf("postgres://postgres@127.0.0.1:%d", p.Postgres),
-	}, api.Service{
-		ID: "redis", Name: "Redis (Valkey)", Category: "Cache & Queue", Version: cfg.Services.Redis, Port: p.Redis,
-		Installed: cfg.Services.Redis != "", Enabled: cfg.Services.Running("redis"), Running: d.procUp("valkey"), Stoppable: true,
-		Env: fmt.Sprintf("REDIS_CLIENT=phpredis\nREDIS_HOST=127.0.0.1\nREDIS_PASSWORD=null\nREDIS_PORT=%d", p.Redis),
-		Log: "valkey", URL: fmt.Sprintf("redis://127.0.0.1:%d", p.Redis),
 	})
+
+	valkeyService := api.Service{
+		ID: components.Valkey, Name: "Valkey", Category: "Cache & Queue", Version: cfg.Services.Valkey, Port: p.Valkey,
+		Description: "The open-source Redis: an in-memory store for cache, queues and sessions.", Available: true,
+		Installed: cfg.Services.Valkey != "", Enabled: cfg.Services.Running(components.Valkey), Running: d.procUp("valkey"), Stoppable: true,
+		Env: catalog.RedisEnv(p.Valkey), Log: "valkey", URL: fmt.Sprintf("redis://127.0.0.1:%d", p.Valkey), Problem: problems[components.Valkey],
+	}
+	if runtime.GOOS == "windows" {
+		valkeyService.Available, valkeyService.Unavailable = false, "Valkey has no Windows build — install Redis instead."
+	}
+	services = append(services, valkeyService)
+
+	if d.catalog != nil {
+		for _, k := range d.catalog.Kinds() {
+			s := api.Service{ID: k.ID, Name: k.Name, Category: k.Category, Description: k.Description,
+				Available: k.Method != "", Unavailable: k.Unavailable, Log: k.ID}
+			if x, ok := cfg.Services.Extra(k.ID); ok {
+				s.Version, s.Port, s.Installed, s.Stoppable = x.Version, x.Port, true, true
+				s.Enabled, s.Running, s.Problem = cfg.Services.Running(k.ID), d.procUp(k.ID), problems[k.ID]
+				s.Env = k.Env(x.Port)
+				if k.URL != nil {
+					s.URL = k.URL(x.Port)
+				}
+			} else {
+				s.Port = k.DefaultPort
+			}
+			services = append(services, s)
+		}
+	}
 
 	return services
 }

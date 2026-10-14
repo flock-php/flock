@@ -11,6 +11,8 @@ namespace Flock.Tray;
 /// </summary>
 internal sealed class PhpPane(SettingsWindow window, AppModel model) : Pane(window, model)
 {
+    // Versions with a request in flight: their buttons are disabled until the daemon answers.
+    private readonly HashSet<string> busy = [];
     private bool checking;
 
     public override string Title => "PHP";
@@ -154,8 +156,8 @@ internal sealed class PhpPane(SettingsWindow window, AppModel model) : Pane(wind
         if (release.Job is { IsActive: true })
         {
             actions.Children.Add(Ui.Link("Show Log", () => _ = ShowLog(release.Minor)));
-            actions.Children.Add(Ui.Button("Cancel", () => _ = Store.PerformOnPhpAsync(c => c.CancelPhpBuildAsync(release.Minor))));
-            return actions;
+            actions.Children.Add(Ui.Button("Cancel", () => _ = Run(release.Minor, () => Store.PerformOnPhpAsync(c => c.CancelPhpBuildAsync(release.Minor)))));
+            return Busy(release, actions);
         }
 
         switch (release.Status)
@@ -163,13 +165,13 @@ internal sealed class PhpPane(SettingsWindow window, AppModel model) : Pane(wind
             case PhpStatus.Installed or PhpStatus.Update:
                 if (release.Status == PhpStatus.Update)
                 {
-                    actions.Children.Add(Ui.Button($"Update to {release.Latest}", () => _ = Store.PerformOnPhpAsync(c => c.InstallPhpAsync(release.Minor)),
+                    actions.Children.Add(Ui.Button($"Update to {release.Latest}", () => _ = Run(release.Minor, () => Store.PerformOnPhpAsync(c => c.InstallPhpAsync(release.Minor))),
                         accent: true, glyph: release.UpdateReady ? Ui.GlyphLightning : Ui.GlyphDownload,
                         tooltip: release.UpdateReady ? "Already downloaded — installs instantly" : $"Downloads PHP {release.Latest}, then installs it"));
                 }
                 if (!release.IsDefault)
                 {
-                    actions.Children.Add(Ui.Button("Make Default", () => _ = Perform(c => c.UpdateSettingsAsync(new SettingsChange(DefaultPhp: release.Minor)))));
+                    actions.Children.Add(Ui.Button("Make Default", () => _ = Run(release.Minor, () => Perform(c => c.UpdateSettingsAsync(new SettingsChange(DefaultPhp: release.Minor))))));
                 }
                 actions.Children.Add(More(release));
                 break;
@@ -186,12 +188,41 @@ internal sealed class PhpPane(SettingsWindow window, AppModel model) : Pane(wind
                     actions.Children.Add(Ui.Link("Show Log", () => _ = ShowLog(release.Minor)));
                 }
                 actions.Children.Add(Ui.Button(release.Status == PhpStatus.Failed ? "Retry" : "Install",
-                    () => _ = Store.PerformOnPhpAsync(c => c.InstallPhpAsync(release.Minor)),
+                    () => _ = Run(release.Minor, () => Store.PerformOnPhpAsync(c => c.InstallPhpAsync(release.Minor))),
                     glyph: release.Status == PhpStatus.Ready ? Ui.GlyphLightning : Ui.GlyphDownload,
                     tooltip: release.Status == PhpStatus.Ready ? "Already downloaded — installs instantly" : $"Downloads PHP {release.Latest} from windows.php.net, then installs it"));
                 break;
         }
+        return Busy(release, actions);
+    }
+
+    /// <summary>A row's actions, disabled with a progress ring while its request runs.</summary>
+    private StackPanel Busy(PhpRelease release, StackPanel actions)
+    {
+        if (busy.Contains(release.Minor))
+        {
+            Ui.SetEnabled(actions, false);
+            if (release.Job is not { IsActive: true }) // a running download shows its own ring
+            {
+                actions.Children.Insert(0, new ProgressRing { Width = 16, Height = 16 });
+            }
+        }
         return actions;
+    }
+
+    private async Task Run(string minor, Func<Task> request)
+    {
+        busy.Add(minor);
+        Rerender();
+        try
+        {
+            await request();
+        }
+        finally
+        {
+            busy.Remove(minor);
+            Rerender();
+        }
     }
 
     private Button More(PhpRelease release)
@@ -203,7 +234,7 @@ internal sealed class PhpPane(SettingsWindow window, AppModel model) : Pane(wind
             menu.Items.Add(Item("Open php.ini", () => Native.Open(ini)));
             menu.Items.Add(Item("Show php.ini in Explorer", () => Native.Reveal(ini)));
         }
-        menu.Items.Add(Item("Download Again", () => _ = Store.PerformOnPhpAsync(c => c.BuildPhpAsync(release.Minor))));
+        menu.Items.Add(Item("Download Again", () => _ = Run(release.Minor, () => Store.PerformOnPhpAsync(c => c.BuildPhpAsync(release.Minor)))));
         menu.Items.Add(Item("Show Last Log", () => _ = ShowLog(release.Minor)));
         menu.Items.Add(new MenuFlyoutSeparator());
         var uninstall = Item("Uninstall…", async () =>
@@ -211,7 +242,7 @@ internal sealed class PhpPane(SettingsWindow window, AppModel model) : Pane(wind
             if (await Window.Confirm($"Uninstall PHP {release.Minor}?",
                     $"Its php.ini is removed too. Sites pinned to PHP {release.Minor} stop working until you pick another version.", "Uninstall"))
             {
-                await Store.PerformOnPhpAsync(c => c.UninstallPhpAsync(release.Minor));
+                await Run(release.Minor, () => Store.PerformOnPhpAsync(c => c.UninstallPhpAsync(release.Minor)));
             }
         });
         uninstall.IsEnabled = !release.IsDefault;
@@ -250,6 +281,8 @@ internal sealed class PhpPane(SettingsWindow window, AppModel model) : Pane(wind
             XamlRoot = Window.XamlRoot,
         };
         dialog.Resources["ContentDialogMaxWidth"] = 760.0;
+        // Nothing to copy until the log has loaded ("Loading…", "No log yet." are placeholders).
+        dialog.IsPrimaryButtonEnabled = false;
         dialog.PrimaryButtonClick += (_, e) =>
         {
             e.Cancel = true; // copying keeps the dialog open
@@ -271,6 +304,7 @@ internal sealed class PhpPane(SettingsWindow window, AppModel model) : Pane(wind
                 if (shown != text.Text)
                 {
                     text.Text = shown;
+                    dialog.IsPrimaryButtonEnabled = tail.Length > 0;
                     scroller.UpdateLayout();
                     scroller.ChangeView(null, scroller.ScrollableHeight, null, disableAnimation: true);
                 }

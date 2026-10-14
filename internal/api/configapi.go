@@ -12,6 +12,7 @@ import (
 	"slices"
 	"time"
 
+	"flock/internal/components"
 	"flock/internal/config"
 	"flock/internal/node"
 	"flock/internal/php"
@@ -20,19 +21,23 @@ import (
 
 // Service is one background service as shown in the Services settings.
 type Service struct {
-	ID        string `json:"id"`
-	Name      string `json:"name"`
-	Category  string `json:"category"`
-	Version   string `json:"version"`
-	Port      int    `json:"port"`
-	Installed bool   `json:"installed"`
-	Enabled   bool   `json:"enabled"`
-	Running   bool   `json:"running"`
-	Stoppable bool   `json:"stoppable"`
-	Env       string `json:"env"`               // .env snippet to connect a Laravel app
-	Log       string `json:"log"`               // name for /v1/logs/services/{name}
-	URL       string `json:"url"`               // connection URL (e.g. for TablePlus)
-	Problem   string `json:"problem,omitempty"` // why it isn't working, when that isn't simply "stopped"
+	ID          string `json:"id"`
+	Name        string `json:"name"`
+	Category    string `json:"category"`
+	Description string `json:"description,omitempty"`
+	// Available is false for a service Flock can't run on this platform; Unavailable says why.
+	Available   bool   `json:"available"`
+	Unavailable string `json:"unavailable,omitempty"`
+	Version     string `json:"version"`
+	Port        int    `json:"port"`
+	Installed   bool   `json:"installed"`
+	Enabled     bool   `json:"enabled"`
+	Running     bool   `json:"running"`
+	Stoppable   bool   `json:"stoppable"`
+	Env         string `json:"env"`               // .env snippet to connect a Laravel app
+	Log         string `json:"log"`               // name for /v1/logs/services/{name}
+	URL         string `json:"url"`               // connection URL (e.g. for TablePlus)
+	Problem     string `json:"problem,omitempty"` // why it isn't working, when that isn't simply "stopped"
 }
 
 // ConfigView is config.json plus installed versions, for the settings UI.
@@ -361,12 +366,15 @@ func registerConfig(mux *http.ServeMux, b Backend) {
 	setRunning := func(on bool) func(*config.Config, string) error {
 		return func(cfg *config.Config, id string) error {
 			switch id {
-			case "postgres", "redis":
+			case "postgres", components.Valkey:
 				cfg.Services.SetRunning(id, on)
 			case "dumps":
 				cfg.Dumps = on
 			default:
-				return invalid("%s cannot be started or stopped", id)
+				if _, ok := cfg.Services.Extra(id); !ok {
+					return invalid("%s cannot be started or stopped", id)
+				}
+				cfg.Services.SetRunning(id, on)
 			}
 			return nil
 		}
@@ -386,11 +394,19 @@ func registerConfig(mux *http.ServeMux, b Backend) {
 			if body.Port < 1024 || body.Port > 65535 {
 				return invalid("port must be between 1024 and 65535")
 			}
+			if other, taken := cfg.UsedPorts(id)[body.Port]; taken && other != id {
+				return invalid("port %d is used by Flock's %s service", body.Port, other)
+			}
+			if x, ok := cfg.Services.Extra(id); ok {
+				x.Port = body.Port
+				cfg.Services.SetExtra(id, x)
+				return nil
+			}
 			switch id {
 			case "postgres":
 				cfg.Ports.Postgres = body.Port
-			case "redis":
-				cfg.Ports.Redis = body.Port
+			case components.Valkey:
+				cfg.Ports.Valkey = body.Port
 			case "mail":
 				cfg.Ports.SMTP = body.Port
 			case "dumps":

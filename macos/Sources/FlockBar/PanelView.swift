@@ -11,6 +11,10 @@ struct PanelView: View {
         VStack(alignment: .leading, spacing: 12) {
             header
 
+            if let message = model.actionError {
+                errorBanner(message)
+            }
+
             if let status = model.status {
                 if !status.warnings.isEmpty {
                     warnings(status.warnings)
@@ -43,19 +47,35 @@ struct PanelView: View {
                 .foregroundStyle(model.isRunning ? (model.isDegraded ? Color.orange : Color.accentColor) : .secondary)
             VStack(alignment: .leading, spacing: 1) {
                 Text("Flock").font(.headline)
-                Text(headline).font(.caption).foregroundStyle(.secondary)
+                Text(model.headline).font(.caption).foregroundStyle(.secondary)
             }
             Spacer()
-            if model.isRestarting {
+            if model.isRestarting || model.isUpdating {
                 ProgressView().controlSize(.small)
             }
         }
     }
 
-    private var headline: String {
-        guard let status = model.status else { return "Not running" }
-        let state = status.isDegraded ? "Needs attention" : "Running"
-        return "\(state) · v\(status.version)"
+    /// The last failed action (restart, a toggle) until it is dismissed or an action succeeds.
+    private func errorBanner(_ message: String) -> some View {
+        HStack(alignment: .top, spacing: 6) {
+            Image(systemName: "exclamationmark.octagon.fill").foregroundStyle(.red)
+            Text(message)
+                .font(.caption)
+                .textSelection(.enabled)
+                .lineLimit(8)
+                .fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: 0)
+            Button {
+                model.actionError = nil
+            } label: {
+                Image(systemName: "xmark").font(.caption2.weight(.bold))
+            }
+            .buttonStyle(.borderless)
+            .help("Dismiss")
+        }
+        .padding(8)
+        .background(.red.opacity(0.12), in: RoundedRectangle(cornerRadius: 6))
     }
 
     private func warnings(_ warnings: [String]) -> some View {
@@ -73,16 +93,23 @@ struct PanelView: View {
         VStack(alignment: .leading, spacing: 5) {
             SectionTitle("Services")
             ServiceRow(name: "Web", detail: "http :\(status.httpPort) · https :\(status.httpsPort)", up: true)
-            if !status.dns.addr.isEmpty {
+            if status.dns.wildcard {
                 ServiceRow(name: "DNS", detail: "*.\(status.dns.tld)", up: true)
+            } else if !status.dns.tld.isEmpty {
+                ServiceRow(name: "DNS", detail: status.dns.wildcardProblem.isEmpty ? "*.\(status.dns.tld) doesn't resolve" : status.dns.wildcardProblem, up: false)
+                    .help(status.dns.wildcardProblem)
             }
             ServiceRow(name: "Mail", detail: status.mail.isEmpty ? "stopped" : "smtp \(status.mail)", up: !status.mail.isEmpty)
             if let postgres = status.postgres {
                 ServiceRow(name: "PostgreSQL", detail: postgres, up: status.processes.first { $0.name == "postgres" }?.up ?? false)
             }
-            if let redis = status.redis {
-                ServiceRow(name: "Redis", detail: redis, up: status.processes.first { $0.name == "valkey" }?.up ?? false)
+            if let valkey = status.valkey {
+                ServiceRow(name: "Valkey", detail: valkey, up: status.processes.first { $0.name == "valkey" }?.up ?? false)
             }
+            ForEach(status.extras) { extra in
+                ServiceRow(name: extra.name, detail: extra.enabled ? "\(extra.version) on 127.0.0.1:\(extra.port)" : "stopped", up: extra.up)
+            }
+            notInstalled(status)
             ForEach(status.processes.filter { $0.name.hasPrefix("php") }) { process in
                 ServiceRow(name: process.name, detail: processDetail(process), up: process.up)
             }
@@ -91,6 +118,26 @@ struct PanelView: View {
                     .font(.caption2)
                     .foregroundStyle(.red)
                     .lineLimit(3)
+            }
+        }
+    }
+
+    /// Databases and caches are installed on request, from Settings → Services.
+    @ViewBuilder
+    private func notInstalled(_ status: Status) -> some View {
+        if status.postgres == nil, status.valkey == nil, status.extras.isEmpty {
+            HStack(spacing: 6) {
+                Circle().fill(Color.secondary.opacity(0.4)).frame(width: 7, height: 7)
+                Text("No database or cache installed")
+                    .font(.caption).foregroundStyle(.secondary)
+                Spacer()
+                Button("Install…") {
+                    model.showSettings(.services, service: "postgres")
+                    openWindow.activating(WindowID.settings)
+                }
+                .buttonStyle(.link)
+                .font(.caption)
+                .help("Opens Settings → Services")
             }
         }
     }
@@ -149,16 +196,30 @@ struct PanelView: View {
         }
     }
 
+    @ViewBuilder
     private var notRunning: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text(model.error ?? "Flock is not running")
-                .font(.callout)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-            Button("Start Flock") {
-                Task { await model.restart() }
+        if model.needsSetup {
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Flock isn't set up on this Mac yet. Setup installs the daemon, puts php, composer and node on your PATH, and makes *.test sites work with trusted HTTPS.")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                Button("Set Up Flock…") {
+                    openWindow.activating(WindowID.setup)
+                }
+                .buttonStyle(.borderedProminent)
             }
-            .disabled(model.isRestarting)
+        } else {
+            VStack(alignment: .leading, spacing: 8) {
+                Text(model.isUpdating ? "Updating Flock…" : model.error ?? "Flock is not running")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                Button("Start Flock") {
+                    Task { await model.restart() }
+                }
+                .disabled(model.isRestarting || model.isUpdating)
+            }
         }
     }
 
@@ -167,7 +228,7 @@ struct PanelView: View {
             Button("Restart") {
                 Task { await model.restart() }
             }
-            .disabled(model.isRestarting || !model.isRunning)
+            .disabled(model.isRestarting || model.isUpdating || !model.isRunning)
             Button("Settings…") {
                 openWindow.activating(WindowID.settings)
             }

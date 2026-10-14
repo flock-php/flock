@@ -12,11 +12,13 @@ public class ClientTests : IDisposable
     {
         public List<HttpRequestMessage> Requests { get; } = [];
         public List<string> Bodies { get; } = [];
+        public List<TimeSpan> Timeouts { get; } = [];
 
         protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {
             Requests.Add(request);
             Bodies.Add(request.Content is null ? "" : await request.Content.ReadAsStringAsync(cancellationToken));
+            Timeouts.Add(request.Options.TryGetValue(FlockClient.TimeoutOption, out var timeout) ? timeout : TimeSpan.Zero);
             return respond(request);
         }
     }
@@ -93,5 +95,127 @@ public class ClientTests : IDisposable
 
         await client.LinkSiteAsync(@"C:\code\shop");
         Assert.Equal("""{"path":"C:\\code\\shop","secured":false}""", handler.Bodies[0]);
+    }
+
+    [Fact]
+    public async Task GivesSlowEndpointsLongerThanTheDefault()
+    {
+        var handler = new Handler(_ => new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent("{}") });
+        using var client = new FlockClient(WriteApiJson("http://127.0.0.1:1", "t"), handler);
+
+        await client.StatusAsync();
+        // The daemon may ask nodejs.org first (~30 s on a cold cache).
+        await client.NodeVersionsAsync();
+        // Changing PHP versions waits for the daemon's work, like the Go CLI (2 min).
+        await client.InstallPhpAsync("8.4");
+        await client.BuildPhpAsync("8.4");
+        await client.CancelPhpBuildAsync("8.4");
+        await client.UninstallPhpAsync("8.4");
+        await client.PhpVersionsAsync();
+
+        Assert.Equal(
+            [TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(60), TimeSpan.FromMinutes(2), TimeSpan.FromMinutes(2), TimeSpan.FromMinutes(2), TimeSpan.FromMinutes(2), TimeSpan.FromSeconds(5)],
+            handler.Timeouts);
+    }
+
+    [Fact]
+    public async Task CallsThePostgresVersionEndpoints()
+    {
+        var handler = new Handler(_ => new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent("""{"active":"18","majors":[]}""") });
+        using var client = new FlockClient(WriteApiJson("http://127.0.0.1:1", "t"), handler);
+
+        await client.PostgresVersionsAsync();
+        await client.CheckPostgresReleasesAsync();
+        await client.InstallPostgresAsync("17");
+        await client.UpdatePostgresAsync("18");
+        await client.ActivatePostgresAsync("17");
+        await client.UninstallPostgresAsync("16");
+        var answer = await client.UninstallPostgresAsync("15", deleteData: true);
+
+        Assert.Equal("18", answer.Active);
+        Assert.Equal(
+            [
+                "GET /v1/postgres/versions", "POST /v1/postgres/check", "POST /v1/postgres/versions/17/install",
+                "POST /v1/postgres/versions/18/update", "POST /v1/postgres/versions/17/activate",
+                "DELETE /v1/postgres/versions/16", "DELETE /v1/postgres/versions/15?delete_data=1",
+            ],
+            handler.Requests.Select(r => $"{r.Method} {r.RequestUri!.PathAndQuery}"));
+        // Installs and updates download a server and wait for it; switching and uninstalling stop one.
+        Assert.Equal(
+            [TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(60), TimeSpan.FromMinutes(10), TimeSpan.FromMinutes(10), TimeSpan.FromMinutes(2), TimeSpan.FromMinutes(2), TimeSpan.FromMinutes(2)],
+            handler.Timeouts);
+    }
+
+    [Fact]
+    public async Task CallsTheComponentEndpoints()
+    {
+        var handler = new Handler(r => new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StringContent(r.RequestUri!.AbsolutePath.EndsWith("/log") ? "downloading…\n" : """{"components":[]}"""),
+        });
+        using var client = new FlockClient(WriteApiJson("http://127.0.0.1:1", "t"), handler);
+
+        await client.ComponentsAsync();
+        await client.CheckComponentsAsync();
+        await client.InstallComponentAsync("postgres-client");
+        await client.CancelComponentJobAsync("postgres-client");
+        await client.DismissComponentJobAsync("postgres-client");
+        Assert.Equal("downloading…\n", await client.ComponentLogAsync("postgres-client"));
+        await client.UninstallComponentAsync("postgres-client");
+
+        Assert.Equal(
+            [
+                "GET /v1/components", "POST /v1/components/check", "POST /v1/components/postgres-client/install",
+                "POST /v1/components/postgres-client/cancel", "DELETE /v1/components/postgres-client/job", "GET /v1/components/postgres-client/log",
+                "DELETE /v1/components/postgres-client",
+            ],
+            handler.Requests.Select(r => $"{r.Method} {r.RequestUri!.PathAndQuery}"));
+        // Installs return at once (the job runs in the daemon); uninstalling may stop a service first.
+        Assert.Equal(
+            [TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(60), TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(30)],
+            handler.Timeouts);
+    }
+
+    [Fact]
+    public async Task CallsTheCatalogEndpoints()
+    {
+        var handler = new Handler(r => new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StringContent(r.RequestUri!.AbsolutePath.EndsWith("/log") ? "==> Downloading\n" : """{"services":[{"id":"mysql"}]}"""),
+        });
+        using var client = new FlockClient(WriteApiJson("http://127.0.0.1:1", "t"), handler);
+
+        await client.CatalogAsync();
+        await client.CheckCatalogAsync();
+        var started = await client.InstallCatalogServiceAsync("mysql", "8.4", 3307);
+        Assert.NotNull(started["mysql"]);
+        await client.InstallCatalogServiceAsync("redis");
+        await client.CancelCatalogJobAsync("mysql");
+        await client.DismissCatalogJobAsync("mysql");
+        Assert.Equal("==> Downloading\n", await client.CatalogLogAsync("mysql"));
+        await client.UninstallCatalogServiceAsync("mysql");
+        await client.UninstallCatalogServiceAsync("mongodb", deleteData: true);
+
+        Assert.Equal(
+            [
+                "GET /v1/catalog", "POST /v1/catalog/check", "POST /v1/catalog/mysql/install", "POST /v1/catalog/redis/install",
+                "POST /v1/catalog/mysql/cancel", "DELETE /v1/catalog/mysql/job", "GET /v1/catalog/mysql/log",
+                "DELETE /v1/catalog/mysql", "DELETE /v1/catalog/mongodb?delete_data=1",
+            ],
+            handler.Requests.Select(r => $"{r.Method} {r.RequestUri!.PathAndQuery}"));
+        Assert.Contains("\"line\":\"8.4\"", handler.Bodies[2]);
+        Assert.Contains("\"port\":3307", handler.Bodies[2]);
+        Assert.Contains("\"port\":0", handler.Bodies[3]);
+        Assert.Equal(TimeSpan.FromMinutes(1), handler.Timeouts[^1]);
+    }
+
+    [Fact]
+    public async Task ReportsAMissingComponentLogAsAServerError()
+    {
+        var handler = new Handler(_ => new HttpResponseMessage(HttpStatusCode.NotFound) { Content = new StringContent("""{"error":"no log for redis"}""") });
+        using var client = new FlockClient(WriteApiJson("http://127.0.0.1:1", "t"), handler);
+
+        var error = await Assert.ThrowsAsync<FlockServerException>(() => client.ComponentLogAsync("redis"));
+        Assert.Equal(404, error.StatusCode);
     }
 }

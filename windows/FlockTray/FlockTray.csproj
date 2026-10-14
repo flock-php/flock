@@ -25,8 +25,8 @@
     <SelfContained>true</SelfContained>
     <DisableXamlGeneratedMain>true</DisableXamlGeneratedMain>
     <EnableWindowsTargeting>true</EnableWindowsTargeting>
-    <Platforms>x64;ARM64</Platforms>
-    <RuntimeIdentifiers>win-x64;win-arm64</RuntimeIdentifiers>
+    <Platforms>x64</Platforms>
+    <RuntimeIdentifiers>win-x64</RuntimeIdentifiers>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <ApplicationIcon>Assets\AppIcon.ico</ApplicationIcon>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>

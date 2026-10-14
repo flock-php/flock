@@ -14,6 +14,12 @@ struct GeneralPane: View {
         get { selectedParkedState.wrappedValue }
         nonmutating set { selectedParkedState.wrappedValue = newValue }
     }
+    /// The project folder waiting for the removal to be confirmed.
+    private let confirmUnparkState = State<String?>(initialValue: nil)
+    private var confirmUnpark: String? {
+        get { confirmUnparkState.wrappedValue }
+        nonmutating set { confirmUnparkState.wrappedValue = newValue }
+    }
     private let launchAtLoginState = State<Bool>(initialValue: SMAppService.mainApp.status == .enabled)
     private var launchAtLogin: Bool {
         get { launchAtLoginState.wrappedValue }
@@ -47,7 +53,12 @@ struct GeneralPane: View {
 
                 if let config = store.config {
                     Section {
-                        LabeledContent("Domain", value: "*.\(config.tld)")
+                        LabeledContent {
+                            Text("*.\(config.tld)")
+                        } label: {
+                            Text("Domain")
+                            Text(domainExplanation(config.tld))
+                        }
                         LabeledContent("HTTP port", value: String(config.ports.http))
                         LabeledContent("HTTPS port", value: String(config.ports.https))
                         LabeledContent("DNS port", value: String(config.ports.dns))
@@ -95,9 +106,7 @@ struct GeneralPane: View {
                                 }
                             } label: { Image(systemName: "plus").frame(width: 22, height: 18) }
                             Button {
-                                guard let path = selectedParked else { return }
-                                selectedParked = nil
-                                Task { await store.perform { _ = try await $0.unpark(path) } }
+                                confirmUnpark = selectedParked
                             } label: { Image(systemName: "minus").frame(width: 22, height: 18) }
                             .disabled(selectedParked == nil)
                             Spacer()
@@ -114,6 +123,30 @@ struct GeneralPane: View {
             .formStyle(.grouped)
             .scrollContentBackground(.hidden)
         }
+        .confirmationDialog("Remove \(confirmUnpark.map { URL(fileURLWithPath: $0).lastPathComponent } ?? "") from project folders?",
+                            isPresented: Binding(get: { confirmUnpark != nil }, set: { if !$0 { confirmUnpark = nil } }),
+                            presenting: confirmUnpark) { path in
+            Button("Remove", role: .destructive) {
+                if selectedParked == path {
+                    selectedParked = nil
+                }
+                Task { await store.perform { _ = try await $0.unpark(path) } }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: { path in
+            Text("The sites in \(path) are no longer served. The folder and its projects are not touched.")
+        }
+    }
+
+    /// How names under the TLD resolve: Flock's DNS server through /etc/resolver, which has no
+    /// fallback on macOS (Windows also writes site domains to the hosts file).
+    private func domainExplanation(_ tld: String) -> String {
+        guard let dns = model.status?.dns else { return "" }
+        if dns.wildcard {
+            return "Every name, any subdomain included, is resolved by Flock's DNS server (/etc/resolver/\(tld))."
+        }
+        let problem = dns.wildcardProblem.isEmpty ? "Flock's DNS server isn't running" : dns.wildcardProblem
+        return "*.\(tld) doesn't resolve: \(problem). macOS has no hosts-file fallback, so sites don't open until it does; `flock install` sets /etc/resolver/\(tld) up again."
     }
 
     private func setLaunchAtLogin(_ on: Bool) {

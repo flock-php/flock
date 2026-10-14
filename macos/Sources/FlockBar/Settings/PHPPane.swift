@@ -124,6 +124,12 @@ private struct PHPReleaseRow: View {
         get { confirmUninstallState.wrappedValue }
         nonmutating set { confirmUninstallState.wrappedValue = newValue }
     }
+    /// A request of this row is waiting for the daemon; its buttons stay disabled until it answers.
+    private let busyState = State<Bool>(initialValue: false)
+    private var busy: Bool {
+        get { busyState.wrappedValue }
+        nonmutating set { busyState.wrappedValue = newValue }
+    }
 
     var body: some View {
         HStack(alignment: .center, spacing: 10) {
@@ -141,12 +147,16 @@ private struct PHPReleaseRow: View {
             }
 
             Spacer(minLength: 12)
+            if busy {
+                ProgressView().controlSize(.small)
+            }
             actions
+                .disabled(busy)
         }
         .padding(.vertical, 3)
         .confirmationDialog("Uninstall PHP \(release.minor)?", isPresented: confirmUninstallState.projectedValue) {
             Button("Uninstall", role: .destructive) {
-                Task { await model.settings.performOnPHP { try await $0.uninstallPHP(release.minor) } }
+                run { try await $0.uninstallPHP(release.minor) }
             }
         } message: {
             Text("Its php.ini is removed too. Sites pinned to PHP \(release.minor) stop working until you pick another version.")
@@ -216,14 +226,14 @@ private struct PHPReleaseRow: View {
         if let job = release.job, job.isActive {
             Button("Show Log", action: showLog).buttonStyle(.link)
             Button("Cancel") {
-                Task { await store.performOnPHP { try await $0.cancelPHPBuild(release.minor) } }
+                run { try await $0.cancelPHPBuild(release.minor) }
             }
         } else {
             switch release.status {
             case .installed, .update:
                 if release.status == .update {
                     Button {
-                        Task { await store.performOnPHP { try await $0.installPHP(release.minor) } }
+                        run { try await $0.installPHP(release.minor) }
                     } label: {
                         Label("Update to \(release.latest)", systemImage: release.updateReady ? "bolt.fill" : "arrow.down.circle")
                     }
@@ -232,7 +242,12 @@ private struct PHPReleaseRow: View {
                 }
                 if !release.isDefault {
                     Button("Make Default") {
-                        Task { await store.perform { _ = try await $0.updateSettings(SettingsChange(defaultPHP: release.minor)) } }
+                        busy = true
+                        Task {
+                            await store.perform { _ = try await $0.updateSettings(SettingsChange(defaultPHP: release.minor)) }
+                            await store.refreshPHP()
+                            busy = false
+                        }
                     }
                 }
                 Menu {
@@ -240,7 +255,7 @@ private struct PHPReleaseRow: View {
                         Button("Open php.ini") { NSWorkspace.shared.open(URL(fileURLWithPath: ini)) }
                     }
                     Button("Rebuild") {
-                        Task { await store.performOnPHP { try await $0.buildPHP(release.minor) } }
+                        run { try await $0.buildPHP(release.minor) }
                     }
                     Button("Show Last Build Log", action: showLog)
                     Divider()
@@ -259,7 +274,7 @@ private struct PHPReleaseRow: View {
                     Button("Show Log", action: showLog).buttonStyle(.link)
                 }
                 Button {
-                    Task { await store.performOnPHP { try await $0.installPHP(release.minor) } }
+                    run { try await $0.installPHP(release.minor) }
                 } label: {
                     Label(release.status == .failed ? "Retry" : "Install",
                           systemImage: release.status == .ready ? "bolt.fill" : "arrow.down.circle")
@@ -272,6 +287,17 @@ private struct PHPReleaseRow: View {
                     .disabled(true)
                     .help(release.note.isEmpty ? "The build tooling doesn't support PHP \(release.minor) yet. Flock checks again automatically." : release.note)
             }
+        }
+    }
+}
+
+extension PHPReleaseRow {
+    /// Runs a PHP action for this row, with its buttons disabled until the daemon answers.
+    fileprivate func run(_ action: @escaping @Sendable (FlockClient) async throws -> PHPCatalog) {
+        busy = true
+        Task {
+            await model.settings.performOnPHP(action)
+            busy = false
         }
     }
 }

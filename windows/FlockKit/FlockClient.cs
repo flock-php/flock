@@ -21,6 +21,11 @@ public sealed class FlockServerException(int status, string message)
 public sealed class FlockClient : IDisposable
 {
     private readonly string configPath;
+    // Installing, building or uninstalling PHP waits for the daemon's work (the Go CLI allows 2 min too).
+    private static readonly TimeSpan PhpChangeTimeout = TimeSpan.FromMinutes(2);
+    // Installing or updating PostgreSQL downloads a server build and waits for it (and initdb).
+    private static readonly TimeSpan PostgresDownloadTimeout = TimeSpan.FromMinutes(10);
+
     private readonly HttpClient http;
     private readonly SemaphoreSlim configLock = new(1, 1);
     private ApiConfig? config;
@@ -91,7 +96,8 @@ public sealed class FlockClient : IDisposable
 
     // Node.js versions
 
-    public Task<NodeCatalog> NodeVersionsAsync() => Get<NodeCatalog>("/v1/node/versions");
+    /// <summary>The Node.js lines; on a cold cache the daemon asks nodejs.org first, which can take ~30 s.</summary>
+    public Task<NodeCatalog> NodeVersionsAsync() => Send<NodeCatalog>(HttpMethod.Get, "/v1/node/versions", timeout: TimeSpan.FromMinutes(1));
 
     /// <summary>Installs the newest release of a major line, or updates it; a download of about 30 MB.</summary>
     public Task<NodeCatalog> InstallNodeMajorAsync(string major) =>
@@ -111,19 +117,92 @@ public sealed class FlockClient : IDisposable
     public Task<PhpCatalog> PhpVersionsAsync() => Get<PhpCatalog>("/v1/php/versions");
 
     /// <summary>Installs a version: instantly when a verified build is waiting, otherwise it queues one that installs when done.</summary>
-    public Task<PhpCatalog> InstallPhpAsync(string minor) => Send<PhpCatalog>(HttpMethod.Post, $"/v1/php/versions/{Escape(minor)}/install");
+    public Task<PhpCatalog> InstallPhpAsync(string minor) => Send<PhpCatalog>(HttpMethod.Post, $"/v1/php/versions/{Escape(minor)}/install", timeout: PhpChangeTimeout);
 
     /// <summary>Prepares a version without installing it (on Windows: downloads it again).</summary>
-    public Task<PhpCatalog> BuildPhpAsync(string minor) => Send<PhpCatalog>(HttpMethod.Post, $"/v1/php/versions/{Escape(minor)}/build");
+    public Task<PhpCatalog> BuildPhpAsync(string minor) => Send<PhpCatalog>(HttpMethod.Post, $"/v1/php/versions/{Escape(minor)}/build", timeout: PhpChangeTimeout);
 
-    public Task<PhpCatalog> CancelPhpBuildAsync(string minor) => Send<PhpCatalog>(HttpMethod.Post, $"/v1/php/versions/{Escape(minor)}/cancel");
+    public Task<PhpCatalog> CancelPhpBuildAsync(string minor) => Send<PhpCatalog>(HttpMethod.Post, $"/v1/php/versions/{Escape(minor)}/cancel", timeout: PhpChangeTimeout);
 
-    public Task<PhpCatalog> UninstallPhpAsync(string minor) => Send<PhpCatalog>(HttpMethod.Delete, $"/v1/php/versions/{Escape(minor)}");
+    public Task<PhpCatalog> UninstallPhpAsync(string minor) => Send<PhpCatalog>(HttpMethod.Delete, $"/v1/php/versions/{Escape(minor)}", timeout: PhpChangeTimeout);
 
     /// <summary>Asks the daemon to check php.net for new releases now.</summary>
     public Task<PhpCatalog> CheckPhpReleasesAsync() => Send<PhpCatalog>(HttpMethod.Post, "/v1/php/check", timeout: TimeSpan.FromMinutes(1));
 
     public async Task<string> PhpBuildLogAsync(string minor) => await Text(HttpMethod.Get, $"/v1/php/versions/{Escape(minor)}/log");
+
+    // PostgreSQL versions
+
+    /// <summary>Cached by the daemon (it checks Maven Central in the background), so it answers at once.</summary>
+    public Task<PostgresVersions> PostgresVersionsAsync() => Get<PostgresVersions>("/v1/postgres/versions");
+
+    /// <summary>Asks the daemon to look for new PostgreSQL releases now.</summary>
+    public Task<PostgresVersions> CheckPostgresReleasesAsync() =>
+        Send<PostgresVersions>(HttpMethod.Post, "/v1/postgres/check", timeout: TimeSpan.FromMinutes(1));
+
+    /// <summary>Downloads and installs a major's newest release; the first one installed becomes active and starts.</summary>
+    public Task<PostgresVersions> InstallPostgresAsync(string major) =>
+        Send<PostgresVersions>(HttpMethod.Post, $"/v1/postgres/versions/{Escape(major)}/install", timeout: PostgresDownloadTimeout);
+
+    /// <summary>Installs a major's newest release over the installed one; its databases stay, a running server restarts.</summary>
+    public Task<PostgresVersions> UpdatePostgresAsync(string major) =>
+        Send<PostgresVersions>(HttpMethod.Post, $"/v1/postgres/versions/{Escape(major)}/update", timeout: PostgresDownloadTimeout);
+
+    /// <summary>Stops the active major and starts this one with its own databases.</summary>
+    public Task<PostgresVersions> ActivatePostgresAsync(string major) =>
+        Send<PostgresVersions>(HttpMethod.Post, $"/v1/postgres/versions/{Escape(major)}/activate", timeout: TimeSpan.FromMinutes(2));
+
+    /// <summary>Removes a major's binaries; its data directory goes too only when asked.</summary>
+    public Task<PostgresVersions> UninstallPostgresAsync(string major, bool deleteData = false) =>
+        Send<PostgresVersions>(HttpMethod.Delete, $"/v1/postgres/versions/{Escape(major)}" + (deleteData ? "?delete_data=1" : ""), timeout: TimeSpan.FromMinutes(2));
+
+    // Catalog (MySQL, MariaDB, Redis, MongoDB, Meilisearch, Typesense, RustFS)
+
+    public Task<ServiceCatalog> CatalogAsync() => Get<ServiceCatalog>("/v1/catalog");
+
+    public Task<ServiceCatalog> CheckCatalogAsync() =>
+        Send<ServiceCatalog>(HttpMethod.Post, "/v1/catalog/check", timeout: TimeSpan.FromMinutes(1));
+
+    /// <summary>
+    /// Starts installing the newest release of a line on a port in the background (null: the
+    /// installed line or the newest, and the configured or suggested port); poll CatalogAsync.
+    /// </summary>
+    public Task<ServiceCatalog> InstallCatalogServiceAsync(string id, string? line = null, int? port = null) =>
+        Send<ServiceCatalog>(HttpMethod.Post, $"/v1/catalog/{Escape(id)}/install", new { line = line ?? "", port = port ?? 0 });
+
+    public Task<ServiceCatalog> CancelCatalogJobAsync(string id) => Send<ServiceCatalog>(HttpMethod.Post, $"/v1/catalog/{Escape(id)}/cancel");
+
+    /// <summary>Forgets a failed install.</summary>
+    public Task<ServiceCatalog> DismissCatalogJobAsync(string id) => Send<ServiceCatalog>(HttpMethod.Delete, $"/v1/catalog/{Escape(id)}/job");
+
+    /// <summary>The end of the current or last install's output; 404 (FlockServerException) when there is none.</summary>
+    public Task<string> CatalogLogAsync(string id) => Text(HttpMethod.Get, $"/v1/catalog/{Escape(id)}/log");
+
+    /// <summary>Stops and removes a catalog service; its data goes too only when asked.</summary>
+    public Task<ServiceCatalog> UninstallCatalogServiceAsync(string id, bool deleteData = false) =>
+        Send<ServiceCatalog>(HttpMethod.Delete, $"/v1/catalog/{Escape(id)}" + (deleteData ? "?delete_data=1" : ""), timeout: TimeSpan.FromMinutes(1));
+
+    // Components (the PostgreSQL command-line tools; Valkey on macOS)
+
+    public Task<ComponentCatalog> ComponentsAsync() => Get<ComponentCatalog>("/v1/components");
+
+    public Task<ComponentCatalog> CheckComponentsAsync() =>
+        Send<ComponentCatalog>(HttpMethod.Post, "/v1/components/check", timeout: TimeSpan.FromMinutes(1));
+
+    /// <summary>Starts installing (or updating) in the background; poll ComponentsAsync for the job.</summary>
+    public Task<ComponentCatalog> InstallComponentAsync(string id) => Send<ComponentCatalog>(HttpMethod.Post, $"/v1/components/{Escape(id)}/install");
+
+    public Task<ComponentCatalog> CancelComponentJobAsync(string id) => Send<ComponentCatalog>(HttpMethod.Post, $"/v1/components/{Escape(id)}/cancel");
+
+    /// <summary>Forgets a failed job.</summary>
+    public Task<ComponentCatalog> DismissComponentJobAsync(string id) => Send<ComponentCatalog>(HttpMethod.Delete, $"/v1/components/{Escape(id)}/job");
+
+    /// <summary>The end of the current or last job's output; 404 (FlockServerException) when there is none.</summary>
+    public Task<string> ComponentLogAsync(string id) => Text(HttpMethod.Get, $"/v1/components/{Escape(id)}/log");
+
+    /// <summary>Uninstalls (a service stops first; its data stays).</summary>
+    public Task<ComponentCatalog> UninstallComponentAsync(string id) =>
+        Send<ComponentCatalog>(HttpMethod.Delete, $"/v1/components/{Escape(id)}", timeout: TimeSpan.FromSeconds(30));
 
     // Mail
 
@@ -160,6 +239,11 @@ public sealed class FlockClient : IDisposable
     public async Task ClearSiteLogAsync(string name) => await Raw(HttpMethod.Delete, $"/v1/logs/sites/{Escape(name)}");
 
     // Transport
+
+    /// <summary>The time a request is given, recorded in its options (for diagnostics and tests).</summary>
+    public static readonly HttpRequestOptionsKey<TimeSpan> TimeoutOption = new("Flock.Timeout");
+
+    private static readonly TimeSpan DefaultTimeout = TimeSpan.FromSeconds(5);
 
     private Task<T> Get<T>(string path) => Send<T>(HttpMethod.Get, path);
 
@@ -219,7 +303,9 @@ public sealed class FlockClient : IDisposable
             request.Content = new StringContent(JsonSerializer.Serialize(body, FlockJson.Options), Encoding.UTF8, "application/json");
         }
 
-        using var cts = new CancellationTokenSource(timeout ?? TimeSpan.FromSeconds(5));
+        var limit = timeout ?? DefaultTimeout;
+        request.Options.Set(TimeoutOption, limit);
+        using var cts = new CancellationTokenSource(limit);
         HttpResponseMessage response;
         try
         {

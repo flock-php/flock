@@ -2,76 +2,174 @@ import AppKit
 import FlockKit
 import SwiftUI
 
-/// Grouped list of services with a detail column, like Herd's Services pane.
+/// Grouped list of services with a detail column, like Herd's Services pane. Shows the installed
+/// services or every service Flock offers; PostgreSQL, Valkey and the catalog services (MySQL,
+/// Redis, Meilisearch, ...) are installed, updated and switched from their detail.
 struct ServicesPane: View {
     @Environment(AppModel.self) private var model
-    private let selectionState = State<Service.ID?>(initialValue: nil)
-    private var selection: Service.ID? {
-        get { selectionState.wrappedValue }
-        nonmutating set { selectionState.wrappedValue = newValue }
-    }
-    private let editingState = State<Service?>(initialValue: nil)
-    private var editing: Service? {
-        get { editingState.wrappedValue }
-        nonmutating set { editingState.wrappedValue = newValue }
+    @AppStorage("services.filter") private var filter = ServiceFilter.all
+    private let confirmStopState = State<Service?>(initialValue: nil)
+    private var confirmStop: Service? {
+        get { confirmStopState.wrappedValue }
+        nonmutating set { confirmStopState.wrappedValue = newValue }
     }
 
-    private static let categoryOrder = ["Core", "Database", "Cache & Queue", "Mail", "Debugging"]
+    private static let categoryOrder = ["Core", "Database", "Cache & Queue", "Search", "Storage", "Mail", "Debugging"]
 
     var body: some View {
         let store = model.settings
-        let services = store.services
-        let selected = services.first { $0.id == selection } ?? services.first
+        let services = visible(store.services)
+        let selected = services.first { $0.id == model.servicesSelection } ?? services.first
 
         VStack(alignment: .leading, spacing: 0) {
-            PaneHeader(title: "Services", subtitle: "Databases, caches and the tools around your sites. Everything listens on 127.0.0.1 only.")
+            HStack(alignment: .bottom, spacing: 12) {
+                PaneHeader(title: "Services", subtitle: "Databases, caches, search and the tools around your sites. Everything listens on 127.0.0.1 only.")
+                Picker("Show", selection: $filter) {
+                    Text("Installed").tag(ServiceFilter.installed)
+                    Text("All").tag(ServiceFilter.all)
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .fixedSize()
+                .padding(.trailing, 20)
+                .padding(.bottom, 6)
+                .help("Show only installed services, or every service Flock offers")
+            }
 
             HStack(spacing: 0) {
-                List(selection: Binding<Service.ID?>(get: { selected?.id }, set: { selection = $0 })) {
+                List(selection: Binding<Service.ID?>(get: { selected?.id }, set: { model.servicesSelection = $0 })) {
                     ForEach(categories(of: services), id: \.self) { category in
                         Section(category) {
                             ForEach(services.filter { $0.category == category }) { service in
-                                ServiceRow(service: service, busy: store.isBusy) {
-                                    editing = service
+                                ServiceRow(service: service, activity: activity(of: service), locked: locked(service)) {
+                                    model.servicesSelection = service.id
                                 } toggle: {
-                                    let id = service.id
-                                    Task {
-                                        await store.performOnServices {
-                                            service.running ? try await $0.stopService(id) : try await $0.startService(id)
-                                        }
+                                    if service.running {
+                                        confirmStop = service
+                                    } else {
+                                        let id = service.id
+                                        Task { await store.performOnServices { try await $0.startService(id) } }
                                     }
                                 }
                                 .tag(service.id)
                             }
                         }
                     }
+                    if filter == .installed, hiddenCount(store.services) > 0 {
+                        Button {
+                            filter = .all
+                        } label: {
+                            Label("More Services…", systemImage: "plus.circle")
+                        }
+                        .buttonStyle(.link)
+                        .padding(.vertical, 4)
+                        .help("Show every service Flock offers: MySQL, Redis, Meilisearch and more")
+                    }
                 }
                 .listStyle(.inset)
-                .frame(minWidth: 330)
+                .frame(width: 230)
 
                 Divider()
 
                 Group {
                     if let selected {
-                        ServiceDetail(service: selected)
+                        detail(selected)
                     } else {
                         ContentUnavailableView("No services", systemImage: "server.rack")
                     }
                 }
-                .frame(width: 270)
-                .frame(maxHeight: .infinity, alignment: .top)
+                .frame(minWidth: 340, maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                .background(Color(nsColor: .controlBackgroundColor).opacity(0.5))
             }
             .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(.separator))
             .clipShape(RoundedRectangle(cornerRadius: 8))
             .padding(.horizontal, 20)
             .padding(.vertical, 12)
         }
-        .sheet(item: editingState.projectedValue) { service in
-            PortSheet(service: service) { port in
+        .confirmationDialog("Stop \(confirmStop?.name ?? "")?", isPresented: Binding(get: { confirmStop != nil }, set: { if !$0 { confirmStop = nil } }),
+                            presenting: confirmStop) { service in
+            Button("Stop", role: .destructive) {
                 let id = service.id
-                Task { await store.performOnServices { try await $0.setServicePort(id, port: port) } }
+                Task { await store.performOnServices { try await $0.stopService(id) } }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: { service in
+            Text("Your sites can't use \(service.name) until you start it again; it stays stopped after restarts.")
+        }
+        // Versions and components load when the pane appears, then follow the status (AppModel);
+        // while something installs, builds or switches they are polled every 2 seconds.
+        .task { await store.refreshInstalls() }
+        .task(id: store.installsBusy) {
+            guard store.installsBusy else { return }
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(2))
+                if Task.isCancelled { break }
+                await store.refreshInstalls()
             }
         }
+    }
+
+    @ViewBuilder
+    private func detail(_ service: Service) -> some View {
+        switch service.id {
+        case "postgres": PostgresDetail(service: service)
+        case ServiceComponent.valkey: ValkeyDetail(service: service)
+        default:
+            if service.isOnRequest {
+                CatalogDetail(service: service)
+            } else {
+                ServiceDetail(service: service)
+            }
+        }
+    }
+
+    /// The services the filter shows: with "Installed", the built-in ones, the installed ones and
+    /// those installing (and the selected one, so picking a service from elsewhere still works).
+    private func visible(_ services: [Service]) -> [Service] {
+        guard filter == .installed else { return services }
+        return services.filter { service in
+            !service.isOnRequest || service.installed || activity(of: service) == .working || activity(of: service) == .failed
+        }
+    }
+
+    private func hiddenCount(_ services: [Service]) -> Int {
+        services.count - visible(services).count
+    }
+
+    /// What the row shows next to the name: work in progress, or an available update.
+    private func activity(of service: Service) -> ServiceRow.Activity {
+        let store = model.settings
+        let components = store.components
+        switch service.id {
+        case "postgres":
+            let client = components?[ServiceComponent.postgresClient]
+            if store.postgres?.isBusy == true || !store.postgresPending.isEmpty {
+                return .working
+            }
+            if client?.job?.isRunning == true {
+                return .background
+            }
+            if client?.job?.isFailed == true {
+                return .failed
+            }
+            return store.postgres?.hasUpdate == true || client?.update == true ? .update : .none
+        case ServiceComponent.valkey:
+            let valkey = components?[ServiceComponent.valkey]
+            if valkey?.job?.isRunning == true { return .working }
+            if valkey?.job?.isFailed == true { return .failed }
+            return valkey?.update == true ? .update : .none
+        default:
+            guard let entry = store.catalog?[service.id] else { return .none }
+            if entry.job?.isRunning == true || store.catalogPending.contains(service.id) { return .working }
+            if entry.job?.isFailed == true { return .failed }
+            return entry.update ? .update : .none
+        }
+    }
+
+    /// Start/Stop waits while the service is being installed or switched.
+    private func locked(_ service: Service) -> Bool {
+        let store = model.settings
+        return store.isBusy || activity(of: service) == .working
     }
 
     private func categories(of services: [Service]) -> [String] {
@@ -81,38 +179,74 @@ struct ServicesPane: View {
     }
 }
 
+/// Which services the Services pane lists.
+enum ServiceFilter: String {
+    case installed, all
+}
+
 private struct ServiceRow: View {
+    /// `working`: the service itself is being installed or switched; `background`: something
+    /// around it builds (the PostgreSQL command-line tools) while the service keeps running.
+    enum Activity { case none, update, working, background, failed }
+
     let service: Service
-    let busy: Bool
-    let settings: () -> Void
+    let activity: Activity
+    let locked: Bool
+    let select: () -> Void
     let toggle: () -> Void
 
     var body: some View {
         HStack(spacing: 10) {
             StatusDot(on: service.running)
             VStack(alignment: .leading, spacing: 1) {
-                Text(service.name).fontWeight(.medium)
-                Text(detail).font(.caption).foregroundStyle(.secondary)
-            }
-            Spacer()
-            if service.installed {
-                if service.hasConfigurablePort {
-                    Button("Settings", action: settings)
-                        .controlSize(.small)
+                HStack(spacing: 5) {
+                    Text(service.name).fontWeight(.medium).lineLimit(1)
+                    switch activity {
+                    case .update:
+                        Circle().fill(Color.accentColor).frame(width: 6, height: 6)
+                            .help("Update available")
+                    case .failed:
+                        Image(systemName: "exclamationmark.circle.fill").font(.caption).foregroundStyle(.red)
+                            .help("The last install failed")
+                    case .background:
+                        ProgressView().controlSize(.mini)
+                            .help("Building the command-line tools")
+                    case .none, .working:
+                        EmptyView()
+                    }
                 }
+                Text(detail).font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                if !service.problem.isEmpty {
+                    Label(service.problem, systemImage: "exclamationmark.triangle.fill")
+                        .font(.caption).foregroundStyle(.orange)
+                        .lineLimit(3)
+                        .help(service.problem)
+                }
+            }
+            Spacer(minLength: 4)
+            if activity == .working {
+                ProgressView().controlSize(.small)
+            } else if service.installed {
                 if service.stoppable {
                     Button(service.running ? "Stop" : "Start", action: toggle)
                         .controlSize(.small)
-                        .disabled(busy)
+                        .disabled(locked)
                 }
-            } else {
-                Text("Not installed").font(.caption).foregroundStyle(.secondary)
+            } else if service.isInstallable, service.available {
+                Button("Install…", action: select)
+                    .controlSize(.small)
             }
         }
         .padding(.vertical, 3)
+        .opacity(service.available ? 1 : 0.5)
+        .help(service.available ? "" : service.unavailable)
     }
 
     private var detail: String {
+        if !service.installed {
+            guard service.isInstallable else { return "" }
+            return service.available ? "Not installed" : "Not available on macOS"
+        }
         var parts: [String] = []
         if !service.version.isEmpty {
             parts.append(service.version)
@@ -127,56 +261,100 @@ private struct ServiceRow: View {
     }
 }
 
-private extension Service {
+extension Service {
     /// The web server and DNS ports are tied to certificates and /etc/resolver; `flock install` changes them.
-    var hasConfigurablePort: Bool { port > 0 && id != "web" && id != "dns" }
+    var hasConfigurablePort: Bool { installed && port > 0 && id != "web" && id != "dns" }
+
+    /// PostgreSQL, Valkey and the catalog services are installed from their detail.
+    var isInstallable: Bool { id == "postgres" || id == ServiceComponent.valkey || isOnRequest }
+
+    /// A catalog service (MySQL, Redis, ...): installed on request, its detail is a CatalogDetail.
+    var isOnRequest: Bool {
+        !["web", "dns", "hosts", "mail", "dumps", "postgres", ServiceComponent.valkey].contains(id)
+    }
 }
 
+/// The detail of a service without installs: problem, port, environment, connection and logs.
 private struct ServiceDetail: View {
     let service: Service
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 14) {
+            VStack(alignment: .leading, spacing: 16) {
                 HStack(spacing: 8) {
                     StatusDot(on: service.running)
                     Text(service.name).font(.headline)
                     Spacer()
                 }
+                ServiceInfo(service: service)
+            }
+            .padding(16)
+        }
+    }
+}
 
-                if service.isDatabase, let url = URL(string: service.url),
-                   let tablePlus = NSWorkspace.shared.urlForApplication(withBundleIdentifier: "com.tinyapp.TablePlus") {
-                    row("TablePlus") {
-                        Button("Open") {
-                            NSWorkspace.shared.open([url], withApplicationAt: tablePlus, configuration: NSWorkspace.OpenConfiguration())
-                        }
-                    }
-                }
+/// What every installed service shows: its problem, port, TablePlus, environment, connection and log.
+struct ServiceInfo: View {
+    @Environment(AppModel.self) private var model
+    let service: Service
+    private let editingState = State<Bool>(initialValue: false)
 
-                if !service.env.isEmpty {
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text("Environment Variables").font(.subheadline.weight(.medium))
-                        CodeBlock(text: service.env)
-                    }
-                }
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            if !service.problem.isEmpty {
+                Label(service.problem, systemImage: "exclamationmark.triangle.fill")
+                    .font(.callout).foregroundStyle(.orange)
+                    .textSelection(.enabled)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
 
-                if !service.log.isEmpty {
-                    row("Logs") {
-                        Button("Open") {
-                            let file = FlockPaths.root.appendingPathComponent("log/\(service.log).log")
-                            NSWorkspace.shared.open(file)
-                        }
-                    }
-                }
-
-                if !service.url.isEmpty {
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text("Connection").font(.subheadline.weight(.medium))
-                        CodeBlock(text: service.url)
-                    }
+            if service.hasConfigurablePort {
+                row("Port") {
+                    Text(String(service.port)).monospacedDigit().foregroundStyle(.secondary)
+                    Button("Change…") { editingState.wrappedValue = true }
+                        .controlSize(.small)
                 }
             }
-            .padding(14)
+
+            if service.isDatabase, let url = URL(string: service.url),
+               let tablePlus = NSWorkspace.shared.urlForApplication(withBundleIdentifier: "com.tinyapp.TablePlus") {
+                row("TablePlus") {
+                    Button("Open") {
+                        NSWorkspace.shared.open([url], withApplicationAt: tablePlus, configuration: NSWorkspace.OpenConfiguration())
+                    }
+                    .controlSize(.small)
+                }
+            }
+
+            if !service.log.isEmpty {
+                row("Log") {
+                    Button("Open") {
+                        let file = FlockPaths.root.appendingPathComponent("log/\(service.log).log")
+                        NSWorkspace.shared.open(file)
+                    }
+                    .controlSize(.small)
+                }
+            }
+
+            if !service.env.isEmpty {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Environment Variables").font(.subheadline.weight(.medium))
+                    CodeBlock(text: service.env)
+                }
+            }
+
+            if !service.url.isEmpty {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Connection").font(.subheadline.weight(.medium))
+                    CodeBlock(text: service.url)
+                }
+            }
+        }
+        .sheet(isPresented: editingState.projectedValue) {
+            PortSheet(service: service) { port in
+                let id = service.id
+                Task { await model.settings.performOnServices { try await $0.setServicePort(id, port: port) } }
+            }
         }
     }
 
@@ -208,7 +386,7 @@ private struct PortSheet: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text("\(service.name) Settings").font(.headline)
+            Text("\(service.name) Port").font(.headline)
             Form {
                 TextField("Port", text: portState.projectedValue)
             }

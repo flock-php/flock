@@ -1,7 +1,8 @@
 ; Flock-Setup.exe: installs the tray app with the flock CLI next to it, for the current user only
 ; (no administrator rights). The app sets Flock up on its first start (`flock install`, one UAC
 ; prompt for the hosts helper and the CA). Built by windows\build-installer.ps1, which passes
-; AppVersion, Arch (x64 | arm64) and GoArch (amd64 | arm64).
+; AppVersion, Arch (x64) and GoArch (amd64). Only x64 is built for now; x64compatible lets it
+; install on Windows on ARM too, where it runs under emulation.
 
 #ifndef AppVersion
   #define AppVersion "dev"
@@ -22,13 +23,8 @@ DefaultDirName={localappdata}\Programs\Flock
 DisableDirPage=yes
 DisableProgramGroupPage=yes
 PrivilegesRequired=lowest
-#if Arch == "arm64"
-ArchitecturesAllowed=arm64
-ArchitecturesInstallIn64BitMode=arm64
-#else
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
-#endif
 OutputDir=..\dist
 OutputBaseFilename=Flock-Setup-{#Arch}
 SetupIconFile=..\FlockTray\Assets\AppIcon.ico

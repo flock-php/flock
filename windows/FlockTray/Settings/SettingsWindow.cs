@@ -55,7 +55,12 @@ internal sealed partial class SettingsWindow : FlockWindow
     public SettingsWindow(AppModel model) : base("Flock Settings", 980, 680, minWidth: 820, minHeight: 520)
     {
         this.model = model;
-        error = Ui.ErrorBar(() => model.Settings.DismissError());
+        // The Settings store's errors, and the model's (Xdebug and dumps toggles, restarts).
+        error = Ui.ErrorBar(() =>
+        {
+            model.DismissError();
+            model.Settings.DismissError();
+        });
         error.Margin = new Thickness(0, 0, 0, 16);
 
         panes[SettingsPane.General] = new GeneralPane(this, model);
@@ -140,7 +145,7 @@ internal sealed partial class SettingsWindow : FlockWindow
     /// <summary>Renders the current pane again from the latest state.</summary>
     public Panel Rerender()
     {
-        Ui.ShowError(error, model.Settings.Error);
+        Ui.ShowError(error, model.Settings.Error ?? model.ActionError);
         var container = new StackPanel { Padding = new Thickness(0, 0, 0, 24) };
         if (model.Status is null && current != SettingsPane.About)
         {
@@ -175,18 +180,18 @@ internal sealed partial class SettingsWindow : FlockWindow
         return folder?.Path;
     }
 
-    public async Task<bool> Confirm(string question, string details, string action)
+    /// <summary>Several folders at once, through the shell's dialog; one, through FolderPicker, if that dialog fails.</summary>
+    public async Task<List<string>> PickFolders(string title)
     {
-        var dialog = new ContentDialog
+        try
         {
-            Title = question,
-            Content = details,
-            PrimaryButtonText = action,
-            CloseButtonText = "Cancel",
-            DefaultButton = ContentDialogButton.Close,
-            XamlRoot = Content.XamlRoot,
-        };
-        return await dialog.ShowAsync() == ContentDialogResult.Primary;
+            return Native.PickFolders(Hwnd, title);
+        }
+        catch (Exception e) when (e is System.Runtime.InteropServices.COMException or InvalidCastException)
+        {
+            App.Log(e);
+        }
+        return await PickFolder() is { } path ? [path] : [];
     }
 
     /// <summary>Asks for one line of text; null when cancelled or left empty.</summary>

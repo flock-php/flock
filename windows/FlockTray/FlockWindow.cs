@@ -14,6 +14,7 @@ namespace Flock.Tray;
 internal abstract class FlockWindow : Window
 {
     private readonly Grid root = new();
+    private readonly TextBlock caption;
     private readonly ContentControl body = new()
     {
         HorizontalContentAlignment = HorizontalAlignment.Stretch,
@@ -30,9 +31,10 @@ internal abstract class FlockWindow : Window
         ExtendsContentIntoTitleBar = true;
         AppWindow.TitleBar.PreferredHeightOption = TitleBarHeightOption.Tall;
         var titleBar = new Grid { Height = 48, Padding = new Thickness(16, 0, 0, 0) };
+        caption = Ui.Text(title, "CaptionTextBlockStyle", wrap: false);
         titleBar.Children.Add(Ui.Row(12,
             new Image { Source = new Microsoft.UI.Xaml.Media.Imaging.BitmapImage(new Uri(System.IO.Path.Combine(AppContext.BaseDirectory, "Assets", "AppIcon.ico"))), Width = 16, Height = 16 },
-            Ui.Text(title, "CaptionTextBlockStyle", wrap: false)));
+            caption));
         root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         root.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
         root.Children.Add(titleBar);
@@ -52,6 +54,24 @@ internal abstract class FlockWindow : Window
     }
 
     public IntPtr Hwnd { get; }
+
+    /// <summary>
+    /// The title in the drawn title bar and in the taskbar ("Dumps (3)"). Window.Title alone only
+    /// reaches the taskbar, because the content extends into the title bar.
+    /// </summary>
+    public string Heading
+    {
+        get => caption.Text;
+        set
+        {
+            Title = value;
+            caption.Text = value;
+        }
+    }
+
+    /// <summary>Asks before a change; see Ui.Confirm.</summary>
+    public Task<bool> Confirm(string question, string details, string action, bool destructive = false, UIElement? extra = null) =>
+        Ui.Confirm(Content.XamlRoot, question, details, action, destructive, extra);
 
     /// <summary>Physical pixels per device-independent pixel on the window's monitor.</summary>
     public double Scale => Math.Max(1, Native.GetDpiForWindow(Hwnd) / 96.0);

@@ -3,6 +3,7 @@ package cli
 import (
 	"fmt"
 	"io"
+	"runtime"
 	"text/tabwriter"
 
 	"github.com/spf13/cobra"
@@ -152,5 +153,10 @@ func wildcardNote(out io.Writer, dns api.DNSStatus) {
 		fmt.Fprintf(out, "\nEvery subdomain up to %d levels below a site (and its aliases) resolves, extra domain or not.\n", dns.MaxDepth)
 		return
 	}
-	fmt.Fprintf(out, "\nWildcard DNS is off: %s.\nOnly site domains and extra domains resolve (through the hosts file) — add each subdomain you use.\n", dns.WildcardProblem)
+	if runtime.GOOS == "windows" {
+		fmt.Fprintf(out, "\nWildcard DNS is off: %s.\nOnly site domains and extra domains resolve (through the hosts file) — add each subdomain you use.\n", dns.WildcardProblem)
+		return
+	}
+	// macOS has no hosts file fallback: every name under the TLD goes through /etc/resolver.
+	fmt.Fprintf(out, "\nDNS for .%s is not working: %s.\nNo .%s domain resolves to Flock until that is fixed.\n", dns.TLD, dns.WildcardProblem, dns.TLD)
 }

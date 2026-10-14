@@ -36,6 +36,10 @@ func TestServesEveryDepthAliasAndCatchAllOverTrustedHTTPS(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = os.RemoveAll(dir) })
+	// php_fastcgi only proxies when the front controller exists; without it file_server answers 404.
+	if err := os.WriteFile(filepath.Join(dir, "index.php"), []byte("<?php\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
 	ca, err := certs.Ensure(filepath.Join(dir, "certs"), "test")
 	if err != nil {
 		t.Fatal(err)

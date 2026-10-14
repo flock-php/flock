@@ -132,6 +132,8 @@ final class LogStore {
     var index = LogIndex()
     var entries: [LogEntry] = []
     var serviceText = ""
+    /// The source `entries` / `serviceText` belong to; another one is still loading.
+    private(set) var loaded: Source?
     var error: String?
 
     init(client: FlockClient) {
@@ -140,23 +142,43 @@ final class LogStore {
 
     func loadIndex() async {
         do {
-            index = try await client.logs()
+            let fresh = try await client.logs()
+            if fresh != index {
+                index = fresh
+            }
             error = nil
         } catch {
             self.error = error.localizedDescription
         }
     }
 
+    /// Loads a source. A load that was cancelled (another source was picked meanwhile) changes nothing.
     func load(_ source: Source) async {
         do {
             switch source {
             case let .site(name):
-                entries = try await client.siteLog(name)
+                let fresh = try await client.siteLog(name)
+                try Task.checkCancellation()
+                if fresh != entries || loaded != source {
+                    entries = fresh
+                }
             case let .service(name):
-                serviceText = try await client.serviceLog(name)
+                let fresh = try await client.serviceLog(name)
+                try Task.checkCancellation()
+                if fresh != serviceText || loaded != source {
+                    serviceText = fresh
+                }
             }
+            loaded = source
             error = nil
+        } catch where Task.isCancelled {
         } catch {
+            if loaded != source {
+                // Don't leave the previous source's lines under this one's name.
+                entries = []
+                serviceText = ""
+                loaded = source
+            }
             self.error = error.localizedDescription
         }
     }
@@ -165,6 +187,7 @@ final class LogStore {
         do {
             try await client.clearSiteLog(site)
             entries = []
+            error = nil
         } catch {
             self.error = error.localizedDescription
         }

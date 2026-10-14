@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Builds Valkey (Redis-compatible) for Flock.
+# Builds Valkey (Redis-compatible) for Flock by hand. Flock itself builds it with
+# internal/components/valkey.sh (`flock valkey install`, or Install in the app).
 # Usage: build/valkey/build.sh [version]  → build/valkey/out/<version>/{valkey-server,valkey-cli}
 # Only links against macOS system libraries (TLS off: Flock binds to localhost only), so the
 # binaries run on any Mac with the same architecture and macOS ≥ the deployment target.

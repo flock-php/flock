@@ -41,6 +41,8 @@ internal sealed partial class PanelWindow : Window
         AppWindow.IsShownInSwitchers = false;
 
         Content = scroller;
+        Ui.Shortcut(scroller, Windows.System.VirtualKey.Escape, Windows.System.VirtualKeyModifiers.None, Hide);
+        Ui.SettingsShortcut(scroller);
         Activated += (_, e) =>
         {
             if (e.WindowActivationState == WindowActivationState.Deactivated)
@@ -142,6 +144,14 @@ internal sealed partial class PanelWindow : Window
         dirty = false;
         var root = new StackPanel { Spacing = 12, Padding = new Thickness(16), Width = Width };
         root.Children.Add(Header());
+        if (model.ActionError is { } failure)
+        {
+            // Shown whether or not the daemon runs (a failed restart, a toggle the daemon refused).
+            var banner = Ui.ErrorBar(model.DismissError);
+            banner.Margin = new Thickness(0);
+            Ui.ShowError(banner, failure);
+            root.Children.Add(banner);
+        }
 
         if (model.Status is { } status)
         {
@@ -221,9 +231,13 @@ internal sealed partial class PanelWindow : Window
         {
             panel.Children.Add(ServiceRow("PostgreSQL", postgres, status.Processes.FirstOrDefault(p => p.Name == "postgres")?.Up ?? false));
         }
-        if (status.Redis is { } redis)
+        if (status.Valkey is { } valkey)
         {
-            panel.Children.Add(ServiceRow("Redis", redis, status.Processes.FirstOrDefault(p => p.Name == "valkey")?.Up ?? false));
+            panel.Children.Add(ServiceRow("Valkey", valkey, status.Processes.FirstOrDefault(p => p.Name == "valkey")?.Up ?? false));
+        }
+        foreach (var extra in status.Extras)
+        {
+            panel.Children.Add(ServiceRow(extra.Name, extra.Enabled ? $"{extra.Version} on 127.0.0.1:{extra.Port}" : "stopped", extra.Up));
         }
 
         // PHP pools: one FPM process on macOS, several php-cgi workers (php8.4-cgi-1, -2, ...) on Windows.

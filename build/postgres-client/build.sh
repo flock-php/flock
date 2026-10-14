@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Builds the PostgreSQL client tools (psql, pg_dump, pg_restore, ...) that zonky's server
 # builds do not include. libpq is linked in via @rpath so the tools are relocatable.
+# Flock itself builds them with internal/components/postgres-client.sh (`flock postgres install-client`).
 # Usage: build/postgres-client/build.sh [version] → build/postgres-client/out/<version>/{bin,lib}
 set -euo pipefail
 

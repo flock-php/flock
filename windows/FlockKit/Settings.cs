@@ -28,7 +28,7 @@ public sealed class FlockConfig
         public int Dns { get; init; }
         public int Smtp { get; init; }
         public int Postgres { get; init; }
-        public int Redis { get; init; }
+        public int Valkey { get; init; }
         public int Dumps { get; init; }
         public int Api { get; init; }
     }
@@ -52,6 +52,11 @@ public sealed class Service
     public string Id { get; init; } = "";
     public string Name { get => name ?? Id; init => name = value; }
     public string Category { get; init; } = "Other";
+    /// <summary>What it is, for services installed on request; may be empty.</summary>
+    public string Description { get; init; } = "";
+    /// <summary>False for a service Flock can't run on this platform; Unavailable says why.</summary>
+    public bool Available { get; init; } = true;
+    public string Unavailable { get; init; } = "";
     public string Version { get; init; } = "";
     public int Port { get; init; }
     public bool Installed { get; init; }
@@ -73,7 +78,11 @@ public sealed class Service
 
     /// <summary>The web server and hosts ports are tied to certificates and the hosts helper; `flock install` changes them.</summary>
     [JsonIgnore]
-    public bool HasConfigurablePort => Port > 0 && Id != "web" && Id != "dns";
+    public bool HasConfigurablePort => Installed && Port > 0 && Id != "web" && Id != "dns";
+
+    /// <summary>A catalog service (MySQL, Redis, ...), installed on request from its detail.</summary>
+    [JsonIgnore]
+    public bool IsOnRequest => Id is not ("web" or "dns" or "hosts" or "mail" or "dumps" or "postgres" or ComponentId.Valkey);
 }
 
 /// <summary>Body of POST /v1/settings; null fields are left out and stay unchanged.</summary>

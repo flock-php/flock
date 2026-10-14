@@ -1,12 +1,29 @@
+import AppKit
 import FlockKit
 import SwiftUI
 
 struct LogsWindow: View {
     @Environment(AppModel.self) private var model
+    @AppStorage("logs.autoRefresh") private var autoRefresh = false
     private let selectionState = State<LogStore.Source?>(initialValue: nil)
     private var selection: LogStore.Source? {
         get { selectionState.wrappedValue }
         nonmutating set { selectionState.wrappedValue = newValue }
+    }
+    private let queryState = State<String>(initialValue: "")
+    private var query: String {
+        get { queryState.wrappedValue }
+        nonmutating set { queryState.wrappedValue = newValue }
+    }
+    private let levelState = State<LogLevelFilter>(initialValue: .all)
+    private var level: LogLevelFilter {
+        get { levelState.wrappedValue }
+        nonmutating set { levelState.wrappedValue = newValue }
+    }
+    private let confirmClearState = State<String?>(initialValue: nil)
+    private var confirmClear: String? {
+        get { confirmClearState.wrappedValue }
+        nonmutating set { confirmClearState.wrappedValue = newValue }
     }
 
     var body: some View {
@@ -29,28 +46,60 @@ struct LogsWindow: View {
             }
             .frame(minWidth: 200, idealWidth: 240, maxWidth: 340)
             Group {
-                switch selection {
-                case let .site(name):
-                    SiteLogView(entries: store.entries, site: name)
-                case .service:
-                    MonospacedText(store.serviceText.isEmpty ? "(empty)" : store.serviceText)
-                case nil:
-                    ContentUnavailableView("Pick a log", systemImage: "doc.text.magnifyingglass")
+                if let selection, store.loaded != selection {
+                    ProgressView("Loading…").frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else {
+                    switch selection {
+                    case let .site(name):
+                        SiteLogView(entries: LogFilter.entries(store.entries, level: level, query: query),
+                                    filtered: !store.entries.isEmpty, site: name)
+                    case .service:
+                        ServiceLogView(text: store.serviceText.isEmpty ? "(empty)" : LogFilter.lines(store.serviceText, query: query))
+                    case nil:
+                        ContentUnavailableView("Pick a log", systemImage: "doc.text.magnifyingglass")
+                    }
                 }
             }
             .frame(minWidth: 420, maxWidth: .infinity, maxHeight: .infinity)
         }
+        .searchable(text: queryState.projectedValue, placement: .toolbar, prompt: "Search logs")
         .toolbar {
             ToolbarItemGroup {
+                Picker("Level", selection: levelState.projectedValue) {
+                    ForEach(LogLevelFilter.allCases) { Text($0.title).tag($0) }
+                }
+                .pickerStyle(.menu)
+                .fixedSize()
+                .help("Show only entries of this level and above (site logs)")
+                .disabled({ if case .site = selection { false } else { true } }())
+
+                Toggle(isOn: $autoRefresh) {
+                    Label("Auto-refresh", systemImage: "arrow.triangle.2.circlepath")
+                }
+                .help(autoRefresh ? "Reloading the log every 2 seconds — click to stop" : "Reload the log every 2 seconds while this window is visible")
+
                 Button("Refresh", systemImage: "arrow.clockwise") {
-                    Task { await reload() }
+                    Task {
+                        await store.loadIndex()
+                        await reload()
+                    }
                 }
                 if case let .site(name) = selection {
                     Button("Clear", systemImage: "trash") {
-                        Task { await store.clear(site: name) }
+                        confirmClear = name
                     }
+                    .disabled(store.entries.isEmpty)
                 }
             }
+        }
+        .confirmationDialog("Clear the log of \(confirmClear ?? "")?", isPresented: Binding(get: { confirmClear != nil }, set: { if !$0 { confirmClear = nil } }),
+                            presenting: confirmClear) { site in
+            Button("Clear", role: .destructive) {
+                Task { await store.clear(site: site) }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: { site in
+            Text("Deletes the Laravel log files in storage/logs of \(site). This can't be undone.")
         }
         .safeAreaInset(edge: .bottom) {
             ErrorBanner(message: store.error)
@@ -62,6 +111,25 @@ struct LogsWindow: View {
         .task(id: selection) {
             await reload()
         }
+        .task(id: AutoRefresh(source: selection, on: autoRefresh)) {
+            guard autoRefresh else { return }
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(2))
+                if !Task.isCancelled, isVisible {
+                    await reload()
+                }
+            }
+        }
+    }
+
+    private struct AutoRefresh: Equatable {
+        let source: LogStore.Source?
+        let on: Bool
+    }
+
+    /// The Logs window is on screen (not minimized, hidden or covered entirely).
+    private var isVisible: Bool {
+        NSApp.windows.contains { $0.identifier?.rawValue.contains(WindowID.logs) == true && $0.occlusionState.contains(.visible) }
     }
 
     private func reload() async {
@@ -73,16 +141,44 @@ struct LogsWindow: View {
 
 private struct SiteLogView: View {
     let entries: [LogEntry]
+    /// There are entries, and the search or level filter hides them all.
+    let filtered: Bool
     let site: String
 
     var body: some View {
         if entries.isEmpty {
-            ContentUnavailableView("No log entries", systemImage: "checkmark.circle",
-                                   description: Text("storage/logs of \(site) is empty."))
+            if filtered {
+                ContentUnavailableView.search
+            } else {
+                ContentUnavailableView("No log entries", systemImage: "checkmark.circle",
+                                       description: Text("storage/logs of \(site) is empty."))
+            }
         } else {
             List(entries) { entry in
                 LogEntryRow(entry: entry)
             }
+        }
+    }
+}
+
+/// A service's log, scrolled to its newest lines (at the bottom) when it loads or changes.
+private struct ServiceLogView: View {
+    let text: String
+
+    var body: some View {
+        ScrollViewReader { proxy in
+            ScrollView([.vertical, .horizontal]) {
+                VStack(alignment: .leading, spacing: 0) {
+                    Text(text)
+                        .font(.system(.callout, design: .monospaced))
+                        .textSelection(.enabled)
+                        .frame(maxWidth: .infinity, alignment: .topLeading)
+                    Color.clear.frame(height: 1).id("end")
+                }
+                .padding(12)
+            }
+            .onAppear { proxy.scrollTo("end", anchor: .bottom) }
+            .onChange(of: text) { proxy.scrollTo("end", anchor: .bottom) }
         }
     }
 }
@@ -117,10 +213,17 @@ private struct LogEntryRow: View {
                 .textSelection(.enabled)
             if !entry.details.isEmpty {
                 DisclosureGroup("Details", isExpanded: expandedState.projectedValue) {
-                    Text(entry.details)
+                    let details = Text(entry.details)
                         .font(.system(.caption, design: .monospaced))
                         .textSelection(.enabled)
                         .frame(maxWidth: .infinity, alignment: .leading)
+                    // Stack traces run to hundreds of lines; keep the list scrollable around them.
+                    if entry.details.reduce(0, { $1 == "\n" ? $0 + 1 : $0 }) > 20 {
+                        ScrollView([.vertical, .horizontal]) { details }
+                            .frame(height: 280)
+                    } else {
+                        details
+                    }
                 }
                 .font(.caption)
             }

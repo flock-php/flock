@@ -10,7 +10,10 @@ public struct Status: Decodable, Sendable, Equatable {
     public var httpsPort: Int
     public var mail: String
     public var postgres: String?
-    public var redis: String?
+    /// "9.1.2 on 127.0.0.1:6379" when Valkey is installed.
+    public var valkey: String?
+    /// The installed catalog services (MySQL, Redis, ...).
+    public var extras: [Extra]
     public var xdebug: Bool
     public var dumps: Bool
     public var mailCount: Int
@@ -144,13 +147,35 @@ public struct Status: Decodable, Sendable, Equatable {
         public var id: String { name }
     }
 
+    /// An installed catalog service, for the menu bar panel.
+    public struct Extra: Decodable, Sendable, Equatable, Identifiable {
+        public var id: String
+        public var name: String
+        public var version: String
+        public var port: Int
+        public var enabled: Bool
+        public var up: Bool
+
+        enum CodingKeys: String, CodingKey { case id, name, version, port, enabled, up }
+
+        public init(from decoder: Decoder) throws {
+            let c = try decoder.container(keyedBy: CodingKeys.self)
+            id = try c.decode(String.self, forKey: .id)
+            name = try c.decodeIfPresent(String.self, forKey: .name) ?? id
+            version = try c.decodeIfPresent(String.self, forKey: .version) ?? ""
+            port = try c.decodeIfPresent(Int.self, forKey: .port) ?? 0
+            enabled = try c.decodeIfPresent(Bool.self, forKey: .enabled) ?? true
+            up = try c.decodeIfPresent(Bool.self, forKey: .up) ?? false
+        }
+    }
+
     /// Something needs attention: a warning, or a supervised process that is down.
     public var isDegraded: Bool {
         !warnings.isEmpty || processes.contains { !$0.up }
     }
 
     enum CodingKeys: String, CodingKey {
-        case version, pid, startedAt, dns, httpPort, httpsPort, mail, postgres, redis
+        case version, pid, startedAt, dns, httpPort, httpsPort, mail, postgres, valkey, extras
         case xdebug, dumps, mailCount, dumpCount, sites, processes, warnings
     }
 
@@ -165,7 +190,8 @@ public struct Status: Decodable, Sendable, Equatable {
         httpsPort = try c.decodeIfPresent(Int.self, forKey: .httpsPort) ?? 0
         mail = try c.decodeIfPresent(String.self, forKey: .mail) ?? ""
         postgres = try c.decodeIfPresent(String.self, forKey: .postgres)
-        redis = try c.decodeIfPresent(String.self, forKey: .redis)
+        valkey = try c.decodeIfPresent(String.self, forKey: .valkey)
+        extras = try c.decodeIfPresent([Extra].self, forKey: .extras) ?? []
         xdebug = try c.decodeIfPresent(Bool.self, forKey: .xdebug) ?? false
         dumps = try c.decodeIfPresent(Bool.self, forKey: .dumps) ?? false
         mailCount = try c.decodeIfPresent(Int.self, forKey: .mailCount) ?? 0

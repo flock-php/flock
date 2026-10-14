@@ -10,7 +10,7 @@ private func decode<T: Decodable>(_ type: T.Type, _ json: String) throws -> T {
     let config = try decode(FlockConfig.self, """
     {"tld":"test","default_php":"8.5","default_node":"22","xdebug":false,"dumps":true,
      "root":"/Users/x/Library/Application Support/Flock",
-     "ports":{"http":80,"https":443,"dns":53535,"smtp":2525,"postgres":5432,"redis":6379,"dumps":9912,"api":53531},
+     "ports":{"http":80,"https":443,"dns":53535,"smtp":2525,"postgres":5432,"valkey":6379,"dumps":9912,"api":53531},
      "parked":["/Users/x/Developer"],
      "php":[{"version":"8.5","full_version":"8.5.11","ini":"/f/php/8.5/php.ini","xdebug_available":true},
             {"version":"8.4","full_version":"8.4.26","ini":"/f/php/8.4/php.ini","xdebug_available":false}],
@@ -65,4 +65,37 @@ private func decode<T: Decodable>(_ type: T.Type, _ json: String) throws -> T {
 
     let site = String(decoding: try encoder.encode(SiteChange(php: "")), as: UTF8.self)
     #expect(site == #"{"php":""}"#)
+}
+
+@Test func decodesServiceProblems() throws {
+    let services = try decode([Service].self, """
+    [{"id":"dns","name":"DNS","category":"Core","running":false,"problem":"port 53535 is in use"},
+     {"id":"mail","name":"Mail","category":"Mail","running":true}]
+    """)
+    #expect(services[0].problem == "port 53535 is in use")
+    #expect(services[1].problem.isEmpty)
+}
+
+@Test func filtersLogEntriesByLevelAndText() throws {
+    let entries = try decode([LogEntry].self, """
+    [{"time":"2026-10-13T14:10:01Z","level":"debug","message":"cache miss"},
+     {"time":"2026-10-13T14:10:02Z","level":"info","message":"User logged in","details":"{\\"user\\":42}"},
+     {"time":"2026-10-13T14:10:03Z","level":"WARNING","message":"Slow query"},
+     {"time":"2026-10-13T14:10:04Z","level":"critical","message":"Payment failed","details":"#0 Stripe\\\\Client"},
+     {"time":"2026-10-13T14:10:05Z","level":"weird","message":"unknown level"}]
+    """)
+    func messages(_ level: LogLevelFilter, _ query: String = "") -> [String] {
+        LogFilter.entries(entries, level: level, query: query).map(\.message)
+    }
+
+    #expect(messages(.all).count == 5)
+    #expect(messages(.info) == ["User logged in", "Slow query", "Payment failed", "unknown level"])
+    #expect(messages(.warning) == ["Slow query", "Payment failed", "unknown level"])
+    #expect(messages(.error) == ["Payment failed", "unknown level"])
+    // The query matches the message or the details (context, stack trace), ignoring case.
+    #expect(messages(.all, "USER") == ["User logged in"])
+    #expect(messages(.all, "\"user\":42") == ["User logged in"])
+    #expect(messages(.error, "stripe") == ["Payment failed"])
+    #expect(LogFilter.lines("a Error\nb\nc error", query: "ERROR") == "a Error\nc error")
+    #expect(LogFilter.lines("a\nb", query: " ") == "a\nb")
 }

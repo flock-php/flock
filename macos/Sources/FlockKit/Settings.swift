@@ -20,11 +20,11 @@ public struct FlockConfig: Decodable, Sendable, Equatable {
         public var dns: Int
         public var smtp: Int
         public var postgres: Int
-        public var redis: Int
+        public var valkey: Int
         public var dumps: Int
         public var api: Int
 
-        enum CodingKeys: String, CodingKey { case http, https, dns, smtp, postgres, redis, dumps, api }
+        enum CodingKeys: String, CodingKey { case http, https, dns, smtp, postgres, valkey, dumps, api }
 
         public init(from decoder: Decoder) throws {
             let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -34,7 +34,7 @@ public struct FlockConfig: Decodable, Sendable, Equatable {
             dns = try port(.dns)
             smtp = try port(.smtp)
             postgres = try port(.postgres)
-            redis = try port(.redis)
+            valkey = try port(.valkey)
             dumps = try port(.dumps)
             api = try port(.api)
         }
@@ -95,6 +95,11 @@ public struct Service: Decodable, Sendable, Equatable, Identifiable {
     public var id: String
     public var name: String
     public var category: String
+    /// What it is, for services installed on request; may be empty.
+    public var description: String
+    /// False for a service Flock can't run on this platform; `unavailable` says why.
+    public var available: Bool
+    public var unavailable: String
     public var version: String
     public var port: Int
     public var installed: Bool
@@ -104,9 +109,11 @@ public struct Service: Decodable, Sendable, Equatable, Identifiable {
     public var env: String
     public var log: String
     public var url: String
+    /// Why it isn't working, when that isn't simply "stopped".
+    public var problem: String
 
     enum CodingKeys: String, CodingKey {
-        case id, name, category, version, port, installed, enabled, running, stoppable, env, log, url
+        case id, name, category, description, available, unavailable, version, port, installed, enabled, running, stoppable, env, log, url, problem
     }
 
     public init(from decoder: Decoder) throws {
@@ -114,6 +121,9 @@ public struct Service: Decodable, Sendable, Equatable, Identifiable {
         id = try c.decode(String.self, forKey: .id)
         name = try c.decodeIfPresent(String.self, forKey: .name) ?? id
         category = try c.decodeIfPresent(String.self, forKey: .category) ?? "Other"
+        description = try c.decodeIfPresent(String.self, forKey: .description) ?? ""
+        available = try c.decodeIfPresent(Bool.self, forKey: .available) ?? true
+        unavailable = try c.decodeIfPresent(String.self, forKey: .unavailable) ?? ""
         version = try c.decodeIfPresent(String.self, forKey: .version) ?? ""
         port = try c.decodeIfPresent(Int.self, forKey: .port) ?? 0
         installed = try c.decodeIfPresent(Bool.self, forKey: .installed) ?? false
@@ -123,6 +133,7 @@ public struct Service: Decodable, Sendable, Equatable, Identifiable {
         env = try c.decodeIfPresent(String.self, forKey: .env) ?? ""
         log = try c.decodeIfPresent(String.self, forKey: .log) ?? ""
         url = try c.decodeIfPresent(String.self, forKey: .url) ?? ""
+        problem = try c.decodeIfPresent(String.self, forKey: .problem) ?? ""
     }
 
     /// Is this a database that a GUI client like TablePlus can open?

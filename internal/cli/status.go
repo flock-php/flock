@@ -2,6 +2,7 @@ package cli
 
 import (
 	"fmt"
+	"runtime"
 	"text/tabwriter"
 	"time"
 
@@ -28,17 +29,26 @@ func newStatusCommand() *cobra.Command {
 			switch {
 			case st.DNS.Wildcard:
 				fmt.Fprintf(out, "dns       *.%s → 127.0.0.1, any subdomain (server on %s)\n", st.DNS.TLD, st.DNS.Addr)
-			case st.DNS.TLD != "":
+			case st.DNS.TLD != "" && runtime.GOOS == "windows":
 				fmt.Fprintf(out, "dns       site domains and extra domains → 127.0.0.1 (hosts file); other *.%s subdomains don't resolve: %s\n",
 					st.DNS.TLD, st.DNS.WildcardProblem)
+			case st.DNS.TLD != "":
+				fmt.Fprintf(out, "dns       *.%s doesn't resolve to Flock: %s\n", st.DNS.TLD, st.DNS.WildcardProblem)
 			}
 			fmt.Fprintf(out, "web       http :%d, https :%d\n", st.HTTPPort, st.HTTPSPort)
 			fmt.Fprintf(out, "mail      smtp://%s\n", st.Mail)
 			if st.Postgres != "" {
 				fmt.Fprintf(out, "postgres  %s\n", st.Postgres)
 			}
-			if st.Redis != "" {
-				fmt.Fprintf(out, "redis     %s\n", st.Redis)
+			if st.Valkey != "" {
+				fmt.Fprintf(out, "valkey    %s\n", st.Valkey)
+			}
+			for _, x := range st.Extras {
+				state := fmt.Sprintf("%s on 127.0.0.1:%d", x.Version, x.Port)
+				if !x.Enabled {
+					state += " (stopped)"
+				}
+				fmt.Fprintf(out, "%-9s %s\n", x.ID, state)
 			}
 			if st.Xdebug {
 				fmt.Fprintln(out, "xdebug    on (port 9003, start with XDEBUG_TRIGGER)")

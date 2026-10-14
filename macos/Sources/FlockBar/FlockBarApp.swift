@@ -16,7 +16,7 @@ struct FlockBarApp: App {
             PanelView()
                 .environment(model)
         } label: {
-            MenuBarLabel(symbol: model.menuBarSymbol)
+            MenuBarLabel(symbol: model.menuBarSymbol, needsSetup: model.needsSetup)
         }
         .menuBarExtraStyle(.window)
 
@@ -45,13 +45,21 @@ struct FlockBarApp: App {
         .defaultSize(width: 860, height: 560)
         .windowStyle(.hiddenTitleBar)
         .windowResizability(.contentMinSize)
+
+        Window("Set Up Flock", id: WindowID.setup) {
+            SetupWindow()
+                .environment(model)
+        }
+        .windowResizability(.contentSize)
+        .defaultPosition(.center)
     }
 }
 
 /// The menu bar icon. It is the only view that exists at launch, so it also opens the
-/// window requested by `--snapshot`.
+/// window requested by `--snapshot`, or the setup on the first start after installing.
 private struct MenuBarLabel: View {
     let symbol: String
+    let needsSetup: Bool
     @Environment(\.openWindow) private var openWindow
 
     var body: some View {
@@ -59,6 +67,8 @@ private struct MenuBarLabel: View {
             .task {
                 if let target = Snapshot.target {
                     openWindow.activating(target)
+                } else if needsSetup {
+                    openWindow.activating(WindowID.setup)
                 }
             }
     }
@@ -69,6 +79,7 @@ enum WindowID {
     static let dumps = "dumps"
     static let logs = "logs"
     static let settings = "settings"
+    static let setup = "setup"
 }
 
 extension OpenWindowAction {

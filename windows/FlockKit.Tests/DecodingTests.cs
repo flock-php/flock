@@ -20,7 +20,8 @@ public class DecodingTests
         var status = FlockJson.Decode<Status>("""
             {"version":"0893ae2","pid":91994,"started_at":"2026-10-13T14:10:01.123456+02:00",
              "dns":{"tld":"test","addr":"127.0.0.1:53535"},"http_port":80,"https_port":443,
-             "mail":"127.0.0.1:2525","postgres":"18.6.0 on 127.0.0.1:5432","redis":"Valkey 9.1.2 on 127.0.0.1:6379",
+             "mail":"127.0.0.1:2525","postgres":"18.6.0 on 127.0.0.1:5432",
+             "extras":[{"id":"redis","name":"Redis","version":"7.2.16","port":6379,"enabled":true,"up":true},{"id":"mysql"}],
              "xdebug":true,"dumps":false,"mail_count":3,"dump_count":12,
              "sites":[{"name":"watchtower","domain":"watchtower.test","path":"/code/watchtower","php":"8.5","secured":true,"parked":false,"url":"https://watchtower.test"},
                       {"name":"legacy","domain":"legacy.test","path":"/code/legacy","php":"7.4","secured":false,"parked":true,"problem":"PHP 7.4 is not installed"}],
@@ -29,6 +30,13 @@ public class DecodingTests
             """);
 
         Assert.Equal(443, status.HttpsPort);
+        Assert.Null(status.Valkey);
+        Assert.Equal(["redis", "mysql"], status.Extras.Select(e => e.Id));
+        Assert.True(status.Extras[0].Up);
+        Assert.Equal(6379, status.Extras[0].Port);
+        Assert.Equal("mysql", status.Extras[1].Name);
+        Assert.True(status.Extras[1].Enabled);
+        Assert.False(status.Extras[1].Up);
         Assert.Equal(3, status.MailCount);
         Assert.Equal(12, status.DumpCount);
         Assert.Equal("https://watchtower.test", status.Sites[0].Url);
@@ -93,7 +101,8 @@ public class DecodingTests
             """);
 
         Assert.Null(status.Postgres);
-        Assert.Null(status.Redis);
+        Assert.Null(status.Valkey);
+        Assert.Empty(status.Extras);
         Assert.Empty(status.Sites);
         Assert.Empty(status.Warnings);
         Assert.False(status.IsDegraded);

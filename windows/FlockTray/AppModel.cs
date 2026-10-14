@@ -13,7 +13,13 @@ public sealed class AppModel
     public FlockClient Client { get; } = new();
 
     public Status? Status { get; private set; }
+    /// <summary>Why the status can't be read (the daemon isn't running); the next refresh replaces it.</summary>
     public string? Error { get; private set; }
+    /// <summary>
+    /// Why the last restart or Xdebug/dumps toggle failed. Status refreshes keep it; it goes when
+    /// dismissed or when the next of those actions succeeds.
+    /// </summary>
+    public string? ActionError { get; private set; }
     public bool IsRestarting { get; private set; }
 
     public MailStore Mail { get; }
@@ -21,7 +27,7 @@ public sealed class AppModel
     public LogStore Logs { get; }
     public SettingsStore Settings { get; }
 
-    /// <summary>Raised whenever Status, Error or IsRestarting change.</summary>
+    /// <summary>Raised whenever Status, Error, ActionError or IsRestarting change.</summary>
     public event Action? Changed;
 
     public AppModel()
@@ -96,10 +102,10 @@ public sealed class AppModel
         }
     }
 
-    private void Apply(Status fresh)
+    private void Apply(Status fresh, bool force = false)
     {
         var previous = Status;
-        var changed = !Json.Same(previous, fresh) || Error is not null;
+        var changed = force || !Json.Same(previous, fresh) || Error is not null;
         Status = fresh;
         Error = null;
         _ = Settings.RefreshIfVisibleAsync();
@@ -127,11 +133,22 @@ public sealed class AppModel
     {
         try
         {
-            Apply(await Client.UpdateSettingsAsync(change));
+            var fresh = await Client.UpdateSettingsAsync(change);
+            ActionError = null;
+            Apply(fresh, force: true);
         }
         catch (FlockException e)
         {
-            Error = e.Message;
+            ActionError = e.Message;
+            Changed?.Invoke();
+        }
+    }
+
+    public void DismissError()
+    {
+        if (ActionError is not null)
+        {
+            ActionError = null;
             Changed?.Invoke();
         }
     }
@@ -144,11 +161,7 @@ public sealed class AppModel
         try
         {
             var binary = FlockPaths.FlockBinary;
-            var failure = await Task.Run(() => RunFlock(binary, "restart"));
-            if (failure is not null)
-            {
-                Error = failure;
-            }
+            ActionError = await Task.Run(() => RunFlock(binary, "restart"));
         }
         finally
         {
@@ -326,7 +339,12 @@ public sealed class LogStore(FlockClient client) : Store
         switch (source)
         {
             case SiteSource site:
-                Entries = await client.SiteLogAsync(site.Name);
+                // Unchanged entries keep their list, so an auto-refresh doesn't rebuild the view.
+                var fresh = await client.SiteLogAsync(site.Name);
+                if (!Json.Same(fresh, Entries))
+                {
+                    Entries = fresh;
+                }
                 break;
             case ServiceSource service:
                 ServiceText = await client.ServiceLogAsync(service.Name);
@@ -372,6 +390,11 @@ public sealed class SettingsStore(FlockClient client) : Store
             {
                 Services = services.Result;
                 changed = true;
+                // A service changed (installed, started, another version): the Services pane's details follow.
+                if (WatchesServices)
+                {
+                    _ = RefreshServiceVersionsAsync();
+                }
             }
             if (changed || Error is not null)
             {
@@ -513,6 +536,160 @@ public sealed class SettingsStore(FlockClient client) : Store
         }
         Notify();
         await RefreshAsync();
+    }
+
+    /// <summary>PostgreSQL majors with install state; loaded by the Services pane.</summary>
+    public PostgresVersions? Postgres { get; private set; }
+    /// <summary>The PostgreSQL command-line tools with their install job; loaded by the Services pane.</summary>
+    public ComponentCatalog? Components { get; private set; }
+    /// <summary>MySQL, MariaDB, Redis, MongoDB, Meilisearch, Typesense, RustFS; loaded by the Services pane.</summary>
+    public ServiceCatalog? Catalog { get; private set; }
+    /// <summary>The Services pane is shown, so service changes also reload Postgres and Components.</summary>
+    public bool WatchesServices { get; set; }
+
+    public Task RefreshServiceVersionsAsync() => Task.WhenAll(RefreshPostgresAsync(), RefreshComponentsAsync(), RefreshCatalogAsync());
+
+    public async Task RefreshCatalogAsync()
+    {
+        try
+        {
+            var fresh = await client.CatalogAsync();
+            if (!Json.Same(fresh, Catalog))
+            {
+                Catalog = fresh;
+                Notify();
+            }
+        }
+        catch (FlockException e)
+        {
+            Error = e.Message;
+            Notify();
+        }
+    }
+
+    /// <summary>Runs a catalog action (they return at once; installs continue as jobs) and adopts the catalog.</summary>
+    public async Task PerformOnCatalogAsync(Func<FlockClient, Task<ServiceCatalog>> change)
+    {
+        try
+        {
+            Catalog = await change(client);
+            Error = null;
+        }
+        catch (FlockException e)
+        {
+            Error = e.Message;
+        }
+        Notify();
+        await RefreshAsync();
+        if (OnChange is not null)
+        {
+            await OnChange();
+        }
+    }
+
+    /// <summary>The tail of a catalog install's output; empty when there is none (yet).</summary>
+    public async Task<string> CatalogLogAsync(string id)
+    {
+        try
+        {
+            return await client.CatalogLogAsync(id);
+        }
+        catch (FlockException)
+        {
+            return "";
+        }
+    }
+
+    public async Task RefreshPostgresAsync()
+    {
+        try
+        {
+            var fresh = await client.PostgresVersionsAsync();
+            if (!Json.Same(fresh, Postgres))
+            {
+                Postgres = fresh;
+                Notify();
+            }
+        }
+        catch (FlockException e)
+        {
+            Error = e.Message;
+            Notify();
+        }
+    }
+
+    public async Task RefreshComponentsAsync()
+    {
+        try
+        {
+            var fresh = await client.ComponentsAsync();
+            if (!Json.Same(fresh, Components))
+            {
+                Components = fresh;
+                Notify();
+            }
+        }
+        catch (FlockException e)
+        {
+            Error = e.Message;
+            Notify();
+        }
+    }
+
+    /// <summary>
+    /// Runs a PostgreSQL action and adopts the versions it returns, then lets the service list and
+    /// the tray catch up. Not Busy(): an install takes minutes and shouldn't freeze other services.
+    /// </summary>
+    public async Task PerformOnPostgresAsync(Func<FlockClient, Task<PostgresVersions>> change)
+    {
+        try
+        {
+            Postgres = await change(client);
+            Error = null;
+        }
+        catch (FlockException e)
+        {
+            Error = e.Message;
+        }
+        Notify();
+        await RefreshAsync();
+        if (OnChange is not null)
+        {
+            await OnChange();
+        }
+    }
+
+    /// <summary>Runs a component action (they return at once; installs continue as jobs) and adopts the catalog.</summary>
+    public async Task PerformOnComponentsAsync(Func<FlockClient, Task<ComponentCatalog>> change)
+    {
+        try
+        {
+            Components = await change(client);
+            Error = null;
+        }
+        catch (FlockException e)
+        {
+            Error = e.Message;
+        }
+        Notify();
+        await RefreshAsync();
+        if (OnChange is not null)
+        {
+            await OnChange();
+        }
+    }
+
+    /// <summary>The tail of a component job's output; empty when there is none (yet).</summary>
+    public async Task<string> ComponentLogAsync(string id)
+    {
+        try
+        {
+            return await client.ComponentLogAsync(id);
+        }
+        catch (FlockException)
+        {
+            return "";
+        }
     }
 
     public async Task<string> PhpBuildLogAsync(string minor)

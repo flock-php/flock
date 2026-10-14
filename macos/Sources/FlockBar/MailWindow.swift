@@ -26,8 +26,7 @@ struct MailWindow: View {
             }
             .overlay {
                 if store.messages.isEmpty {
-                    ContentUnavailableView("No mail", systemImage: "envelope.open",
-                                           description: Text("Send mail to 127.0.0.1:2525. MAIL_USERNAME picks the inbox."))
+                    ContentUnavailableView("No mail", systemImage: "envelope.open", description: Text(emptyHint))
                 }
             }
             .frame(minWidth: 260, idealWidth: 320, maxWidth: 340)
@@ -67,6 +66,21 @@ struct MailWindow: View {
             await store.refresh()
         }
         .onDisappear { store.isVisible = false }
+        .onChange(of: store.messages) {
+            // Cleared elsewhere (the CLI, another inbox's clear): drop the selection and its detail.
+            if let selection, !store.messages.contains(where: { $0.id == selection }) {
+                self.selection = nil
+            }
+        }
+    }
+
+    /// Where to send mail, from the daemon's status.
+    private var emptyHint: String {
+        guard let status = model.status else { return "Flock is not running." }
+        if status.mail.isEmpty {
+            return "The mail catcher isn't running — start it in Settings → Services."
+        }
+        return "Send mail to \(status.mail). MAIL_USERNAME picks the inbox."
     }
 }
 
@@ -112,10 +126,14 @@ private struct MailDetailView: View {
         get { detailState.wrappedValue }
         nonmutating set { detailState.wrappedValue = newValue }
     }
-    private let rawState = State<String?>(initialValue: nil)
-    private var raw: String? {
+    private let rawState = State<Result<String, RawError>?>(initialValue: nil)
+    private var raw: Result<String, RawError>? {
         get { rawState.wrappedValue }
         nonmutating set { rawState.wrappedValue = newValue }
+    }
+
+    struct RawError: Error {
+        let message: String
     }
     private let modeState = State<Mode>(initialValue: Mode.html)
     private var mode: Mode {
@@ -154,8 +172,13 @@ private struct MailDetailView: View {
             }
         }
         .task(id: mode) {
-            if mode == .raw, raw == nil {
-                raw = (try? await model.mail.raw(id)) ?? ""
+            // Loaded once; a failure is shown, and switching back to Raw tries again.
+            if mode == .raw, raw == nil || (try? raw?.get()) == nil {
+                do {
+                    raw = .success(try await model.mail.raw(id))
+                } catch {
+                    raw = .failure(RawError(message: error.localizedDescription))
+                }
             }
         }
     }
@@ -175,16 +198,20 @@ private struct MailDetailView: View {
             .font(.callout)
 
             if !detail.attachments.isEmpty {
-                HStack {
-                    ForEach(detail.attachments) { attachment in
-                        Button {
-                            Task { await model.mail.save(attachment, of: detail.id) }
-                        } label: {
-                            Label("\(attachment.filename) (\(attachment.size.formatted(.byteCount(style: .file))))", systemImage: "paperclip")
+                ScrollView(.horizontal) {
+                    HStack {
+                        ForEach(detail.attachments) { attachment in
+                            Button {
+                                Task { await model.mail.save(attachment, of: detail.id) }
+                            } label: {
+                                Label("\(attachment.filename) (\(attachment.size.formatted(.byteCount(style: .file))))", systemImage: "paperclip")
+                            }
+                            .help("Save…")
                         }
-                        .help("Save…")
                     }
+                    .padding(.vertical, 2)
                 }
+                .scrollIndicators(.automatic)
                 .controlSize(.small)
             }
 
@@ -219,9 +246,12 @@ private struct MailDetailView: View {
         case .text:
             MonospacedText(detail.text.isEmpty ? "(no text part)" : detail.text)
         case .raw:
-            if let raw {
-                MonospacedText(raw)
-            } else {
+            switch raw {
+            case let .success(text):
+                MonospacedText(text)
+            case let .failure(error):
+                ContentUnavailableView("Could not load the raw message", systemImage: "exclamationmark.triangle", description: Text(error.message))
+            case nil:
                 ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         case .headers:

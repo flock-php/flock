@@ -118,6 +118,7 @@ private struct NodeReleaseRow: View {
 
             Spacer(minLength: 12)
             actions
+                .disabled(busy != nil)
         }
         .padding(.vertical, 3)
         .confirmationDialog("Uninstall Node \(release.major)?", isPresented: confirmUninstallState.projectedValue) {
@@ -176,9 +177,7 @@ private struct NodeReleaseRow: View {
 
     @ViewBuilder
     private var actions: some View {
-        if busy != nil {
-            EmptyView()
-        } else if !release.isInstalled {
+        if !release.isInstalled {
             Button {
                 run("Downloading Node.js \(release.latest)…") { try await $0.installNodeMajor(release.major) }
             } label: {
@@ -203,9 +202,11 @@ private struct NodeReleaseRow: View {
             }
             if !release.isDefault {
                 Button("Make Default") {
+                    busy = "Making Node \(release.major) the default…"
                     Task {
                         await model.settings.perform { _ = try await $0.updateSettings(SettingsChange(defaultNode: release.major)) }
                         await model.settings.refreshNode()
+                        busy = nil
                     }
                 }
             }

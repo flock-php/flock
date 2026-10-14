@@ -1,17 +1,14 @@
-# Builds the Flock tray app into windows\dist\FlockTray-<arch>\ (self-contained: no .NET or
+# Builds the Flock tray app into windows\dist\FlockTray-x64\ (self-contained: no .NET or
 # Windows App SDK install needed on the target machine).
 #
-#   .\windows\build.ps1               # for this machine's architecture
-#   .\windows\build.ps1 -Arch arm64
+#   .\windows\build.ps1
 #
+# Only x64 is built for now; Windows on ARM runs it under emulation.
 # Needs the .NET 10 SDK (winget install Microsoft.DotNet.SDK.10).
-param(
-    [ValidateSet("x64", "arm64")]
-    [string]$Arch = $(if ($env:PROCESSOR_ARCHITECTURE -eq "ARM64") { "arm64" } else { "x64" })
-)
 $ErrorActionPreference = "Stop"
 
-$platform = if ($Arch -eq "arm64") { "ARM64" } else { "x64" }
+$Arch = "x64"
+$platform = "x64"
 $out = Join-Path $PSScriptRoot "dist\FlockTray-$Arch"
 
 dotnet test (Join-Path $PSScriptRoot "FlockKit.Tests")
