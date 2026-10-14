@@ -3,6 +3,7 @@
 *.test
 *.out
 .DS_Store
+/.idea/
 /build/php/spc
 /build/php/buildroot/
 /build/php/source/
