@@ -1,0 +1,93 @@
+# Builds the unsigned macOS disk image and Windows installer and keeps them as run artifacts.
+# Start it by hand from the Actions tab (any branch), or let release.yml call it for a release.
+name: Build
+
+on:
+  workflow_dispatch:
+  workflow_call:
+    inputs:
+      ref:
+        description: Git ref to build (a release tag); defaults to the triggering ref.
+        type: string
+        default: ""
+      version:
+        description: Version to stamp into the builds (e.g. 1.2.0); defaults to git describe.
+        type: string
+        default: ""
+
+permissions:
+  contents: read
+
+jobs:
+  macos:
+    name: macOS (universal)
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref }}
+          fetch-depth: 0 # tags, for git describe
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+
+      - name: Version
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
+        run: echo "VERSION=${INPUT_VERSION:-$(git describe --tags --always)}" >> "$GITHUB_ENV"
+
+      - name: Test
+        run: swift test --package-path macos
+
+      - name: Build app and disk image
+        run: |
+          macos/build-app.sh
+          mv build/macos/Flock.dmg "build/macos/Flock-$VERSION-macOS.dmg"
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: flock-macos
+          path: build/macos/Flock-*-macOS.dmg
+          if-no-files-found: error
+
+  windows:
+    name: Windows (x64)
+    runs-on: windows-2025
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref }}
+          fetch-depth: 0
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Install Inno Setup
+        run: |
+          if (-not (Test-Path "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe")) {
+            choco install innosetup --no-progress -y
+          }
+
+      - name: Version
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
+        run: |
+          $v = if ($env:INPUT_VERSION) { $env:INPUT_VERSION } else { git describe --tags --always }
+          "VERSION=$v" >> $env:GITHUB_ENV
+
+      - name: Build installer
+        run: |
+          ./windows/build-installer.ps1
+          Move-Item windows/dist/Flock-Setup-x64.exe "windows/dist/Flock-Setup-$env:VERSION-x64.exe"
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: flock-windows
+          path: windows/dist/Flock-Setup-*-x64.exe
+          if-no-files-found: error

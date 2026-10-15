@@ -10,7 +10,8 @@ $ErrorActionPreference = "Stop"
 $Arch = "x64"
 $repo = Split-Path $PSScriptRoot -Parent
 $goArch = "amd64"
-$version = git -C $repo describe --tags --always --dirty 2>$null
+$version = $env:VERSION
+if (-not $version) { $version = git -C $repo describe --tags --always --dirty 2>$null }
 if (-not $version) { $version = "dev" }
 
 # Go and Inno Setup may have been installed after this terminal was opened.

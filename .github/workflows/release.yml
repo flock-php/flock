@@ -1,0 +1,60 @@
+# Release branches (1.x, 2.x, …): release-please keeps a release PR open with the next version
+# and changelog from the conventional commits; merging it tags the release, and the builds are
+# attached to it. main is for development and never releases.
+name: Release
+
+on:
+  push:
+    branches: ["[0-9]+.x"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+
+jobs:
+  release-please:
+    # A manual start on main or a feature branch does nothing.
+    if: endsWith(github.ref_name, '.x')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      issues: write
+      pull-requests: write
+    outputs:
+      release_created: ${{ steps.release.outputs.release_created }}
+      tag_name: ${{ steps.release.outputs.tag_name }}
+      version: ${{ steps.release.outputs.version }}
+    steps:
+      - uses: googleapis/release-please-action@v5
+        id: release
+        with:
+          target-branch: ${{ github.ref_name }}
+
+  build:
+    needs: release-please
+    if: needs.release-please.outputs.release_created == 'true'
+    uses: ./.github/workflows/build.yml
+    with:
+      ref: ${{ needs.release-please.outputs.tag_name }}
+      version: ${{ needs.release-please.outputs.version }}
+
+  publish:
+    name: Attach builds to the release
+    needs: [release-please, build]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Upload
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.release-please.outputs.tag_name }}
+        run: gh release upload "$TAG" dist/* --clobber --repo "$GITHUB_REPOSITORY"
