@@ -1,11 +1,11 @@
-# Release branches (1.x, 2.x, …): release-please keeps a release PR open with the next version
-# and changelog from the conventional commits; merging it tags the release, and the builds are
-# attached to it. main is for development and never releases.
+# main (and maintenance branches like 1.x): release-please keeps a release PR open with the next
+# version and changelog from the conventional commits. Nothing is tagged or released until that PR
+# is merged; merging it tags the release, and the builds are attached to it.
 name: Release
 
 on:
   push:
-    branches: ["*.x"]
+    branches: [main, "*.x"]
   workflow_dispatch:
 
 permissions:
@@ -16,8 +16,8 @@ concurrency:
 
 jobs:
   release-please:
-    # A manual start on main or a feature branch does nothing.
-    if: endsWith(github.ref_name, '.x')
+    # A manual start on a feature branch does nothing.
+    if: github.ref_name == 'main' || endsWith(github.ref_name, '.x')
     runs-on: ubuntu-latest
     permissions:
       contents: write
