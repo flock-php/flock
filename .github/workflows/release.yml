@@ -5,7 +5,7 @@ name: Release
 
 on:
   push:
-    branches: ["[0-9]+.x"]
+    branches: ["*.x"]
   workflow_dispatch:
 
 permissions:
@@ -21,7 +21,6 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
-      issues: write
       pull-requests: write
     outputs:
       release_created: ${{ steps.release.outputs.release_created }}
@@ -31,6 +30,9 @@ jobs:
       - uses: googleapis/release-please-action@v5
         id: release
         with:
+          # RELEASE_PLEASE_TOKEN (a fine-grained PAT) is preferred: PRs created with the default
+          # GITHUB_TOKEN don't trigger other workflows.
+          token: ${{ secrets.RELEASE_PLEASE_TOKEN || secrets.GITHUB_TOKEN }}
           target-branch: ${{ github.ref_name }}
 
   build:
