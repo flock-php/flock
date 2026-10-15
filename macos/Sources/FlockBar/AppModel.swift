@@ -35,6 +35,15 @@ final class AppModel {
         }
     }
 
+    /// A flock://install link waiting for the user to confirm it in Settings → Services.
+    var pendingInstall: InstallLink?
+
+    /// Shows the service a link asks to install; the Services pane then asks to confirm.
+    func handle(_ link: InstallLink) {
+        pendingInstall = link
+        showSettings(.services, service: link.service)
+    }
+
     let mail: MailStore
     let dumps: DumpStore
     let logs: LogStore

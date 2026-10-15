@@ -44,6 +44,9 @@ public sealed class AppModel
     /// <summary>Flock isn't set up for this user yet, and this app can do it (see Installation).</summary>
     public bool NeedsSetup { get; set; }
 
+    /// <summary>A flock://install link waiting for the user to confirm it in Settings → Services.</summary>
+    public InstallLink? PendingInstall { get; set; }
+
     /// <summary>The app is replacing the installed CLI with its bundled one.</summary>
     public bool IsUpdating { get; private set; }
 

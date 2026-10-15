@@ -1,3 +1,4 @@
+using Flock.Kit;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Markup;
@@ -49,6 +50,7 @@ public sealed partial class App : Application, IXamlMetadataProvider
             tray = new Native.TrayIcon(IconPath(), "Flock");
             tray.Clicked += TogglePanel;
             tray.ShowRequested += ShowMain;
+            tray.LinkReceived += text => OpenLink(InstallLink.Parse(text));
             tray.MenuRequested += ShowMenu;
             tray.ThemeChanged += UpdateTray;
 
@@ -62,8 +64,14 @@ public sealed partial class App : Application, IXamlMetadataProvider
             }
             // Started by hand (e.g. from the Start menu): open the main window, so it is clear the
             // app runs (Windows 11 hides new notification area icons). The panel belongs to the
-            // tray icon. The sign-in autostart passes --background and stays quiet.
-            if (!Environment.GetCommandLineArgs().Contains(BackgroundArgument))
+            // tray icon. The sign-in autostart passes --background and stays quiet. A flock://
+            // link that starts the app opens Settings → Services instead.
+            var arguments = Environment.GetCommandLineArgs();
+            if (arguments.Select(InstallLink.Parse).FirstOrDefault(link => link is not null) is { } link)
+            {
+                OpenLink(link);
+            }
+            else if (!arguments.Contains(BackgroundArgument))
             {
                 ShowMain();
             }
@@ -114,6 +122,28 @@ public sealed partial class App : Application, IXamlMetadataProvider
 
     /// <summary>Opens the app from outside the tray (a start by hand): the setup until Flock is set up, then Settings.</summary>
     private void ShowMain() => Open(Model.NeedsSetup ? WindowKind.Setup : WindowKind.Settings);
+
+    /// <summary>
+    /// A flock://install link (registered by the installer), e.g. from the website's install
+    /// buttons: shows the service in Settings → Services, which asks before installing anything.
+    /// Before the setup the link waits, and Services asks about it once Flock is set up.
+    /// </summary>
+    private void OpenLink(InstallLink? link)
+    {
+        if (link is null)
+        {
+            ShowMain();
+            return;
+        }
+        Model.PendingInstall = link;
+        if (Model.NeedsSetup)
+        {
+            Open(WindowKind.Setup);
+            return;
+        }
+        Open(WindowKind.Settings, SettingsPane.Services);
+        (windows[WindowKind.Settings] as SettingsWindow)?.ShowService(link.Service);
+    }
 
     private void ShowMenu()
     {

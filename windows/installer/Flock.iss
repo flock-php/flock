@@ -58,6 +58,11 @@ Name: "{userprograms}\Flock"; Filename: "{app}\FlockTray.exe"
 [Registry]
 ; The same value the app's "Open Flock at sign-in" setting writes (removed again on uninstall).
 Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: string; ValueName: "Flock"; ValueData: """{app}\FlockTray.exe"" --background"; Tasks: startup
+; flock://install/<service>/<version> links from the website; the app asks before installing.
+Root: HKCU; Subkey: "Software\Classes\flock"; ValueType: string; ValueName: ""; ValueData: "URL:Flock"; Flags: uninsdeletekey
+Root: HKCU; Subkey: "Software\Classes\flock"; ValueType: string; ValueName: "URL Protocol"; ValueData: ""
+Root: HKCU; Subkey: "Software\Classes\flock\DefaultIcon"; ValueType: string; ValueName: ""; ValueData: """{app}\FlockTray.exe"",0"
+Root: HKCU; Subkey: "Software\Classes\flock\shell\open\command"; ValueType: string; ValueName: ""; ValueData: """{app}\FlockTray.exe"" ""%1"""
 
 [Run]
 Filename: "{app}\FlockTray.exe"; Description: "Open Flock"; Flags: postinstall nowait skipifsilent

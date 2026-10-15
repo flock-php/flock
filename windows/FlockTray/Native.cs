@@ -37,8 +37,26 @@ internal static partial class Native
     [DllImport("user32.dll")]
     private static extern bool AllowSetForegroundWindow(uint processId);
 
-    /// <summary>Asks the running instance to bring its main window to the front.</summary>
-    public static void SignalRunningInstance()
+    private const int WM_COPYDATA = 0x004A;
+    /// <summary>Marks a WM_COPYDATA from a second instance as a flock:// link ("FLK1").</summary>
+    private static readonly IntPtr LinkMessage = 0x464C4B31;
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct COPYDATASTRUCT
+    {
+        public IntPtr dwData;
+        public int cbData;
+        public IntPtr lpData;
+    }
+
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+    private static extern IntPtr SendMessageTimeout(IntPtr hwnd, int msg, IntPtr wParam, ref COPYDATASTRUCT lParam, int flags, int timeout, out IntPtr result);
+
+    /// <summary>
+    /// Asks the running instance to bring its main window to the front, or, for a flock:// link
+    /// this process was started with, to open the link.
+    /// </summary>
+    public static void SignalRunningInstance(string? link = null)
     {
         var hwnd = FindWindow(TrayWindowClass, null);
         if (hwnd != IntPtr.Zero)
@@ -47,7 +65,23 @@ internal static partial class Native
             // on, or the running instance's window would only flash in the taskbar.
             GetWindowThreadProcessId(hwnd, out var process);
             AllowSetForegroundWindow(process);
-            PostMessage(hwnd, WM_SHOW_APP, IntPtr.Zero, IntPtr.Zero);
+            if (link is null)
+            {
+                PostMessage(hwnd, WM_SHOW_APP, IntPtr.Zero, IntPtr.Zero);
+                return;
+            }
+            // WM_COPYDATA carries the text across processes; it only lives until the call returns.
+            var text = Marshal.StringToHGlobalUni(link);
+            try
+            {
+                var data = new COPYDATASTRUCT { dwData = LinkMessage, cbData = (link.Length + 1) * 2, lpData = text };
+                const int SMTO_ABORTIFHUNG = 0x2;
+                SendMessageTimeout(hwnd, WM_COPYDATA, IntPtr.Zero, ref data, SMTO_ABORTIFHUNG, 5000, out _);
+            }
+            finally
+            {
+                Marshal.FreeHGlobal(text);
+            }
         }
     }
 
@@ -352,6 +386,8 @@ internal static partial class Native
         public event Action? Clicked;
         public event Action? MenuRequested;
         public event Action? ShowRequested;
+        /// <summary>A second instance was started with a flock:// link (the raw text; parse it before use).</summary>
+        public event Action<string>? LinkReceived;
         /// <summary>Windows switched between light and dark mode (the taskbar's or the apps').</summary>
         public event Action? ThemeChanged;
 
@@ -475,6 +511,18 @@ internal static partial class Native
                 if (msg == WM_SHOW_APP)
                 {
                     self.ShowRequested?.Invoke();
+                    return IntPtr.Zero;
+                }
+                if (msg == WM_COPYDATA)
+                {
+                    var data = Marshal.PtrToStructure<COPYDATASTRUCT>(lParam);
+                    if (data.dwData == LinkMessage && data.cbData is > 0 and <= 1024)
+                    {
+                        // Copied now: the sender frees it as soon as this returns.
+                        var link = Marshal.PtrToStringUni(data.lpData, data.cbData / 2).TrimEnd('\0');
+                        self.LinkReceived?.Invoke(link);
+                        return 1;
+                    }
                     return IntPtr.Zero;
                 }
                 if (msg == WM_SETTINGCHANGE && Marshal.PtrToStringUni(lParam) == "ImmersiveColorSet")

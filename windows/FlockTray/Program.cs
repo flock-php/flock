@@ -21,11 +21,11 @@ public static class Program
         }
 
         // One tray icon per user session: a second start (e.g. from the Start menu) brings the
-        // running app's main window to the front.
+        // running app's main window to the front, and one for a flock:// link hands it over.
         using var single = new Mutex(initiallyOwned: true, @"Local\Flock.Tray", out var first);
         if (!first)
         {
-            Native.SignalRunningInstance();
+            Native.SignalRunningInstance(args.FirstOrDefault(a => InstallLink.Parse(a) is not null));
             return 0;
         }
 

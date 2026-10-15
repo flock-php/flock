@@ -398,6 +398,20 @@ internal static class Ui
         return await dialog.ShowAsync() == ContentDialogResult.Primary;
     }
 
+    /// <summary>Tells the user something that needs no decision: a title, a sentence and OK.</summary>
+    public static async Task Inform(XamlRoot root, string title, string details)
+    {
+        var dialog = new ContentDialog
+        {
+            Title = title,
+            Content = new TextBlock { Text = details, TextWrapping = TextWrapping.Wrap },
+            CloseButtonText = "OK",
+            DefaultButton = ContentDialogButton.Close,
+            XamlRoot = root,
+        };
+        await dialog.ShowAsync();
+    }
+
     /// <summary>Enables or disables every control in a panel (a row's buttons while its request runs).</summary>
     public static void SetEnabled(Panel panel, bool enabled)
     {

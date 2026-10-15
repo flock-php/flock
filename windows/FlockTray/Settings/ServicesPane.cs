@@ -34,6 +34,41 @@ internal sealed partial class ServicesPane(SettingsWindow window, AppModel model
         Rerender();
     }
 
+    /// <summary>
+    /// Asks about a pending flock://install link (App.Open) once the services and versions are
+    /// loaded: nothing installs until the user confirms here.
+    /// </summary>
+    private void ConfirmPendingLink()
+    {
+        if (Model.PendingInstall is not { } link || link.Resolve(Store.Services, Store.Catalog, Store.Postgres) is not { } request)
+        {
+            return;
+        }
+        Model.PendingInstall = null;
+        // Not while building the pane: a dialog needs the window's content in place.
+        Window.DispatcherQueue.TryEnqueue(async () =>
+        {
+            if (request.Target is not { } target)
+            {
+                await Ui.Inform(Window.Content.XamlRoot, request.Title, request.Message);
+                return;
+            }
+            if (!await Window.Confirm(request.Title, request.Message, "Install"))
+            {
+                return;
+            }
+            var line = target.Line;
+            if (target.Service == "postgres")
+            {
+                await Run(line, "Installing…", c => c.InstallPostgresAsync(line));
+            }
+            else
+            {
+                await RunCatalog(target.Service, c => c.InstallCatalogServiceAsync(target.Service, line));
+            }
+        });
+    }
+
     public override UIElement Build()
     {
         var all = Store.Services;
@@ -41,8 +76,10 @@ internal sealed partial class ServicesPane(SettingsWindow window, AppModel model
         {
             return Ui.EmptyState(Ui.GlyphServer, "No services");
         }
-        var services = showAll ? all : all.Where(s => !s.IsOnRequest || s.Installed || WorkText(s) is not null || CatalogFailed(s)).ToList();
+        // With "Installed", also the selected service, so showing one from elsewhere still works.
+        var services = showAll ? all : all.Where(s => !s.IsOnRequest || s.Installed || WorkText(s) is not null || CatalogFailed(s) || s.Id == selection).ToList();
         var selected = services.FirstOrDefault(s => s.Id == selection) ?? services[0];
+        ConfirmPendingLink();
 
         var list = new StackPanel { Spacing = 4 };
         var filter = new SelectorBar();

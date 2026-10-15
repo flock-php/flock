@@ -96,6 +96,18 @@ struct ServicesPane: View {
         } message: { service in
             Text("Your sites can't use \(service.name) until you start it again; it stays stopped after restarts.")
         }
+        // A flock://install link (AppModel.handle): nothing installs until the user confirms here.
+        .alert(linkRequest?.title ?? "", isPresented: Binding(get: { linkRequest != nil }, set: { if !$0 { model.pendingInstall = nil } }),
+               presenting: linkRequest) { request in
+            if let install = request.confirmation {
+                Button("Install") { self.install(install) }
+                Button("Cancel", role: .cancel) {}
+            } else {
+                Button("OK") {}
+            }
+        } message: { request in
+            Text(request.message)
+        }
         // Versions and components load when the pane appears, then follow the status (AppModel);
         // while something installs, builds or switches they are polled every 2 seconds.
         .task { await store.refreshInstalls() }
@@ -123,12 +135,30 @@ struct ServicesPane: View {
         }
     }
 
+    /// What a pending flock://install link asks for, once the services and versions are loaded.
+    private var linkRequest: InstallLink.Resolution? {
+        let store = model.settings
+        return model.pendingInstall?.resolve(services: store.services, catalog: store.catalog, postgres: store.postgres)
+    }
+
+    private func install(_ install: InstallLink.Install) {
+        let store = model.settings
+        let id = install.service
+        let line = install.line
+        if id == "postgres" {
+            Task { await store.performOnPostgres(line, .installing) { try await $0.installPostgres(line) } }
+        } else {
+            Task { await store.performOnCatalog(id) { try await $0.installCatalogService(id, line: line) } }
+        }
+    }
+
     /// The services the filter shows: with "Installed", the built-in ones, the installed ones and
     /// those installing (and the selected one, so picking a service from elsewhere still works).
     private func visible(_ services: [Service]) -> [Service] {
         guard filter == .installed else { return services }
         return services.filter { service in
             !service.isOnRequest || service.installed || activity(of: service) == .working || activity(of: service) == .failed
+                || service.id == model.servicesSelection
         }
     }
 

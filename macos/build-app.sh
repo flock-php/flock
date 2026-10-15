@@ -46,6 +46,14 @@ cat > "$APP/Contents/Info.plist" <<PLIST
 	<key>NSHighResolutionCapable</key><true/>
 	<key>NSAppTransportSecurity</key>
 	<dict><key>NSAllowsLocalNetworking</key><true/></dict>
+	<!-- flock://install/<service>/<version> links from the website; the app asks before installing. -->
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key><string>dev.flock.bar</string>
+			<key>CFBundleURLSchemes</key><array><string>flock</string></array>
+		</dict>
+	</array>
 </dict>
 </plist>
 PLIST

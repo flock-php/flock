@@ -133,6 +133,13 @@ internal sealed partial class SettingsWindow : FlockWindow
         Show(pane);
     }
 
+    /// <summary>Shows a service's details in the Services pane.</summary>
+    public void ShowService(string id)
+    {
+        Select(SettingsPane.Services);
+        ((ServicesPane)panes[SettingsPane.Services]).Select(id);
+    }
+
     private void Show(SettingsPane pane)
     {
         current = pane;

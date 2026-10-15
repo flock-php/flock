@@ -1,4 +1,5 @@
 import AppKit
+import FlockKit
 import SwiftUI
 
 /// Note on `State`: with only the Command Line Tools installed, `@State` cannot be used —
@@ -17,7 +18,7 @@ struct FlockBarApp: App {
             PanelView()
                 .environment(model)
         } label: {
-            MenuBarLabel(mode: model.logoMark, needsSetup: model.needsSetup)
+            MenuBarLabel(model: model)
         }
         .menuBarExtraStyle(.window)
 
@@ -75,20 +76,40 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NotificationCenter.default.post(name: Self.reopen, object: nil)
         return false
     }
+
+    static let openLink = Notification.Name("dev.flock.openLink")
+
+    /// The flock://install link macOS handed over last, until the menu bar label takes it. Kept
+    /// here because a link that starts the app can arrive before any view listens.
+    private(set) static var pendingLink: InstallLink?
+
+    static func takePendingLink() -> InstallLink? {
+        defer { pendingLink = nil }
+        return pendingLink
+    }
+
+    /// flock:// links (CFBundleURLTypes in build-app.sh), e.g. from the website's install buttons.
+    func application(_ application: NSApplication, open urls: [URL]) {
+        guard let link = urls.lazy.compactMap(InstallLink.init(url:)).first else { return }
+        Self.pendingLink = link
+        NotificationCenter.default.post(name: Self.openLink, object: nil)
+    }
 }
 
 /// The menu bar icon. It is the only view that exists at launch, so it also opens the
-/// window requested by `--snapshot`, or the main window when started by hand.
+/// window requested by `--snapshot`, the main window when started by hand, and Settings →
+/// Services for a flock://install link.
 private struct MenuBarLabel: View {
-    let mode: LogoMark.Mode
-    let needsSetup: Bool
+    let model: AppModel
     @Environment(\.openWindow) private var openWindow
 
     var body: some View {
-        LogoMark(mode: mode)
+        LogoMark(mode: model.logoMark)
             .task {
                 if let target = Snapshot.target {
                     openWindow.activating(target)
+                } else if let link = AppDelegate.takePendingLink() {
+                    open(link)
                 } else if !AppDelegate.launchedAtLogin {
                     openMain()
                 }
@@ -96,11 +117,22 @@ private struct MenuBarLabel: View {
             .onReceive(NotificationCenter.default.publisher(for: AppDelegate.reopen)) { _ in
                 openMain()
             }
+            .onReceive(NotificationCenter.default.publisher(for: AppDelegate.openLink)) { _ in
+                if let link = AppDelegate.takePendingLink() {
+                    open(link)
+                }
+            }
     }
 
     /// The setup until Flock is set up, then Settings.
     private func openMain() {
-        openWindow.activating(needsSetup ? WindowID.setup : WindowID.settings)
+        openWindow.activating(model.needsSetup ? WindowID.setup : WindowID.settings)
+    }
+
+    /// Before the setup the link waits: Services asks about it once Flock is set up.
+    private func open(_ link: InstallLink) {
+        model.handle(link)
+        openMain()
     }
 }
 
