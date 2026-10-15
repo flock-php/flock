@@ -101,7 +101,7 @@ internal sealed class AboutPane(SettingsWindow window, AppModel model) : Pane(wi
     {
         var icon = new Image
         {
-            Source = new Microsoft.UI.Xaml.Media.Imaging.BitmapImage(new Uri(Path.Combine(AppContext.BaseDirectory, "Assets", "AppIcon.ico"))),
+            Source = new Microsoft.UI.Xaml.Media.Imaging.BitmapImage(new Uri(Path.Combine(AppContext.BaseDirectory, "Assets", "AppIcon.png"))),
             Width = 72,
             Height = 72,
         };

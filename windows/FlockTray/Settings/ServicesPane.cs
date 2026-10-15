@@ -206,6 +206,16 @@ internal sealed partial class ServicesPane(SettingsWindow window, AppModel model
     {
         var panel = new StackPanel { Spacing = 14 };
         panel.Children.Add(Ui.Row(8, Ui.StatusDot(service.Running), Ui.Text(service.Name, "SubtitleTextBlockStyle")));
+        var card = Ui.Card(panel, new Thickness(16));
+        card.VerticalAlignment = VerticalAlignment.Top;
+
+        // A service Flock can't run here has nothing to configure or connect to: just say why.
+        if (!service.Available)
+        {
+            panel.Children.Add(Hero(Ui.GlyphServer, "Not available on Windows",
+                service.Unavailable.Length > 0 ? service.Unavailable : $"Flock can't run {service.Name} on Windows."));
+            return card;
+        }
 
         // Why it isn't working; the stopped DNS server's explanation below already includes it.
         if (service.Problem.Length > 0 && !(service.Id == "dns" && !service.Running))
@@ -240,12 +250,7 @@ internal sealed partial class ServicesPane(SettingsWindow window, AppModel model
         {
             PostgresDetail(panel);
         }
-        if (!service.Available)
-        {
-            panel.Children.Add(Hero(Ui.GlyphServer, "Not available on Windows",
-                service.Unavailable.Length > 0 ? service.Unavailable : $"Flock can't run {service.Name} on Windows."));
-        }
-        else if (service.IsOnRequest)
+        if (service.IsOnRequest)
         {
             CatalogDetail(panel, service);
         }
@@ -271,8 +276,6 @@ internal sealed partial class ServicesPane(SettingsWindow window, AppModel model
                 panel.Children.Add(Ui.Column(6, Ui.Text("Connection", "BodyStrongTextBlockStyle"), Ui.CodeBlock(service.Url)));
             }
         }
-        var card = Ui.Card(panel, new Thickness(16));
-        card.VerticalAlignment = VerticalAlignment.Top;
         return card;
     }
 

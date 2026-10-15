@@ -14,8 +14,10 @@ swift build -c release --product FlockBar "${ARCHS[@]}"
 
 APP="$OUT/Flock.app"
 rm -rf "$APP"
-mkdir -p "$APP/Contents/MacOS"
+mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp "$(swift build -c release "${ARCHS[@]}" --show-bin-path)/FlockBar" "$APP/Contents/MacOS/FlockBar"
+# The app icon and the menu bar's logomark, rendered by design/icongen.
+cp Resources/AppIcon.icns Resources/MenuBar*.png Resources/LogoMark*.png "$APP/Contents/Resources/"
 
 # The CLI for both architectures, built like `make build`; `flock install` copies it to the data dir.
 CLI="$OUT/cli"
@@ -35,6 +37,7 @@ cat > "$APP/Contents/Info.plist" <<PLIST
 	<key>CFBundleName</key><string>Flock</string>
 	<key>CFBundleDisplayName</key><string>Flock</string>
 	<key>CFBundleExecutable</key><string>FlockBar</string>
+	<key>CFBundleIconFile</key><string>AppIcon</string>
 	<key>CFBundlePackageType</key><string>APPL</string>
 	<key>CFBundleShortVersionString</key><string>${VERSION}</string>
 	<key>CFBundleVersion</key><string>${VERSION}</string>

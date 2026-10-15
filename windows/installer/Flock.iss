@@ -35,6 +35,8 @@ Compression=lzma2/max
 SolidCompression=yes
 ; The tray app is stopped in PrepareToInstall; the Restart Manager would ask the user instead.
 CloseApplications=no
+; Tells Explorer to refresh its icon cache, or the Start menu and taskbar keep an updated app's old icon.
+ChangesAssociations=yes
 
 [Tasks]
 Name: startup; Description: "Open Flock when I sign in"
@@ -43,6 +45,12 @@ Name: startup; Description: "Open Flock when I sign in"
 Source: "..\dist\FlockTray-{#Arch}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "..\..\dist\windows-{#GoArch}\flock.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\..\dist\windows-{#GoArch}\flock-helper.exe"; DestDir: "{app}"; Flags: ignoreversion
+
+[InstallDelete]
+; Tray icons of versions before the brand logomark (now Tray*.Light/Dark.ico).
+Type: files; Name: "{app}\Assets\Flock.ico"
+Type: files; Name: "{app}\Assets\FlockStopped.ico"
+Type: files; Name: "{app}\Assets\FlockWarning.ico"
 
 [Icons]
 Name: "{userprograms}\Flock"; Filename: "{app}\FlockTray.exe"

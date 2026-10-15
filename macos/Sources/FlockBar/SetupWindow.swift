@@ -108,7 +108,7 @@ struct SetupWindow: View {
 
     private func header(_ title: String, _ text: String?) -> some View {
         VStack(alignment: .leading, spacing: 10) {
-            SettingsIcon(symbol: "bird.fill", color: .accentColor, size: 48)
+            AppIconView(size: 60)
             Text(title).font(.title.weight(.semibold))
             if let text {
                 Text(text).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)

@@ -20,7 +20,8 @@ public static class Program
             return SelfTest.RunAsync(client, Console.Out).GetAwaiter().GetResult();
         }
 
-        // One tray icon per user session: a second start just shows the running app's panel.
+        // One tray icon per user session: a second start (e.g. from the Start menu) brings the
+        // running app's main window to the front.
         using var single = new Mutex(initiallyOwned: true, @"Local\Flock.Tray", out var first);
         if (!first)
         {

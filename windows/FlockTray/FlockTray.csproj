@@ -38,6 +38,6 @@
     <ProjectReference Include="..\FlockKit\FlockKit.csproj" />
   </ItemGroup>
   <ItemGroup>
-    <Content Include="Assets\*.ico" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="Assets\*.ico;Assets\*.png" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>

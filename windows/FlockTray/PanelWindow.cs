@@ -50,6 +50,7 @@ internal sealed partial class PanelWindow : Window
                 Hide();
             }
         };
+        scroller.ActualThemeChanged += (_, _) => dirty = true;
         model.Changed += () =>
         {
             dirty = true;
@@ -73,18 +74,10 @@ internal sealed partial class PanelWindow : Window
         ShowNearTray();
     }
 
-    public void ShowNearTray() => Show(Native.CursorPosition());
-
-    /// <summary>Shows the panel in the corner of the primary screen where the notification area is.</summary>
-    public void ShowAtTrayCorner()
+    /// <summary>Shows the panel next to the tray icon, which is under the cursor (an icon click or its menu).</summary>
+    public void ShowNearTray()
     {
-        var area = DisplayArea.Primary.WorkArea;
-        Show(new Native.POINT { X = area.X + area.Width - 1, Y = area.Y + area.Height - 1 });
-    }
-
-    private void Show(Native.POINT at)
-    {
-        anchor = at;
+        anchor = Native.CursorPosition();
         if (dirty)
         {
             Render();
@@ -188,10 +181,11 @@ internal sealed partial class PanelWindow : Window
 
     private Grid Header()
     {
-        var file = !model.IsRunning ? "FlockStopped.ico" : model.IsDegraded ? "FlockWarning.ico" : "Flock.ico";
+        // The tray icon, colored for the panel's own theme (which can differ from the taskbar's).
+        var file = App.TrayIconPath(model, scroller.ActualTheme == ElementTheme.Light, ".png");
         var icon = new Image
         {
-            Source = new Microsoft.UI.Xaml.Media.Imaging.BitmapImage(new Uri(System.IO.Path.Combine(AppContext.BaseDirectory, "Assets", file))),
+            Source = new Microsoft.UI.Xaml.Media.Imaging.BitmapImage(new Uri(file)),
             Width = 26,
             Height = 26,
         };

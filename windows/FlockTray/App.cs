@@ -48,35 +48,24 @@ public sealed partial class App : Application, IXamlMetadataProvider
 
             tray = new Native.TrayIcon(IconPath(), "Flock");
             tray.Clicked += TogglePanel;
-            tray.ShowRequested += ShowPanel;
+            tray.ShowRequested += ShowMain;
             tray.MenuRequested += ShowMenu;
+            tray.ThemeChanged += UpdateTray;
 
             Model.Changed += UpdateTray;
             Model.NeedsSetup = Installation.BundledFlock is not null && !Installation.IsSetUp;
             Model.StartPolling();
 
-            // Started by hand: show the panel, so it is clear the app runs (Windows 11 hides new
-            // notification area icons), or the setup on the first start after installing. The
-            // sign-in autostart passes --background and stays quiet.
-            var background = Environment.GetCommandLineArgs().Contains(BackgroundArgument);
-            if (Model.NeedsSetup)
+            if (!Model.NeedsSetup && Installation.NeedsUpdate)
             {
-                if (!background)
-                {
-                    Open(WindowKind.Setup);
-                }
+                _ = Model.UpdateInstallationAsync();
             }
-            else
+            // Started by hand (e.g. from the Start menu): open the main window, so it is clear the
+            // app runs (Windows 11 hides new notification area icons). The panel belongs to the
+            // tray icon. The sign-in autostart passes --background and stays quiet.
+            if (!Environment.GetCommandLineArgs().Contains(BackgroundArgument))
             {
-                if (Installation.NeedsUpdate)
-                {
-                    _ = Model.UpdateInstallationAsync();
-                }
-                if (!background)
-                {
-                    panel = new PanelWindow(Model);
-                    panel.ShowAtTrayCorner();
-                }
+                ShowMain();
             }
         }
         catch (Exception e)
@@ -91,10 +80,14 @@ public sealed partial class App : Application, IXamlMetadataProvider
     /// <summary>Command line argument of the sign-in autostart.</summary>
     public const string BackgroundArgument = "--background";
 
-    private string IconPath()
+    private string IconPath() => TrayIconPath(Model, Native.TaskbarIsLight);
+
+    /// <summary>The logomark for the daemon's state, colored for a light or a dark background.</summary>
+    /// <param name="extension">.ico for the notification area; .png inside windows (WinUI scales up an .ico's smallest image).</param>
+    public static string TrayIconPath(AppModel model, bool light, string extension = ".ico")
     {
-        var name = !Model.IsRunning ? "FlockStopped.ico" : Model.IsDegraded ? "FlockWarning.ico" : "Flock.ico";
-        return Path.Combine(AppContext.BaseDirectory, "Assets", name);
+        var state = !model.IsRunning ? "TrayStopped" : model.IsDegraded ? "TrayWarning" : "Tray";
+        return Path.Combine(AppContext.BaseDirectory, "Assets", $"{state}.{(light ? "Light" : "Dark")}{extension}");
     }
 
     private void UpdateTray()
@@ -118,6 +111,9 @@ public sealed partial class App : Application, IXamlMetadataProvider
         panel ??= new PanelWindow(Model);
         panel.ShowNearTray();
     }
+
+    /// <summary>Opens the app from outside the tray (a start by hand): the setup until Flock is set up, then Settings.</summary>
+    private void ShowMain() => Open(Model.NeedsSetup ? WindowKind.Setup : WindowKind.Settings);
 
     private void ShowMenu()
     {

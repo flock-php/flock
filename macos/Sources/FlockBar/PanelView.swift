@@ -42,9 +42,9 @@ struct PanelView: View {
 
     private var header: some View {
         HStack(spacing: 8) {
-            Image(systemName: model.menuBarSymbol)
-                .font(.title2)
-                .foregroundStyle(model.isRunning ? (model.isDegraded ? Color.orange : Color.accentColor) : .secondary)
+            LogoMark(mode: model.logoMark, size: 24)
+                // The stopped image is already dimmed.
+                .foregroundStyle(model.isRunning && model.isDegraded ? Color.flockEmber : Color.flockMark)
             VStack(alignment: .leading, spacing: 1) {
                 Text("Flock").font(.headline)
                 Text(model.headline).font(.caption).foregroundStyle(.secondary)

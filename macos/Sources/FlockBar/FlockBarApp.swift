@@ -5,6 +5,7 @@ import SwiftUI
 /// the macOS SDK expands it as a macro whose plugin ships with Xcode only. The property
 /// wrapper type itself works, so views declare `State` values explicitly instead.
 struct FlockBarApp: App {
+    @NSApplicationDelegateAdaptor(AppDelegate.self) private var delegate
     private let modelState = State<AppModel>(initialValue: AppModel())
     private var model: AppModel {
         get { modelState.wrappedValue }
@@ -16,7 +17,7 @@ struct FlockBarApp: App {
             PanelView()
                 .environment(model)
         } label: {
-            MenuBarLabel(symbol: model.menuBarSymbol, needsSetup: model.needsSetup)
+            MenuBarLabel(mode: model.logoMark, needsSetup: model.needsSetup)
         }
         .menuBarExtraStyle(.window)
 
@@ -55,22 +56,51 @@ struct FlockBarApp: App {
     }
 }
 
+/// Opens the main window when the app is started by hand (Finder, Spotlight, Launchpad), also
+/// while it already runs. The panel belongs to the menu bar icon; the login item stays quiet.
+@MainActor
+final class AppDelegate: NSObject, NSApplicationDelegate {
+    static let reopen = Notification.Name("dev.flock.reopen")
+
+    /// Whether this launch is the login item's, read from the launch's Apple event.
+    private(set) static var launchedAtLogin = false
+
+    func applicationWillFinishLaunching(_ notification: Notification) {
+        let event = NSAppleEventManager.shared().currentAppleEvent
+        Self.launchedAtLogin = event?.eventID == kAEOpenApplication
+            && event?.paramDescriptor(forKeyword: keyAEPropData)?.enumCodeValue == keyAELaunchedAsLogInItem
+    }
+
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        NotificationCenter.default.post(name: Self.reopen, object: nil)
+        return false
+    }
+}
+
 /// The menu bar icon. It is the only view that exists at launch, so it also opens the
-/// window requested by `--snapshot`, or the setup on the first start after installing.
+/// window requested by `--snapshot`, or the main window when started by hand.
 private struct MenuBarLabel: View {
-    let symbol: String
+    let mode: LogoMark.Mode
     let needsSetup: Bool
     @Environment(\.openWindow) private var openWindow
 
     var body: some View {
-        Image(systemName: symbol)
+        LogoMark(mode: mode)
             .task {
                 if let target = Snapshot.target {
                     openWindow.activating(target)
-                } else if needsSetup {
-                    openWindow.activating(WindowID.setup)
+                } else if !AppDelegate.launchedAtLogin {
+                    openMain()
                 }
             }
+            .onReceive(NotificationCenter.default.publisher(for: AppDelegate.reopen)) { _ in
+                openMain()
+            }
+    }
+
+    /// The setup until Flock is set up, then Settings.
+    private func openMain() {
+        openWindow.activating(needsSetup ? WindowID.setup : WindowID.settings)
     }
 }
 

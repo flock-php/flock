@@ -50,11 +50,13 @@ internal sealed class SetupWindow : FlockWindow
                     Ui.Setting("Open a new terminal", "Terminals that were already open still have the old PATH.", null, Ui.GlyphTerminal),
                     Ui.Setting("Link a project", "In a Laravel project, run `flock link`: the site is then at http://<folder>.test. `flock secure` adds HTTPS.", null, Ui.GlyphGlobe),
                     Ui.Setting("Install PHP", "Settings → PHP installs versions; running `php` in a terminal offers to install a missing one.", null, Ui.GlyphCode)));
-                page.Children.Add(Buttons(Ui.Button("Open Flock", () =>
-                {
-                    Close();
-                    App.Current.ShowPanel();
-                }, accent: true)));
+                page.Children.Add(Buttons(
+                    Ui.Button("Open Settings", () =>
+                    {
+                        Close();
+                        App.Current.Open(WindowKind.Settings);
+                    }),
+                    Ui.Button("Done", Close, accent: true)));
                 break;
 
             case Stage.Failed:
@@ -98,7 +100,7 @@ internal sealed class SetupWindow : FlockWindow
     {
         var icon = new Image
         {
-            Source = new Microsoft.UI.Xaml.Media.Imaging.BitmapImage(new Uri(Path.Combine(AppContext.BaseDirectory, "Assets", "AppIcon.ico"))),
+            Source = new Microsoft.UI.Xaml.Media.Imaging.BitmapImage(new Uri(Path.Combine(AppContext.BaseDirectory, "Assets", "AppIcon.png"))),
             Width = 48,
             Height = 48,
         };

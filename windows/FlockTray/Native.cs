@@ -9,11 +9,12 @@ internal static partial class Native
 {
     public const int WM_APP = 0x8000;
     public const int WM_TRAY = WM_APP + 1;
-    public const int WM_SHOW_PANEL = WM_APP + 2;
+    public const int WM_SHOW_APP = WM_APP + 2;
     private const int WM_NULL = 0x0000;
     private const int WM_LBUTTONUP = 0x0202;
     private const int WM_RBUTTONUP = 0x0205;
     private const int WM_CONTEXTMENU = 0x007B;
+    private const int WM_SETTINGCHANGE = 0x001A;
 
     /// <summary>Class name of the tray icon's hidden window (also how a second instance finds the first).</summary>
     public const string TrayWindowClass = "Flock.Tray.NotifyWindow";
@@ -30,13 +31,23 @@ internal static partial class Native
     [DllImport("user32.dll")]
     private static extern bool PostMessage(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam);
 
-    /// <summary>Asks the running instance to show its panel.</summary>
+    [DllImport("user32.dll")]
+    private static extern uint GetWindowThreadProcessId(IntPtr hwnd, out uint processId);
+
+    [DllImport("user32.dll")]
+    private static extern bool AllowSetForegroundWindow(uint processId);
+
+    /// <summary>Asks the running instance to bring its main window to the front.</summary>
     public static void SignalRunningInstance()
     {
         var hwnd = FindWindow(TrayWindowClass, null);
         if (hwnd != IntPtr.Zero)
         {
-            PostMessage(hwnd, WM_SHOW_PANEL, IntPtr.Zero, IntPtr.Zero);
+            // This process was just started by the user, so it may take the foreground; pass that
+            // on, or the running instance's window would only flash in the taskbar.
+            GetWindowThreadProcessId(hwnd, out var process);
+            AllowSetForegroundWindow(process);
+            PostMessage(hwnd, WM_SHOW_APP, IntPtr.Zero, IntPtr.Zero);
         }
     }
 
@@ -89,6 +100,19 @@ internal static partial class Native
         else
         {
             Process.Start(new ProcessStartInfo("explorer.exe", $"/select,\"{path}\"") { UseShellExecute = true });
+        }
+    }
+
+    /// <summary>
+    /// Whether the taskbar is light. It follows Windows' mode, which can differ from the apps' mode
+    /// (Settings → Personalization → Colors); Windows 10's default taskbar is dark.
+    /// </summary>
+    public static bool TaskbarIsLight
+    {
+        get
+        {
+            using var key = Registry.CurrentUser.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize");
+            return key?.GetValue("SystemUsesLightTheme") is int value && value != 0;
         }
     }
 
@@ -328,6 +352,8 @@ internal static partial class Native
         public event Action? Clicked;
         public event Action? MenuRequested;
         public event Action? ShowRequested;
+        /// <summary>Windows switched between light and dark mode (the taskbar's or the apps').</summary>
+        public event Action? ThemeChanged;
 
         public TrayIcon(string iconPath, string tooltip)
         {
@@ -446,10 +472,14 @@ internal static partial class Native
                     }
                     return IntPtr.Zero;
                 }
-                if (msg == WM_SHOW_PANEL)
+                if (msg == WM_SHOW_APP)
                 {
                     self.ShowRequested?.Invoke();
                     return IntPtr.Zero;
+                }
+                if (msg == WM_SETTINGCHANGE && Marshal.PtrToStringUni(lParam) == "ImmersiveColorSet")
+                {
+                    self.ThemeChanged?.Invoke();
                 }
                 if (msg == self.taskbarCreated)
                 {

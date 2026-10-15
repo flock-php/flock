@@ -33,7 +33,7 @@ internal abstract class FlockWindow : Window
         var titleBar = new Grid { Height = 48, Padding = new Thickness(16, 0, 0, 0) };
         caption = Ui.Text(title, "CaptionTextBlockStyle", wrap: false);
         titleBar.Children.Add(Ui.Row(12,
-            new Image { Source = new Microsoft.UI.Xaml.Media.Imaging.BitmapImage(new Uri(System.IO.Path.Combine(AppContext.BaseDirectory, "Assets", "AppIcon.ico"))), Width = 16, Height = 16 },
+            new Image { Source = new Microsoft.UI.Xaml.Media.Imaging.BitmapImage(new Uri(System.IO.Path.Combine(AppContext.BaseDirectory, "Assets", "AppIcon.png"))), Width = 16, Height = 16 },
             caption));
         root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         root.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });

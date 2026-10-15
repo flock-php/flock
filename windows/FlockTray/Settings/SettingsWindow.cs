@@ -45,7 +45,8 @@ internal sealed partial class SettingsWindow : FlockWindow
         OpenPaneLength = 220,
     };
     private readonly TextBlock title = Ui.Text("", "TitleTextBlockStyle");
-    private readonly TextBlock subtitle = Ui.Caption("");
+    // Colored in Show(): theme brushes looked up before the window exists come from the light theme.
+    private readonly TextBlock subtitle = Ui.Text("", "CaptionTextBlockStyle");
     private readonly ScrollViewer scroller = new() { VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
     private readonly InfoBar error;
     private readonly Dictionary<SettingsPane, Pane> panes = [];
@@ -61,7 +62,8 @@ internal sealed partial class SettingsWindow : FlockWindow
             model.DismissError();
             model.Settings.DismissError();
         });
-        error.Margin = new Thickness(0, 0, 0, 16);
+        error.Margin = new Thickness(36, 0, 36, 16);
+        error.MaxWidth = PageWidth;
 
         panes[SettingsPane.General] = new GeneralPane(this, model);
         panes[SettingsPane.Sites] = new SitesPane(this, model);
@@ -90,12 +92,15 @@ internal sealed partial class SettingsWindow : FlockWindow
             }
         };
 
-        var page = new Grid { Padding = new Thickness(36, 8, 36, 0), MaxWidth = 1000, HorizontalAlignment = HorizontalAlignment.Stretch };
+        // The side padding is inside the scroller, so its scroll bar runs along the window's edge
+        // instead of over the cards.
+        var page = new Grid { Padding = new Thickness(0, 8, 0, 0) };
         page.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         page.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
         page.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         var heading = Ui.Column(2, title, subtitle);
-        heading.Margin = new Thickness(0, 0, 0, 20);
+        heading.Margin = new Thickness(36, 0, 36, 20);
+        heading.MaxWidth = PageWidth;
         Grid.SetRow(scroller, 1);
         Grid.SetRow(error, 2);
         page.Children.Add(heading);
@@ -135,6 +140,7 @@ internal sealed partial class SettingsWindow : FlockWindow
         shown = new CancellationTokenSource();
         title.Text = panes[pane].Title;
         subtitle.Text = panes[pane].Subtitle;
+        subtitle.Foreground = Ui.SecondaryText;
         Rerender();
         scroller.ChangeView(null, 0, null, disableAnimation: true);
         panes[pane].Shown(shown.Token);
@@ -146,7 +152,7 @@ internal sealed partial class SettingsWindow : FlockWindow
     public Panel Rerender()
     {
         Ui.ShowError(error, model.Settings.Error ?? model.ActionError);
-        var container = new StackPanel { Padding = new Thickness(0, 0, 0, 24) };
+        var container = new StackPanel { Padding = new Thickness(36, 0, 36, 24), MaxWidth = PageWidth };
         if (model.Status is null && current != SettingsPane.About)
         {
             container.Children.Add(Ui.EmptyState(Ui.GlyphWarning, "Flock is not running", model.Error ?? "Start the daemon to change its settings.",
@@ -168,6 +174,8 @@ internal sealed partial class SettingsWindow : FlockWindow
         scroller.Content = container;
         return container;
     }
+
+    private const double PageWidth = 1000;
 
     // Pickers need the window they belong to (unpackaged apps have no implicit owner).
 

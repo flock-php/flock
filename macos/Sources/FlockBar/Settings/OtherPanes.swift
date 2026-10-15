@@ -133,7 +133,7 @@ struct AboutPane: View {
     var body: some View {
         VStack(spacing: 14) {
             Spacer()
-            SettingsIcon(symbol: "bird.fill", color: .accentColor, size: 72)
+            AppIconView(size: 88)
             Text("Flock").font(.largeTitle.weight(.semibold))
             Text("A native local development environment for Laravel.")
                 .foregroundStyle(.secondary)

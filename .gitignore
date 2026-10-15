@@ -24,3 +24,5 @@
 /windows/**/bin/
 /windows/**/obj/
 /windows/dist/
+/design/icongen/bin/
+/design/icongen/obj/

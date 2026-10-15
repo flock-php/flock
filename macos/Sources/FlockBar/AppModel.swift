@@ -63,9 +63,10 @@ final class AppModel {
     var isRunning: Bool { status != nil }
     var isDegraded: Bool { status?.isDegraded ?? false }
 
-    var menuBarSymbol: String {
-        guard isRunning else { return "bird" }
-        return isDegraded ? "exclamationmark.triangle.fill" : "bird.fill"
+    /// The logomark for the daemon's state: stopped is dimmed, a warning adds a badge.
+    var logoMark: LogoMark.Mode {
+        guard isRunning else { return .stopped }
+        return isDegraded ? .warning : .running
     }
 
     /// "Running · v1.2", "Needs attention · v1.2", "Not running" (or "Not set up", "Updating…").

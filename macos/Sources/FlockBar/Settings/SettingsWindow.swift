@@ -112,7 +112,7 @@ struct SettingsWindow: View {
         if model.status == nil, pane != .about {
             if model.needsSetup {
                 ContentUnavailableView {
-                    Label("Flock isn't set up yet", systemImage: "bird")
+                    Label { Text("Flock isn't set up yet") } icon: { LogoMark(size: 44) }
                 } description: {
                     Text("Set Flock up to run your sites and change its settings.")
                 } actions: {
@@ -120,7 +120,7 @@ struct SettingsWindow: View {
                 }
             } else {
                 ContentUnavailableView {
-                    Label("Flock is not running", systemImage: "bird")
+                    Label { Text("Flock is not running") } icon: { LogoMark(size: 44) }
                 } description: {
                     Text(model.error ?? "Start the daemon to change its settings.")
                 } actions: {
