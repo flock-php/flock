@@ -10,7 +10,8 @@ $ErrorActionPreference = "Stop"
 $Arch = "x64"
 $repo = Split-Path $PSScriptRoot -Parent
 $goArch = "amd64"
-$version = $env:VERSION
+# Not VERSION: MSBuild reads environment variables as properties, and a non-semver Version breaks NuGet restore.
+$version = $env:FLOCK_VERSION
 if (-not $version) { $version = git -C $repo describe --tags --always --dirty 2>$null }
 if (-not $version) { $version = "dev" }
 

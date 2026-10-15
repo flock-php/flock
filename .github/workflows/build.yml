@@ -79,12 +79,12 @@ jobs:
           INPUT_VERSION: ${{ inputs.version }}
         run: |
           $v = if ($env:INPUT_VERSION) { $env:INPUT_VERSION } else { git describe --tags --always }
-          "VERSION=$v" >> $env:GITHUB_ENV
+          "FLOCK_VERSION=$v" >> $env:GITHUB_ENV
 
       - name: Build installer
         run: |
           ./windows/build-installer.ps1
-          Move-Item windows/dist/Flock-Setup-x64.exe "windows/dist/Flock-Setup-$env:VERSION-x64.exe"
+          Move-Item windows/dist/Flock-Setup-x64.exe "windows/dist/Flock-Setup-$env:FLOCK_VERSION-x64.exe"
 
       - uses: actions/upload-artifact@v7
         with:

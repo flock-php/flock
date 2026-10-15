@@ -80,7 +80,7 @@ struct GeneralPane: View {
                 }
 
                 Section("Startup") {
-                    Toggle("Open Flock’s menu bar app at login", isOn: Binding(get: { launchAtLogin }, set: setLaunchAtLogin))
+                    Toggle("Open Flock’s menu bar app at login", isOn: Binding(get: { launchAtLogin }, set: { setLaunchAtLogin($0) }))
                     if let loginError {
                         Text(loginError).font(.caption).foregroundStyle(.orange)
                     }
