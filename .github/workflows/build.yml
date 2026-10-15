@@ -1,9 +1,16 @@
 # Builds the unsigned macOS disk image and Windows installer and keeps them as run artifacts.
-# Start it by hand from the Actions tab (any branch), or let release.yml call it for a release.
+#
+#   - by hand from the Actions tab (any branch): named dev-<commit>
+#   - on the release PR once it is marked ready for review (not while it is a draft), and again on
+#     every update to it: named with the PR's version. These are the checks that must pass before
+#     the release PR can be merged, and release.yml attaches these very files to the release.
+#   - from release.yml, only when it cannot find the release PR's builds
 name: Build
 
 on:
   workflow_dispatch:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
   workflow_call:
     inputs:
       ref:
@@ -11,31 +18,64 @@ on:
         type: string
         default: ""
       version:
-        description: Version to stamp into the builds (e.g. 1.2.0); defaults to git describe.
+        description: Version to stamp into the builds (e.g. 1.2.0).
         type: string
         default: ""
 
 permissions:
   contents: read
 
+concurrency:
+  # A newer push to the release PR replaces a build of the older one.
+  group: build-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: true
+
 jobs:
-  macos:
-    name: macOS (universal)
-    runs-on: macos-26
+  version:
+    # Of all pull requests, only the release PR is built, and only once it is out of draft.
+    if: >-
+      github.event_name != 'pull_request' ||
+      (startsWith(github.head_ref, 'release-please--') && !github.event.pull_request.draft)
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
     steps:
       - uses: actions/checkout@v7
         with:
-          ref: ${{ inputs.ref }}
-          fetch-depth: 0 # tags, for git describe
+          ref: ${{ inputs.ref || github.event.pull_request.head.sha }}
+
+      - name: Version
+        id: version
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
+          EVENT: ${{ github.event_name }}
+        run: |
+          if [ -n "$INPUT_VERSION" ]; then
+            version="$INPUT_VERSION"
+          elif [ "$EVENT" = pull_request ]; then
+            version=$(jq -r '."."' .release-please-manifest.json)
+          else
+            version="dev-$(git rev-parse --short HEAD)"
+          fi
+          if [ -z "$version" ] || [ "$version" = null ]; then
+            echo "::error::no version found" && exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+  macos:
+    name: macOS (universal)
+    needs: version
+    runs-on: macos-26
+    env:
+      VERSION: ${{ needs.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref || github.event.pull_request.head.sha }}
 
       - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
-
-      - name: Version
-        env:
-          INPUT_VERSION: ${{ inputs.version }}
-        run: echo "VERSION=${INPUT_VERSION:-$(git describe --tags --always)}" >> "$GITHUB_ENV"
 
       - name: Test
         run: swift test --package-path macos
@@ -53,12 +93,14 @@ jobs:
 
   windows:
     name: Windows (x64)
+    needs: version
     runs-on: windows-2025
+    env:
+      FLOCK_VERSION: ${{ needs.version.outputs.version }}
     steps:
       - uses: actions/checkout@v7
         with:
-          ref: ${{ inputs.ref }}
-          fetch-depth: 0
+          ref: ${{ inputs.ref || github.event.pull_request.head.sha }}
 
       - uses: actions/setup-go@v7
         with:
@@ -73,13 +115,6 @@ jobs:
           if (-not (Test-Path "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe")) {
             choco install innosetup --no-progress -y
           }
-
-      - name: Version
-        env:
-          INPUT_VERSION: ${{ inputs.version }}
-        run: |
-          $v = if ($env:INPUT_VERSION) { $env:INPUT_VERSION } else { git describe --tags --always }
-          "FLOCK_VERSION=$v" >> $env:GITHUB_ENV
 
       - name: Build installer
         run: |
