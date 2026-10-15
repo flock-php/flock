@@ -845,7 +845,7 @@ func (d *daemon) Services() []api.Service {
 	}
 
 	services = append(services, api.Service{
-		ID: "postgres", Name: "PostgreSQL", Category: "Database", Version: cfg.Services.Postgres, Port: p.Postgres,
+		ID: "postgres", Name: "PostgreSQL", Category: "Database", Version: cfg.Services.Postgres, Port: p.Postgres, Available: true,
 		Installed: cfg.Services.Postgres != "", Enabled: cfg.Services.Running("postgres"), Running: d.procUp("postgres"), Stoppable: true,
 		Env: fmt.Sprintf("DB_CONNECTION=pgsql\nDB_HOST=127.0.0.1\nDB_PORT=%d\nDB_DATABASE=laravel\nDB_USERNAME=postgres\nDB_PASSWORD=", p.Postgres),
 		Log: "postgres", URL: fmt.Sprintf("postgres://postgres@127.0.0.1:%d", p.Postgres),
