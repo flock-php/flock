@@ -396,7 +396,11 @@ func newUninstallCommand() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			purge = decidePurge(s.root, purge)
+			// The app runs this (--keep-app) where no one can answer, e.g. in a hidden console window,
+			// and passes --purge itself when the data should go.
+			if !keepApp {
+				purge = decidePurge(s.root, purge)
+			}
 			if err := uninstallService(); err != nil {
 				return err
 			}
