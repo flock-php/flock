@@ -11,6 +11,8 @@ package hosts
 
 import (
 	"bytes"
+	"crypto/sha256"
+	"encoding/hex"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -67,6 +69,44 @@ func WriteSource(root string, domains []string) error {
 		return err
 	}
 	return os.Rename(tmp, path)
+}
+
+// blockedFile records that Windows refused to run the helper (Smart App Control or an App Control
+// policy blocks unsigned programs as services), with the SHA-256 of the refused executable.
+func blockedFile(root string) string { return filepath.Join(root, "hosts-helper-blocked") }
+
+// MarkBlocked records that Windows refused to run the helper executable exe.
+func MarkBlocked(root, exe string) error {
+	data, err := os.ReadFile(exe)
+	if err != nil {
+		return err
+	}
+	sum := sha256.Sum256(data)
+	return os.WriteFile(blockedFile(root), []byte(hex.EncodeToString(sum[:])+"\n"), 0o644)
+}
+
+// ClearBlocked forgets a refused helper, e.g. once one runs.
+func ClearBlocked(root string) { _ = os.Remove(blockedFile(root)) }
+
+// Blocked reports whether Windows refused to run a helper.
+func Blocked(root string) bool {
+	_, err := os.Stat(blockedFile(root))
+	return err == nil
+}
+
+// BlockedExe reports whether Windows refused to run this very helper executable. Smart App Control
+// judges each file on its own, so a different build is worth another try.
+func BlockedExe(root, exe string) bool {
+	recorded, err := os.ReadFile(blockedFile(root))
+	if err != nil {
+		return false
+	}
+	data, err := os.ReadFile(exe)
+	if err != nil {
+		return false
+	}
+	sum := sha256.Sum256(data)
+	return strings.TrimSpace(string(recorded)) == hex.EncodeToString(sum[:])
 }
 
 // ParseSource returns the valid domains of a source file, in order, without duplicates.

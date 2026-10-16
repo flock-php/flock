@@ -67,8 +67,8 @@ public actor FlockClient {
     }
 
     /// Changes only the given settings and returns the new status.
-    public func updateSettings(xdebug: Bool? = nil, dumps: Bool? = nil) async throws -> Status {
-        try await updateSettings(SettingsChange(xdebug: xdebug, dumps: dumps))
+    public func updateSettings(xdebug: Bool? = nil, xdebugBreakpoints: Bool? = nil, dumps: Bool? = nil) async throws -> Status {
+        try await updateSettings(SettingsChange(xdebug: xdebug, xdebugBreakpoints: xdebugBreakpoints, dumps: dumps))
     }
 
     /// Changes only the non-nil settings and returns the new status.

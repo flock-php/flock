@@ -35,7 +35,7 @@ func TestCaddyfileRoutesSitesAndSubdomains(t *testing.T) {
 		"get_certificate flock",
 		"redir https://{host}{uri} 308",
 		"https://:443 {",
-		"No secured Flock site is linked for {host}",
+		"rewrite * /unlinked.html",
 		`php_fastcgi "unix//run/php84.sock"`,
 		`storage file_system "/data/Application Support/caddy"`,
 		"abort @remote",
@@ -83,5 +83,30 @@ func TestCaddyfileBalancesPHPCGIWorkersAndKeepsWindowsPaths(t *testing.T) {
 		if !strings.Contains(string(json), want) {
 			t.Errorf("missing %s in:\n%s", want, json)
 		}
+	}
+}
+
+func TestCaddyfileSendsXdebugRequestsToTheDebugPool(t *testing.T) {
+	cfg := testConfig()
+	cfg.Sites = []Site{
+		{Domain: "plain.test", Root: "/code/plain/public", FPM: []string{"unix//run/php85.sock"}, DebugFPM: []string{"unix//run/php85-xdebug.sock"}},
+		{Domain: "debugged.test", Root: "/code/debugged/public", FPM: []string{"unix//run/php84.sock"}, DebugFPM: []string{"unix//run/php84-xdebug.sock"}, Debugging: true},
+	}
+
+	json, _, err := caddyconfig.GetAdapter("caddyfile").Adapt([]byte(Caddyfile(cfg)), nil)
+	if err != nil {
+		t.Fatalf("%v\n%s", err, Caddyfile(cfg))
+	}
+	for _, want := range []string{
+		`"dial":"unix//run/php85-xdebug.sock"`, `"dial":"unix//run/php85.sock"`, `XDEBUG_SESSION`, `XDEBUG_TRIGGER`,
+		// With breakpoints, the site has no fast pool at all.
+		`"dial":"unix//run/php84-xdebug.sock"`,
+	} {
+		if !strings.Contains(string(json), want) {
+			t.Errorf("missing %s in:\n%s", want, json)
+		}
+	}
+	if strings.Contains(string(json), `"dial":"unix//run/php84.sock"`) {
+		t.Errorf("a site with breakpoints still uses its fast pool:\n%s", json)
 	}
 }

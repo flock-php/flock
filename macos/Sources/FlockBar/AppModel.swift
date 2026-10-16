@@ -138,6 +138,10 @@ final class AppModel {
         await update(target) { try await $0.updateSettings(xdebug: on) }
     }
 
+    func setXdebugBreakpoints(_ on: Bool, from target: ErrorTarget = .settings) async {
+        await update(target) { try await $0.updateSettings(xdebugBreakpoints: on) }
+    }
+
     func setDumps(_ on: Bool, from target: ErrorTarget = .panel) async {
         await update(target) { try await $0.updateSettings(dumps: on) }
     }

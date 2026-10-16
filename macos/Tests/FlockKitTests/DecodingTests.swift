@@ -22,8 +22,8 @@ private func decode<T: Decodable>(_ type: T.Type, _ json: String) throws -> T {
      "dns":{"tld":"test","addr":"127.0.0.1:53535"},"http_port":80,"https_port":443,
      "mail":"127.0.0.1:2525","postgres":"18.6.0 on 127.0.0.1:5432","valkey":"9.1.2 on 127.0.0.1:6379",
      "extras":[{"id":"mysql","name":"MySQL","version":"8.4.6","port":3306,"enabled":true,"up":true},{"id":"redis"}],
-     "xdebug":true,"dumps":false,"mail_count":3,"dump_count":12,
-     "sites":[{"name":"watchtower","domain":"watchtower.test","path":"/code/watchtower","php":"8.5","secured":true,"parked":false,"url":"https://watchtower.test"},
+     "xdebug":true,"xdebug_breakpoints":true,"dumps":false,"mail_count":3,"dump_count":12,
+     "sites":[{"name":"watchtower","domain":"watchtower.test","path":"/code/watchtower","php":"8.5","secured":true,"parked":false,"url":"https://watchtower.test","debugging":true},
               {"name":"legacy","domain":"legacy.test","path":"/code/legacy","php":"7.4","secured":false,"parked":true,"problem":"PHP 7.4 is not installed"}],
      "processes":[{"name":"php8.5-fpm","up":true,"restarts":0},{"name":"postgres","up":false,"restarts":3,"last_error":"exit status 1: could not bind"}],
      "warnings":["postgres: port 5432 is used by postgres (pid 1)"]}
@@ -35,6 +35,7 @@ private func decode<T: Decodable>(_ type: T.Type, _ json: String) throws -> T {
     #expect(status.extras[1].name == "redis" && !status.extras[1].up && status.extras[1].enabled)
     #expect(status.mailCount == 3 && status.dumpCount == 12)
     #expect(status.sites[0].url == "https://watchtower.test")
+    #expect(status.xdebugBreakpoints && status.sites[0].debugging && !status.sites[1].debugging)
     #expect(status.sites[1].url == nil && status.sites[1].problem != nil)
     #expect(status.processes[1].lastError == "exit status 1: could not bind")
     #expect(status.isDegraded)

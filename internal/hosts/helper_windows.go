@@ -134,6 +134,12 @@ func InstallHelper(exe, source, tld string) error {
 	return nil
 }
 
+// IsBlocked reports whether err is Windows refusing to run the helper: Smart App Control or an
+// App Control policy, which block unsigned programs from running as a service.
+func IsBlocked(err error) bool {
+	return errors.Is(err, windows.ERROR_SYSTEM_INTEGRITY_POLICY_VIOLATION)
+}
+
 // RemoveHelper (administrator only) deletes the service, its executable and the hosts block.
 func RemoveHelper() error {
 	m, err := mgr.Connect()

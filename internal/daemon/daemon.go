@@ -36,6 +36,7 @@ import (
 	"flock/internal/supervisor"
 	"flock/internal/valkey"
 	"flock/internal/web"
+	"flock/internal/xdebug"
 )
 
 // Config controls a daemon instance. Everything else comes from <Root>/config.json.
@@ -81,6 +82,9 @@ type daemon struct {
 	sites    []api.SiteStatus
 	warnings []string
 	problems map[string]string // why an installed catalog service or Valkey isn't running, by id
+	// breakpoints finds PhpStorm breakpoints; breakpointSites is what the last reload found, by site path.
+	breakpoints     xdebug.Detector
+	breakpointSites map[string]bool
 	cfg      *config.Config
 	wildcard wildcardState
 }
@@ -296,6 +300,9 @@ func Run(ctx context.Context, cfg Config) error {
 	watch := time.NewTicker(projectWatchInterval)
 	defer watch.Stop()
 	files := d.projectFiles()
+	// Follow PhpStorm breakpoints, so a site switches to Xdebug as soon as one is set.
+	breakpoints := time.NewTicker(breakpointInterval)
+	defer breakpoints.Stop()
 
 loop:
 	for {
@@ -306,6 +313,12 @@ loop:
 			return fmt.Errorf("api server: %w", err)
 		case <-retry.C:
 			if d.degraded() {
+				if err := d.reload(); err != nil {
+					d.setWarnings([]string{err.Error()})
+				}
+			}
+		case <-breakpoints.C:
+			if d.breakpointsChanged() {
 				if err := d.reload(); err != nil {
 					d.setWarnings([]string{err.Error()})
 				}
@@ -354,6 +367,25 @@ func (d *daemon) projectFiles() string {
 		}
 	}
 	return b.String()
+}
+
+// breakpointInterval is how often the sites' PhpStorm workspaces are checked for breakpoints.
+var breakpointInterval = time.Second
+
+// breakpointsChanged reports whether a site gained or lost PhpStorm breakpoints since the last reload.
+func (d *daemon) breakpointsChanged() bool {
+	d.mu.Lock()
+	cfg, sites, found := d.cfg, d.sites, d.breakpointSites
+	d.mu.Unlock()
+	if cfg == nil || !cfg.Xdebug || !cfg.XdebugBreakpoints {
+		return false
+	}
+	for _, site := range sites {
+		if d.breakpoints.Has(site.Path) != found[site.Path] {
+			return true
+		}
+	}
+	return false
 }
 
 // Reload implements api.Backend.
@@ -423,19 +455,28 @@ func (d *daemon) reload() error {
 	})
 
 	var (
-		statuses []api.SiteStatus
-		webSites []web.Site
-		domains  []string
-		keep     = map[string]bool{}
-		pools    = map[string][]string{} // version → FastCGI upstreams
+		statuses    []api.SiteStatus
+		webSites    []web.Site
+		domains     []string
+		keep        = map[string]bool{}
+		pools       = map[string][]string{} // version → FastCGI upstreams
+		debugPools  = map[string][]string{} // version → upstreams of the pool that loads Xdebug
+		breakpoints = map[string]bool{}     // site path → PhpStorm breakpoints found
 	)
 
-	installed, _ := php.Installed(d.root)
-	for _, version := range installed {
-		if err := php.SetXdebug(d.root, version, cfg.Xdebug); err != nil {
-			warnings = append(warnings, "xdebug: "+err.Error())
+	// ensurePool starts a pool and waits for it to listen: Caddy would answer 502 until it does.
+	ensurePool := func(pool php.Pool, log string) {
+		restarted := false
+		for _, spec := range pool.Specs {
+			restarted = d.procs.Ensure(spec) || restarted
+			keep[spec.Name] = true
+		}
+		if restarted && !php.WaitReady(pool.Upstreams, 5*time.Second) {
+			warnings = append(warnings, fmt.Sprintf("php: %s did not start — see `flock logs %s`", log, log))
 		}
 	}
+
+	installed, _ := php.Installed(d.root)
 
 	sites := cfg.AllSites()
 	extras := cfg.DomainsBySite(sites)
@@ -484,19 +525,25 @@ func (d *daemon) reload() error {
 			if err != nil {
 				return err
 			}
-			restarted := false
-			for _, spec := range pool.Specs {
-				restarted = d.procs.Ensure(spec) || restarted
-				keep[spec.Name] = true
-			}
-			// Don't route requests to a pool that isn't listening yet (Caddy would answer 502).
-			if restarted && !php.WaitReady(pool.Upstreams, 5*time.Second) {
-				warnings = append(warnings, fmt.Sprintf("php %s: PHP did not start — see `flock logs %s`", version, php.PoolLog(version)))
-			}
+			ensurePool(pool, php.PoolLog(version))
 			pools[version] = pool.Upstreams
+
+			if cfg.Xdebug {
+				if debug, err := php.DebugPoolFor(d.root, version, extraEnv...); err != nil {
+					warnings = append(warnings, "xdebug: "+err.Error())
+				} else {
+					ensurePool(debug, php.DebugPoolLog(version))
+					debugPools[version] = debug.Upstreams
+				}
+			}
 		}
 
-		ws := web.Site{Domain: domain, Aliases: aliases, Root: web.DocumentRoot(site.Path), FPM: pools[version]}
+		ws := web.Site{Domain: domain, Aliases: aliases, Root: web.DocumentRoot(site.Path), FPM: pools[version], DebugFPM: debugPools[version]}
+		if cfg.Xdebug && cfg.XdebugBreakpoints {
+			breakpoints[site.Path] = d.breakpoints.Has(site.Path)
+			ws.Debugging = breakpoints[site.Path] && len(ws.DebugFPM) > 0
+			status.Debugging = ws.Debugging
+		}
 		if site.Secured {
 			if ws.CertFile, ws.KeyFile, err = ca.SiteCert(domain); err != nil {
 				return fmt.Errorf("certificate for %s: %w", domain, err)
@@ -587,7 +634,7 @@ func (d *daemon) reload() error {
 	}
 
 	d.mu.Lock()
-	d.cfg, d.sites, d.warnings, d.problems = cfg, statuses, warnings, problems
+	d.cfg, d.sites, d.warnings, d.problems, d.breakpointSites = cfg, statuses, warnings, problems, breakpoints
 	d.mu.Unlock()
 
 	go d.checkWildcard()
@@ -763,8 +810,14 @@ func (d *daemon) Status() api.Status {
 				}
 			}
 		}
-		st.Xdebug = d.cfg.Xdebug
+		st.Xdebug, st.XdebugBreakpoints = d.cfg.Xdebug, d.cfg.XdebugBreakpoints
 		st.Dumps = d.cfg.Dumps
+
+		// Without the helper, sites resolve only through the DNS rule: say so when that fails too.
+		if runtime.GOOS == "windows" && d.wildcard.problem != "" && hosts.Blocked(d.root) && !hosts.HelperStatus().Installed {
+			st.Warnings = append(st.Warnings[:len(st.Warnings):len(st.Warnings)],
+				fmt.Sprintf("*.%s domains don't resolve: %s, and %s", d.cfg.TLD, d.wildcard.problem, helperBlockedProblem))
+		}
 	}
 
 	return st
@@ -841,7 +894,11 @@ func (d *daemon) Services() []api.Service {
 		services = append(services, api.Service{ID: "dns", Name: "DNS (*." + cfg.TLD + ")", Category: "Core", Port: windowsDNSPort,
 			Installed: true, Enabled: true, Running: dnsUp && wildcard.ok, Problem: wildcard.problem})
 		helper := hosts.HelperStatus()
-		services = append(services, api.Service{ID: "hosts", Name: "Hosts file", Category: "Core", Installed: helper.Installed, Enabled: true, Running: helper.Running})
+		hostsService := api.Service{ID: "hosts", Name: "Hosts file", Category: "Core", Installed: helper.Installed, Enabled: true, Running: helper.Running}
+		if !helper.Installed && hosts.Blocked(d.root) {
+			hostsService.Problem = helperBlockedProblem
+		}
+		services = append(services, hostsService)
 	}
 
 	services = append(services, api.Service{
@@ -883,6 +940,9 @@ func (d *daemon) Services() []api.Service {
 	return services
 }
 
+// helperBlockedProblem explains a hosts helper that `flock install` couldn't run.
+const helperBlockedProblem = "Windows blocked the Flock hosts helper (Smart App Control or an App Control policy only runs signed programs as services)"
+
 // syncHosts hands the site domains to the hosts helper (Windows) and explains when it can't apply them.
 func (d *daemon) syncHosts(cfg *config.Config, domains []string) []string {
 	if err := hosts.WriteSource(d.root, domains); err != nil {
@@ -890,6 +950,8 @@ func (d *daemon) syncHosts(cfg *config.Config, domains []string) []string {
 	}
 	helper := hosts.HelperStatus()
 	switch {
+	case !helper.Installed && hosts.Blocked(d.root):
+		return nil // sites resolve through the DNS rule; Status reports it if that fails too
 	case !helper.Installed:
 		return []string{fmt.Sprintf("*.%s domains don't resolve: the Flock hosts helper is not installed — run `flock install`", cfg.TLD)}
 	case !helper.Running:

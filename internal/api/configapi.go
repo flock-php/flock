@@ -42,17 +42,18 @@ type Service struct {
 
 // ConfigView is config.json plus installed versions, for the settings UI.
 type ConfigView struct {
-	TLD          string       `json:"tld"`
-	DefaultPHP   string       `json:"default_php"`
-	DefaultNode  string       `json:"default_node"`
-	Xdebug       bool         `json:"xdebug"`
-	Dumps        bool         `json:"dumps"`
-	PHPAutoBuild bool         `json:"php_auto_build"`
-	Root         string       `json:"root"`
-	Ports        config.Ports `json:"ports"`
-	Parked       []string     `json:"parked"`
-	PHP          []PHPVersion `json:"php"`
-	Node         []string     `json:"node"`
+	TLD               string       `json:"tld"`
+	DefaultPHP        string       `json:"default_php"`
+	DefaultNode       string       `json:"default_node"`
+	Xdebug            bool         `json:"xdebug"`
+	XdebugBreakpoints bool         `json:"xdebug_breakpoints"`
+	Dumps             bool         `json:"dumps"`
+	PHPAutoBuild      bool         `json:"php_auto_build"`
+	Root              string       `json:"root"`
+	Ports             config.Ports `json:"ports"`
+	Parked            []string     `json:"parked"`
+	PHP               []PHPVersion `json:"php"`
+	Node              []string     `json:"node"`
 }
 
 // PHPVersion is one installed PHP minor version.
@@ -100,6 +101,9 @@ func pinSite(cfg *config.Config, site config.Site, tool, version string) error {
 func applySettings(root string, cfg *config.Config, s Settings) error {
 	if s.Xdebug != nil {
 		cfg.Xdebug = *s.Xdebug
+	}
+	if s.XdebugBreakpoints != nil {
+		cfg.XdebugBreakpoints = *s.XdebugBreakpoints
 	}
 	if s.Dumps != nil {
 		cfg.Dumps = *s.Dumps
@@ -422,7 +426,7 @@ func registerConfig(mux *http.ServeMux, b Backend) {
 func configView(root string, cfg *config.Config) ConfigView {
 	view := ConfigView{
 		TLD: cfg.TLD, DefaultPHP: cfg.DefaultPHP, DefaultNode: cfg.DefaultNode,
-		Xdebug: cfg.Xdebug, Dumps: cfg.Dumps, PHPAutoBuild: cfg.PHPAutoBuild, Root: root, Ports: cfg.Ports,
+		Xdebug: cfg.Xdebug, XdebugBreakpoints: cfg.XdebugBreakpoints, Dumps: cfg.Dumps, PHPAutoBuild: cfg.PHPAutoBuild, Root: root, Ports: cfg.Ports,
 		Parked: cfg.Parked, PHP: []PHPVersion{}, Node: []string{},
 	}
 	if view.Parked == nil {
@@ -431,12 +435,12 @@ func configView(root string, cfg *config.Config) ConfigView {
 
 	installed, _ := php.Installed(root)
 	for _, v := range installed {
-		_, xdebugErr := os.Stat(php.ExtensionPath(root, v, "xdebug"))
+
 		view.PHP = append(view.PHP, PHPVersion{
 			Version:         v,
 			FullVersion:     php.FullVersion(root, v),
 			Ini:             php.IniPath(root, v),
-			XdebugAvailable: xdebugErr == nil,
+			XdebugAvailable: php.XdebugAvailable(root, v),
 		})
 	}
 

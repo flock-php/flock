@@ -14,7 +14,10 @@ public struct Status: Decodable, Sendable, Equatable {
     public var valkey: String?
     /// The installed catalog services (MySQL, Redis, ...).
     public var extras: [Extra]
+    /// Xdebug detection: requests that ask for Xdebug go to a PHP pool that loads it.
     public var xdebug: Bool
+    /// Sites with PhpStorm breakpoints send every request to Xdebug.
+    public var xdebugBreakpoints: Bool
     public var dumps: Bool
     public var mailCount: Int
     public var dumpCount: Int
@@ -90,6 +93,8 @@ public struct Status: Decodable, Sendable, Equatable {
         public var url: String?
         public var problem: String?
         public var domains: [SiteDomain]
+        /// PhpStorm breakpoints send every request of the site to Xdebug.
+        public var debugging: Bool
 
         public var id: String { name }
 
@@ -103,7 +108,7 @@ public struct Status: Decodable, Sendable, Equatable {
 
         enum CodingKeys: String, CodingKey {
             case name, domain, path, php, phpSource, phpPinned, phpFile, node, nodeSource, nodePinned, nodeFile, nodeShadowed
-            case secured, parked, url, problem, domains
+            case secured, parked, url, problem, domains, debugging
         }
 
         public init(from decoder: Decoder) throws {
@@ -125,6 +130,7 @@ public struct Status: Decodable, Sendable, Equatable {
             url = try c.decodeIfPresent(String.self, forKey: .url)
             problem = try c.decodeIfPresent(String.self, forKey: .problem)
             domains = try c.decodeIfPresent([SiteDomain].self, forKey: .domains) ?? []
+            debugging = try c.decodeIfPresent(Bool.self, forKey: .debugging) ?? false
         }
     }
 
@@ -176,7 +182,7 @@ public struct Status: Decodable, Sendable, Equatable {
 
     enum CodingKeys: String, CodingKey {
         case version, pid, startedAt, dns, httpPort, httpsPort, mail, postgres, valkey, extras
-        case xdebug, dumps, mailCount, dumpCount, sites, processes, warnings
+        case xdebug, xdebugBreakpoints, dumps, mailCount, dumpCount, sites, processes, warnings
     }
 
     // Go omits empty slices (`omitempty`) or sends null; treat both as empty.
@@ -193,6 +199,7 @@ public struct Status: Decodable, Sendable, Equatable {
         valkey = try c.decodeIfPresent(String.self, forKey: .valkey)
         extras = try c.decodeIfPresent([Extra].self, forKey: .extras) ?? []
         xdebug = try c.decodeIfPresent(Bool.self, forKey: .xdebug) ?? false
+        xdebugBreakpoints = try c.decodeIfPresent(Bool.self, forKey: .xdebugBreakpoints) ?? false
         dumps = try c.decodeIfPresent(Bool.self, forKey: .dumps) ?? false
         mailCount = try c.decodeIfPresent(Int.self, forKey: .mailCount) ?? 0
         dumpCount = try c.decodeIfPresent(Int.self, forKey: .dumpCount) ?? 0

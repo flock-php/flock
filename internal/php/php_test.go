@@ -8,52 +8,57 @@ import (
 	"testing"
 )
 
-func TestSetXdebugWritesAndRemovesTheIni(t *testing.T) {
+func TestXdebugLoadsOnlyInTheDebugPool(t *testing.T) {
 	root := t.TempDir()
+	if err := os.MkdirAll(Dir(root, "8.5"), 0o755); err != nil {
+		t.Fatal(err)
+	}
 
-	if err := SetXdebug(root, "8.5", true); err == nil || !strings.Contains(err.Error(), "without xdebug") {
+	if _, err := DebugPoolFor(root, "8.5"); err == nil || !strings.Contains(err.Error(), "without Xdebug") {
 		t.Fatalf("missing xdebug.so must be explained, got %v", err)
 	}
 
 	so := ExtensionPath(root, "8.5", "xdebug")
-	if err := os.MkdirAll(filepath.Dir(so), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(so, nil, 0o755); err != nil {
-		t.Fatal(err)
-	}
-
-	if err := SetXdebug(root, "8.5", true); err != nil || !XdebugEnabled(root, "8.5") {
-		t.Fatalf("enable: %v", err)
-	}
-	data, _ := os.ReadFile(xdebugIni(root, "8.5"))
-	if !strings.Contains(string(data), `zend_extension = "`+so+`"`) || !strings.Contains(string(data), "start_with_request = trigger") {
-		t.Fatalf("unexpected ini:\n%s", data)
-	}
-
-	if err := SetXdebug(root, "8.5", false); err != nil || XdebugEnabled(root, "8.5") {
-		t.Fatalf("disable: %v", err)
-	}
-	if err := SetXdebug(root, "8.5", false); err != nil {
-		t.Fatalf("disabling twice must be fine: %v", err)
-	}
-}
-
-func TestFPMSpecChangesWhenXdebugIsToggled(t *testing.T) {
-	root := t.TempDir()
-	so := ExtensionPath(root, "8.5", "xdebug")
 	_ = os.MkdirAll(filepath.Dir(so), 0o755)
 	_ = os.WriteFile(so, nil, 0o755)
+	// Older versions loaded Xdebug for every request from conf.d.
+	legacy := filepath.Join(Dir(root, "8.5"), "conf.d", "xdebug.ini")
+	_ = os.MkdirAll(filepath.Dir(legacy), 0o755)
+	_ = os.WriteFile(legacy, nil, 0o644)
 
-	off, err := FPMSpec(root, "8.5")
+	normal, err := PoolFor(root, "8.5")
 	if err != nil {
 		t.Fatal(err)
 	}
-	_ = SetXdebug(root, "8.5", true)
-	on, _ := FPMSpec(root, "8.5")
+	debug, err := DebugPoolFor(root, "8.5")
+	if err != nil {
+		t.Fatal(err)
+	}
 
-	if strings.Join(off.Env, " ") == strings.Join(on.Env, " ") {
-		t.Fatal("spec must differ so the supervisor restarts FPM")
+	if _, err := os.Stat(legacy); !os.IsNotExist(err) {
+		t.Fatal("conf.d/xdebug.ini must be removed")
+	}
+	data, _ := os.ReadFile(filepath.Join(XdebugDir(root, "8.5"), "xdebug.ini"))
+	if !strings.Contains(string(data), `zend_extension = "`+so+`"`) || !strings.Contains(string(data), "start_with_request = yes") {
+		t.Fatalf("unexpected ini:\n%s", data)
+	}
+
+	scanDir := func(env []string) string {
+		for _, kv := range env {
+			if v, ok := strings.CutPrefix(kv, "PHP_INI_SCAN_DIR="); ok {
+				return v
+			}
+		}
+		return ""
+	}
+	if dir := scanDir(normal.Specs[0].Env); strings.Contains(dir, XdebugDir(root, "8.5")) {
+		t.Fatalf("the normal pool scans %s", dir)
+	}
+	if dir := scanDir(debug.Specs[0].Env); !strings.Contains(dir, XdebugDir(root, "8.5")) {
+		t.Fatalf("the debug pool scans %s", dir)
+	}
+	if slices.Equal(normal.Upstreams, debug.Upstreams) || normal.Specs[0].Name == debug.Specs[0].Name {
+		t.Fatalf("pools collide: %v %v", normal.Upstreams, debug.Upstreams)
 	}
 }
 
@@ -81,5 +86,19 @@ func TestCGIPoolRunsWorkersOnDistinctPortsPerVersion(t *testing.T) {
 	}
 	if CGIPort("8.5", 0) == CGIPort("8.4", 0) || CGIPort("8.4", CGIWorkers-1) >= CGIPort("8.5", 0) {
 		t.Fatal("versions must not share ports")
+	}
+}
+
+func TestDebugCGIPortsStayClearOfTheWorkers(t *testing.T) {
+	for _, minor := range []string{"7.4", "8.0", "8.4", "8.5"} {
+		for _, other := range []string{"7.4", "8.0", "8.4", "8.5"} {
+			for w := range CGIWorkers {
+				for dw := range DebugCGIWorkers {
+					if CGIPort(other, w) == DebugCGIPort(minor, dw) {
+						t.Fatalf("PHP %s debug worker %d uses PHP %s worker %d's port", minor, dw, other, w)
+					}
+				}
+			}
+		}
 	}
 }

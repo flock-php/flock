@@ -27,7 +27,10 @@ public sealed class Status
     public string? Valkey { get; init; }
     /// <summary>The installed catalog services (MySQL, Redis, ...).</summary>
     public List<ExtraService> Extras { get; init; } = [];
+    /// <summary>Xdebug detection: requests that ask for Xdebug go to a PHP pool that loads it.</summary>
     public bool Xdebug { get; init; }
+    /// <summary>Sites with PhpStorm breakpoints send every request to Xdebug.</summary>
+    public bool XdebugBreakpoints { get; init; }
     public bool Dumps { get; init; }
     public int MailCount { get; init; }
     public int DumpCount { get; init; }
@@ -103,6 +106,8 @@ public sealed class Status
         public string? Url { get; init; }
         public string? Problem { get; init; }
         public List<SiteDomain> Domains { get; init; } = [];
+        /// <summary>PhpStorm breakpoints send every request of the site to Xdebug.</summary>
+        public bool Debugging { get; init; }
 
         /// <summary>The project file pinning PHP sits in the site's own folder (so it can be unpinned here).</summary>
         [System.Text.Json.Serialization.JsonIgnore]

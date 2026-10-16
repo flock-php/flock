@@ -304,7 +304,14 @@ internal sealed partial class PanelWindow : Window
             name.Children.Add(Ui.Caption(problem, Ui.Critical));
         }
         var icon = Ui.Icon(site.Secured ? Ui.GlyphLock : Ui.GlyphGlobe, 12, site.Secured ? Ui.Success : Ui.SecondaryText);
-        var row = Ui.Spread(Ui.Row(8, icon, name), Ui.Caption($"PHP {site.Php}", wrap: false));
+        UIElement php = Ui.Caption($"PHP {site.Php}", wrap: false);
+        if (site.Debugging)
+        {
+            var bug = Ui.Icon(Ui.GlyphBug, 12, Ui.Caution);
+            Ui.AutomationName(bug, "Debugging");
+            php = Ui.Row(6, bug, php);
+        }
+        var row = Ui.Spread(Ui.Row(8, icon, name), php);
 
         var button = new Button
         {

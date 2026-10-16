@@ -103,7 +103,8 @@ func TestSettingsOnlyChangeGivenKeys(t *testing.T) {
 	if resp, body := call(t, "POST", srv.URL+"/v1/settings", "", `{"dumps":true}`); resp.StatusCode != http.StatusOK {
 		t.Fatalf("%d %s", resp.StatusCode, body)
 	}
-	if cfg := b.config(t); !cfg.Dumps || cfg.Xdebug {
+	// Xdebug detection is on by default and must stay so.
+	if cfg := b.config(t); !cfg.Dumps || !cfg.Xdebug {
 		t.Fatalf("got %+v", cfg)
 	}
 	if resp, _ := call(t, "POST", srv.URL+"/v1/settings", "", `{"default_php":"5.6"}`); resp.StatusCode != http.StatusBadRequest {

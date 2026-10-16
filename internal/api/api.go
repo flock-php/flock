@@ -27,23 +27,24 @@ var ErrDaemonNotRunning = errors.New("flock daemon is not running (start it with
 
 // Status describes the running daemon.
 type Status struct {
-	Version   string                  `json:"version"`
-	PID       int                     `json:"pid"`
-	StartedAt time.Time               `json:"started_at"`
-	DNS       DNSStatus               `json:"dns"`
-	HTTPPort  int                     `json:"http_port"`
-	HTTPSPort int                     `json:"https_port"`
-	Mail      string                  `json:"mail"`
-	Dumps     bool                    `json:"dumps"`
-	MailCount int                     `json:"mail_count"`
-	DumpCount int                     `json:"dump_count"`
-	Postgres  string                  `json:"postgres,omitempty"`
-	Valkey    string                  `json:"valkey,omitempty"`
-	Extras    []ExtraStatus           `json:"extras,omitempty"` // installed catalog services
-	Xdebug    bool                    `json:"xdebug"`
-	Sites     []SiteStatus            `json:"sites"`
-	Processes []supervisor.ProcStatus `json:"processes"`
-	Warnings  []string                `json:"warnings,omitempty"`
+	Version           string                  `json:"version"`
+	PID               int                     `json:"pid"`
+	StartedAt         time.Time               `json:"started_at"`
+	DNS               DNSStatus               `json:"dns"`
+	HTTPPort          int                     `json:"http_port"`
+	HTTPSPort         int                     `json:"https_port"`
+	Mail              string                  `json:"mail"`
+	Dumps             bool                    `json:"dumps"`
+	MailCount         int                     `json:"mail_count"`
+	DumpCount         int                     `json:"dump_count"`
+	Postgres          string                  `json:"postgres,omitempty"`
+	Valkey            string                  `json:"valkey,omitempty"`
+	Extras            []ExtraStatus           `json:"extras,omitempty"` // installed catalog services
+	Xdebug            bool                    `json:"xdebug"`           // Xdebug detection; see config.Config.Xdebug
+	XdebugBreakpoints bool                    `json:"xdebug_breakpoints"`
+	Sites             []SiteStatus            `json:"sites"`
+	Processes         []supervisor.ProcStatus `json:"processes"`
+	Warnings          []string                `json:"warnings,omitempty"`
 }
 
 // ExtraStatus is an installed catalog service (MySQL, Redis, ...).
@@ -78,6 +79,8 @@ type SiteStatus struct {
 	Parked       bool   `json:"parked"`
 	URL          string `json:"url,omitempty"`
 	Problem      string `json:"problem,omitempty"`
+	// Debugging is set while PhpStorm breakpoints send every request of the site to Xdebug.
+	Debugging bool `json:"debugging,omitempty"`
 	// Domains are the site's extra domains (subdomains and aliases), in the order they were added.
 	Domains []SiteDomain `json:"domains"`
 }
@@ -106,11 +109,12 @@ type DNSStatus struct {
 
 // Settings are the global toggles a UI can change; nil fields stay as they are.
 type Settings struct {
-	Xdebug       *bool   `json:"xdebug"`
-	Dumps        *bool   `json:"dumps"`
-	DefaultPHP   *string `json:"default_php"`
-	DefaultNode  *string `json:"default_node"`
-	PHPAutoBuild *bool   `json:"php_auto_build"`
+	Xdebug            *bool   `json:"xdebug"`
+	XdebugBreakpoints *bool   `json:"xdebug_breakpoints"`
+	Dumps             *bool   `json:"dumps"`
+	DefaultPHP        *string `json:"default_php"`
+	DefaultNode       *string `json:"default_node"`
+	PHPAutoBuild      *bool   `json:"php_auto_build"`
 }
 
 // Backend is what the API needs from the daemon.

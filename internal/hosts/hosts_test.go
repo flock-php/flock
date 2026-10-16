@@ -71,3 +71,37 @@ func TestWriteSourceSortsAndSkipsUnchangedWrites(t *testing.T) {
 		t.Fatalf("got %q", data)
 	}
 }
+
+func TestBlockedRemembersTheRefusedExecutableOnly(t *testing.T) {
+	root := t.TempDir()
+	exe := filepath.Join(root, HelperName)
+	if err := os.WriteFile(exe, []byte("build 1"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if Blocked(root) || BlockedExe(root, exe) {
+		t.Fatal("nothing was blocked yet")
+	}
+
+	if err := MarkBlocked(root, exe); err != nil {
+		t.Fatal(err)
+	}
+	if !Blocked(root) || !BlockedExe(root, exe) {
+		t.Fatal("want the refused helper remembered")
+	}
+
+	// Smart App Control judges each file on its own: another build gets another try.
+	if err := os.WriteFile(exe, []byte("build 2"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if BlockedExe(root, exe) {
+		t.Error("a different build counts as blocked")
+	}
+	if !Blocked(root) {
+		t.Error("the record went away before the new build was tried")
+	}
+
+	ClearBlocked(root)
+	if Blocked(root) {
+		t.Error("ClearBlocked kept the record")
+	}
+}

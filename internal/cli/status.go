@@ -3,6 +3,7 @@ package cli
 import (
 	"fmt"
 	"runtime"
+	"strings"
 	"text/tabwriter"
 	"time"
 
@@ -51,7 +52,17 @@ func newStatusCommand() *cobra.Command {
 				fmt.Fprintf(out, "%-9s %s\n", x.ID, state)
 			}
 			if st.Xdebug {
-				fmt.Fprintln(out, "xdebug    on (port 9003, start with XDEBUG_TRIGGER)")
+				line := "on for requests that ask for it (port 9003)"
+				var debugging []string
+				for _, site := range st.Sites {
+					if site.Debugging {
+						debugging = append(debugging, site.Domain)
+					}
+				}
+				if len(debugging) > 0 {
+					line += ", PhpStorm breakpoints in " + strings.Join(debugging, ", ")
+				}
+				fmt.Fprintln(out, "xdebug    "+line)
 			}
 			for _, p := range st.Processes {
 				state := "up"

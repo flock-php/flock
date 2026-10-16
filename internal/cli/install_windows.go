@@ -454,23 +454,48 @@ func ensurePrivileged(cmd *cobra.Command, s *state, bin string, ca *certs.CA) er
 
 	source := hosts.SourceFile(s.root)
 	helper := hosts.HelperStatus()
-	helperOK := helper.Configured(source, s.cfg.TLD) && helper.Running && sameFile(helperBin, hosts.HelperExe())
+	// A helper Windows refused before isn't tried again; a different build is.
+	blocked := hosts.BlockedExe(s.root, helperBin)
+	helperOK := blocked || helper.Configured(source, s.cfg.TLD) && helper.Running && sameFile(helperBin, hosts.HelperExe())
 	trusted := exec.Command("certutil", "-store", "Root", ca.Fingerprint()).Run() == nil
 	ruleOK := dns.NRPTInstalled(s.cfg.TLD)
 
 	done := func() {
 		cmd.Printf("✓ every *.%s name (any subdomain) is sent to Flock's DNS server\n", s.cfg.TLD)
-		cmd.Printf("✓ site domains are added to the hosts file (they resolve even where the DNS rule is overridden)\n✓ Flock CA is trusted\n")
+		if blocked {
+			cmd.Printf("! Windows blocked the hosts helper (Smart App Control or an App Control policy only runs signed programs as services).\n" +
+				"  Sites work through the DNS rule; without the helper there's no hosts file fallback where it's overridden (VPNs, company DNS policies, browsers with their own secure DNS).\n")
+		} else {
+			cmd.Printf("✓ site domains are added to the hosts file (they resolve even where the DNS rule is overridden)\n")
+		}
+		cmd.Printf("✓ Flock CA is trusted\n")
+	}
+	if !blocked && helper.Running {
+		hosts.ClearBlocked(s.root)
 	}
 	if helperOK && trusted && ruleOK {
 		done()
 		return nil
 	}
 
-	cmd.Println("→ setting up DNS for *." + s.cfg.TLD + ", the hosts helper and the local CA (Windows asks for permission)…")
-	err = runElevated(bin, "privileged-setup", "--tld", s.cfg.TLD, "--ca", ca.CertPath(), "--source", source)
-	if err != nil {
+	args :=[]string{"privileged-setup", "--tld", s.cfg.TLD, "--ca", ca.CertPath(), "--source", source}
+	if blocked {
+		cmd.Println("→ setting up DNS for *." + s.cfg.TLD + " and the local CA (Windows asks for permission)…")
+		args = append(args, "--no-helper")
+	} else {
+		cmd.Println("→ setting up DNS for *." + s.cfg.TLD + ", the hosts helper and the local CA (Windows asks for permission)…")
+	}
+	err = runElevated(bin, args...)
+	switch {
+	case errors.Is(err, errHelperBlocked):
+		if err := hosts.MarkBlocked(s.root, helperBin); err != nil {
+			return err
+		}
+		blocked = true
+	case err != nil:
 		return fmt.Errorf("privileged setup: %w", err)
+	case !blocked:
+		hosts.ClearBlocked(s.root)
 	}
 	done()
 	return nil
@@ -570,6 +595,9 @@ func runElevated(exe string, args ...string) error {
 	}
 	if code != 0 {
 		if msg, _ := os.ReadFile(result.Name()); len(bytes.TrimSpace(msg)) > 0 {
+			if string(bytes.TrimSpace(msg)) == errHelperBlocked.Error() {
+				return errHelperBlocked
+			}
 			return errors.New(string(bytes.TrimSpace(msg)))
 		}
 		return fmt.Errorf("the elevated setup failed with exit code %d", code)
@@ -579,7 +607,7 @@ func runElevated(exe string, args ...string) error {
 
 func newPrivilegedSetupCommand() *cobra.Command {
 	var tld, caPath, source, resultFile string
-	var remove bool
+	var remove, noHelper bool
 
 	cmd := &cobra.Command{
 		Use:    "privileged-setup",
@@ -587,7 +615,7 @@ func newPrivilegedSetupCommand() *cobra.Command {
 		Hidden: true,
 		Args:   cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			err := privilegedSetup(tld, caPath, source, remove)
+			err := privilegedSetup(tld, caPath, source, remove, noHelper)
 			if resultFile != "" && err != nil {
 				_ = os.WriteFile(resultFile, []byte(err.Error()), 0o644)
 			}
@@ -600,10 +628,15 @@ func newPrivilegedSetupCommand() *cobra.Command {
 	cmd.Flags().StringVar(&source, "source", "", "")
 	cmd.Flags().StringVar(&resultFile, "result-file", "", "")
 	cmd.Flags().BoolVar(&remove, "remove", false, "")
+	cmd.Flags().BoolVar(&noHelper, "no-helper", false, "")
 	return cmd
 }
 
-func privilegedSetup(tld, caPath, source string, remove bool) error {
+// errHelperBlocked is the elevated setup's answer when Windows refused to run the hosts helper:
+// everything else is set up. It crosses the process boundary as its message (see runElevated).
+var errHelperBlocked = errors.New("hosts helper blocked by Windows")
+
+func privilegedSetup(tld, caPath, source string, remove, noHelper bool) error {
 	if !windows.GetCurrentProcessToken().IsElevated() {
 		return errors.New("must run as administrator")
 	}
@@ -625,20 +658,29 @@ func privilegedSetup(tld, caPath, source string, remove bool) error {
 		return fmt.Errorf("invalid --source %q", source)
 	}
 
+	// The DNS rule and the CA first: sites work without the helper, which Windows may refuse to run.
+	if err := dns.SetNRPT(tld); err != nil {
+		return fmt.Errorf("DNS rule for .%s: %w", tld, err)
+	}
+	out, err := exec.Command("certutil", "-addstore", "-f", "Root", caPath).CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("trust CA: %v: %s", err, bytes.TrimSpace(out))
+	}
+	if noHelper {
+		return nil
+	}
+
 	self, err := os.Executable()
 	if err != nil {
 		return err
 	}
 	if err := hosts.InstallHelper(filepath.Join(filepath.Dir(self), hosts.HelperName), source, tld); err != nil {
+		if hosts.IsBlocked(err) {
+			// Don't leave a service behind that can never start (or an older helper's stale entries).
+			_ = hosts.RemoveHelper()
+			return errHelperBlocked
+		}
 		return fmt.Errorf("hosts helper: %w", err)
-	}
-	if err := dns.SetNRPT(tld); err != nil {
-		return fmt.Errorf("DNS rule for .%s: %w", tld, err)
-	}
-
-	out, err := exec.Command("certutil", "-addstore", "-f", "Root", caPath).CombinedOutput()
-	if err != nil {
-		return fmt.Errorf("trust CA: %v: %s", err, bytes.TrimSpace(out))
 	}
 	return nil
 }

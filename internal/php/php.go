@@ -383,45 +383,39 @@ func writeExtensionsIni(root, minor string) error {
 	return os.WriteFile(filepath.Join(dir, "00-flock.ini"), []byte(b.String()), 0o644)
 }
 
-func xdebugIni(root, minor string) string {
-	return filepath.Join(Dir(root, minor), "conf.d", "xdebug.ini")
+// XdebugDir is a version's extra ini scan dir that loads Xdebug. Only the debug pool and
+// `flock debug` scan it, so ordinary requests and CLI runs never load the extension.
+func XdebugDir(root, minor string) string { return filepath.Join(Dir(root, minor), "conf.d-xdebug") }
+
+// XdebugAvailable reports whether a version's build ships Xdebug.
+func XdebugAvailable(root, minor string) bool {
+	return fileExists(ExtensionPath(root, minor, "xdebug"))
 }
 
-// XdebugEnabled reports whether Xdebug is loaded for a version.
-func XdebugEnabled(root, minor string) bool {
-	_, err := os.Stat(xdebugIni(root, minor))
-	return err == nil
-}
-
-// SetXdebug loads or unloads Xdebug for a version (CLI and FPM) via conf.d/xdebug.ini.
-// It is off by default: merely loading Xdebug slows every request down noticeably.
-// With mode=debug,develop and start_with_request=trigger, a debugger session starts only
-// when the request carries XDEBUG_TRIGGER (browser extension, ?XDEBUG_TRIGGER=1 or the env var).
-func SetXdebug(root, minor string, on bool) error {
-	ini := xdebugIni(root, minor)
-	if !on {
-		if err := os.Remove(ini); err != nil && !errors.Is(err, os.ErrNotExist) {
-			return err
-		}
-		return nil
-	}
-
-	so := ExtensionPath(root, minor, "xdebug")
-	if _, err := os.Stat(so); err != nil {
-		return fmt.Errorf("PHP %s was installed without xdebug — reinstall it from a newer build", minor)
-	}
-	if err := os.MkdirAll(filepath.Dir(ini), 0o755); err != nil {
+// writeXdebugIni (re)writes conf.d-xdebug/xdebug.ini when the build ships Xdebug. Whatever
+// reaches the debug pool asked to be debugged, so a session starts with every request.
+func writeXdebugIni(root, minor string) error {
+	// Older versions loaded Xdebug for everything from conf.d.
+	if err := os.Remove(filepath.Join(Dir(root, minor), "conf.d", "xdebug.ini")); err != nil && !errors.Is(err, os.ErrNotExist) {
 		return err
 	}
-
-	body := fmt.Sprintf(`; Managed by Flock (flock xdebug on|off)
+	if !XdebugAvailable(root, minor) {
+		return nil
+	}
+	dir := XdebugDir(root, minor)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return err
+	}
+	body := fmt.Sprintf(`; Managed by Flock — loaded only for requests that ask for Xdebug, and by flock debug.
 zend_extension = "%s"
 xdebug.mode = debug,develop
-xdebug.start_with_request = trigger
+xdebug.start_with_request = yes
 xdebug.client_host = 127.0.0.1
 xdebug.client_port = 9003
-`, so)
-	return os.WriteFile(ini, []byte(body), 0o644)
+; An IDE that isn't listening is normal here: don't warn about it on every request.
+xdebug.log_level = 0
+`, ExtensionPath(root, minor, "xdebug"))
+	return os.WriteFile(filepath.Join(dir, "xdebug.ini"), []byte(body), 0o644)
 }
 
 // DefaultIni is written once per version; afterwards the file belongs to the user.
@@ -452,12 +446,16 @@ curl.cainfo = "%s"
 `, ca, ca)
 }
 
-// EnsureIni creates php.ini for a version when it does not exist yet.
+// EnsureIni creates php.ini for a version when it does not exist yet, and (re)writes the ini
+// files Flock manages.
 func EnsureIni(root, minor string) error {
 	if runtime.GOOS == "windows" {
 		if err := writeExtensionsIni(root, minor); err != nil {
 			return err
 		}
+	}
+	if err := writeXdebugIni(root, minor); err != nil {
+		return err
 	}
 	path := IniPath(root, minor)
 	if _, err := os.Stat(path); err == nil {
@@ -469,6 +467,12 @@ func EnsureIni(root, minor string) error {
 // FPMSpec writes the FPM config for a version and returns the process to supervise.
 // extraEnv is passed to the workers (e.g. the dump server address).
 func FPMSpec(root, minor string, extraEnv ...string) (supervisor.Spec, error) {
+	return fpmSpec(root, minor, false, extraEnv)
+}
+
+// fpmSpec builds the normal FPM pool, or with debug the one that loads Xdebug. The debug pool
+// starts workers on demand, so it is idle unless someone debugs.
+func fpmSpec(root, minor string, debug bool, extraEnv []string) (supervisor.Spec, error) {
 	if err := EnsureIni(root, minor); err != nil {
 		return supervisor.Spec{}, err
 	}
@@ -476,8 +480,15 @@ func FPMSpec(root, minor string, extraEnv ...string) (supervisor.Spec, error) {
 		return supervisor.Spec{}, err
 	}
 
-	conf := filepath.Join(Dir(root, minor), "php-fpm.conf")
-	logFile := filepath.Join(root, "log", "php"+minor+"-fpm.log")
+	name, conf, socket, env := "php"+minor+"-fpm", "php-fpm.conf", Socket(root, minor), Env(root, minor)
+	pm := "pm = dynamic\npm.max_children = 16\npm.start_servers = 2\npm.min_spare_servers = 1\npm.max_spare_servers = 4"
+	if debug {
+		name, conf, socket, env = "php"+minor+"-fpm-xdebug", "php-fpm-xdebug.conf", DebugSocket(root, minor), DebugEnv(root, minor)
+		pm = "pm = ondemand\npm.max_children = 8\npm.process_idle_timeout = 60s"
+	}
+
+	conf = filepath.Join(Dir(root, minor), conf)
+	logFile := filepath.Join(root, "log", name+".log")
 	body := fmt.Sprintf(`; Generated by Flock on every start — edit php.ini instead.
 [global]
 error_log = "%s"
@@ -486,33 +497,32 @@ daemonize = no
 [flock]
 listen = "%s"
 listen.mode = 0600
-pm = dynamic
-pm.max_children = 16
-pm.start_servers = 2
-pm.min_spare_servers = 1
-pm.max_spare_servers = 4
+%s
 pm.max_requests = 500
 catch_workers_output = yes
 decorate_workers_output = no
 clear_env = no
-`, logFile, Socket(root, minor))
+`, logFile, socket, pm)
 
 	if err := os.WriteFile(conf, []byte(body), 0o644); err != nil {
 		return supervisor.Spec{}, err
 	}
 
 	return supervisor.Spec{
-		Name: "php" + minor + "-fpm",
+		Name: name,
 		Path: FPMBinary(root, minor),
 		Args: []string{"--nodaemonize", "--fpm-config", conf, "-c", IniPath(root, minor)},
-		// FLOCK_XDEBUG and FLOCK_PHP_VERSION change the spec when Xdebug is toggled or a patch
-		// update is installed, so the supervisor restarts FPM with the new setup.
-		Env: append(append(Env(root, minor),
-			fmt.Sprintf("FLOCK_XDEBUG=%t", XdebugEnabled(root, minor)),
-			"FLOCK_PHP_VERSION="+FullVersion(root, minor)), extraEnv...),
+		// FLOCK_PHP_VERSION changes the spec when a patch update is installed, so the supervisor
+		// restarts FPM with the new binary.
+		Env:        append(append(env, "FLOCK_PHP_VERSION="+FullVersion(root, minor)), extraEnv...),
 		LogFile:    logFile,
 		StopSignal: syscall.SIGQUIT, // graceful: finish in-flight requests
 	}, nil
+}
+
+// DebugSocket is the socket of a version's Xdebug FPM pool.
+func DebugSocket(root, minor string) string {
+	return filepath.Join(root, "run", "php"+strings.ReplaceAll(minor, ".", "")+"-xdebug.sock")
 }
 
 // Pool is a version's FastCGI pool: the processes to supervise and the addresses
@@ -524,19 +534,40 @@ type Pool struct {
 
 // PoolFor returns the pool of a version: one PHP-FPM master, or php-cgi workers on Windows.
 func PoolFor(root, minor string, extraEnv ...string) (Pool, error) {
-	if runtime.GOOS == "windows" {
-		return CGIPool(root, minor, extraEnv...)
+	return poolFor(root, minor, false, extraEnv)
+}
+
+// DebugPoolFor returns a version's second pool, which loads Xdebug. The web server sends it
+// only the requests that ask to be debugged, so every other request stays fast.
+func DebugPoolFor(root, minor string, extraEnv ...string) (Pool, error) {
+	if !XdebugAvailable(root, minor) {
+		return Pool{}, fmt.Errorf("PHP %s was installed without Xdebug — reinstall it from a newer build", minor)
 	}
-	spec, err := FPMSpec(root, minor, extraEnv...)
+	return poolFor(root, minor, true, extraEnv)
+}
+
+func poolFor(root, minor string, debug bool, extraEnv []string) (Pool, error) {
+	if runtime.GOOS == "windows" {
+		return cgiPool(root, minor, debug, extraEnv)
+	}
+	spec, err := fpmSpec(root, minor, debug, extraEnv)
 	if err != nil {
 		return Pool{}, err
 	}
-	return Pool{Specs: []supervisor.Spec{spec}, Upstreams: []string{"unix/" + Socket(root, minor)}}, nil
+	socket := Socket(root, minor)
+	if debug {
+		socket = DebugSocket(root, minor)
+	}
+	return Pool{Specs: []supervisor.Spec{spec}, Upstreams: []string{"unix/" + socket}}, nil
 }
 
 // CGIWorkers is how many php-cgi processes serve a version on Windows. Each handles one request
-// at a time, so a paused Xdebug session or a slow request only blocks its own worker.
+// at a time, so a slow request only blocks its own worker.
 const CGIWorkers = 6
+
+// DebugCGIWorkers serve a version's Xdebug requests on Windows. A request paused at a
+// breakpoint holds its worker, so there are a few.
+const DebugCGIWorkers = 3
 
 // CGIPort is the loopback port of a php-cgi worker: 19000 + major*100 + minor*10 + worker,
 // e.g. 19840-19845 for PHP 8.4.
@@ -547,28 +578,38 @@ func CGIPort(minor string, worker int) int {
 	return 19000 + ma*100 + mi*10 + worker
 }
 
+// DebugCGIPort is the port of an Xdebug php-cgi worker: CGIPort + 1000, e.g. 20840-20842 for PHP 8.4.
+func DebugCGIPort(minor string, worker int) int { return CGIPort(minor, worker) + 1000 }
+
 // CGIPool runs CGIWorkers php-cgi processes for a version (Windows has no PHP-FPM).
 func CGIPool(root, minor string, extraEnv ...string) (Pool, error) {
+	return cgiPool(root, minor, false, extraEnv)
+}
+
+func cgiPool(root, minor string, debug bool, extraEnv []string) (Pool, error) {
 	if err := EnsureIni(root, minor); err != nil {
 		return Pool{}, err
 	}
 
-	env := append(append(Env(root, minor),
-		fmt.Sprintf("FLOCK_XDEBUG=%t", XdebugEnabled(root, minor)),
+	name, workers, port, env := "php"+minor+"-cgi", CGIWorkers, CGIPort, Env(root, minor)
+	if debug {
+		name, workers, port, env = "php"+minor+"-cgi-xdebug", DebugCGIWorkers, DebugCGIPort, DebugEnv(root, minor)
+	}
+	env = append(append(env,
 		"FLOCK_PHP_VERSION="+FullVersion(root, minor),
 		// php-cgi exits after 500 requests by default; the restart would briefly take a worker away.
 		"PHP_FCGI_MAX_REQUESTS=0",
 		"PHP_FCGI_CHILDREN=0"), extraEnv...)
 
 	var pool Pool
-	for i := range CGIWorkers {
-		addr := fmt.Sprintf("127.0.0.1:%d", CGIPort(minor, i))
+	for i := range workers {
+		addr := fmt.Sprintf("127.0.0.1:%d", port(minor, i))
 		pool.Specs = append(pool.Specs, supervisor.Spec{
-			Name:    fmt.Sprintf("php%s-cgi-%d", minor, i+1),
+			Name:    fmt.Sprintf("%s-%d", name, i+1),
 			Path:    CGIBinary(root, minor),
 			Args:    []string{"-b", addr, "-c", IniPath(root, minor)},
 			Env:     env,
-			LogFile: filepath.Join(root, "log", "php"+minor+"-cgi.log"),
+			LogFile: filepath.Join(root, "log", name+".log"),
 		})
 		pool.Upstreams = append(pool.Upstreams, addr)
 	}
@@ -582,6 +623,9 @@ func PoolLog(minor string) string {
 	}
 	return "php" + minor + "-fpm"
 }
+
+// DebugPoolLog is the log name of a version's Xdebug pool.
+func DebugPoolLog(minor string) string { return PoolLog(minor) + "-xdebug" }
 
 // WaitReady polls until every upstream accepts connections, or the timeout passes.
 func WaitReady(upstreams []string, timeout time.Duration) bool {
@@ -608,9 +652,18 @@ func WaitReady(upstreams []string, timeout time.Duration) bool {
 // Env pins php.ini and the scan dir so a static build never picks up another PHP's
 // config from its compiled-in default paths (e.g. /usr/local/etc/php).
 func Env(root, minor string) []string {
+	return env(root, minor, filepath.Join(Dir(root, minor), "conf.d"))
+}
+
+// DebugEnv is Env that also scans XdebugDir, so PHP loads Xdebug.
+func DebugEnv(root, minor string) []string {
+	return env(root, minor, filepath.Join(Dir(root, minor), "conf.d")+string(os.PathListSeparator)+XdebugDir(root, minor))
+}
+
+func env(root, minor, scanDir string) []string {
 	env := []string{
 		"PHPRC=" + IniPath(root, minor),
-		"PHP_INI_SCAN_DIR=" + filepath.Join(Dir(root, minor), "conf.d"),
+		"PHP_INI_SCAN_DIR=" + scanDir,
 	}
 	if cnf := filepath.Join(Dir(root, minor), "bin", "openssl.cnf"); runtime.GOOS == "windows" && fileExists(cnf) {
 		env = append(env, "OPENSSL_CONF="+cnf)

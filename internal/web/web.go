@@ -7,6 +7,7 @@ package web
 
 import (
 	"crypto/tls"
+	_ "embed"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -27,6 +28,10 @@ type Site struct {
 	Aliases []string // other names served like Domain, e.g. watchtower-2.test
 	Root    string   // document root, e.g. <path>/public
 	FPM     []string // FastCGI upstreams: "unix/<socket>" (PHP-FPM) or "127.0.0.1:<port>" (php-cgi workers)
+	// DebugFPM are the upstreams of the pool that loads Xdebug. Requests that ask for Xdebug go
+	// there, and with Debugging (the project has breakpoints) every request does.
+	DebugFPM  []string
+	Debugging bool
 	// CertFile and KeyFile (from certs.SiteCert, covering Domain and *.Domain) are set when the site
 	// is secured. Deeper subdomains and aliases get certificates from Config.Issue.
 	CertFile string
@@ -71,7 +76,7 @@ func DocumentRoot(path string) string {
 	return path
 }
 
-// Caddyfile renders the configuration. It is exported for tests and `flock debug`.
+// Caddyfile renders the configuration. It is exported for tests.
 func Caddyfile(cfg Config) string {
 	var b strings.Builder
 
@@ -112,27 +117,56 @@ func Caddyfile(cfg Config) string {
 		fmt.Fprintf(&b, "\n%s {\n\timport flock_site\n%s}\n", addresses("http", hosts, cfg), app(s))
 	}
 
-	fmt.Fprintf(&b, "\n%s {\n\timport flock_site\n\trespond \"No Flock site is linked for {host}. Run `flock link` in the project directory.\" 404\n}\n",
-		addresses("http", []string{""}, cfg))
+	// Any other name gets the "not linked" page, its host and scheme filled in by templates.
+	fmt.Fprintf(&b, "\n%s {\n\timport flock_site\n%s}\n", addresses("http", []string{""}, cfg), unlinked(cfg))
 	// Without this, https:// to an unknown or unsecured name would fail the handshake (or hang).
-	fmt.Fprintf(&b, "\n%s {\n\timport flock_site\n%s\trespond \"No secured Flock site is linked for {host}. Run `flock link` in the project directory, or `flock secure` to serve it over HTTPS.\" 404\n}\n",
-		addresses("https", []string{""}, cfg), tlsBlock)
+	fmt.Fprintf(&b, "\n%s {\n\timport flock_site\n%s%s}\n", addresses("https", []string{""}, cfg), tlsBlock, unlinked(cfg))
 
 	return b.String()
 }
 
+//go:embed pages/unlinked.html
+var unlinkedPage []byte
+
+// pagesDir holds the pages Flock serves itself; Apply writes them.
+func pagesDir(cfg Config) string { return filepath.Join(cfg.StorageDir, "pages") }
+
+// unlinked serves the catch-all page: a 404 that is never cached, so the site shows once it's linked.
+func unlinked(cfg Config) string {
+	return fmt.Sprintf("\troot * %s\n\trewrite * /unlinked.html\n\theader Cache-Control no-store\n\ttemplates\n\tfile_server {\n\t\tstatus 404\n\t}\n",
+		quote(pagesDir(cfg)))
+}
+
+// xdebugRequest matches requests that ask for Xdebug: the cookie the Xdebug browser extensions
+// set (and Xdebug itself, after ?XDEBUG_SESSION_START), or a trigger in the query string.
+const xdebugRequest = `{cookie.XDEBUG_SESSION} != "" || {cookie.XDEBUG_TRIGGER} != "" || ` +
+	`{query.XDEBUG_SESSION} != "" || {query.XDEBUG_SESSION_START} != "" || {query.XDEBUG_TRIGGER} != ""`
+
 func app(s Site) string {
-	upstreams := make([]string, len(s.FPM))
-	for i, u := range s.FPM {
-		upstreams[i] = quote(u)
+	root := fmt.Sprintf("\troot * %s\n", quote(s.Root))
+	switch {
+	case len(s.DebugFPM) == 0:
+		return root + php(s.FPM, "\t")
+	case s.Debugging:
+		return root + php(s.DebugFPM, "\t")
+	}
+	return root + fmt.Sprintf("\t@xdebug expression `%s`\n\thandle @xdebug {\n%s\t}\n\thandle {\n%s\t}\n",
+		xdebugRequest, php(s.DebugFPM, "\t\t"), php(s.FPM, "\t\t"))
+}
+
+// php sends PHP requests to upstreams and serves everything else as static files.
+func php(upstreams []string, indent string) string {
+	quoted := make([]string, len(upstreams))
+	for i, u := range upstreams {
+		quoted[i] = quote(u)
 	}
 	// php-cgi workers (Windows) serve one request at a time: send each request to the least busy
 	// one and wait briefly for a free worker instead of failing.
 	balance := ""
-	if len(s.FPM) > 1 {
-		balance = " {\n\t\tlb_policy least_conn\n\t\tlb_try_duration 30s\n\t}"
+	if len(upstreams) > 1 {
+		balance = fmt.Sprintf(" {\n%[1]s\tlb_policy least_conn\n%[1]s\tlb_try_duration 30s\n%[1]s}", indent)
 	}
-	return fmt.Sprintf("\troot * %s\n\tphp_fastcgi %s%s\n\tfile_server\n", quote(s.Root), strings.Join(upstreams, " "), balance)
+	return fmt.Sprintf("%[1]sphp_fastcgi %[2]s%[3]s\n%[1]sfile_server\n", indent, strings.Join(quoted, " "), balance)
 }
 
 func addresses(scheme string, hosts []string, cfg Config) string {
@@ -174,6 +208,12 @@ func Apply(cfg Config) error {
 		return err
 	}
 	if err := os.MkdirAll(filepath.Dir(cfg.LogFile), 0o700); err != nil {
+		return err
+	}
+	if err := os.MkdirAll(pagesDir(cfg), 0o700); err != nil {
+		return err
+	}
+	if err := os.WriteFile(filepath.Join(pagesDir(cfg), "unlinked.html"), unlinkedPage, 0o600); err != nil {
 		return err
 	}
 

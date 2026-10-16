@@ -129,13 +129,23 @@ func TestServesEveryDepthAliasAndCatchAllOverTrustedHTTPS(t *testing.T) {
 			t.Errorf("%s: %v", host, err)
 			continue
 		}
-		if resp.StatusCode != http.StatusNotFound || !strings.Contains(body, "No secured Flock site is linked for "+host) {
+		if resp.StatusCode != http.StatusNotFound || !strings.Contains(body, "Not secured") || !strings.Contains(body, ">"+host+"<") {
 			t.Errorf("%s: want the catch-all, got %d %q", host, resp.StatusCode, body)
 		}
 	}
 
+	// Over plain HTTP, an unknown name gets the rendered "not linked" page, never cached.
+	resp, body, err := get(fmt.Sprintf("http://nope.test:%d/some/path", cfg.HTTPPort))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp.StatusCode != http.StatusNotFound || !strings.Contains(body, "Not linked") || !strings.Contains(body, "flock link nope") ||
+		strings.Contains(body, "{{") || resp.Header.Get("Cache-Control") != "no-store" {
+		t.Errorf("http catch-all: got %d %v %q", resp.StatusCode, resp.Header, body)
+	}
+
 	// Plain HTTP redirects secured sites at every depth.
-	resp, _, err := get(fmt.Sprintf("http://a.b.c.d.app.test:%d/x", cfg.HTTPPort))
+	resp, _, err = get(fmt.Sprintf("http://a.b.c.d.app.test:%d/x", cfg.HTTPPort))
 	if err != nil || resp.StatusCode != http.StatusPermanentRedirect || !strings.HasPrefix(resp.Header.Get("Location"), "https://a.b.c.d.app.test:") {
 		t.Errorf("http redirect: %v %+v", err, resp)
 	}

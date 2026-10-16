@@ -70,8 +70,23 @@ internal sealed class DebuggerPane(SettingsWindow window, AppModel model) : Pane
 
     public override UIElement Build()
     {
-        var load = new ToggleSwitch { IsOn = Model.Status?.Xdebug == true };
-        load.Toggled += (_, _) => _ = Model.SetXdebugAsync(load.IsOn);
+        var enabled = Model.Status?.Xdebug == true;
+        var detect = new ToggleSwitch { IsOn = enabled };
+        detect.Toggled += (_, _) => _ = Model.SetXdebugAsync(detect.IsOn);
+        var breakpoints = new ToggleSwitch { IsOn = Model.Status?.XdebugBreakpoints == true, IsEnabled = enabled };
+        breakpoints.Toggled += (_, _) => _ = Model.SetXdebugBreakpointsAsync(breakpoints.IsOn);
+
+        var debugging = new List<UIElement>();
+        if (enabled && breakpoints.IsOn)
+        {
+            foreach (var site in Model.Status?.Sites ?? [])
+            {
+                if (site.Debugging)
+                {
+                    debugging.Add(Ui.Setting(site.Domain, "Breakpoints in PhpStorm", null, Ui.GlyphBug));
+                }
+            }
+        }
 
         var availability = new List<UIElement>();
         foreach (var php in Store.Config?.Php ?? [])
@@ -82,13 +97,20 @@ internal sealed class DebuggerPane(SettingsWindow window, AppModel model) : Pane
             availability.Add(Ui.Setting($"PHP {php.Version}", null, state));
         }
 
-        return Ui.Column(0,
-            Ui.Section(null, Ui.Setting("Load Xdebug", "Loading Xdebug slows every request down, so keep it off when you don't need it.", load)),
-            Ui.Section("Connect your IDE",
-                Ui.Setting("Client port", null, Ui.Text("9003", foreground: Ui.SecondaryText, wrap: false)),
-                Ui.Setting("Mode", null, Ui.Text("debug, develop", foreground: Ui.SecondaryText, wrap: false)),
-                Ui.Setting("Start a session", "Use the Xdebug browser extension, add ?XDEBUG_TRIGGER=1 to the URL, or run `$env:XDEBUG_TRIGGER=1; php artisan …` in PowerShell.", null)),
-            Ui.Section("Availability", [.. availability]));
+        var column = Ui.Column(0,
+            Ui.Section(null,
+                Ui.Setting("Detect Xdebug requests", "Xdebug loads only for requests that ask for it, so everything else stays fast.", detect),
+                Ui.Setting("Detect PhpStorm breakpoints", "While a project has breakpoints in PhpStorm, every request to its site is debugged.", breakpoints)));
+        if (debugging.Count > 0)
+        {
+            column.Children.Add(Ui.Section("Debugging now", [.. debugging]));
+        }
+        column.Children.Add(Ui.Section("Connect your IDE",
+            Ui.Setting("Client port", null, Ui.Text("9003", foreground: Ui.SecondaryText, wrap: false)),
+            Ui.Setting("Mode", null, Ui.Text("debug, develop", foreground: Ui.SecondaryText, wrap: false)),
+            Ui.Setting("Start a session", "Set a breakpoint in PhpStorm and listen for debug connections, use the Xdebug browser extension, or add ?XDEBUG_TRIGGER=1 to the URL. On the command line, run `flock debug artisan …`.", null)));
+        column.Children.Add(Ui.Section("Availability", [.. availability]));
+        return column;
     }
 }
 

@@ -88,6 +88,7 @@ public sealed class Service
 /// <summary>Body of POST /v1/settings; null fields are left out and stay unchanged.</summary>
 public sealed record SettingsChange(
     bool? Xdebug = null,
+    bool? XdebugBreakpoints = null,
     bool? Dumps = null,
     string? DefaultPhp = null,
     string? DefaultNode = null,

@@ -110,3 +110,18 @@ func TestMigrateLeavesNewConfigsAlone(t *testing.T) {
 		t.Fatalf("used ports: %v", used)
 	}
 }
+
+func TestXdebugDetectionIsOnForOlderConfigs(t *testing.T) {
+	root := t.TempDir()
+	// "xdebug" loaded Xdebug for every request and was off by default; detection replaces it.
+	if err := os.WriteFile(filepath.Join(root, "config.json"), []byte(`{"tld":"test","xdebug":false}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := Load(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !cfg.Xdebug || !cfg.XdebugBreakpoints {
+		t.Fatalf("got xdebug %v, breakpoints %v", cfg.Xdebug, cfg.XdebugBreakpoints)
+	}
+}

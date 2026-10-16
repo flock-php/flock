@@ -130,6 +130,8 @@ public sealed class AppModel
 
     public Task SetXdebugAsync(bool on) => UpdateAsync(new SettingsChange(Xdebug: on));
 
+    public Task SetXdebugBreakpointsAsync(bool on) => UpdateAsync(new SettingsChange(XdebugBreakpoints: on));
+
     public Task SetDumpsAsync(bool on) => UpdateAsync(new SettingsChange(Dumps: on));
 
     private async Task UpdateAsync(SettingsChange change)

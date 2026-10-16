@@ -87,7 +87,9 @@ fails, or a service hasn't exited after 10 seconds, it is killed. php-cgi worker
 - [ ] `php -v`, `composer -V`, `php artisan` in a new terminal use Flock's PHP (`where.exe php` lists `%AppData%\Flock\bin\php.exe` first)
 - [ ] `composer install` reaches packagist (CA bundle with the Windows roots)
 - [ ] Settings → PHP: install 8.4, switch a site to it, uninstall it again (files must not be locked)
-- [ ] Xdebug toggle restarts the workers; a breakpoint hits with `?XDEBUG_TRIGGER=1`
+- [ ] A PhpStorm breakpoint hits on reload with no browser extension, and the site goes back to the fast pool once it is removed
+- [ ] `?XDEBUG_TRIGGER=1` and the Xdebug browser extension hit a breakpoint; requests without them never load Xdebug
+- [ ] `flock debug artisan …` hits a breakpoint; plain `php` does not load Xdebug
 - [ ] `flock services install redis` downloads Redis and starts it; `redis-cli ping` → PONG; `flock postgres install-client` → `psql -c "select 1"`
 - [ ] Upgrading from a Flock that had Redis: it keeps running from `services\redis\7.2.16` with its data
 - [ ] Settings → Services → All: install MySQL, MariaDB (port suggested as 3307 next to MySQL), MongoDB, Meilisearch, RustFS; each starts and its connection works; Typesense and Valkey show as not available

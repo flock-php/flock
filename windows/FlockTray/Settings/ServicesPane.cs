@@ -281,7 +281,9 @@ internal sealed partial class ServicesPane(SettingsWindow window, AppModel model
         {
             panel.Children.Add(Ui.Caption(service.Installed
                 ? "The Flock hosts helper (a small Windows service) writes every site's domain and added domains into the hosts file, so they resolve even where the DNS rule doesn't apply (company DNS policies, VPNs, browsers with their own secure DNS)."
-                : "The hosts helper is not installed, so site domains don't resolve. Run `flock install` in a terminal once; Windows asks for permission."));
+                : service.Problem.Length > 0
+                    ? "Sites resolve through Flock's DNS rule instead. The hosts file is only a fallback for where that rule is overridden (company DNS policies, VPNs, browsers with their own secure DNS). Updating Flock tries the helper again."
+                    : "The hosts helper is not installed, so site domains don't resolve. Run `flock install` in a terminal once; Windows asks for permission."));
         }
         if (service.Id == "postgres")
         {

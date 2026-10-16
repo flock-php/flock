@@ -143,13 +143,15 @@ public struct Service: Decodable, Sendable, Equatable, Identifiable {
 /// Body of POST /v1/settings; nil fields are left out and stay unchanged.
 public struct SettingsChange: Encodable, Sendable {
     public var xdebug: Bool?
+    public var xdebugBreakpoints: Bool?
     public var dumps: Bool?
     public var defaultPHP: String?
     public var defaultNode: String?
     public var phpAutoBuild: Bool?
 
-    public init(xdebug: Bool? = nil, dumps: Bool? = nil, defaultPHP: String? = nil, defaultNode: String? = nil, phpAutoBuild: Bool? = nil) {
+    public init(xdebug: Bool? = nil, xdebugBreakpoints: Bool? = nil, dumps: Bool? = nil, defaultPHP: String? = nil, defaultNode: String? = nil, phpAutoBuild: Bool? = nil) {
         self.xdebug = xdebug
+        self.xdebugBreakpoints = xdebugBreakpoints
         self.dumps = dumps
         self.defaultPHP = defaultPHP
         self.defaultNode = defaultNode
@@ -158,6 +160,7 @@ public struct SettingsChange: Encodable, Sendable {
 
     enum CodingKeys: String, CodingKey {
         case xdebug, dumps
+        case xdebugBreakpoints = "xdebug_breakpoints"
         case defaultPHP = "default_php"
         case defaultNode = "default_node"
         case phpAutoBuild = "php_auto_build"

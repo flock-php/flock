@@ -18,7 +18,7 @@ import (
 var (
 	// rebuildable: programs, downloads, certificates, logs and runtime files.
 	rebuildable = []string{"bin", "cache", "caddy", "certs", "log", "mail", "dumps", "tools", "php", "node", "node-global", "run",
-		"api.json", "flockd.sock", "hosts.txt", "hosts.txt.tmp", "config.json.tmp"}
+		"api.json", "flockd.sock", "hosts.txt", "hosts.txt.tmp", "hosts-helper-blocked", "config.json.tmp"}
 	// userData survives a plain uninstall: sites, parked folders and settings, and in services/
 	// each service's data/ (the PostgreSQL, Valkey, MySQL, Redis, ... databases; per version line).
 	userData = []string{"config.json", "services"}

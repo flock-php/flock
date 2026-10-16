@@ -86,23 +86,34 @@ struct DebuggerPane: View {
 
     var body: some View {
         let enabled = model.status?.xdebug == true
+        let breakpoints = model.status?.xdebugBreakpoints == true
+        let debugging = (model.status?.sites ?? []).filter(\.debugging).map(\.domain)
         let versions = model.settings.config?.php ?? []
 
         VStack(spacing: 0) {
             PaneHeader(title: "Debugger", subtitle: "Step through requests and commands with Xdebug.")
             Form {
                 Section {
-                    Toggle("Load Xdebug", isOn: Binding(get: { enabled }, set: { on in Task { await model.setXdebug(on, from: .settings) } }))
+                    Toggle("Detect Xdebug requests", isOn: Binding(get: { enabled }, set: { on in Task { await model.setXdebug(on, from: .settings) } }))
+                    Toggle("Detect PhpStorm breakpoints", isOn: Binding(get: { breakpoints }, set: { on in Task { await model.setXdebugBreakpoints(on) } }))
+                        .disabled(!enabled)
                 } footer: {
-                    Text("Loading Xdebug slows every request down, so keep it off when you don't need it.")
+                    Text("Xdebug loads only for requests that ask for it, so everything else stays fast. While a project has breakpoints in PhpStorm, every request to its site is debugged.")
                         .font(.caption).foregroundStyle(.secondary)
+                }
+                if enabled && breakpoints && !debugging.isEmpty {
+                    Section("Debugging now") {
+                        ForEach(debugging, id: \.self) { domain in
+                            Label(domain, systemImage: "ladybug.fill").foregroundStyle(.orange)
+                        }
+                    }
                 }
                 Section("Connect your IDE") {
                     LabeledContent("Client port", value: "9003")
                     LabeledContent("Mode", value: "debug, develop")
                     VStack(alignment: .leading, spacing: 4) {
                         Text("Start a session")
-                        Text("Use the Xdebug browser extension, add `?XDEBUG_TRIGGER=1` to the URL, or run `XDEBUG_TRIGGER=1 php artisan …`.")
+                        Text("Set a breakpoint in PhpStorm and listen for debug connections, use the Xdebug browser extension, or add `?XDEBUG_TRIGGER=1` to the URL. On the command line, run `flock debug artisan …`.")
                             .font(.callout)
                             .foregroundStyle(.secondary)
                             .fixedSize(horizontal: false, vertical: true)

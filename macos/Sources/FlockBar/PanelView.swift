@@ -302,6 +302,12 @@ private struct SiteRow: View {
                     }
                 }
                 Spacer()
+                if site.debugging {
+                    Label("Debugging", systemImage: "ladybug.fill")
+                        .labelStyle(.iconOnly)
+                        .font(.caption2)
+                        .foregroundStyle(.orange)
+                }
                 Text("PHP \(site.php)")
                     .font(.caption2.monospacedDigit())
                     .foregroundStyle(.secondary)

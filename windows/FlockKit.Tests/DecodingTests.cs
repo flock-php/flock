@@ -22,8 +22,8 @@ public class DecodingTests
              "dns":{"tld":"test","addr":"127.0.0.1:53535"},"http_port":80,"https_port":443,
              "mail":"127.0.0.1:2525","postgres":"18.6.0 on 127.0.0.1:5432",
              "extras":[{"id":"redis","name":"Redis","version":"7.2.16","port":6379,"enabled":true,"up":true},{"id":"mysql"}],
-             "xdebug":true,"dumps":false,"mail_count":3,"dump_count":12,
-             "sites":[{"name":"watchtower","domain":"watchtower.test","path":"/code/watchtower","php":"8.5","secured":true,"parked":false,"url":"https://watchtower.test"},
+             "xdebug":true,"xdebug_breakpoints":true,"dumps":false,"mail_count":3,"dump_count":12,
+             "sites":[{"name":"watchtower","domain":"watchtower.test","path":"/code/watchtower","php":"8.5","secured":true,"parked":false,"url":"https://watchtower.test","debugging":true},
                       {"name":"legacy","domain":"legacy.test","path":"/code/legacy","php":"7.4","secured":false,"parked":true,"problem":"PHP 7.4 is not installed"}],
              "processes":[{"name":"php8.5-fpm","up":true,"restarts":0},{"name":"postgres","up":false,"restarts":3,"last_error":"exit status 1: could not bind"}],
              "warnings":["postgres: port 5432 is used by postgres (pid 1)"]}
@@ -40,6 +40,9 @@ public class DecodingTests
         Assert.Equal(3, status.MailCount);
         Assert.Equal(12, status.DumpCount);
         Assert.Equal("https://watchtower.test", status.Sites[0].Url);
+        Assert.True(status.XdebugBreakpoints);
+        Assert.True(status.Sites[0].Debugging);
+        Assert.False(status.Sites[1].Debugging);
         Assert.Null(status.Sites[1].Url);
         Assert.NotNull(status.Sites[1].Problem);
         Assert.Equal("exit status 1: could not bind", status.Processes[1].LastError);
