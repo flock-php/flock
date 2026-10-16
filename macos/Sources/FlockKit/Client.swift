@@ -478,7 +478,11 @@ public actor FlockClient {
     }
 
     private func attempt(_ method: String, _ path: String, query: [URLQueryItem], body: Data?, timeout: TimeInterval?, config: APIConfig) async throws -> Data {
-        var components = URLComponents(url: config.url.appendingPathComponent(path), resolvingAgainstBaseURL: false)!
+        // path is already percent-encoded (see escape); appendingPathComponent would encode the
+        // escapes again ("my%20app" → "my%2520app").
+        var components = URLComponents(url: config.url, resolvingAgainstBaseURL: false)!
+        let basePath = components.percentEncodedPath
+        components.percentEncodedPath = (basePath.hasSuffix("/") ? String(basePath.dropLast()) : basePath) + path
         if !query.isEmpty {
             components.queryItems = query
         }
