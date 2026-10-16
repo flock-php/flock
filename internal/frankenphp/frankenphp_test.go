@@ -17,6 +17,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -131,15 +132,18 @@ func TestManagerInstallsAndUpdatesFromTheManifest(t *testing.T) {
 	pub, priv, _ := ed25519.GenerateKey(rand.Reader)
 	pkg := packageZip(t, "8.4.14")
 	sum := sha256.Sum256(pkg)
-	build := 1
-	serial := int64(1)
+	var mu sync.Mutex
+	build, serial, yanked := 1, int64(1), map[string]string(nil)
 	expires := time.Now().Add(time.Hour).Truncate(time.Second)
 
 	var srv *httptest.Server
 	manifest := func() []byte {
-		key := "php8.4-" + binaries.Platform()
-		m := binaries.Manifest{Schema: 1, Serial: serial, Expires: expires, Packages: map[string]map[string]map[string]binaries.Entry{
-			Package: {"1.13.0": {key: {Build: build, URL: srv.URL + "/frankenphp-1.13.0-build1-" + key + ".zip", SHA256: hex.EncodeToString(sum[:]), Size: int64(len(pkg))}}},
+		mu.Lock()
+		defer mu.Unlock()
+		platform := binaries.Platform()
+		m := binaries.Manifest{Schema: 1, Channel: binaries.Stable, Serial: serial, Expires: expires, Packages: map[string]map[string]map[string]binaries.Entry{
+			Package: {"8.4.14": {platform: {Build: build, URL: fmt.Sprintf("%s/frankenphp-8.4.14-build%d-%s.zip", srv.URL, build, platform),
+				SHA256: hex.EncodeToString(sum[:]), Size: int64(len(pkg)), Yanked: yanked}}},
 		}}
 		data, _ := json.Marshal(m)
 		return data
@@ -159,8 +163,9 @@ func TestManagerInstallsAndUpdatesFromTheManifest(t *testing.T) {
 	defer srv.Close()
 
 	root := t.TempDir()
-	m := NewManager(root, binaries.Source{URL: srv.URL + "/manifest.json", Key: pub, HTTP: srv.Client()})
-	installed := make(chan string, 2)
+	source := binaries.Source{Bases: []string{srv.URL + "/"}, Key: pub, HTTP: srv.Client(), Cache: filepath.Join(root, "cache")}
+	m := NewManager(root, binaries.NewCatalog(source, func() binaries.Channel { return binaries.Stable }))
+	installed := make(chan string, 4)
 	m.Installed = func(minor string) { installed <- minor }
 
 	if err := m.Install("8.1"); err == nil {
@@ -171,24 +176,22 @@ func TestManagerInstallsAndUpdatesFromTheManifest(t *testing.T) {
 	if j := m.Job("8.4"); j != nil {
 		t.Fatalf("install failed: %+v", j)
 	}
-	select {
-	case got := <-installed:
-		if got != "8.4" {
-			t.Fatalf("installed %s", got)
-		}
-	default:
-		t.Fatal("Installed wasn't called")
+	if got := <-installed; got != "8.4" {
+		t.Fatalf("installed %s", got)
 	}
 	info, ok := InstalledInfo(root, "8.4")
 	if !ok || info.Version != "1.13.0" || info.PHP != "8.4.14" || info.Build != 1 {
 		t.Fatalf("installed info: %+v %v", info, ok)
 	}
 	st := m.State()
-	if len(st.Builds) != 1 || st.Builds[0].Installed != "1.13.0" || st.Builds[0].Update || st.Builds[0].Job != nil {
+	if len(st.Builds) != 1 || st.Builds[0].Installed != "1.13.0" || st.Builds[0].Latest != "8.4.14" || st.Builds[0].Update || st.Builds[0].Job != nil {
 		t.Fatalf("state: %+v", st)
 	}
 
+	// A higher build of the same PHP release is an update.
+	mu.Lock()
 	build, serial = 2, 2
+	mu.Unlock()
 	if err := m.Check(context.Background()); err != nil {
 		t.Fatal(err)
 	}
@@ -199,9 +202,31 @@ func TestManagerInstallsAndUpdatesFromTheManifest(t *testing.T) {
 		t.Fatal(err)
 	}
 	m.Wait()
+	<-installed
 	if info, _ := InstalledInfo(root, "8.4"); info.Build != 2 {
 		t.Errorf("after the update: %+v", info)
 	}
+
+	// Build 2 is withdrawn and build 3 published: it replaces build 2 without being asked.
+	mu.Lock()
+	build, serial, yanked = 3, 3, map[string]string{"2": "crashes on start"}
+	mu.Unlock()
+	if err := m.Check(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-installed:
+	case <-time.After(10 * time.Second):
+		t.Fatal("the withdrawn build wasn't replaced")
+	}
+	m.Wait()
+	if info, _ := InstalledInfo(root, "8.4"); info.Build != 3 {
+		t.Errorf("after replacing the withdrawn build: %+v", info)
+	}
+	if b := m.State().Builds[0]; b.Yanked != "" || b.Update {
+		t.Errorf("state after the replacement: %+v", b)
+	}
+
 	if runtime.GOOS == "windows" {
 		ini, err := os.ReadFile(filepath.Join(Dir(root, "8.4"), "conf.d", "00-flock.ini"))
 		if err != nil || !strings.Contains(string(ini), "extension = intl") {

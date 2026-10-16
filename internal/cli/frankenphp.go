@@ -352,6 +352,7 @@ func listFrankenPHP(cmd *cobra.Command, s *state) error {
 		return nil
 	}
 	w := tabwriter.NewWriter(cmd.OutOrStdout(), 0, 0, 2, ' ', 0)
+	// AVAILABLE is the newest PHP release with a build in the channel.
 	fmt.Fprintln(w, "PHP\tFRANKENPHP\tAVAILABLE\tSTATE")
 	for _, b := range st.Builds {
 		installed, state := b.Installed, ""
@@ -360,7 +361,16 @@ func listFrankenPHP(cmd *cobra.Command, s *state) error {
 		} else {
 			installed += " (PHP " + b.PHPVersion + ")"
 		}
+		latest := b.Latest
+		if b.Prerelease {
+			latest += " (pre-release)"
+		}
 		switch {
+		case b.Yanked != "":
+			state = "withdrawn: " + b.Yanked
+			if b.Update {
+				state += " — `flock frankenphp install " + b.PHP + "` replaces it"
+			}
 		case b.Job != nil && b.Job.State == "failed":
 			state = "install failed: " + b.Job.Error
 		case b.Job != nil:
@@ -368,7 +378,7 @@ func listFrankenPHP(cmd *cobra.Command, s *state) error {
 		case b.Update:
 			state = "update available — `flock frankenphp install " + b.PHP + "`"
 		}
-		fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", b.PHP, installed, b.Latest, state)
+		fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", b.PHP, installed, latest, state)
 	}
 	if st.CheckError != "" {
 		fmt.Fprintf(w, "\nthe package manifest couldn't be read: %s\n", st.CheckError)

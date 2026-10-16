@@ -67,6 +67,8 @@ type daemon struct {
 	mail     *mail.Server
 	webUp    bool
 	builds   *phpbuild.Manager
+	// binaries is the manifest of prebuilt packages for the configured channel, shared by the managers.
+	binaries *binaries.Catalog
 	// frankenphp installs FrankenPHP builds; restarts counts RestartSite calls per site (see frankenphp.Site.Restart).
 	frankenphp *frankenphp.Manager
 	restarts   map[string]int
@@ -243,10 +245,6 @@ func Run(ctx context.Context, cfg Config) error {
 		d.builds = phpbuild.NewManager(cfg.Root, workspace, phpbuild.DefaultSources(), phpbuild.Hooks{
 			Installed: d.installedPHP,
 			Install:   d.installPHP,
-			AutoBuild: func() bool {
-				c, err := config.Load(d.root)
-				return err == nil && c.PHPAutoBuild
-			},
 		})
 		go d.builds.Run(ctx)
 	}
@@ -255,7 +253,9 @@ func Run(ctx context.Context, cfg Config) error {
 		d.pg = pg
 		go pg.Catalog.Run(ctx)
 	}
-	d.frankenphp = frankenphp.NewManager(cfg.Root, binaries.DefaultSource(cfg.Root))
+	d.binaries = binaries.NewCatalog(binaries.DefaultSource(cfg.Root), d.channel)
+	go d.binaries.Run(ctx)
+	d.frankenphp = frankenphp.NewManager(cfg.Root, d.binaries)
 	d.frankenphp.Release = d.releaseFrankenPHP
 	d.frankenphp.Installed = func(string) { _ = d.reload() }
 	go d.frankenphp.Run(ctx)
@@ -422,12 +422,29 @@ func (d *daemon) Mutate(change func(*config.Config) error) error {
 	return d.reload()
 }
 
+// channel is the channel config.json follows; stable when it names an unknown one.
+func (d *daemon) channel() binaries.Channel {
+	cfg, err := config.Load(d.root)
+	if err != nil {
+		return binaries.Stable
+	}
+	ch, err := binaries.ParseChannel(cfg.Channel)
+	if err != nil {
+		return binaries.Stable
+	}
+	return ch
+}
+
 // reload re-reads config.json and reconciles every service with it.
 // It only returns an error when the config itself is unusable; a service that fails
 // to start is reported as a warning and retried later.
 func (d *daemon) reload() error {
 	d.reloadMu.Lock()
 	defer d.reloadMu.Unlock()
+	// A changed channel (the apps, `flock channel`) takes effect at once.
+	if d.binaries != nil {
+		d.binaries.ChannelChanged()
+	}
 
 	cfg, err := config.Load(d.root)
 	if err != nil {

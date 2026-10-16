@@ -6,7 +6,7 @@ public class PhpVersionsTests
     public void DecodesPhpCatalog()
     {
         var catalog = FlockJson.Decode<PhpCatalog>("""
-            {"auto_build": true, "checked_at": "2026-10-13T15:40:00+02:00", "check_error": "",
+            {"checked_at": "2026-10-13T15:40:00+02:00", "check_error": "",
              "versions": [
               {"minor":"8.5","latest":"8.5.11","installed":"8.5.11","default":true,"supported":true,
                "status":"installed","update_ready":false,"xdebug":true,"job":null},
@@ -22,7 +22,6 @@ public class PhpVersionsTests
              ]}
             """);
 
-        Assert.True(catalog.AutoBuild);
         Assert.NotNull(catalog.CheckedAt);
         Assert.Equal(["8.5", "8.4", "8.3", "7.4", "9.0"], catalog.Versions.Select(v => v.Minor));
         Assert.True(catalog.Versions[0].IsDefault && catalog.Versions[0].IsInstalled && catalog.Versions[0].Job is null);
@@ -42,14 +41,13 @@ public class PhpVersionsTests
     public void DecodesCatalogWithoutCheckAndFinishedJob()
     {
         var catalog = FlockJson.Decode<PhpCatalog>("""
-            {"auto_build": false, "checked_at": null, "check_error": "php.net unreachable",
+            {"checked_at": null, "check_error": "php.net unreachable",
              "versions": [{"minor":"8.5","latest":"8.5.12","installed":"8.5.11","default":true,"supported":true,
                "status":"failed","update_ready":false,"xdebug":true,
                "job":{"state":"failed","install":true,"auto":true,"step":"","full_version":"8.5.12",
                       "started_at":"2026-10-13T15:41:00Z","finished_at":"2026-10-13T15:47:12.123456789Z","error":"checksum mismatch"}}]}
             """);
 
-        Assert.False(catalog.AutoBuild);
         Assert.Null(catalog.CheckedAt);
         Assert.Equal("php.net unreachable", catalog.CheckError);
         Assert.False(catalog.HasActiveJob);

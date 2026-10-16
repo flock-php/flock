@@ -173,9 +173,9 @@ private func decode<T: Decodable>(_ type: T.Type, _ json: String) throws -> T {
 @Test func decodesTheFrankenPHPBuilds() throws {
     let state = try decode(FrankenPHPState.self, """
     {"available":true,"checked_at":"2026-10-13T14:10:01Z","check_error":"",
-     "builds":[{"php":"8.5","installed":"","php_version":"","latest":"1.13.1","update":false,"size":41943040,
+     "builds":[{"php":"8.5","installed":"","php_version":"","latest":"8.5.11","update":false,"size":41943040,"prerelease":true,
                 "job":{"action":"install","state":"running","phase":"downloading","progress":0.42,"error":"","started_at":"2026-10-13T14:11:00Z"}},
-               {"php":"8.4","installed":"1.13.0","php_version":"8.4.14","latest":"1.13.1","update":true,"size":40000000,"job":null},
+               {"php":"8.4","installed":"1.13.0","php_version":"8.4.14","latest":"8.4.26","update":true,"size":40000000,"prerelease":false,"yanked":"crashes on start","job":null},
                {"php":"8.3","installed":"","php_version":"","latest":"1.13.1","update":false,"size":39000000,
                 "job":{"action":"install","state":"failed","phase":"downloading","progress":-1,"error":"connection reset","started_at":"2026-10-13T14:09:00Z"}}]}
     """)
@@ -185,6 +185,8 @@ private func decode<T: Decodable>(_ type: T.Type, _ json: String) throws -> T {
     #expect(state.hasRunningJob)
     #expect(!state.builds[0].isInstalled && state.builds[0].job?.progress == 0.42 && state.builds[0].job?.phase == .downloading)
     #expect(state.builds[1].isInstalled && state.builds[1].update && state.builds[1].phpVersion == "8.4.14" && state.builds[1].job == nil)
+    #expect(state.builds[0].prerelease && state.builds[0].yanked.isEmpty && !state.builds[1].prerelease && state.builds[1].yanked == "crashes on start")
+    #expect(!state.builds[2].prerelease && state.builds[2].yanked.isEmpty)
     #expect(state.builds[2].job?.isFailed == true && state.builds[2].job?.error == "connection reset" && state.builds[2].job?.progress == nil)
 
     let unchecked = try decode(FrankenPHPState.self, #"{"available":false,"checked_at":null,"check_error":"","builds":null}"#)

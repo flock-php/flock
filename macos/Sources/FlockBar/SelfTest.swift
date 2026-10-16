@@ -75,7 +75,7 @@ enum SelfTest {
             await check("GET /v1/php/versions") {
                 let catalog = try await client.phpVersions()
                 let rows = catalog.versions.map { "\($0.minor):\($0.status.rawValue)\($0.job.map { "[\($0.state.rawValue)]" } ?? "")" }
-                return "auto_build \(catalog.autoBuild), checked \(catalog.checkedAt.map { "\($0)" } ?? "never"), \(rows.joined(separator: " "))"
+                return "checked \(catalog.checkedAt.map { "\($0)" } ?? "never"), \(rows.joined(separator: " "))"
             }
 
             semaphore.signal()

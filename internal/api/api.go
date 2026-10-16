@@ -146,7 +146,8 @@ type Settings struct {
 	Dumps             *bool   `json:"dumps"`
 	DefaultPHP        *string `json:"default_php"`
 	DefaultNode       *string `json:"default_node"`
-	PHPAutoBuild      *bool   `json:"php_auto_build"`
+	// Channel is "stable", "beta" or "experimental" (see config.Config.Channel).
+	Channel *string `json:"channel"`
 }
 
 // Backend is what the API needs from the daemon.

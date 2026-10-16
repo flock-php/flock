@@ -9,7 +9,6 @@ namespace Flock.Kit;
 /// </summary>
 public sealed class PhpCatalog
 {
-    public bool AutoBuild { get; init; } = true;
     public DateTimeOffset? CheckedAt { get; init; }
     public string CheckError { get; init; } = "";
     public List<PhpRelease> Versions { get; init; } = [];

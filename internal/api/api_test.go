@@ -117,6 +117,33 @@ func TestSettingsOnlyChangeGivenKeys(t *testing.T) {
 	}
 }
 
+func TestChannelSetting(t *testing.T) {
+	b := &fakeBackend{root: t.TempDir()}
+	srv := serve(t, b, "")
+	channel := func() string {
+		_, body := call(t, "GET", srv.URL+"/v1/config", "", "")
+		var view ConfigView
+		if err := json.Unmarshal([]byte(body), &view); err != nil {
+			t.Fatal(err)
+		}
+		return view.Channel
+	}
+	if got := channel(); got != "stable" {
+		t.Fatalf("default channel %q", got)
+	}
+	for _, c := range []struct{ set, stored, shown string }{{"beta", "beta", "beta"}, {"experimental", "experimental", "experimental"}, {"stable", "", "stable"}} {
+		if resp, body := call(t, "POST", srv.URL+"/v1/settings", "", `{"channel":"`+c.set+`"}`); resp.StatusCode != http.StatusOK {
+			t.Fatalf("%s: %d %s", c.set, resp.StatusCode, body)
+		}
+		if cfg := b.config(t); cfg.Channel != c.stored || channel() != c.shown {
+			t.Errorf("%s: stored %q, shown %q", c.set, cfg.Channel, channel())
+		}
+	}
+	if resp, _ := call(t, "POST", srv.URL+"/v1/settings", "", `{"channel":"nightly"}`); resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("an unknown channel must be rejected, got %d", resp.StatusCode)
+	}
+}
+
 func TestMailEndpoints(t *testing.T) {
 	root := t.TempDir()
 	path := filepath.Join(root, "mail", "app", "1-000001.eml")
@@ -318,7 +345,7 @@ func TestSiteDomainEndpoints(t *testing.T) {
 
 func TestSitesSwitchToFrankenPHPAndBack(t *testing.T) {
 	root := t.TempDir()
-	b := &fakeBackend{root: root, frankenphp: frankenphp.NewManager(root, binaries.Source{})}
+	b := &fakeBackend{root: root, frankenphp: frankenphp.NewManager(root, binaries.NewCatalog(binaries.Source{}, func() binaries.Channel { return binaries.Stable }))}
 	if !b.frankenphp.Available() {
 		t.Skip("no FrankenPHP for this platform")
 	}

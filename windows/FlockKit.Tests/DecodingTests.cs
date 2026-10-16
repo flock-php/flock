@@ -132,8 +132,8 @@ public class DecodingTests
     {
         var state = FlockJson.Decode<FrankenPhpState>("""
             {"available":true,"checked_at":"2026-10-13T14:10:01.5+02:00","check_error":"",
-             "builds":[{"php":"8.4","installed":"1.13.0","php_version":"8.4.14","latest":"1.13.1","update":true,"size":41943040,"job":null},
-                       {"php":"8.3","installed":"","php_version":"","latest":"1.13.1","update":false,"size":40000000,
+             "builds":[{"php":"8.4","installed":"1.13.0","php_version":"8.4.14","latest":"8.4.26","update":true,"size":41943040,"prerelease":false,"yanked":"crashes on start","job":null},
+                       {"php":"8.3","installed":"","php_version":"","latest":"8.3.36RC1","update":false,"size":40000000,"prerelease":true,
                         "job":{"action":"install","state":"running","phase":"downloading","progress":0.42,"error":"","started_at":"2026-10-13T14:11:00Z"}},
                        {"php":"8.2","installed":"","php_version":"","latest":"","update":false,"size":0,
                         "job":{"action":"install","state":"failed","phase":"downloading","progress":-1,"error":"checksum mismatch","started_at":"2026-10-13T14:11:00Z"}}]}
@@ -143,7 +143,9 @@ public class DecodingTests
         Assert.NotNull(state.CheckedAt);
         Assert.True(state.HasRunningJob);
         Assert.True(state.Builds[0].IsInstalled);
-        Assert.Equal(("1.13.1", true, 41943040L), (state.Builds[0].Latest, state.Builds[0].Update, state.Builds[0].Size));
+        Assert.Equal(("8.4.26", true, 41943040L), (state.Builds[0].Latest, state.Builds[0].Update, state.Builds[0].Size));
+        Assert.Equal((false, "crashes on start"), (state.Builds[0].Prerelease, state.Builds[0].Yanked));
+        Assert.Equal((true, ""), (state.Builds[1].Prerelease, state.Builds[1].Yanked));
         Assert.Null(state.Builds[0].Job);
         Assert.Equal((0.42, "Downloading…"), (state.Builds[1].Job!.Progress, state.Builds[1].Job!.PhaseText));
         Assert.True(state.Builds[2].Job!.IsFailed);

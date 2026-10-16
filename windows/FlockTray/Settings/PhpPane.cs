@@ -78,17 +78,6 @@ internal sealed class PhpPane(SettingsWindow window, AppModel model) : Pane(wind
         {
             page.Children.Add(FrankenPhp(franken));
         }
-
-        var auto = new ToggleSwitch { IsOn = catalog.AutoBuild };
-        auto.Toggled += async (_, _) =>
-        {
-            await Perform(c => c.UpdateSettingsAsync(new SettingsChange(PhpAutoBuild: auto.IsOn)));
-            await Store.RefreshPhpAsync();
-        };
-        page.Children.Add(Ui.Section("Background downloads",
-            Ui.Setting("Download updates and new PHP versions automatically",
-                "Patch updates for installed versions and new PHP versions are downloaded from windows.php.net in the background (about 30 MB each), so installing them is instant. Pre-releases are not shown.",
-                auto)));
         return page;
     }
 
@@ -161,11 +150,23 @@ internal sealed class PhpPane(SettingsWindow window, AppModel model) : Pane(wind
         }
         else
         {
-            detail = Ui.Caption(build.IsInstalled ? $"FrankenPHP {build.Installed} (PHP {build.PhpVersion})" : "Not installed — downloaded when a site needs it", wrap: false);
+            if (build.Yanked.Length > 0)
+            {
+                var withdrawn = Ui.Caption(build.Update ? $"Withdrawn: {build.Yanked} — update to replace it" : $"Withdrawn: {build.Yanked}", Ui.Caution);
+                withdrawn.MaxLines = 2;
+                withdrawn.MaxWidth = 380;
+                ToolTipService.SetToolTip(withdrawn, "This build was withdrawn. Flock replaces it as soon as a fixed build is published.");
+                detail = Ui.Row(6, Ui.Icon(Ui.GlyphWarning, 12, Ui.Caution), withdrawn);
+            }
+            else
+            {
+                detail = Ui.Caption(build.IsInstalled ? $"FrankenPHP {build.Installed} (PHP {build.PhpVersion})" : "Not installed — downloaded when a site needs it", wrap: false);
+            }
             if (build.Update)
             {
-                actions.Children.Add(Ui.Button($"Update to {build.Latest}", () => _ = Run(key, () => Store.PerformOnFrankenPhpAsync(c => c.InstallFrankenPhpAsync(minor))),
-                    accent: true, glyph: Ui.GlyphDownload, tooltip: build.Size > 0 ? $"Downloads FrankenPHP {build.Latest} ({build.Size / 1_000_000} MB)" : null));
+                var label = build.Latest == build.PhpVersion ? "Update" : $"Update to PHP {build.Latest}";
+                actions.Children.Add(Ui.Button(label, () => _ = Run(key, () => Store.PerformOnFrankenPhpAsync(c => c.InstallFrankenPhpAsync(minor))),
+                    accent: true, glyph: Ui.GlyphDownload, tooltip: build.Size > 0 ? $"Downloads FrankenPHP for PHP {build.Latest} ({build.Size / 1_000_000} MB)" : null));
             }
             if (build.IsInstalled)
             {
@@ -182,7 +183,14 @@ internal sealed class PhpPane(SettingsWindow window, AppModel model) : Pane(wind
             }
         }
         var icon = Ui.Icon(Ui.GlyphServer, 20, build.IsInstalled ? Ui.Accent : Ui.TertiaryText);
-        var info = Ui.Row(14, icon, Ui.Column(2, Ui.Text($"PHP {build.Php}", "BodyStrongTextBlockStyle", wrap: false), detail));
+        var title = Ui.Row(8, Ui.Text($"PHP {build.Php}", "BodyStrongTextBlockStyle", wrap: false));
+        if (build.Prerelease)
+        {
+            var badge = Ui.Badge("Pre-release", Ui.Tone.Caution);
+            ToolTipService.SetToolTip(badge, $"PHP {build.Latest} isn't released yet — it may not work. Offered on the beta channel.");
+            title.Children.Add(badge);
+        }
+        var info = Ui.Row(14, icon, Ui.Column(2, title, detail));
         return Ui.Card(Ui.Spread(info, actions));
     }
 

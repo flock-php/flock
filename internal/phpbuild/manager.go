@@ -61,8 +61,6 @@ type Hooks struct {
 	Installed func() map[string]string
 	// Install installs the build in dir (containing php, php-fpm, ext/) and applies it.
 	Install func(dir string) error
-	// AutoBuild reports whether background builds are enabled.
-	AutoBuild func() bool
 }
 
 // Manager discovers PHP releases and runs builds one at a time in the background.
@@ -180,36 +178,7 @@ func (m *Manager) Check(ctx context.Context) error {
 	m.save()
 	m.mu.Unlock()
 
-	if err == nil && m.hooks.AutoBuild() {
-		m.scheduleAuto()
-	}
 	return err
-}
-
-// scheduleAuto queues builds for patch updates of installed versions and for new PHP versions.
-func (m *Manager) scheduleAuto() {
-	installed := m.hooks.Installed()
-	newest := ""
-	for minor := range installed {
-		if Compare(minor, newest) > 0 {
-			newest = minor
-		}
-	}
-
-	// Versions are newest first. With nothing installed yet every version is newer than the
-	// newest installed one; prepare only the newest, not every release since 7.4.
-	preparedFirst := false
-	for _, v := range m.Versions() {
-		if v.Job != nil || v.Status == "unsupported" || v.Status == "failed" {
-			continue
-		}
-		update := v.Status == "update" && !v.UpdateReady
-		brandNew := v.Installed == "" && v.Status == "likely" && Compare(v.Minor, newest) > 0 && !(newest == "" && preparedFirst)
-		if update || brandNew {
-			m.enqueue(v.Minor, false, true)
-			preparedFirst = preparedFirst || brandNew
-		}
-	}
 }
 
 // Versions returns every known minor version, newest first.

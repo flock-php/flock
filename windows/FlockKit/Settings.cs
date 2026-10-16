@@ -10,7 +10,8 @@ public sealed class FlockConfig
     public string DefaultNode { get; init; } = "";
     public bool Xdebug { get; init; }
     public bool Dumps { get; init; }
-    public bool PhpAutoBuild { get; init; } = true;
+    /// <summary>The channel of prebuilt packages: "stable", "beta" or "experimental" (`flock channel`).</summary>
+    public string Channel { get; init; } = "stable";
     public string Root { get; init; } = "";
     public PortSet Ports { get; init; } = new();
     public List<string> Parked { get; init; } = [];
@@ -92,7 +93,7 @@ public sealed record SettingsChange(
     bool? Dumps = null,
     string? DefaultPhp = null,
     string? DefaultNode = null,
-    bool? PhpAutoBuild = null);
+    string? Channel = null);
 
 /// <summary>
 /// Body of PATCH /v1/sites/{name}; null fields are left out. An empty Php means "use the default";

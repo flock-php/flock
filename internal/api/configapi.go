@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"flock/internal/components"
+	"flock/internal/binaries"
 	"flock/internal/config"
 	"flock/internal/frankenphp"
 	"flock/internal/node"
@@ -50,7 +51,7 @@ type ConfigView struct {
 	Xdebug            bool         `json:"xdebug"`
 	XdebugBreakpoints bool         `json:"xdebug_breakpoints"`
 	Dumps             bool         `json:"dumps"`
-	PHPAutoBuild      bool         `json:"php_auto_build"`
+	Channel           string       `json:"channel"` // "stable", "beta" or "experimental"
 	Root              string       `json:"root"`
 	Ports             config.Ports `json:"ports"`
 	Parked            []string     `json:"parked"`
@@ -137,8 +138,15 @@ func applySettings(root string, cfg *config.Config, s Settings) error {
 		}
 		cfg.DefaultPHP = *s.DefaultPHP
 	}
-	if s.PHPAutoBuild != nil {
-		cfg.PHPAutoBuild = *s.PHPAutoBuild
+	if s.Channel != nil {
+		ch, err := binaries.ParseChannel(*s.Channel)
+		if err != nil {
+			return invalid("%v", err)
+		}
+		cfg.Channel = string(ch)
+		if ch == binaries.Stable {
+			cfg.Channel = ""
+		}
 	}
 	if s.DefaultNode != nil {
 		if *s.DefaultNode == "" {
@@ -532,7 +540,7 @@ func (c *Client) UnpinSite(ctx context.Context, name, tool string) (Status, erro
 func configView(root string, cfg *config.Config) ConfigView {
 	view := ConfigView{
 		TLD: cfg.TLD, DefaultPHP: cfg.DefaultPHP, DefaultNode: cfg.DefaultNode,
-		Xdebug: cfg.Xdebug, XdebugBreakpoints: cfg.XdebugBreakpoints, Dumps: cfg.Dumps, PHPAutoBuild: cfg.PHPAutoBuild, Root: root, Ports: cfg.Ports,
+		Xdebug: cfg.Xdebug, XdebugBreakpoints: cfg.XdebugBreakpoints, Dumps: cfg.Dumps, Channel: channelOf(cfg), Root: root, Ports: cfg.Ports,
 		Parked: cfg.Parked, PHP: []PHPVersion{}, Node: []string{},
 	}
 	if view.Parked == nil {
@@ -554,4 +562,13 @@ func configView(root string, cfg *config.Config) ConfigView {
 		view.Node = versions
 	}
 	return view
+}
+
+// channelOf is the channel config.json follows ("stable" when it names none or an unknown one).
+func channelOf(cfg *config.Config) string {
+	ch, err := binaries.ParseChannel(cfg.Channel)
+	if err != nil {
+		return string(binaries.Stable)
+	}
+	return string(ch)
 }

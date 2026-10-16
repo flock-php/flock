@@ -4,7 +4,7 @@ import Testing
 
 @Test func decodesPHPCatalog() throws {
     let catalog = try FlockJSON.decoder().decode(PHPCatalog.self, from: Data("""
-    {"auto_build": true, "checked_at": "2026-10-13T15:40:00+02:00", "check_error": "",
+    {"checked_at": "2026-10-13T15:40:00+02:00", "check_error": "",
      "versions": [
       {"minor":"8.5","latest":"8.5.11","installed":"8.5.11","default":true,"supported":true,
        "status":"installed","update_ready":false,"xdebug":true,"job":null},
@@ -20,7 +20,6 @@ import Testing
      ]}
     """.utf8))
 
-    #expect(catalog.autoBuild)
     #expect(catalog.checkedAt != nil)
     #expect(catalog.versions.map(\.minor) == ["8.5", "8.4", "8.3", "7.4", "9.0"])
     #expect(catalog.versions[0].isDefault && catalog.versions[0].isInstalled && catalog.versions[0].job == nil)
@@ -37,28 +36,28 @@ import Testing
 
 @Test func decodesCatalogWithoutCheckAndFinishedJob() throws {
     let catalog = try FlockJSON.decoder().decode(PHPCatalog.self, from: Data("""
-    {"auto_build": false, "checked_at": null, "check_error": "php.net unreachable",
+    {"checked_at": null, "check_error": "php.net unreachable",
      "versions": [{"minor":"8.5","latest":"8.5.12","installed":"8.5.11","default":true,"supported":true,
        "status":"failed","update_ready":false,"xdebug":true,
        "job":{"state":"failed","install":true,"auto":true,"step":"","full_version":"8.5.12",
               "started_at":"2026-10-13T15:41:00Z","finished_at":"2026-10-13T15:47:12.123456789Z","error":"make: *** [ext/intl] Error 1"}}]}
     """.utf8))
 
-    #expect(!catalog.autoBuild && catalog.checkedAt == nil && catalog.checkError == "php.net unreachable")
+    #expect(catalog.checkedAt == nil && catalog.checkError == "php.net unreachable")
     #expect(!catalog.hasActiveJob)
     let job = try #require(catalog.versions[0].job)
     #expect(job.state == .failed && job.auto && job.finishedAt != nil && job.error.contains("intl"))
 }
 
-@Test func settingsChangeEncodesPHPAutoBuild() throws {
-    let json = String(decoding: try JSONEncoder().encode(SettingsChange(phpAutoBuild: false)), as: UTF8.self)
-    #expect(json == #"{"php_auto_build":false}"#)
+@Test func settingsChangeEncodesTheChannel() throws {
+    let json = String(decoding: try JSONEncoder().encode(SettingsChange(channel: "beta")), as: UTF8.self)
+    #expect(json == #"{"channel":"beta"}"#)
 }
 
-@Test func configDecodesPHPAutoBuildWithDefault() throws {
+@Test func configDecodesTheChannelWithDefault() throws {
     let base = #""tld":"test","default_php":"8.5","default_node":"22","root":"/r","ports":{"http":80}"#
-    let off = try FlockJSON.decoder().decode(FlockConfig.self, from: Data("{\(base),\"php_auto_build\":false}".utf8))
+    let beta = try FlockJSON.decoder().decode(FlockConfig.self, from: Data("{\(base),\"channel\":\"beta\"}".utf8))
     let missing = try FlockJSON.decoder().decode(FlockConfig.self, from: Data("{\(base)}".utf8))
-    #expect(!off.phpAutoBuild)
-    #expect(missing.phpAutoBuild)
+    #expect(beta.channel == "beta")
+    #expect(missing.channel == "stable")
 }

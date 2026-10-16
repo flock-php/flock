@@ -37,7 +37,7 @@ public class SettingsTests
         Assert.Empty(config.Php);
         Assert.Empty(config.Node);
         Assert.Equal(0, config.Ports.Https);
-        Assert.True(config.PhpAutoBuild);
+        Assert.Equal("stable", config.Channel);
     }
 
     [Fact]
@@ -72,7 +72,7 @@ public class SettingsTests
     public void EncodesOnlyChangedSettings()
     {
         Assert.Equal("""{"default_php":"8.4"}""", FlockJson.Encode(new SettingsChange(DefaultPhp: "8.4")));
-        Assert.Equal("""{"php_auto_build":false}""", FlockJson.Encode(new SettingsChange(PhpAutoBuild: false)));
+        Assert.Equal("""{"channel":"beta"}""", FlockJson.Encode(new SettingsChange(Channel: "beta")));
         Assert.Equal("""{"php":""}""", FlockJson.Encode(new SiteChange(Php: "")));
     }
 }

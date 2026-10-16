@@ -28,11 +28,18 @@ public sealed class FrankenPhpBuild
     public string Installed { get; init; } = "";
     /// <summary>The embedded PHP of the installed build, e.g. "8.4.14".</summary>
     public string PhpVersion { get; init; } = "";
-    /// <summary>The newest FrankenPHP; empty when unknown.</summary>
+    /// <summary>The newest PHP release with a build in the channel, e.g. "8.4.26"; empty when unknown.</summary>
     public string Latest { get; init; } = "";
     public bool Update { get; init; }
     /// <summary>Download size of Latest in bytes.</summary>
     public long Size { get; init; }
+    /// <summary>Latest is a pre-release (beta channel).</summary>
+    public bool Prerelease { get; init; }
+    /// <summary>
+    /// Why the installed build was withdrawn; empty when it wasn't. Flock replaces it by itself as
+    /// soon as a good build is published.
+    /// </summary>
+    public string Yanked { get; init; } = "";
     /// <summary>An install or update, running or failed (the same shape as a component's).</summary>
     public ComponentJob? Job { get; init; }
 

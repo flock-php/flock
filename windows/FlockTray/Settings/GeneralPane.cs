@@ -59,6 +59,23 @@ internal sealed class GeneralPane(SettingsWindow window, AppModel model) : Pane(
         page.Children.Add(Ui.Section("Startup",
             Ui.Setting("Open Flock at sign-in", "Shows the Flock icon in the notification area when you sign in. The daemon itself always starts at sign-in.", startup)));
 
+        if (Store.Config is { } channelConfig)
+        {
+            var experimental = channelConfig.Channel == "experimental";
+            var beta = new ToggleSwitch { IsOn = channelConfig.Channel == "beta", IsEnabled = !experimental };
+            beta.Toggled += async (_, _) => await Perform(c => c.UpdateSettingsAsync(new SettingsChange(Channel: beta.IsOn ? "beta" : "stable")));
+            var updates = new List<UIElement>
+            {
+                Ui.Setting("Beta versions", "Get new PHP versions and services earlier, including pre-releases. They may not work yet.", beta),
+            };
+            if (experimental)
+            {
+                updates.Add(Ui.Row(6, Ui.Icon(Ui.GlyphWarning, 12, Ui.Caution),
+                    Ui.Caption("Experimental channel: packages that aren't released yet are offered. `flock channel stable` switches back.", Ui.Caution)));
+            }
+            page.Children.Add(Ui.Section("Updates", [.. updates]));
+        }
+
         if (Store.Config is { } cfg)
         {
             page.Children.Add(Parked(cfg));

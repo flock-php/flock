@@ -15,7 +15,6 @@ import (
 
 // PHPVersions is the PHP pane's data: every version with its install/build state.
 type PHPVersions struct {
-	AutoBuild  bool         `json:"auto_build"`
 	CheckedAt  *time.Time   `json:"checked_at"`
 	CheckError string       `json:"check_error"`
 	Versions   []PHPRelease `json:"versions"`
@@ -191,7 +190,7 @@ func phpVersions(b Backend) PHPVersions {
 	}
 
 	checkedAt, checkErr := m.CheckedAt()
-	out := PHPVersions{AutoBuild: cfg.PHPAutoBuild, CheckError: checkErr, Versions: []PHPRelease{}}
+	out := PHPVersions{CheckError: checkErr, Versions: []PHPRelease{}}
 	if !checkedAt.IsZero() {
 		out.CheckedAt = &checkedAt
 	}

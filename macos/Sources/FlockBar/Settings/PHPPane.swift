@@ -54,19 +54,6 @@ struct PHPPane: View {
                             }
                         }
                     }
-
-                    Section {
-                        Toggle("Build updates and new PHP versions automatically", isOn: Binding(
-                            get: { catalog.autoBuild },
-                            set: { on in Task { await store.perform { _ = try await $0.updateSettings(SettingsChange(phpAutoBuild: on)) }; await store.refreshPHP() } }
-                        ))
-                    } header: {
-                        Text("Background builds")
-                    } footer: {
-                        Text("Patch updates for installed versions and newly released PHP versions are built in the background (low priority), so installing them is instant. Each build takes ~5–10 minutes and uses the Xcode Command Line Tools. Pre-releases are not shown.")
-                            .font(.caption).foregroundStyle(.secondary)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
                 } else {
                     HStack {
                         ProgressView().controlSize(.small)
@@ -336,7 +323,12 @@ private struct FrankenPHPBuildRow: View {
             SettingsIcon(symbol: "bolt.fill", color: build.isInstalled ? .purple : .gray, size: 26)
 
             VStack(alignment: .leading, spacing: 2) {
-                Text("PHP \(build.php)").font(.body.weight(.semibold))
+                HStack(spacing: 6) {
+                    Text("PHP \(build.php)").font(.body.weight(.semibold))
+                    if build.prerelease {
+                        Badge(text: "Pre-release", color: .orange).help("PHP \(build.latest) isn’t released yet — it may not work. Offered on the beta channel.")
+                    }
+                }
                 detail
             }
 
@@ -374,6 +366,11 @@ private struct FrankenPHPBuildRow: View {
                 .lineLimit(2)
                 .textSelection(.enabled)
                 .help(job.error)
+        } else if !build.yanked.isEmpty {
+            Label(build.update ? "Withdrawn: \(build.yanked) — update to replace it" : "Withdrawn: \(build.yanked)", systemImage: "exclamationmark.triangle.fill")
+                .font(.caption).foregroundStyle(.orange)
+                .lineLimit(2)
+                .help("This build was withdrawn. Flock replaces it as soon as a fixed build is published.")
         } else {
             Text(installedText).font(.caption).foregroundStyle(.secondary)
         }
@@ -410,10 +407,10 @@ private struct FrankenPHPBuildRow: View {
                 Button {
                     run { try await $0.installFrankenPHP(build.php) }
                 } label: {
-                    Label("Update to \(build.latest)", systemImage: "arrow.down.circle")
+                    Label(build.latest == build.phpVersion ? "Update" : "Update to PHP \(build.latest)", systemImage: "arrow.down.circle")
                 }
                 .buttonStyle(.borderedProminent)
-                .help(build.size > 0 ? "Downloads FrankenPHP \(build.latest) (\(build.size / 1_000_000) MB)" : "")
+                .help(build.size > 0 ? "Downloads FrankenPHP for PHP \(build.latest) (\(build.size / 1_000_000) MB)" : "")
             }
             if build.isInstalled {
                 Button("Remove") {

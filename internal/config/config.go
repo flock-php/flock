@@ -27,10 +27,12 @@ type Config struct {
 	Xdebug            bool `json:"xdebug_detection"`
 	XdebugBreakpoints bool `json:"xdebug_breakpoints"`
 	Dumps             bool `json:"dumps"`
-	// PHPAutoBuild builds patch updates and new PHP versions in the background.
-	PHPAutoBuild bool     `json:"php_auto_build"`
-	Parked       []string `json:"parked"`
-	Sites        []Site   `json:"sites"`
+	// Channel is which manifest of prebuilt packages Flock follows: "" or "stable", "beta" (new
+	// versions earlier, pre-releases) or "experimental" (everything published, for testing;
+	// set with `flock channel`, not in the apps).
+	Channel string   `json:"channel,omitempty"`
+	Parked  []string `json:"parked"`
+	Sites   []Site   `json:"sites"`
 }
 
 // Ports are the local ports Flock's services listen on.
@@ -188,7 +190,6 @@ func Default() *Config {
 		TLD:               "test",
 		DefaultPHP:        "8.5",
 		DefaultNode:       "22",
-		PHPAutoBuild:      true,
 		Xdebug:            true,
 		XdebugBreakpoints: true,
 		Ports:             Ports{HTTP: 80, HTTPS: 443, DNS: 53535, SMTP: 2525, Postgres: 5432, Valkey: 6379, Dumps: 9912, API: 53531},

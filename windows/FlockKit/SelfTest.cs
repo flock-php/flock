@@ -81,7 +81,7 @@ public static class SelfTest
         {
             var catalog = await client.PhpVersionsAsync();
             var rows = catalog.Versions.Select(v => $"{v.Minor}:{v.Status}{(v.Job is null ? "" : $"[{v.Job.State}]")}");
-            return $"auto_build {catalog.AutoBuild}, checked {catalog.CheckedAt?.ToString() ?? "never"}, {string.Join(" ", rows)}";
+            return $"checked {catalog.CheckedAt?.ToString() ?? "never"}, {string.Join(" ", rows)}";
         });
         await Check("GET /v1/frankenphp", async () =>
         {

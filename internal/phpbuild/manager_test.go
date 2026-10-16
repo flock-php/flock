@@ -27,7 +27,6 @@ type fakeHooks struct {
 	mu        sync.Mutex
 	installed map[string]string
 	installs  []string
-	auto      bool
 }
 
 func (f *fakeHooks) hooks() Hooks {
@@ -47,7 +46,6 @@ func (f *fakeHooks) hooks() Hooks {
 			f.installs = append(f.installs, filepath.Base(dir))
 			return nil
 		},
-		AutoBuild: func() bool { return f.auto },
 	}
 }
 
@@ -142,11 +140,11 @@ func TestVersionStatuses(t *testing.T) {
 
 func TestInstallBuildsThenInstallsAndUpdatesAreInstantWhenReady(t *testing.T) {
 	t.Setenv("FAKE_VERSION", "8.4.26")
-	hooks := &fakeHooks{installed: map[string]string{"8.4": "8.4.25"}, auto: true}
+	hooks := &fakeHooks{installed: map[string]string{"8.4": "8.4.25"}}
 	m := newTestManager(t, hooks, []Release{{"8.4", "8.4.26", true}}, map[string]bool{"8.4": true})
 
-	// Background build of the patch update: built, not installed.
-	m.scheduleAuto()
+	// A build of the patch update queued without installing it (as the old background builds did).
+	m.enqueue("8.4", false, true)
 	waitJob(t, m, "8.4", Succeeded)
 	if v := status(m, "8.4"); v.Status != "update" || !v.UpdateReady || len(hooks.installs) != 0 {
 		t.Fatalf("after background build: %+v, installs %v", v, hooks.installs)
@@ -179,47 +177,5 @@ func TestFailedBuildsAreReportedWithTheLogLine(t *testing.T) {
 	}
 	if data, _ := os.ReadFile(m.LogPath("8.3")); len(data) == 0 {
 		t.Fatal("build log missing")
-	}
-}
-
-func TestAutoBuildsNewVersionsOnlyWhenEnabled(t *testing.T) {
-	t.Setenv("FAKE_VERSION", "8.6.0")
-	hooks := &fakeHooks{installed: map[string]string{"8.5": "8.5.11"}}
-	m := newTestManager(t, hooks, []Release{{"8.6", "8.6.0", true}, {"8.5", "8.5.11", true}, {"8.2", "8.2.30", true}},
-		map[string]bool{"8.6": true, "8.5": true})
-
-	if m.hooks.AutoBuild() {
-		t.Fatal("precondition")
-	}
-	hooks.auto = true
-	m.scheduleAuto()
-	waitJob(t, m, "8.6", Succeeded)
-
-	if v := status(m, "8.6"); v.Status != "ready" {
-		t.Fatalf("8.6 should be ready: %+v", v)
-	}
-	m.mu.Lock()
-	_, olderQueued := m.jobs["8.2"]
-	m.mu.Unlock()
-	if olderQueued {
-		t.Fatal("older versions must not be built automatically")
-	}
-}
-
-func TestAutoBuildsOnlyTheNewestVersionWhenNothingIsInstalled(t *testing.T) {
-	t.Setenv("FAKE_VERSION", "8.5.11")
-	hooks := &fakeHooks{installed: map[string]string{}, auto: true}
-	m := newTestManager(t, hooks, []Release{{"8.5", "8.5.11", true}, {"8.4", "8.4.26", true}, {"8.3", "8.3.35", true}},
-		map[string]bool{"8.5": true, "8.4": true, "8.3": true})
-
-	m.scheduleAuto()
-	waitJob(t, m, "8.5", Succeeded)
-
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	for _, minor := range []string{"8.4", "8.3"} {
-		if _, queued := m.jobs[minor]; queued {
-			t.Fatalf("PHP %s must not be prepared while nothing is installed", minor)
-		}
 	}
 }

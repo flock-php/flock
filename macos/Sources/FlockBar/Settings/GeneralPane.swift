@@ -88,6 +88,25 @@ struct GeneralPane: View {
 
                 if let config = store.config {
                     Section {
+                        Toggle("Beta versions", isOn: Binding(
+                            get: { config.channel == "beta" },
+                            set: { on in Task { await store.perform { _ = try await $0.updateSettings(SettingsChange(channel: on ? "beta" : "stable")) } } }
+                        ))
+                        .disabled(config.channel == "experimental")
+                        if config.channel == "experimental" {
+                            Label("Experimental channel: packages that aren’t released yet are offered. `flock channel stable` switches back.", systemImage: "flask.fill")
+                                .font(.caption).foregroundStyle(.orange)
+                        }
+                    } header: {
+                        Text("Updates")
+                    } footer: {
+                        Text("Get new PHP versions and services earlier, including pre-releases. They may not work yet.")
+                            .font(.caption).foregroundStyle(.secondary)
+                    }
+                }
+
+                if let config = store.config {
+                    Section {
                         List(selection: selectedParkedState.projectedValue) {
                             ForEach(config.parked, id: \.self) { path in
                                 Label(path, systemImage: "folder").tag(path)

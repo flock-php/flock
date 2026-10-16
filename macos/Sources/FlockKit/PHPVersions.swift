@@ -3,16 +3,14 @@ import Foundation
 /// GET /v1/php/versions — every PHP minor Flock knows about (php.net releases from 7.4 up,
 /// plus anything installed), with install state and background build jobs.
 public struct PHPCatalog: Decodable, Sendable, Equatable {
-    public var autoBuild: Bool
     public var checkedAt: Date?
     public var checkError: String
     public var versions: [PHPRelease]
 
-    enum CodingKeys: String, CodingKey { case autoBuild, checkedAt, checkError, versions }
+    enum CodingKeys: String, CodingKey { case checkedAt, checkError, versions }
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
-        autoBuild = try c.decodeIfPresent(Bool.self, forKey: .autoBuild) ?? true
         checkedAt = try c.decodeIfPresent(Date.self, forKey: .checkedAt)
         checkError = try c.decodeIfPresent(String.self, forKey: .checkError) ?? ""
         versions = try c.decodeIfPresent([PHPRelease].self, forKey: .versions) ?? []
