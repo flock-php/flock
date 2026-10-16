@@ -122,15 +122,21 @@ func TestServesEveryDepthAliasAndCatchAllOverTrustedHTTPS(t *testing.T) {
 		t.Errorf("unexpected issued certificates: %v", issued)
 	}
 
-	// Five levels is past MaxDepth, an unsecured site and an unknown name: the catch-all answers.
-	for _, host := range []string{"a.b.c.d.e.app.test", "plain.test", "nope.test"} {
+	// The catch-all answers the rest: an unsecured site (at any depth) asks to be secured, by its
+	// own name; five levels is past MaxDepth, so like an unknown name it asks to be linked.
+	for host, want := range map[string]string{
+		"plain.test":         "flock secure plain<",
+		"x.y.plain.test":     `href="flock://secure/plain"`,
+		"a.b.c.d.e.app.test": "Not linked",
+		"nope.test":          "flock link nope --secure",
+	} {
 		resp, body, err := get(https(host))
 		if err != nil {
 			t.Errorf("%s: %v", host, err)
 			continue
 		}
-		if resp.StatusCode != http.StatusNotFound || !strings.Contains(body, "Not secured") || !strings.Contains(body, ">"+host+"<") {
-			t.Errorf("%s: want the catch-all, got %d %q", host, resp.StatusCode, body)
+		if resp.StatusCode != http.StatusNotFound || !strings.Contains(body, want) || !strings.Contains(body, ">"+host+"<") {
+			t.Errorf("%s: want the catch-all with %q, got %d %q", host, want, resp.StatusCode, body)
 		}
 	}
 
@@ -139,8 +145,9 @@ func TestServesEveryDepthAliasAndCatchAllOverTrustedHTTPS(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if resp.StatusCode != http.StatusNotFound || !strings.Contains(body, "Not linked") || !strings.Contains(body, "flock link nope") ||
-		strings.Contains(body, "{{") || resp.Header.Get("Cache-Control") != "no-store" {
+	if resp.StatusCode != http.StatusNotFound || !strings.Contains(body, "Not linked") || !strings.Contains(body, "flock link nope<") ||
+		strings.Contains(body, "{{") || strings.Contains(body, `href="flock://secure`) ||
+		resp.Header.Get("Cache-Control") != "no-store" || resp.Header.Get("X-Flock-Page") != "unlinked" {
 		t.Errorf("http catch-all: got %d %v %q", resp.StatusCode, resp.Header, body)
 	}
 

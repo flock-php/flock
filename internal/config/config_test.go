@@ -125,3 +125,42 @@ func TestXdebugDetectionIsOnForOlderConfigs(t *testing.T) {
 		t.Fatalf("got xdebug %v, breakpoints %v", cfg.Xdebug, cfg.XdebugBreakpoints)
 	}
 }
+
+func TestSetServerAssignsStablePortsAndValidates(t *testing.T) {
+	cfg := Default()
+	cfg.Services.SetExtra("mysql", Extra{Version: "8.4", Port: FirstSitePort})
+
+	a := Site{Name: "a", Path: "/srv/a", Parked: true}
+	if err := cfg.SetServer(&a, ServerFrankenPHP, WorkerOctane); err != nil {
+		t.Fatal(err)
+	}
+	if a.Parked || !a.FrankenPHP() || a.Worker != WorkerOctane || a.Port != FirstSitePort+1 {
+		t.Fatalf("a: %+v (the first port is MySQL's)", a)
+	}
+	cfg.Upsert(a)
+
+	b := Site{Name: "b", Path: "/srv/b"}
+	if err := cfg.SetServer(&b, ServerFrankenPHP, ""); err != nil || b.Port != FirstSitePort+2 {
+		t.Fatalf("b: %+v, %v", b, err)
+	}
+	cfg.Upsert(b)
+
+	// Switching back keeps the port and the worker mode; switching again reuses them.
+	if err := cfg.SetServer(&a, ServerFastCGI, WorkerOctane); err != nil || a.Server != "" || a.Port != FirstSitePort+1 {
+		t.Fatalf("back to FastCGI: %+v, %v", a, err)
+	}
+	cfg.Upsert(a)
+	if err := cfg.SetServer(&a, ServerFrankenPHP, WorkerOctane); err != nil || a.Port != FirstSitePort+1 {
+		t.Fatalf("again: %+v, %v", a, err)
+	}
+	if got := cfg.UsedPorts("")[FirstSitePort+2]; got != "frankenphp-b" {
+		t.Errorf("UsedPorts names b's port %q", got)
+	}
+
+	if err := cfg.SetServer(&a, "swoole", ""); err == nil {
+		t.Error("unknown server accepted")
+	}
+	if err := cfg.SetServer(&a, ServerFrankenPHP, "roadrunner"); err == nil {
+		t.Error("unknown worker mode accepted")
+	}
+}

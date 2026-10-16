@@ -168,14 +168,19 @@ public struct SettingsChange: Encodable, Sendable {
 }
 
 /// Body of PATCH /v1/sites/{name}; nil fields are left out. An empty `php` means "use the default".
+/// `server` is "fastcgi" or "frankenphp", `worker` "" (classic) or "octane".
 public struct SiteChange: Encodable, Sendable {
     public var secured: Bool?
     public var php: String?
     public var node: String?
+    public var server: String?
+    public var worker: String?
 
-    public init(secured: Bool? = nil, php: String? = nil, node: String? = nil) {
+    public init(secured: Bool? = nil, php: String? = nil, node: String? = nil, server: String? = nil, worker: String? = nil) {
         self.secured = secured
         self.php = php
         self.node = node
+        self.server = server
+        self.worker = worker
     }
 }

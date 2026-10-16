@@ -38,10 +38,21 @@ final class AppModel {
     /// A flock://install link waiting for the user to confirm it in Settings → Services.
     var pendingInstall: InstallLink?
 
-    /// Shows the service a link asks to install; the Services pane then asks to confirm.
-    func handle(_ link: InstallLink) {
-        pendingInstall = link
-        showSettings(.services, service: link.service)
+    /// A flock://secure link waiting for the user to confirm it in Settings → Sites.
+    var pendingSecure: SecureLink?
+
+    /// Shows the service a link asks to install, or the sites for a link that asks to secure one;
+    /// the pane then asks to confirm. Before the setup there are no sites to secure.
+    func handle(_ link: FlockLink) {
+        switch link {
+        case .install(let link):
+            pendingInstall = link
+            showSettings(.services, service: link.service)
+        case .secure(let link):
+            guard !needsSetup else { return }
+            pendingSecure = link
+            showSettings(.sites)
+        }
     }
 
     let mail: MailStore

@@ -7,6 +7,7 @@ import SwiftUI
 /// "…" menu pins a version into the project or removes it again.
 struct SitesPane: View {
     @Environment(AppModel.self) private var model
+    @Environment(\.openWindow) private var openWindow
     private let selectionState = State<Status.Site.ID?>(initialValue: nil)
     private let confirmState = State<ConfirmAction?>(initialValue: nil)
     private var confirm: ConfirmAction? {
@@ -20,6 +21,12 @@ struct SitesPane: View {
         nonmutating set { addingState.wrappedValue = newValue }
     }
     private let newDomainState = State<String>(initialValue: "")
+    /// The site whose FrankenPHP is restarting.
+    private let restartingState = State<String?>(initialValue: nil)
+    private var restarting: String? {
+        get { restartingState.wrappedValue }
+        nonmutating set { restartingState.wrappedValue = newValue }
+    }
 
     var body: some View {
         let store = model.settings
@@ -90,6 +97,11 @@ struct SitesPane: View {
                 }
                 .width(min: 150, ideal: 180)
 
+                TableColumn("Server") { site in
+                    serverCell(site)
+                }
+                .width(min: 160, ideal: 200)
+
                 TableColumn("Node") { site in
                     versionPicker(label: "Node", current: major(site.node ?? ""), source: site.nodeSource, pinned: major(site.nodePinned), file: site.nodeFile,
                                   defaultVersion: store.config?.defaultNode ?? "", installed: nodeMajors) { version in
@@ -142,11 +154,14 @@ struct SitesPane: View {
                 }
             }
 
-            Text("A version picked here applies on this machine only. To set it for everyone working on a project, pin it (…): PHP goes into .flockrc, Node.js into .nvmrc. Projects that pin a version use it automatically.")
-                .font(.caption).foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-                .padding(.horizontal, 24)
-                .padding(.vertical, 10)
+            VStack(alignment: .leading, spacing: 4) {
+                Text("A version picked here applies on this machine only. To set it for everyone working on a project, pin it (…): PHP goes into .flockrc, Node.js into .nvmrc. Projects that pin a version use it automatically.")
+                Text("FrankenPHP needs PHP 8.2 or newer. Requests that ask for Xdebug still go to PHP-FPM.")
+            }
+            .font(.caption).foregroundStyle(.secondary)
+            .fixedSize(horizontal: false, vertical: true)
+            .padding(.horizontal, 24)
+            .padding(.vertical, 10)
         }
         .confirmationDialog(confirm?.title ?? "", isPresented: Binding(get: { confirm != nil }, set: { if !$0 { confirm = nil } }), presenting: confirm) { action in
             Button(action.button, role: action.destructive ? .destructive : nil) {
@@ -170,6 +185,25 @@ struct SitesPane: View {
         } message: {
             Text(domainHelp)
         }
+        // A flock://secure link (AppModel.handle): nothing changes until the user confirms here.
+        .alert(linkRequest?.title ?? "", isPresented: Binding(get: { linkRequest != nil }, set: { if !$0 { model.pendingSecure = nil } }),
+               presenting: linkRequest) { request in
+            if let name = request.confirmation {
+                Button("Secure") {
+                    Task { await store.perform { _ = try await $0.updateSite(name, SiteChange(secured: true)) } }
+                }
+                Button("Cancel", role: .cancel) {}
+            } else {
+                Button("OK") {}
+            }
+        } message: { request in
+            Text(request.message)
+        }
+    }
+
+    /// What a pending flock://secure link asks for, once the sites are loaded.
+    private var linkRequest: SecureLink.Resolution? {
+        model.pendingSecure?.resolve(sites: model.status?.sites)
     }
 
     /// What adding a domain does on this machine.
@@ -231,6 +265,130 @@ struct SitesPane: View {
         .help(help)
     }
 
+    /// What runs the site's PHP (PHP-FPM or FrankenPHP); on FrankenPHP also its mode (classic or
+    /// Laravel Octane), its state, Restart and its log.
+    private func serverCell(_ site: Status.Site) -> some View {
+        let store = model.settings
+        return VStack(alignment: .leading, spacing: 4) {
+            Picker("Server", selection: Binding(
+                get: { site.server },
+                set: { server in Task { await store.perform { _ = try await $0.updateSite(site.name, SiteChange(server: server.rawValue)) } } }
+            )) {
+                Text("PHP-FPM").tag(Status.Server.fastcgi)
+                Text("FrankenPHP").tag(Status.Server.frankenphp)
+                    .disabled(!site.supportsFrankenPHP && site.server != .frankenphp)
+            }
+            .labelsHidden()
+            .fixedSize()
+            .help("FrankenPHP needs PHP 8.2 or newer. Requests that ask for Xdebug still go to PHP-FPM.")
+
+            if site.server == .frankenphp {
+                Picker("Mode", selection: Binding(
+                    get: { site.worker },
+                    set: { worker in Task { await store.perform { _ = try await $0.updateSite(site.name, SiteChange(worker: worker.rawValue)) } } }
+                )) {
+                    Text("Classic").tag(Status.Worker.classic)
+                    Text("Laravel Octane").tag(Status.Worker.octane)
+                        .disabled(!site.octaneAvailable && site.worker != .octane)
+                }
+                .labelsHidden()
+                .fixedSize()
+
+                if !site.octaneAvailable {
+                    Text("Install Laravel Octane in the project (composer require laravel/octane) to use worker mode.")
+                        .font(.caption).foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                frankenPHPState(site)
+
+                HStack(spacing: 8) {
+                    Button("Restart") {
+                        restarting = site.name
+                        Task {
+                            await store.perform { _ = try await $0.restartSite(site.name) }
+                            restarting = nil
+                        }
+                    }
+                    .disabled(site.frankenPHP?.state != .running || restarting == site.name)
+                    .help("Restart FrankenPHP, e.g. so Octane's workers load changed code")
+                    Button("Show Log") {
+                        model.logs.requested = .service(frankenPHPLog(site))
+                        openWindow.activating(WindowID.logs)
+                    }
+                    if restarting == site.name {
+                        ProgressView().controlSize(.mini)
+                    }
+                }
+                .controlSize(.small)
+            }
+        }
+        .padding(.vertical, 2)
+    }
+
+    /// The FrankenPHP process: running, downloading its build, or why PHP-FPM serves the site.
+    @ViewBuilder
+    private func frankenPHPState(_ site: Status.Site) -> some View {
+        if let franken = site.frankenPHP {
+            switch franken.state {
+            case .running:
+                Text(runningText(site, franken))
+                    .font(.caption).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            case .installing:
+                VStack(alignment: .leading, spacing: 2) {
+                    HStack(spacing: 6) {
+                        if let progress = franken.progress {
+                            ProgressView(value: progress).frame(width: 60)
+                        } else {
+                            ProgressView().controlSize(.mini)
+                        }
+                        Text(downloadingText(site, franken))
+                    }
+                    Text("PHP-FPM serves the site until it's ready.")
+                        .foregroundStyle(.secondary)
+                }
+                .font(.caption)
+                .fixedSize(horizontal: false, vertical: true)
+            case .failed, .unavailable:
+                VStack(alignment: .leading, spacing: 2) {
+                    if !franken.problem.isEmpty {
+                        Label(franken.problem, systemImage: "exclamationmark.triangle.fill")
+                            .foregroundStyle(.orange)
+                            .textSelection(.enabled)
+                    }
+                    Text("PHP-FPM serves the site meanwhile.")
+                        .foregroundStyle(.secondary)
+                }
+                .font(.caption)
+                .fixedSize(horizontal: false, vertical: true)
+            case .unknown:
+                EmptyView()
+            }
+        }
+    }
+
+    /// "Running FrankenPHP 1.13.0 with PHP 8.4.14 · worker mode".
+    private func runningText(_ site: Status.Site, _ franken: Status.SiteFrankenPHP) -> String {
+        let text = "Running FrankenPHP \(franken.version) with PHP \(franken.phpVersion)"
+        return site.worker == .octane ? text + " · worker mode" : text
+    }
+
+    /// "Downloading FrankenPHP for PHP 8.4… 42%"; without a percentage while the size is unknown.
+    private func downloadingText(_ site: Status.Site, _ franken: Status.SiteFrankenPHP) -> String {
+        let text = "Downloading FrankenPHP for PHP \(site.php)…"
+        guard let progress = franken.progress else { return text }
+        return "\(text) \(Int((progress * 100).rounded()))%"
+    }
+
+    /// The name of the site's FrankenPHP log, a service log in the Logs window.
+    private func frankenPHPLog(_ site: Status.Site) -> String {
+        if let log = site.frankenPHP?.log, !log.isEmpty {
+            return log
+        }
+        return "frankenphp-\(site.name)"
+    }
+
     /// Notes when versions disagree: an isolation over the project's pin, .flockrc over .nvmrc.
     @ViewBuilder
     private func hints(_ site: Status.Site) -> some View {
@@ -258,6 +416,20 @@ struct SitesPane: View {
         if !site.nodeShadowed.isEmpty {
             Text(".flockrc's Node \(site.nodePinned) wins over \(site.nodeShadowed).")
                 .font(.caption).foregroundStyle(.orange)
+        }
+        if site.boost == .missing || site.boost == .outdated {
+            HStack(spacing: 4) {
+                Text(site.boost == .missing ? "Uses Laravel Boost." : "Flock's Boost guideline is outdated.")
+                Button(site.boost == .missing ? "Add Flock to its guidelines…" : "Update it…") {
+                    confirm = ConfirmAction(
+                        title: site.boost == .missing ? "Add Flock to \(site.name)'s Boost guidelines?" : "Update Flock's guideline in \(site.name)?",
+                        button: site.boost == .missing ? "Add" : "Update",
+                        message: "Writes .ai/guidelines/flock.md in \(site.path) and runs php artisan boost:update, so AI agents know Flock serves the app and picks its PHP version. Commit it with the rest of .ai/guidelines. This changes files in your project.",
+                        run: { [name = site.name] client in try await client.addBoostGuideline(site: name) })
+                }
+                .buttonStyle(.link)
+            }
+            .font(.caption).foregroundStyle(.secondary)
         }
     }
 

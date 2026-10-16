@@ -18,12 +18,14 @@ import (
 	"time"
 
 	"flock/internal/api"
+	"flock/internal/binaries"
 	"flock/internal/catalog"
 	"flock/internal/certs"
 	"flock/internal/components"
 	"flock/internal/config"
 	"flock/internal/dns"
 	"flock/internal/dumps"
+	"flock/internal/frankenphp"
 	"flock/internal/hosts"
 	"flock/internal/mail"
 	"flock/internal/node"
@@ -65,6 +67,9 @@ type daemon struct {
 	mail     *mail.Server
 	webUp    bool
 	builds   *phpbuild.Manager
+	// frankenphp installs FrankenPHP builds; restarts counts RestartSite calls per site (see frankenphp.Site.Restart).
+	frankenphp *frankenphp.Manager
+	restarts   map[string]int
 	// pg manages the PostgreSQL versions, components Valkey and the PostgreSQL client tools,
 	// catalog the other services (MySQL, Redis, Meilisearch, ...).
 	pg         *postgres.Manager
@@ -85,8 +90,8 @@ type daemon struct {
 	// breakpoints finds PhpStorm breakpoints; breakpointSites is what the last reload found, by site path.
 	breakpoints     xdebug.Detector
 	breakpointSites map[string]bool
-	cfg      *config.Config
-	wildcard wildcardState
+	cfg             *config.Config
+	wildcard        wildcardState
 }
 
 func (d *daemon) shutdown() {
@@ -231,7 +236,7 @@ func Run(ctx context.Context, cfg Config) error {
 		return err
 	}
 
-	d := &daemon{root: cfg.Root, version: cfg.Version, startedAt: time.Now(), procs: supervisor.New(), leaves: certs.NewLeaves()}
+	d := &daemon{root: cfg.Root, version: cfg.Version, startedAt: time.Now(), procs: supervisor.New(), leaves: certs.NewLeaves(), restarts: map[string]int{}}
 	defer d.shutdown()
 
 	if workspace, err := phpbuild.DefaultWorkspace(); err == nil && runtime.GOOS != "linux" {
@@ -250,6 +255,10 @@ func Run(ctx context.Context, cfg Config) error {
 		d.pg = pg
 		go pg.Catalog.Run(ctx)
 	}
+	d.frankenphp = frankenphp.NewManager(cfg.Root, binaries.DefaultSource(cfg.Root))
+	d.frankenphp.Release = d.releaseFrankenPHP
+	d.frankenphp.Installed = func(string) { _ = d.reload() }
+	go d.frankenphp.Run(ctx)
 	d.components = components.NewManager(cfg.Root, components.Drivers(cfg.Root, d.Mutate))
 	go d.components.Run(ctx)
 	if err := catalog.MigrateLegacy(cfg.Root); err != nil {
@@ -478,6 +487,36 @@ func (d *daemon) reload() error {
 
 	installed, _ := php.Installed(d.root)
 
+	var extraEnv []string
+	if cfg.Dumps {
+		extraEnv = dumps.Env(cfg.Ports.Dumps)
+	}
+	// pool starts a version's FastCGI pool the first time a site needs it.
+	pool := func(version string) ([]string, error) {
+		if pools[version] == nil {
+			p, err := php.PoolFor(d.root, version, extraEnv...)
+			if err != nil {
+				return nil, err
+			}
+			ensurePool(p, php.PoolLog(version))
+			pools[version] = p.Upstreams
+		}
+		return pools[version], nil
+	}
+	// debugPool starts a version's Xdebug pool; FrankenPHP sites send their Xdebug requests there too.
+	debugPool := func(version string) []string {
+		if _, done := debugPools[version]; !done {
+			debugPools[version] = nil
+			if debug, err := php.DebugPoolFor(d.root, version, extraEnv...); err != nil {
+				warnings = append(warnings, "xdebug: "+err.Error())
+			} else {
+				ensurePool(debug, php.DebugPoolLog(version))
+				debugPools[version] = debug.Upstreams
+			}
+		}
+		return debugPools[version]
+	}
+
 	sites := cfg.AllSites()
 	extras := cfg.DomainsBySite(sites)
 	for _, site := range sites {
@@ -489,6 +528,10 @@ func (d *daemon) reload() error {
 			PHP: version, PHPSource: phpVersion.Source, PHPPinned: phpVersion.Pinned, PHPFile: phpVersion.File,
 			Node: nodeVersion.Version, NodeSource: nodeVersion.Source, NodePinned: nodeVersion.Pinned, NodeFile: nodeVersion.File,
 			NodeShadowed: nodeVersion.Shadowed, Domains: []api.SiteDomain{},
+		}
+		status.Server, status.Worker, status.OctaneAvailable = config.ServerFastCGI, site.Worker, frankenphp.HasOctane(site.Path)
+		if site.FrankenPHP() {
+			status.Server = config.ServerFrankenPHP
 		}
 		scheme := "http"
 		if site.Secured {
@@ -516,29 +559,35 @@ func (d *daemon) reload() error {
 			continue
 		}
 
-		if pools[version] == nil {
-			var extraEnv []string
-			if cfg.Dumps {
-				extraEnv = dumps.Env(cfg.Ports.Dumps)
-			}
-			pool, err := php.PoolFor(d.root, version, extraEnv...)
-			if err != nil {
-				return err
-			}
-			ensurePool(pool, php.PoolLog(version))
-			pools[version] = pool.Upstreams
-
-			if cfg.Xdebug {
-				if debug, err := php.DebugPoolFor(d.root, version, extraEnv...); err != nil {
-					warnings = append(warnings, "xdebug: "+err.Error())
+		ws := web.Site{Domain: domain, Aliases: aliases, Root: web.DocumentRoot(site.Path)}
+		if cfg.Xdebug {
+			ws.DebugFPM = debugPool(version)
+		}
+		if site.FrankenPHP() {
+			fp := d.frankenPHPSite(cfg, site, version, ws.Root, extraEnv)
+			status.FrankenPHP = &fp.status
+			if fp.spec != nil {
+				restarted := d.procs.Ensure(*fp.spec)
+				keep[fp.spec.Name] = true
+				upstream := fmt.Sprintf("127.0.0.1:%d", site.Port)
+				wait := 300 * time.Millisecond
+				if restarted {
+					wait = 20 * time.Second // Octane boots the app first
+				}
+				if php.WaitReady([]string{upstream}, wait) {
+					fp.status.State, ws.Proxy = api.FrankenPHPRunning, upstream
 				} else {
-					ensurePool(debug, php.DebugPoolLog(version))
-					debugPools[version] = debug.Upstreams
+					fp.status.State = api.FrankenPHPFailed
+					fp.status.Problem = fmt.Sprintf("FrankenPHP did not start — see `flock logs %s`", fp.spec.Name)
+					warnings = append(warnings, fmt.Sprintf("frankenphp: %s did not start — see `flock logs %s`", site.Name, fp.spec.Name))
 				}
 			}
 		}
-
-		ws := web.Site{Domain: domain, Aliases: aliases, Root: web.DocumentRoot(site.Path), FPM: pools[version], DebugFPM: debugPools[version]}
+		if ws.Proxy == "" {
+			if ws.FPM, err = pool(version); err != nil {
+				return err
+			}
+		}
 		if cfg.Xdebug && cfg.XdebugBreakpoints {
 			breakpoints[site.Path] = d.breakpoints.Has(site.Path)
 			ws.Debugging = breakpoints[site.Path] && len(ws.DebugFPM) > 0
@@ -776,7 +825,7 @@ func (d *daemon) Status() api.Status {
 		Version:   d.version,
 		PID:       os.Getpid(),
 		StartedAt: d.startedAt,
-		Sites:     d.sites,
+		Sites:     withBoost(d.liveSites()),
 		Processes: d.procs.Status(),
 		Warnings:  d.warnings,
 	}

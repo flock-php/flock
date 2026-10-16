@@ -79,18 +79,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     static let openLink = Notification.Name("dev.flock.openLink")
 
-    /// The flock://install link macOS handed over last, until the menu bar label takes it. Kept
-    /// here because a link that starts the app can arrive before any view listens.
-    private(set) static var pendingLink: InstallLink?
+    /// The flock:// link macOS handed over last, until the menu bar label takes it. Kept here
+    /// because a link that starts the app can arrive before any view listens.
+    private(set) static var pendingLink: FlockLink?
 
-    static func takePendingLink() -> InstallLink? {
+    static func takePendingLink() -> FlockLink? {
         defer { pendingLink = nil }
         return pendingLink
     }
 
-    /// flock:// links (CFBundleURLTypes in build-app.sh), e.g. from the website's install buttons.
+    /// flock:// links (CFBundleURLTypes in build-app.sh), e.g. from the website's install buttons
+    /// or the page served for a site that isn't secured.
     func application(_ application: NSApplication, open urls: [URL]) {
-        guard let link = urls.lazy.compactMap(InstallLink.init(url:)).first else { return }
+        guard let link = urls.lazy.compactMap(FlockLink.init(url:)).first else { return }
         Self.pendingLink = link
         NotificationCenter.default.post(name: Self.openLink, object: nil)
     }
@@ -98,7 +99,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
 /// The menu bar icon. It is the only view that exists at launch, so it also opens the
 /// window requested by `--snapshot`, the main window when started by hand, and Settings →
-/// Services for a flock://install link.
+/// Services or Sites for a flock:// link.
 private struct MenuBarLabel: View {
     let model: AppModel
     @Environment(\.openWindow) private var openWindow
@@ -129,8 +130,8 @@ private struct MenuBarLabel: View {
         openWindow.activating(model.needsSetup ? WindowID.setup : WindowID.settings)
     }
 
-    /// Before the setup the link waits: Services asks about it once Flock is set up.
-    private func open(_ link: InstallLink) {
+    /// Before the setup an install link waits: Services asks about it once Flock is set up.
+    private func open(_ link: FlockLink) {
         model.handle(link)
         openMain()
     }

@@ -17,6 +17,7 @@ import (
 	"flock/internal/catalog"
 	"flock/internal/components"
 	"flock/internal/config"
+	"flock/internal/frankenphp"
 	"flock/internal/phpbuild"
 	"flock/internal/postgres"
 	"flock/internal/supervisor"
@@ -83,6 +84,37 @@ type SiteStatus struct {
 	Debugging bool `json:"debugging,omitempty"`
 	// Domains are the site's extra domains (subdomains and aliases), in the order they were added.
 	Domains []SiteDomain `json:"domains"`
+	// Server is what runs the site's PHP: "fastcgi" (the version's PHP-FPM pool; php-cgi on
+	// Windows) or "frankenphp". Worker is FrankenPHP's worker mode: "" (classic) or "octane".
+	// OctaneAvailable is set when the project has Laravel Octane installed.
+	Server          string `json:"server"`
+	Worker          string `json:"worker"`
+	OctaneAvailable bool   `json:"octane_available"`
+	// FrankenPHP is the state of the site's FrankenPHP process, when Server is "frankenphp". Until
+	// it runs, the site is served through FastCGI.
+	FrankenPHP *SiteFrankenPHP `json:"frankenphp,omitempty"`
+	// Boost is whether the project uses Laravel Boost and has Flock's guideline (see package boost):
+	// "" (no Boost), "missing", "current", "outdated" or "custom".
+	Boost string `json:"boost,omitempty"`
+}
+
+// FrankenPHP states of a site.
+const (
+	FrankenPHPRunning     = "running"     // serving the site
+	FrankenPHPInstalling  = "installing"  // the build for the site's PHP version is downloading
+	FrankenPHPFailed      = "failed"      // see Problem; the site is served through FastCGI
+	FrankenPHPUnavailable = "unavailable" // no build for this platform or PHP version; see Problem
+)
+
+// SiteFrankenPHP is a site's FrankenPHP process.
+type SiteFrankenPHP struct {
+	State      string  `json:"state"`
+	Version    string  `json:"version,omitempty"`     // FrankenPHP, e.g. "1.13.0"
+	PHPVersion string  `json:"php_version,omitempty"` // the embedded PHP, e.g. "8.4.14"
+	Port       int     `json:"port"`                  // loopback port the web server proxies to
+	Progress   float64 `json:"progress"`              // while installing: 0..1, or -1 when unknown
+	Problem    string  `json:"problem,omitempty"`
+	Log        string  `json:"log"` // name for /v1/logs/services/{name}
 }
 
 // SiteDomain is one of a site's extra domains.
@@ -136,6 +168,10 @@ type Backend interface {
 	Components() *components.Manager
 	// Catalog manages MySQL, Redis, Meilisearch and the other catalog services (nil when unavailable).
 	Catalog() *catalog.Manager
+	// FrankenPHP installs FrankenPHP builds (nil when unavailable).
+	FrankenPHP() *frankenphp.Manager
+	// RestartSite restarts a FrankenPHP site's process, e.g. so Octane's workers load changed code.
+	RestartSite(name string) error
 }
 
 // NewHandler builds the API routes. A non-empty token requires `Authorization: Bearer <token>`
@@ -173,9 +209,12 @@ func NewHandler(b Backend, token string) http.Handler {
 	registerPostgresVersions(mux, b)
 	registerComponents(mux, b)
 	registerCatalog(mux, b)
+	registerFrankenPHP(mux, b)
 	registerMail(mux, b)
 	registerDumps(mux, b)
 	registerLogs(mux, b)
+	registerMCP(mux, b)
+	registerBoost(mux, b)
 
 	if token == "" {
 		return mux
@@ -234,6 +273,13 @@ func (c *Client) Reload(ctx context.Context) (Status, error) {
 	var status Status
 	err := c.do(ctx, http.MethodPost, "/v1/reload", &status)
 
+	return status, err
+}
+
+// UpdateSettings changes the given global settings and returns the resulting status.
+func (c *Client) UpdateSettings(ctx context.Context, s Settings) (Status, error) {
+	var status Status
+	err := c.send(ctx, http.MethodPost, "/v1/settings", s, &status)
 	return status, err
 }
 

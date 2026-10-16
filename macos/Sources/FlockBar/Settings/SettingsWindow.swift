@@ -3,7 +3,7 @@ import SwiftUI
 
 /// The panes of the Settings window, in sidebar order.
 enum SettingsPane: String, CaseIterable, Identifiable {
-    case general, sites, php, node, services, mail, dumps, debugger, about
+    case general, sites, php, node, services, mail, dumps, debugger, ai, about
 
     var id: String { rawValue }
 
@@ -17,6 +17,7 @@ enum SettingsPane: String, CaseIterable, Identifiable {
         case .mail: "Mail"
         case .dumps: "Dumps"
         case .debugger: "Debugger"
+        case .ai: "AI"
         case .about: "About"
         }
     }
@@ -31,6 +32,7 @@ enum SettingsPane: String, CaseIterable, Identifiable {
         case .mail: "envelope.fill"
         case .dumps: "ladybug.fill"
         case .debugger: "ant.fill"
+        case .ai: "sparkles"
         case .about: "info"
         }
     }
@@ -45,6 +47,7 @@ enum SettingsPane: String, CaseIterable, Identifiable {
         case .mail: .cyan
         case .dumps: .pink
         case .debugger: .red
+        case .ai: .purple
         case .about: .secondary
         }
     }
@@ -138,6 +141,7 @@ struct SettingsWindow: View {
             case .mail: MailPane()
             case .dumps: DumpsPane()
             case .debugger: DebuggerPane()
+            case .ai: AIPane()
             case .about: AboutPane()
             }
         }

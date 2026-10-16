@@ -102,7 +102,14 @@ func newSitesCommand() *cobra.Command {
 					if site.Problem != "" {
 						url = "⚠ " + site.Problem
 					}
-					fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", site.Name, site.PHP, url, site.Path)
+					version := site.PHP
+					if site.Server == "frankenphp" {
+						version += " FrankenPHP"
+						if site.Worker == "octane" {
+							version += " (Octane)"
+						}
+					}
+					fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", site.Name, version, url, site.Path)
 				}
 				return w.Flush()
 			}

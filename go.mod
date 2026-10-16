@@ -6,12 +6,15 @@ require (
 	github.com/caddyserver/caddy/v2 v2.11.7
 	github.com/emersion/go-sasl v0.0.0-20241020182733-b788ff22d5a6
 	github.com/emersion/go-smtp v0.25.0
+	github.com/google/jsonschema-go v0.4.3
 	github.com/miekg/dns v1.1.73
+	github.com/modelcontextprotocol/go-sdk v1.8.0
 	github.com/spf13/cobra v1.10.2
 	github.com/ulikunitz/xz v0.5.17
 	golang.org/x/sys v0.48.0
 	golang.org/x/term v0.46.0
 	gopkg.in/yaml.v3 v3.0.1
+	howett.net/plist v1.0.1
 )
 
 require (
@@ -102,6 +105,8 @@ require (
 	github.com/quic-go/quic-go v0.63.0 // indirect
 	github.com/rs/xid v1.6.0 // indirect
 	github.com/russross/blackfriday/v2 v2.1.0 // indirect
+	github.com/segmentio/asm v1.1.3 // indirect
+	github.com/segmentio/encoding v0.5.4 // indirect
 	github.com/shopspring/decimal v1.4.0 // indirect
 	github.com/shurcooL/sanitized_anchor_name v1.0.0 // indirect
 	github.com/sirupsen/logrus v1.10.2 // indirect
@@ -120,6 +125,7 @@ require (
 	github.com/tailscale/tscert v0.0.0-20251216020129-aea342f6d747 // indirect
 	github.com/urfave/cli v1.22.17 // indirect
 	github.com/x448/float16 v0.8.4 // indirect
+	github.com/yosida95/uritemplate/v3 v3.0.2 // indirect
 	github.com/yuin/goldmark v1.8.6 // indirect
 	github.com/yuin/goldmark-highlighting/v2 v2.0.0-20230729083705-37449abec8cc // indirect
 	github.com/zeebo/blake3 v0.2.4 // indirect
@@ -172,5 +178,4 @@ require (
 	google.golang.org/grpc v1.83.2 // indirect
 	google.golang.org/grpc/cmd/protoc-gen-go-grpc v1.6.2 // indirect
 	google.golang.org/protobuf v1.36.12 // indirect
-	howett.net/plist v1.0.1 // indirect
 )

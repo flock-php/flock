@@ -308,6 +308,9 @@ private struct SiteRow: View {
                         .font(.caption2)
                         .foregroundStyle(.orange)
                 }
+                if site.server == .frankenphp {
+                    Badge(text: site.worker == .octane ? "Octane" : "FrankenPHP", color: .secondary)
+                }
                 Text("PHP \(site.php)")
                     .font(.caption2.monospacedDigit())
                     .foregroundStyle(.secondary)

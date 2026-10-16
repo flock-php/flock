@@ -32,6 +32,9 @@ type Site struct {
 	// there, and with Debugging (the project has breakpoints) every request does.
 	DebugFPM  []string
 	Debugging bool
+	// Proxy is the loopback address of the site's own FrankenPHP ("127.0.0.1:<port>"). When set, requests
+	// go there instead of to FPM; those that ask for Xdebug still go to DebugFPM.
+	Proxy string
 	// CertFile and KeyFile (from certs.SiteCert, covering Domain and *.Domain) are set when the site
 	// is secured. Deeper subdomains and aliases get certificates from Config.Issue.
 	CertFile string
@@ -120,9 +123,33 @@ func Caddyfile(cfg Config) string {
 	// Any other name gets the "not linked" page, its host and scheme filled in by templates.
 	fmt.Fprintf(&b, "\n%s {\n\timport flock_site\n%s}\n", addresses("http", []string{""}, cfg), unlinked(cfg))
 	// Without this, https:// to an unknown or unsecured name would fail the handshake (or hang).
-	fmt.Fprintf(&b, "\n%s {\n\timport flock_site\n%s%s}\n", addresses("https", []string{""}, cfg), tlsBlock, unlinked(cfg))
+	// A linked site that isn't secured names itself, so the page asks to secure it rather than link it.
+	fmt.Fprintf(&b, "\n%s {\n\timport flock_site\n%s%s%s}\n", addresses("https", []string{""}, cfg), tlsBlock, unsecured(cfg), unlinked(cfg))
 
 	return b.String()
+}
+
+// unsecured sets {http.vars.flock_site} to the site's name on every host of a site served over HTTP only.
+func unsecured(cfg Config) string {
+	var b strings.Builder
+	for i, s := range cfg.Sites {
+		if s.CertFile != "" {
+			continue
+		}
+		fmt.Fprintf(&b, "\t@unsecured%[1]d host %[2]s\n\tvars @unsecured%[1]d flock_site %[3]s\n", i, strings.Join(s.Hosts(), " "), quote(siteName(s.Domain, cfg.TLD)))
+	}
+	return b.String()
+}
+
+// siteName is the name the CLI takes for a domain: watchtower for watchtower.test.
+func siteName(domain, tld string) string {
+	if tld != "" {
+		return strings.TrimSuffix(domain, "."+tld)
+	}
+	if i := strings.LastIndex(domain, "."); i > 0 {
+		return domain[:i]
+	}
+	return domain
 }
 
 //go:embed pages/unlinked.html
@@ -132,8 +159,9 @@ var unlinkedPage []byte
 func pagesDir(cfg Config) string { return filepath.Join(cfg.StorageDir, "pages") }
 
 // unlinked serves the catch-all page: a 404 that is never cached, so the site shows once it's linked.
+// X-Flock-Page tells the page's script it still gets this page, not the site (a site can 404 too).
 func unlinked(cfg Config) string {
-	return fmt.Sprintf("\troot * %s\n\trewrite * /unlinked.html\n\theader Cache-Control no-store\n\ttemplates\n\tfile_server {\n\t\tstatus 404\n\t}\n",
+	return fmt.Sprintf("\troot * %s\n\trewrite * /unlinked.html\n\theader Cache-Control no-store\n\theader X-Flock-Page unlinked\n\ttemplates\n\tfile_server {\n\t\tstatus 404\n\t}\n",
 		quote(pagesDir(cfg)))
 }
 
@@ -144,14 +172,24 @@ const xdebugRequest = `{cookie.XDEBUG_SESSION} != "" || {cookie.XDEBUG_TRIGGER} 
 
 func app(s Site) string {
 	root := fmt.Sprintf("\troot * %s\n", quote(s.Root))
+	serve := func(indent string) string { return php(s.FPM, indent) }
+	if s.Proxy != "" {
+		serve = func(indent string) string { return proxy(s.Proxy, indent) }
+	}
 	switch {
 	case len(s.DebugFPM) == 0:
-		return root + php(s.FPM, "\t")
+		return root + serve("\t")
 	case s.Debugging:
 		return root + php(s.DebugFPM, "\t")
 	}
 	return root + fmt.Sprintf("\t@xdebug expression `%s`\n\thandle @xdebug {\n%s\t}\n\thandle {\n%s\t}\n",
-		xdebugRequest, php(s.DebugFPM, "\t\t"), php(s.FPM, "\t\t"))
+		xdebugRequest, php(s.DebugFPM, "\t\t"), serve("\t\t"))
+}
+
+// proxy sends every request to a FrankenPHP process, which serves the static files too. The Host
+// header passes unchanged, so the app sees its own domain.
+func proxy(upstream, indent string) string {
+	return fmt.Sprintf("%sreverse_proxy %s\n", indent, quote(upstream))
 }
 
 // php sends PHP requests to upstreams and serves everything else as static files.

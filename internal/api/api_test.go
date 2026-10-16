@@ -10,10 +10,12 @@ import (
 	"strings"
 	"testing"
 
+	"flock/internal/binaries"
 	"flock/internal/catalog"
 	"flock/internal/components"
 	"flock/internal/config"
 	"flock/internal/dumps"
+	"flock/internal/frankenphp"
 	"flock/internal/phpbuild"
 	"flock/internal/postgres"
 )
@@ -27,6 +29,7 @@ type fakeBackend struct {
 
 	pg         *postgres.Manager
 	components *components.Manager
+	frankenphp *frankenphp.Manager
 }
 
 func (f *fakeBackend) PHPBuilds() *phpbuild.Manager { return f.builds }
@@ -34,6 +37,8 @@ func (f *fakeBackend) PHPBuilds() *phpbuild.Manager { return f.builds }
 func (f *fakeBackend) PostgresVersions() *postgres.Manager { return f.pg }
 func (f *fakeBackend) Components() *components.Manager     { return f.components }
 func (f *fakeBackend) Catalog() *catalog.Manager           { return f.catalog }
+func (f *fakeBackend) FrankenPHP() *frankenphp.Manager     { return f.frankenphp }
+func (f *fakeBackend) RestartSite(string) error            { return nil }
 
 func (f *fakeBackend) Status() Status      { return Status{Sites: f.sites} }
 func (f *fakeBackend) Reload() error       { return nil }
@@ -308,5 +313,41 @@ func TestSiteDomainEndpoints(t *testing.T) {
 	}
 	if site, _ := b.config(t).FindSite("app"); strings.Join(site.Domains, ",") != "app-2.test" {
 		t.Fatalf("domains after removal: %v", site.Domains)
+	}
+}
+
+func TestSitesSwitchToFrankenPHPAndBack(t *testing.T) {
+	root := t.TempDir()
+	b := &fakeBackend{root: root, frankenphp: frankenphp.NewManager(root, binaries.Source{})}
+	if !b.frankenphp.Available() {
+		t.Skip("no FrankenPHP for this platform")
+	}
+	srv := serve(t, b, "")
+	cfg := b.config(t)
+	cfg.Upsert(config.Site{Name: "app", Path: t.TempDir()})
+	cfg.Upsert(config.Site{Name: "old", Path: t.TempDir(), PHP: "8.1"})
+	if err := cfg.Save(root); err != nil {
+		t.Fatal(err)
+	}
+
+	if resp, body := call(t, "PATCH", srv.URL+"/v1/sites/app", "", `{"server":"frankenphp","worker":"octane"}`); resp.StatusCode != http.StatusOK {
+		t.Fatalf("to FrankenPHP: %d %s", resp.StatusCode, body)
+	}
+	site, _ := b.config(t).FindSite("app")
+	if !site.FrankenPHP() || site.Worker != config.WorkerOctane || site.Port != config.FirstSitePort {
+		t.Fatalf("site: %+v", site)
+	}
+	if resp, body := call(t, "PATCH", srv.URL+"/v1/sites/app", "", `{"server":"fastcgi"}`); resp.StatusCode != http.StatusOK {
+		t.Fatalf("back to FastCGI: %d %s", resp.StatusCode, body)
+	}
+	if site, _ := b.config(t).FindSite("app"); site.FrankenPHP() || site.Worker != config.WorkerOctane {
+		t.Fatalf("site: %+v", site)
+	}
+
+	if resp, body := call(t, "PATCH", srv.URL+"/v1/sites/old", "", `{"server":"frankenphp"}`); resp.StatusCode != http.StatusBadRequest || !strings.Contains(body, "8.2 or newer") {
+		t.Fatalf("PHP 8.1: %d %s", resp.StatusCode, body)
+	}
+	if resp, body := call(t, "PATCH", srv.URL+"/v1/sites/app", "", `{"server":"swoole"}`); resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("unknown server: %d %s", resp.StatusCode, body)
 	}
 }

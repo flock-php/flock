@@ -36,6 +36,8 @@ func TestCaddyfileRoutesSitesAndSubdomains(t *testing.T) {
 		"redir https://{host}{uri} 308",
 		"https://:443 {",
 		"rewrite * /unlinked.html",
+		"@unsecured0 host plain.test *.plain.test *.*.plain.test *.*.*.plain.test *.*.*.*.plain.test",
+		`vars @unsecured0 flock_site "plain"`,
 		`php_fastcgi "unix//run/php84.sock"`,
 		`storage file_system "/data/Application Support/caddy"`,
 		"abort @remote",
@@ -108,5 +110,23 @@ func TestCaddyfileSendsXdebugRequestsToTheDebugPool(t *testing.T) {
 	}
 	if strings.Contains(string(json), `"dial":"unix//run/php84.sock"`) {
 		t.Errorf("a site with breakpoints still uses its fast pool:\n%s", json)
+	}
+}
+
+func TestCaddyfileProxiesFrankenPHPSitesButNotTheirXdebugRequests(t *testing.T) {
+	cfg := testConfig()
+	cfg.Sites = []Site{
+		{Domain: "franken.test", Root: "/code/franken/public", Proxy: "127.0.0.1:21000", DebugFPM: []string{"unix//run/php84-xdebug.sock"}},
+		{Domain: "octane.test", Root: "/code/octane/public", Proxy: "127.0.0.1:21001"},
+	}
+
+	json, _, err := caddyconfig.GetAdapter("caddyfile").Adapt([]byte(Caddyfile(cfg)), nil)
+	if err != nil {
+		t.Fatalf("%v\n%s", err, Caddyfile(cfg))
+	}
+	for _, want := range []string{`"dial":"127.0.0.1:21000"`, `"dial":"127.0.0.1:21001"`, `"dial":"unix//run/php84-xdebug.sock"`, `XDEBUG_TRIGGER`} {
+		if !strings.Contains(string(json), want) {
+			t.Errorf("missing %s in:\n%s", want, json)
+		}
 	}
 }

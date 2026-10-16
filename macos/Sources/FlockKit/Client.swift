@@ -46,6 +46,12 @@ public actor FlockClient {
     static let postgresInstallTimeout: TimeInterval = 600
     /// Switching or uninstalling a PostgreSQL major stops and starts servers (2 minutes).
     static let postgresChangeTimeout: TimeInterval = 120
+    /// Restarting a FrankenPHP site waits for its process to come back (1 minute, like the Go CLI).
+    static let siteRestartTimeout: TimeInterval = 60
+    /// Registering with Claude Code runs its CLI.
+    static let mcpChangeTimeout: TimeInterval = 30
+    /// Adding Flock's Boost guideline runs `php artisan boost:update`, which boots the app.
+    static let boostTimeout: TimeInterval = 120
 
     public init(configPath: URL = FlockPaths.apiJSON) {
         self.init(configPath: configPath, configuration: .ephemeral)
@@ -106,6 +112,11 @@ public actor FlockClient {
         try await decode(Status.self, "PATCH", "/v1/sites/\(escape(name))", body: try JSONEncoder().encode(change))
     }
 
+    /// Restarts a FrankenPHP site's process, e.g. so Octane's workers load changed code.
+    public func restartSite(_ name: String) async throws -> Status {
+        try await decode(Status.self, "POST", "/v1/sites/\(escape(name))/restart", timeout: Self.siteRestartTimeout)
+    }
+
     public func unlinkSite(_ name: String) async throws -> Status {
         try await decode(Status.self, "DELETE", "/v1/sites/\(escape(name))")
     }
@@ -129,6 +140,29 @@ public actor FlockClient {
     /// Removes a tool's version from the site's project files.
     public func unpin(site: String, tool: String) async throws -> Status {
         try await decode(Status.self, "DELETE", "/v1/sites/\(escape(site))/pin/\(escape(tool))")
+    }
+
+    /// Writes Flock's guideline into the site's Laravel Boost guidelines (.ai/guidelines/flock.md)
+    /// and runs `php artisan boost:update`, so the agents' guideline files include it.
+    public func addBoostGuideline(site: String) async throws -> Status {
+        try await decode(Status.self, "POST", "/v1/sites/\(escape(site))/boost", timeout: Self.boostTimeout)
+    }
+
+    // MARK: AI clients
+
+    /// The AI clients Flock's MCP server can be registered with.
+    public func mcp() async throws -> MCPState {
+        try await decode(MCPState.self, "GET", "/v1/mcp")
+    }
+
+    /// Registers Flock's MCP server with a client ("claude-code", "cursor", "vscode", "windsurf", "codex").
+    public func registerMCP(_ client: String) async throws -> MCPState {
+        try await decode(MCPState.self, "POST", "/v1/mcp/clients/\(escape(client))", timeout: Self.mcpChangeTimeout)
+    }
+
+    /// Removes Flock's MCP server from a client; nothing else in its configuration changes.
+    public func unregisterMCP(_ client: String) async throws -> MCPState {
+        try await decode(MCPState.self, "DELETE", "/v1/mcp/clients/\(escape(client))", timeout: Self.mcpChangeTimeout)
     }
 
     public func park(_ path: String) async throws -> Status {
@@ -202,6 +236,51 @@ public actor FlockClient {
 
     public func phpBuildLog(_ minor: String) async throws -> String {
         String(decoding: try await send("GET", "/v1/php/versions/\(escape(minor))/log"), as: UTF8.self)
+    }
+
+    // MARK: FrankenPHP builds
+
+    /// The builds per PHP minor; `.unavailable` when the daemon has no FrankenPHP (this platform,
+    /// or a daemon from before it).
+    public func frankenPHP() async throws -> FrankenPHPState {
+        do {
+            return try await decode(FrankenPHPState.self, "GET", "/v1/frankenphp")
+        } catch FlockError.server(let status, _) where status == 404 || status == 501 {
+            return .unavailable
+        }
+    }
+
+    /// Asks the daemon to fetch the list of published builds now.
+    public func checkFrankenPHP() async throws -> FrankenPHPState {
+        try await decode(FrankenPHPState.self, "POST", "/v1/frankenphp/check", timeout: 60)
+    }
+
+    /// Starts installing, updating or retrying the build for a PHP minor in the background; poll for the job.
+    public func installFrankenPHP(_ minor: String) async throws -> FrankenPHPState {
+        try await decode(FrankenPHPState.self, "POST", "/v1/frankenphp/\(escape(minor))/install", timeout: 30)
+    }
+
+    public func cancelFrankenPHPJob(_ minor: String) async throws -> FrankenPHPState {
+        try await decode(FrankenPHPState.self, "POST", "/v1/frankenphp/\(escape(minor))/cancel")
+    }
+
+    /// Dismisses a failed install.
+    public func dismissFrankenPHPJob(_ minor: String) async throws -> FrankenPHPState {
+        try await decode(FrankenPHPState.self, "DELETE", "/v1/frankenphp/\(escape(minor))/job")
+    }
+
+    /// Removes the build; the daemon refuses (409) while a site runs on it.
+    public func uninstallFrankenPHP(_ minor: String) async throws -> FrankenPHPState {
+        try await decode(FrankenPHPState.self, "DELETE", "/v1/frankenphp/\(escape(minor))", timeout: 60)
+    }
+
+    /// The tail of the current or last install's output; empty when there is none.
+    public func frankenPHPLog(_ minor: String) async throws -> String {
+        do {
+            return String(decoding: try await send("GET", "/v1/frankenphp/\(escape(minor))/log"), as: UTF8.self)
+        } catch FlockError.server(404, _) {
+            return ""
+        }
     }
 
     // MARK: PostgreSQL versions

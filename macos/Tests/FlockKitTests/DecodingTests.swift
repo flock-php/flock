@@ -133,3 +133,84 @@ private func decode<T: Decodable>(_ type: T.Type, _ json: String) throws -> T {
     #expect(shop.nodeSource == .project && shop.nodeShadowed == ".nvmrc: 20" && shop.nodePinnedHere)
     #expect(status.sites[1].phpSource == .default && !status.sites[1].phpPinnedHere)
 }
+
+@Test func decodesASiteOnFrankenPHP() throws {
+    let status = try decode(Status.self, """
+    {"version":"dev","pid":1,"started_at":"2026-10-13T14:10:01Z","dns":{"tld":"test","addr":""},
+     "http_port":80,"https_port":443,"mail":"","xdebug":false,"dumps":false,"mail_count":0,"dump_count":0,"processes":[],
+     "sites":[{"name":"shop","domain":"shop.test","path":"/code/shop","php":"8.4","secured":true,"parked":false,
+               "server":"frankenphp","worker":"octane","octane_available":true,
+               "frankenphp":{"state":"running","version":"1.13.0","php_version":"8.4.14","port":21000,"progress":0,"log":"frankenphp-shop"}},
+              {"name":"blog","domain":"blog.test","path":"/code/blog","php":"8.3","secured":false,"parked":true,
+               "server":"frankenphp","worker":"","octane_available":false,
+               "frankenphp":{"state":"installing","port":21001,"progress":-1,"problem":"","log":"frankenphp-blog"}},
+              {"name":"legacy","domain":"legacy.test","path":"/code/legacy","php":"8.1","secured":false,"parked":true}]}
+    """)
+
+    let shop = status.sites[0]
+    #expect(shop.server == .frankenphp && shop.worker == .octane && shop.octaneAvailable)
+    let franken = try #require(shop.frankenPHP)
+    #expect(franken.state == .running && franken.version == "1.13.0" && franken.phpVersion == "8.4.14")
+    #expect(franken.port == 21000 && franken.log == "frankenphp-shop" && franken.problem.isEmpty)
+
+    let blog = status.sites[1]
+    #expect(blog.worker == .classic && !blog.octaneAvailable)
+    #expect(blog.frankenPHP?.state == .installing && blog.frankenPHP?.progress == nil && blog.frankenPHP?.version == "")
+
+    // Older daemons send none of it: the site runs on PHP-FPM.
+    let legacy = status.sites[2]
+    #expect(legacy.server == .fastcgi && legacy.worker == .classic && legacy.frankenPHP == nil)
+    #expect(!legacy.supportsFrankenPHP && shop.supportsFrankenPHP)
+}
+
+@Test func tellsWhichPHPVersionsFrankenPHPSupports() {
+    #expect(Status.Site.frankenPHPSupports("8.2") && Status.Site.frankenPHPSupports("8.4.14") && Status.Site.frankenPHPSupports("9.0"))
+    #expect(!Status.Site.frankenPHPSupports("8.1") && !Status.Site.frankenPHPSupports("7.4"))
+    // The daemon has the last word on a version the app can't read.
+    #expect(Status.Site.frankenPHPSupports(""))
+}
+
+@Test func decodesTheFrankenPHPBuilds() throws {
+    let state = try decode(FrankenPHPState.self, """
+    {"available":true,"checked_at":"2026-10-13T14:10:01Z","check_error":"",
+     "builds":[{"php":"8.5","installed":"","php_version":"","latest":"1.13.1","update":false,"size":41943040,
+                "job":{"action":"install","state":"running","phase":"downloading","progress":0.42,"error":"","started_at":"2026-10-13T14:11:00Z"}},
+               {"php":"8.4","installed":"1.13.0","php_version":"8.4.14","latest":"1.13.1","update":true,"size":40000000,"job":null},
+               {"php":"8.3","installed":"","php_version":"","latest":"1.13.1","update":false,"size":39000000,
+                "job":{"action":"install","state":"failed","phase":"downloading","progress":-1,"error":"connection reset","started_at":"2026-10-13T14:09:00Z"}}]}
+    """)
+
+    #expect(state.available && state.checkedAt != nil && state.checkError.isEmpty)
+    #expect(state.builds.map(\.id) == ["8.5", "8.4", "8.3"])
+    #expect(state.hasRunningJob)
+    #expect(!state.builds[0].isInstalled && state.builds[0].job?.progress == 0.42 && state.builds[0].job?.phase == .downloading)
+    #expect(state.builds[1].isInstalled && state.builds[1].update && state.builds[1].phpVersion == "8.4.14" && state.builds[1].job == nil)
+    #expect(state.builds[2].job?.isFailed == true && state.builds[2].job?.error == "connection reset" && state.builds[2].job?.progress == nil)
+
+    let unchecked = try decode(FrankenPHPState.self, #"{"available":false,"checked_at":null,"check_error":"","builds":null}"#)
+    #expect(!unchecked.available && unchecked.checkedAt == nil && unchecked.builds.isEmpty && !unchecked.hasRunningJob)
+}
+
+@Test func decodesTheAIClients() throws {
+    let state = try decode(MCPState.self, """
+    {"clients":[{"id":"claude-code","name":"Claude Code","state":"registered","config":"/Users/ann/.claude.json"},
+                {"id":"vscode","name":"VS Code","state":"available","config":"/x/mcp.json","problem":"Flock can't read /x/mcp.json — add Flock to it by hand"},
+                {"id":"codex","name":"Codex","state":"missing"},
+                {"id":"new","name":"New","state":"someday"}],
+     "command":"/Users/ann/Library/Application Support/Flock/bin/flock","args":["mcp"],"snippet":"{ \\"mcpServers\\": {} }"}
+    """)
+
+    #expect(state.clients.map(\.id) == ["claude-code", "vscode", "codex", "new"])
+    #expect(state.clients.map(\.state) == [.registered, .available, .missing, .missing])
+    #expect(state.clients[1].problem.contains("by hand") && state.clients[2].config.isEmpty)
+    #expect(state.args == ["mcp"] && state.snippet.contains("mcpServers"))
+}
+
+@Test func decodesTheBoostStateOfSites() throws {
+    let status = try decode(Status.self, """
+    {"version":"dev","pid":1,"started_at":"2026-10-13T14:10:01Z","dns":{"tld":"test"},"http_port":80,"https_port":443,
+     "mail":"","xdebug":false,"dumps":false,"mail_count":0,"dump_count":0,"processes":[],
+     "sites":[{"name":"a","boost":"missing"},{"name":"b","boost":"outdated"},{"name":"c"},{"name":"d","boost":"current"}]}
+    """)
+    #expect(status.sites.map(\.boost) == [.missing, .outdated, .none, .current])
+}

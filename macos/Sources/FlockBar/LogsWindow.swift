@@ -111,6 +111,13 @@ struct LogsWindow: View {
         .task(id: selection) {
             await reload()
         }
+        .task(id: store.requested) {
+            guard let source = store.requested else { return }
+            store.requested = nil
+            // The log may be new since the list loaded.
+            await store.loadIndex()
+            selection = source
+        }
         .task(id: AutoRefresh(source: selection, on: autoRefresh)) {
             guard autoRefresh else { return }
             while !Task.isCancelled {

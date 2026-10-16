@@ -83,6 +83,12 @@ public static class SelfTest
             var rows = catalog.Versions.Select(v => $"{v.Minor}:{v.Status}{(v.Job is null ? "" : $"[{v.Job.State}]")}");
             return $"auto_build {catalog.AutoBuild}, checked {catalog.CheckedAt?.ToString() ?? "never"}, {string.Join(" ", rows)}";
         });
+        await Check("GET /v1/frankenphp", async () =>
+        {
+            var state = await client.FrankenPhpAsync();
+            var rows = state.Builds.Select(b => $"{b.Php}:{(b.IsInstalled ? b.Installed : "-")}{(b.Job is null ? "" : $"[{b.Job.State}]")}");
+            return $"available {state.Available}, {string.Join(" ", rows)}";
+        });
 
         output.WriteLine(failures == 0 ? "selftest passed" : $"selftest: {failures} failure(s)");
         return failures == 0 ? 0 : 1;

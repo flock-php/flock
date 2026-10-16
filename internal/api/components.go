@@ -90,3 +90,10 @@ func (c *Client) Components(ctx context.Context) (Components, error) {
 	err := c.get(ctx, "/v1/components", &out)
 	return out, err
 }
+
+// InstallComponent starts installing a component (follow it with Components).
+func (c *Client) InstallComponent(ctx context.Context, id string) (Components, error) {
+	var out Components
+	err := c.do(ctx, http.MethodPost, "/v1/components/"+id+"/install", &out)
+	return out, err
+}

@@ -14,6 +14,8 @@ final class SettingsStore {
     private(set) var services: [Service] = []
     /// PHP versions from php.net with install state; loaded by the PHP pane.
     private(set) var php: PHPCatalog?
+    /// FrankenPHP builds per PHP minor; loaded by the PHP pane.
+    private(set) var frankenPHP: FrankenPHPState?
     /// Node.js lines from nodejs.org with install state; loaded by the Node pane.
     private(set) var node: NodeCatalog?
     /// PostgreSQL majors with install state; loaded by the Services pane.
@@ -22,6 +24,8 @@ final class SettingsStore {
     private(set) var components: ComponentCatalog?
     /// MySQL, MariaDB, Redis, MongoDB, Meilisearch, Typesense, RustFS; loaded by the Services pane.
     private(set) var catalog: ServiceCatalog?
+    /// The AI clients Flock's MCP server can be registered with; loaded by the AI pane.
+    private(set) var mcp: MCPState?
     /// Catalog services this window asked to install that the daemon hasn't reported a job for yet.
     private(set) var catalogPending: Set<String> = []
     /// PostgreSQL operations this window started that haven't answered yet, by major.
@@ -70,6 +74,32 @@ final class SettingsStore {
         await onChange?()
     }
 
+    /// Reloads the AI clients (only the AI pane lists them).
+    func refreshMCP() async {
+        if Snapshot.isFixture { return }
+        do {
+            let fresh = try await client.mcp()
+            if fresh != mcp {
+                mcp = fresh
+            }
+        } catch {
+            self.error = error.localizedDescription
+        }
+    }
+
+    /// Registers or removes Flock with an AI client and adopts the list the daemon returns.
+    func performOnMCP(_ change: @Sendable (FlockClient) async throws -> MCPState) async {
+        isBusy = true
+        defer { isBusy = false }
+        do {
+            mcp = try await change(client)
+            error = nil
+        } catch {
+            self.error = error.localizedDescription
+            await refreshMCP()
+        }
+    }
+
     /// Changes services and adopts the list the daemon returns.
     func performOnServices(_ change: @Sendable (FlockClient) async throws -> [Service]) async {
         isBusy = true
@@ -106,6 +136,30 @@ final class SettingsStore {
             self.error = error.localizedDescription
         }
         await refresh()
+        await onChange?()
+    }
+
+    /// Reloads the FrankenPHP builds (only the PHP pane lists them).
+    func refreshFrankenPHP() async {
+        if Snapshot.isFixture { return }
+        do {
+            let fresh = try await client.frankenPHP()
+            if fresh != frankenPHP {
+                frankenPHP = fresh
+            }
+        } catch {
+            self.error = error.localizedDescription
+        }
+    }
+
+    /// Runs a FrankenPHP action and adopts the builds it returns; installs reload sites waiting for them.
+    func performOnFrankenPHP(_ change: @escaping @Sendable (FlockClient) async throws -> FrankenPHPState) async {
+        do {
+            frankenPHP = try await change(client)
+            error = nil
+        } catch {
+            self.error = error.localizedDescription
+        }
         await onChange?()
     }
 

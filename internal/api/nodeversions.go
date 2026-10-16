@@ -112,6 +112,20 @@ func registerNodeVersions(mux *http.ServeMux, b Backend) {
 	})
 }
 
+// NodeVersions fetches every Node.js major line with its install state.
+func (c *Client) NodeVersions(ctx context.Context) (NodeVersions, error) {
+	var out NodeVersions
+	err := c.slow().get(ctx, "/v1/node/versions", &out)
+	return out, err
+}
+
+// InstallNode installs the newest release of a major and waits for it.
+func (c *Client) InstallNode(ctx context.Context, major string) (NodeVersions, error) {
+	var out NodeVersions
+	err := c.timeout(10*time.Minute).do(ctx, http.MethodPost, "/v1/node/versions/"+major+"/install", &out)
+	return out, err
+}
+
 func findNodeRelease(v NodeVersions, major string) (NodeRelease, bool) {
 	for _, r := range v.Versions {
 		if r.Major == major {

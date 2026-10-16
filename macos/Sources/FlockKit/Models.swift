@@ -95,8 +95,29 @@ public struct Status: Decodable, Sendable, Equatable {
         public var domains: [SiteDomain]
         /// PhpStorm breakpoints send every request of the site to Xdebug.
         public var debugging: Bool
+        /// What runs the site's PHP: its version's PHP-FPM pool, or FrankenPHP.
+        public var server: Server
+        /// FrankenPHP's worker mode.
+        public var worker: Worker
+        /// The project has Laravel Octane installed, so it can run in worker mode.
+        public var octaneAvailable: Bool
+        /// The site's FrankenPHP process, when `server` is FrankenPHP. Until it runs, PHP-FPM serves the site.
+        public var frankenPHP: SiteFrankenPHP?
+        /// Whether the project uses Laravel Boost and has Flock's guideline.
+        public var boost: Boost
 
         public var id: String { name }
+
+        /// FrankenPHP needs PHP 8.2 or newer.
+        public var supportsFrankenPHP: Bool { Self.frankenPHPSupports(php) }
+
+        /// "8.2" and newer ("8.4", "8.4.14", "9.0"). A version that can't be read doesn't block it
+        /// (the daemon checks too).
+        public static func frankenPHPSupports(_ version: String) -> Bool {
+            let parts = version.split(separator: ".").map { Int($0) }
+            guard parts.count >= 2, let major = parts[0], let minor = parts[1] else { return true }
+            return (major, minor) >= (8, 2)
+        }
 
         /// The file pinning PHP sits in the site's own folder (so it can be unpinned there).
         public var phpPinnedHere: Bool { !phpFile.isEmpty && Self.inFolder(phpFile, path) }
@@ -108,7 +129,8 @@ public struct Status: Decodable, Sendable, Equatable {
 
         enum CodingKeys: String, CodingKey {
             case name, domain, path, php, phpSource, phpPinned, phpFile, node, nodeSource, nodePinned, nodeFile, nodeShadowed
-            case secured, parked, url, problem, domains, debugging
+            case secured, parked, url, problem, domains, debugging, server, worker, octaneAvailable, boost
+            case frankenPHP = "frankenphp"
         }
 
         public init(from decoder: Decoder) throws {
@@ -131,6 +153,96 @@ public struct Status: Decodable, Sendable, Equatable {
             problem = try c.decodeIfPresent(String.self, forKey: .problem)
             domains = try c.decodeIfPresent([SiteDomain].self, forKey: .domains) ?? []
             debugging = try c.decodeIfPresent(Bool.self, forKey: .debugging) ?? false
+            server = try c.decodeIfPresent(Server.self, forKey: .server) ?? .fastcgi
+            worker = try c.decodeIfPresent(Worker.self, forKey: .worker) ?? .classic
+            octaneAvailable = try c.decodeIfPresent(Bool.self, forKey: .octaneAvailable) ?? false
+            frankenPHP = try c.decodeIfPresent(SiteFrankenPHP.self, forKey: .frankenPHP)
+            boost = try c.decodeIfPresent(Boost.self, forKey: .boost) ?? .none
+        }
+    }
+
+    /// A project's Laravel Boost guidelines and Flock's guideline in them; the raw values are the API's.
+    public enum Boost: String, Decodable, Sendable, Hashable {
+        /// The project doesn't use Boost.
+        case none = ""
+        /// Uses Boost, without Flock's guideline.
+        case missing
+        case current
+        /// Has an older version of Flock's guideline.
+        case outdated
+        /// Has a flock.md Flock didn't write; Flock leaves it alone.
+        case custom
+
+        public init(from decoder: Decoder) throws {
+            self = Boost(rawValue: try decoder.singleValueContainer().decode(String.self)) ?? .none
+        }
+    }
+
+    /// What runs a site's PHP; the raw values are the API's.
+    public enum Server: String, Decodable, Sendable, Hashable {
+        /// The PHP version's PHP-FPM pool (php-cgi on Windows).
+        case fastcgi
+        case frankenphp
+
+        public init(from decoder: Decoder) throws {
+            self = Server(rawValue: try decoder.singleValueContainer().decode(String.self)) ?? .fastcgi
+        }
+    }
+
+    /// FrankenPHP's worker mode; the raw values are the API's.
+    public enum Worker: String, Decodable, Sendable, Hashable {
+        case classic = ""
+        /// Laravel Octane keeps the app booted in workers.
+        case octane
+
+        public init(from decoder: Decoder) throws {
+            self = Worker(rawValue: try decoder.singleValueContainer().decode(String.self)) ?? .classic
+        }
+    }
+
+    /// A site's FrankenPHP process.
+    public struct SiteFrankenPHP: Decodable, Sendable, Equatable {
+        public var state: State
+        /// FrankenPHP, e.g. "1.13.0"; empty until installed.
+        public var version: String
+        /// The embedded PHP, e.g. "8.4.14".
+        public var phpVersion: String
+        public var port: Int
+        /// While installing: 0...1, or nil when unknown.
+        public var progress: Double?
+        /// Why it doesn't run (failed, unavailable).
+        public var problem: String
+        /// The name of its service log.
+        public var log: String
+
+        public enum State: String, Decodable, Sendable {
+            /// Serving the site.
+            case running
+            /// The build for the site's PHP version is downloading.
+            case installing
+            /// See `problem`; PHP-FPM serves the site.
+            case failed
+            /// No build for this platform or PHP version; see `problem`.
+            case unavailable
+            case unknown
+
+            public init(from decoder: Decoder) throws {
+                self = State(rawValue: try decoder.singleValueContainer().decode(String.self)) ?? .unknown
+            }
+        }
+
+        enum CodingKeys: String, CodingKey { case state, version, phpVersion, port, progress, problem, log }
+
+        public init(from decoder: Decoder) throws {
+            let c = try decoder.container(keyedBy: CodingKeys.self)
+            state = try c.decodeIfPresent(State.self, forKey: .state) ?? .unknown
+            version = try c.decodeIfPresent(String.self, forKey: .version) ?? ""
+            phpVersion = try c.decodeIfPresent(String.self, forKey: .phpVersion) ?? ""
+            port = try c.decodeIfPresent(Int.self, forKey: .port) ?? 0
+            let raw = try c.decodeIfPresent(Double.self, forKey: .progress) ?? -1
+            progress = raw < 0 ? nil : min(raw, 1)
+            problem = try c.decodeIfPresent(String.self, forKey: .problem) ?? ""
+            log = try c.decodeIfPresent(String.self, forKey: .log) ?? ""
         }
     }
 

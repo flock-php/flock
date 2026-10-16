@@ -311,6 +311,10 @@ internal sealed partial class PanelWindow : Window
             Ui.AutomationName(bug, "Debugging");
             php = Ui.Row(6, bug, php);
         }
+        if (site.IsFrankenPhp)
+        {
+            php = Ui.Row(6, Ui.Badge(site.Worker == Status.SiteServer.Octane ? "Octane" : "FrankenPHP", Ui.Tone.Neutral), php);
+        }
         var row = Ui.Spread(Ui.Row(8, icon, name), php);
 
         var button = new Button

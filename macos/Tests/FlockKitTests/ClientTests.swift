@@ -258,4 +258,28 @@ struct ClientTests {
         #expect(bodies[3].contains(#""line":"""#) && bodies[3].contains(#""port":0"#))
         #expect(StubProtocol.requests.map(\.timeout) == [5, 60, 5, 5, 5, 5, 60, 60, 5, 5])
     }
+
+    @Test func talksToTheAIClientAndBoostEndpoints() async throws {
+        StubProtocol.reset { request in
+            request.url.contains("/boost")
+                ? (200, #"{"version":"dev","pid":1,"started_at":"2026-10-13T14:10:01Z","sites":[]}"#)
+                : (200, #"{"clients":[{"id":"cursor","name":"Cursor","state":"registered"}],"command":"/flock","args":["mcp"],"snippet":"{}"}"#)
+        }
+        let client = client(try apiJSON(token: "t"))
+
+        _ = try await client.mcp()
+        let added = try await client.registerMCP("cursor")
+        #expect(added.clients.first?.state == .registered)
+        _ = try await client.unregisterMCP("cursor")
+        _ = try await client.addBoostGuideline(site: "my app")
+
+        let base = "http://127.0.0.1:53531/v1"
+        #expect(StubProtocol.requests.map { "\($0.method) \($0.url)" } == [
+            "GET \(base)/mcp",
+            "POST \(base)/mcp/clients/cursor",
+            "DELETE \(base)/mcp/clients/cursor",
+            "POST \(base)/sites/my%20app/boost",
+        ])
+        #expect(StubProtocol.requests.map(\.timeout) == [5, 30, 30, 120])
+    }
 }

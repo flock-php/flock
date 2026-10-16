@@ -40,6 +40,21 @@ struct PHPPane: View {
                         }
                     }
 
+                    if let frankenPHP = store.frankenPHP, frankenPHP.available {
+                        Section {
+                            ForEach(frankenPHP.builds) { build in
+                                FrankenPHPBuildRow(build: build)
+                            }
+                        } header: {
+                            Text("FrankenPHP")
+                        } footer: {
+                            if !frankenPHP.checkError.isEmpty {
+                                Label(frankenPHP.checkError, systemImage: "exclamationmark.triangle.fill")
+                                    .font(.caption).foregroundStyle(.orange)
+                            }
+                        }
+                    }
+
                     Section {
                         Toggle("Build updates and new PHP versions automatically", isOn: Binding(
                             get: { catalog.autoBuild },
@@ -66,10 +81,11 @@ struct PHPPane: View {
             PHPBuildLogSheet(minor: target.minor)
         }
         .task {
-            // Poll quickly while something builds, slowly otherwise.
+            // Poll quickly while something builds or downloads, slowly otherwise.
             while !Task.isCancelled {
                 await store.refreshPHP()
-                let active = store.php?.hasActiveJob ?? false
+                await store.refreshFrankenPHP()
+                let active = (store.php?.hasActiveJob ?? false) || (store.frankenPHP?.hasRunningJob ?? false)
                 try? await Task.sleep(for: .seconds(active ? 2 : 30))
             }
         }
@@ -297,6 +313,123 @@ extension PHPReleaseRow {
         busy = true
         Task {
             await model.settings.performOnPHP(action)
+            busy = false
+        }
+    }
+}
+
+/// The FrankenPHP build for one PHP minor: what is installed, a download in progress or a failed
+/// one, and the actions that fit.
+private struct FrankenPHPBuildRow: View {
+    @Environment(AppModel.self) private var model
+    let build: FrankenPHPBuild
+
+    /// A request of this row is waiting for the daemon; its buttons stay disabled until it answers.
+    private let busyState = State<Bool>(initialValue: false)
+    private var busy: Bool {
+        get { busyState.wrappedValue }
+        nonmutating set { busyState.wrappedValue = newValue }
+    }
+
+    var body: some View {
+        HStack(alignment: .center, spacing: 10) {
+            SettingsIcon(symbol: "bolt.fill", color: build.isInstalled ? .purple : .gray, size: 26)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text("PHP \(build.php)").font(.body.weight(.semibold))
+                detail
+            }
+
+            Spacer(minLength: 12)
+            if busy {
+                ProgressView().controlSize(.small)
+            }
+            actions
+                .disabled(busy)
+        }
+        .padding(.vertical, 3)
+    }
+
+    private var installedText: String {
+        guard build.isInstalled else { return "Not installed — downloaded when a site needs it" }
+        return build.phpVersion.isEmpty ? "FrankenPHP \(build.installed)" : "FrankenPHP \(build.installed) (PHP \(build.phpVersion))"
+    }
+
+    /// The line under the name: a download in progress, the error of a failed one, or what is installed.
+    @ViewBuilder
+    private var detail: some View {
+        if let job = build.job, job.isRunning {
+            HStack(spacing: 6) {
+                if let progress = job.progress, job.phase != .installing {
+                    ProgressView(value: progress).frame(width: 120)
+                } else {
+                    ProgressView().controlSize(.mini)
+                }
+                Text(Self.jobText(job))
+            }
+            .font(.caption).foregroundStyle(.secondary)
+        } else if let job = build.job, job.isFailed {
+            Text(job.error.isEmpty ? "The download failed." : job.error)
+                .font(.caption).foregroundStyle(.red)
+                .lineLimit(2)
+                .textSelection(.enabled)
+                .help(job.error)
+        } else {
+            Text(installedText).font(.caption).foregroundStyle(.secondary)
+        }
+    }
+
+    /// "Downloading… 42%", "Downloading…" (size unknown) or "Installing…".
+    private static func jobText(_ job: ComponentJob) -> String {
+        if job.phase == .installing {
+            return "Installing…"
+        }
+        if let progress = job.progress {
+            return "Downloading… \(Int((progress * 100).rounded()))%"
+        }
+        return "Downloading…"
+    }
+
+    @ViewBuilder
+    private var actions: some View {
+        if build.job?.isRunning == true {
+            Button("Cancel") {
+                run { try await $0.cancelFrankenPHPJob(build.php) }
+            }
+        } else if build.job?.isFailed == true {
+            Button {
+                run { try await $0.installFrankenPHP(build.php) }
+            } label: {
+                Label("Retry", systemImage: "arrow.clockwise")
+            }
+            Button("Dismiss") {
+                run { try await $0.dismissFrankenPHPJob(build.php) }
+            }
+        } else {
+            if build.update {
+                Button {
+                    run { try await $0.installFrankenPHP(build.php) }
+                } label: {
+                    Label("Update to \(build.latest)", systemImage: "arrow.down.circle")
+                }
+                .buttonStyle(.borderedProminent)
+                .help(build.size > 0 ? "Downloads FrankenPHP \(build.latest) (\(build.size / 1_000_000) MB)" : "")
+            }
+            if build.isInstalled {
+                Button("Remove") {
+                    run { try await $0.uninstallFrankenPHP(build.php) }
+                }
+            }
+        }
+    }
+}
+
+extension FrankenPHPBuildRow {
+    /// Runs a FrankenPHP action for this row, with its buttons disabled until the daemon answers.
+    fileprivate func run(_ action: @escaping @Sendable (FlockClient) async throws -> FrankenPHPState) {
+        busy = true
+        Task {
+            await model.settings.performOnFrankenPHP(action)
             busy = false
         }
     }

@@ -47,6 +47,9 @@ public sealed class AppModel
     /// <summary>A flock://install link waiting for the user to confirm it in Settings → Services.</summary>
     public InstallLink? PendingInstall { get; set; }
 
+    /// <summary>A flock://secure link waiting for the user to confirm it in Settings → Sites.</summary>
+    public SecureLink? PendingSecure { get; set; }
+
     /// <summary>The app is replacing the installed CLI with its bundled one.</summary>
     public bool IsUpdating { get; private set; }
 
@@ -503,6 +506,99 @@ public sealed class SettingsStore(FlockClient client) : Store
         if (OnChange is not null)
         {
             await OnChange();
+        }
+    }
+
+    /// <summary>FrankenPHP builds per PHP minor; loaded by the PHP pane. Null when the daemon doesn't offer FrankenPHP.</summary>
+    public FrankenPhpState? FrankenPhp { get; private set; }
+
+    public async Task RefreshFrankenPhpAsync()
+    {
+        try
+        {
+            var fresh = await client.FrankenPhpAsync();
+            if (!Json.Same(fresh, FrankenPhp))
+            {
+                FrankenPhp = fresh;
+                Notify();
+            }
+        }
+        catch (FlockServerException e) when (e.StatusCode is 404 or 501)
+        {
+            // An older daemon, or a platform without FrankenPHP: the PHP pane leaves the section out.
+            if (FrankenPhp is not null)
+            {
+                FrankenPhp = null;
+                Notify();
+            }
+        }
+        catch (FlockException e)
+        {
+            Error = e.Message;
+            Notify();
+        }
+    }
+
+    /// <summary>Runs a FrankenPHP action (installs return at once and continue as jobs) and adopts the state it returns.</summary>
+    public async Task PerformOnFrankenPhpAsync(Func<FlockClient, Task<FrankenPhpState>> change)
+    {
+        try
+        {
+            FrankenPhp = await change(client);
+            Error = null;
+        }
+        catch (FlockException e)
+        {
+            Error = e.Message;
+        }
+        Notify();
+        if (OnChange is not null)
+        {
+            await OnChange();
+        }
+    }
+
+    /// <summary>The AI clients Flock's MCP server can be registered with; loaded by the AI pane.</summary>
+    public McpState? Mcp { get; private set; }
+
+    public async Task RefreshMcpAsync()
+    {
+        try
+        {
+            var fresh = await client.McpAsync();
+            if (!Json.Same(fresh, Mcp))
+            {
+                Mcp = fresh;
+                Notify();
+            }
+        }
+        catch (FlockException e)
+        {
+            Error = e.Message;
+            Notify();
+        }
+    }
+
+    /// <summary>Registers or removes Flock with an AI client and adopts the list the daemon returns.</summary>
+    public async Task PerformOnMcpAsync(Func<FlockClient, Task<McpState>> change)
+    {
+        var failed = false;
+        await Busy(async () =>
+        {
+            try
+            {
+                Mcp = await change(client);
+                Error = null;
+            }
+            catch (FlockException e)
+            {
+                Error = e.Message;
+                failed = true;
+            }
+        });
+        if (failed)
+        {
+            await RefreshMcpAsync();
         }
     }
 

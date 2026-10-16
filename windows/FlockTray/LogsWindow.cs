@@ -127,6 +127,20 @@ internal sealed partial class LogsWindow : FlockWindow
         _ = store.LoadIndexAsync();
     }
 
+    /// <summary>Shows one log, e.g. a site's FrankenPHP log from Settings → Sites.</summary>
+    public async Task ShowSource(LogStore.Source source)
+    {
+        selection = source;
+        clear.Visibility = source is LogStore.SiteSource ? Visibility.Visible : Visibility.Collapsed;
+        levels.IsEnabled = source is LogStore.SiteSource;
+        rendered = null;
+        content.Content = new ProgressRing { Width = 32, Height = 32 };
+        // The log may be new since the window loaded its list.
+        await store.LoadIndexAsync();
+        sources.SelectedIndex = rows.IndexOf(source);
+        await Reload();
+    }
+
     private LogLevelFilter Level => levels.SelectedIndex >= 0 ? LogFilter.Choices[levels.SelectedIndex].Filter : LogLevelFilter.All;
 
     /// <summary>Reloads the selected log every 2 seconds while the window is shown (not minimized or hidden).</summary>

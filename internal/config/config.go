@@ -113,6 +113,73 @@ type Site struct {
 	// wildcard DNS doesn't.
 	Domains []string `json:"domains,omitempty"`
 	Parked  bool     `json:"-"` // discovered from a parked directory rather than linked
+
+	// Server runs the site's PHP: "" through the version's FastCGI pool (PHP-FPM; php-cgi on
+	// Windows), or ServerFrankenPHP in a FrankenPHP process of its own on Port, behind the web server.
+	Server string `json:"server,omitempty"`
+	// Worker is FrankenPHP's worker mode: "" (classic: every request boots the app) or WorkerOctane.
+	// It is kept while the site runs on FastCGI, for switching back.
+	Worker string `json:"worker,omitempty"`
+	Port   int    `json:"port,omitempty"` // FrankenPHP's loopback port, assigned by SetServer
+}
+
+// Servers and worker modes of a site (see Site.Server and Site.Worker).
+const (
+	ServerFastCGI    = "fastcgi" // how the API and CLI name the default, stored as ""
+	ServerFrankenPHP = "frankenphp"
+	WorkerOctane     = "octane"
+)
+
+// FirstSitePort is where the loopback ports of FrankenPHP sites start.
+const FirstSitePort = 21000
+
+// SitePortID is how UsedPorts names the port of a FrankenPHP site: "frankenphp-<site>", which is
+// also the name of its process and log.
+func SitePortID(site string) string { return "frankenphp-" + site }
+
+// FrankenPHP reports whether the site runs on FrankenPHP.
+func (s Site) FrankenPHP() bool { return s.Server == ServerFrankenPHP }
+
+// SetServer switches site to server (ServerFastCGI, "" or ServerFrankenPHP) with worker ("" or
+// WorkerOctane), giving it a loopback port for FrankenPHP the first time. The site becomes linked
+// so the setting can be stored; the caller saves it with Upsert.
+func (c *Config) SetServer(site *Site, server, worker string) error {
+	switch server {
+	case ServerFastCGI, "":
+		server = ""
+	case ServerFrankenPHP:
+	default:
+		return fmt.Errorf("unknown server %q (fastcgi or frankenphp)", server)
+	}
+	if worker != "" && worker != WorkerOctane {
+		return fmt.Errorf("unknown worker mode %q (octane, or empty for classic)", worker)
+	}
+	site.Server, site.Worker, site.Parked = server, worker, false
+	if server == ServerFrankenPHP && (site.Port == 0 || c.portTaken(site.Port, site.Name)) {
+		site.Port = c.nextSitePort(site.Name)
+	}
+	return nil
+}
+
+// portTaken reports whether a service or another site uses port.
+func (c *Config) portTaken(port int, site string) bool {
+	if _, used := c.UsedPorts("")[port]; used {
+		for _, s := range c.Sites {
+			if s.Name == site && s.Port == port && s.FrankenPHP() {
+				return false
+			}
+		}
+		return true
+	}
+	return false
+}
+
+func (c *Config) nextSitePort(site string) int {
+	port := FirstSitePort
+	for c.portTaken(port, site) {
+		port++
+	}
+	return port
 }
 
 // Default returns the config used when none exists yet.
@@ -214,6 +281,11 @@ func (c *Config) UsedPorts(except string) map[int]string {
 	for id, x := range c.Services.Extras {
 		if id != except && x.Version != "" {
 			used[x.Port] = id
+		}
+	}
+	for _, s := range c.Sites {
+		if s.FrankenPHP() && s.Port != 0 {
+			used[s.Port] = SitePortID(s.Name)
 		}
 	}
 	return used

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"slices"
@@ -14,6 +15,7 @@ import (
 
 	"flock/internal/components"
 	"flock/internal/config"
+	"flock/internal/frankenphp"
 	"flock/internal/node"
 	"flock/internal/php"
 	"flock/internal/project"
@@ -94,6 +96,26 @@ func pinSite(cfg *config.Config, site config.Site, tool, version string) error {
 		return err
 	} else if lifted {
 		cfg.Upsert(site)
+	}
+	return nil
+}
+
+// setServer switches a site's server. Switching to FrankenPHP retries a failed install of the build
+// for the site's PHP version; the reload starts installing a missing one.
+func setServer(b Backend, cfg *config.Config, site *config.Site, server, worker string) error {
+	m := b.FrankenPHP()
+	if server == config.ServerFrankenPHP {
+		if m == nil || !m.Available() {
+			return invalid("FrankenPHP isn't available for this platform")
+		}
+		minor := project.PHPFor(cfg, site, site.Path).Version
+		if !frankenphp.Supports(minor) {
+			return invalid("FrankenPHP needs PHP %s or newer (%s uses %s)", frankenphp.MinimumMinor, site.Name, minor)
+		}
+		m.Dismiss(minor)
+	}
+	if err := cfg.SetServer(site, server, worker); err != nil {
+		return invalid("%v", err)
 	}
 	return nil
 }
@@ -185,6 +207,9 @@ func registerConfig(mux *http.ServeMux, b Backend) {
 			Secured *bool   `json:"secured"`
 			PHP     *string `json:"php"`
 			Node    *string `json:"node"`
+			// Server is "fastcgi" or "frankenphp"; Worker "" (classic) or "octane" (FrankenPHP's worker mode).
+			Server *string `json:"server"`
+			Worker *string `json:"worker"`
 		}
 		if err := decodeBody(r, &body); err != nil {
 			writeError(w, http.StatusBadRequest, err)
@@ -212,6 +237,18 @@ func registerConfig(mux *http.ServeMux, b Backend) {
 					}
 				}
 				site.Node = *body.Node
+			}
+			if body.Server != nil || body.Worker != nil {
+				server, worker := site.Server, site.Worker
+				if body.Server != nil {
+					server = *body.Server
+				}
+				if body.Worker != nil {
+					worker = *body.Worker
+				}
+				if err := setServer(b, cfg, &site, server, worker); err != nil {
+					return err
+				}
 			}
 			// A parked site becomes linked so its settings can be stored.
 			site.Parked = false
@@ -421,6 +458,75 @@ func registerConfig(mux *http.ServeMux, b Backend) {
 			return nil
 		})
 	})
+}
+
+// SiteChange is a PATCH /v1/sites/{name} body; nil fields stay as they are.
+type SiteChange struct {
+	Secured *bool   `json:"secured,omitempty"`
+	PHP     *string `json:"php,omitempty"`
+	Node    *string `json:"node,omitempty"`
+	Server  *string `json:"server,omitempty"`
+	Worker  *string `json:"worker,omitempty"`
+}
+
+// Config fetches config.json plus the installed versions.
+func (c *Client) Config(ctx context.Context) (ConfigView, error) {
+	var out ConfigView
+	err := c.get(ctx, "/v1/config", &out)
+	return out, err
+}
+
+// Services fetches every background service with its live state.
+func (c *Client) Services(ctx context.Context) ([]Service, error) {
+	var out []Service
+	err := c.get(ctx, "/v1/services", &out)
+	return out, err
+}
+
+// SetServiceRunning starts or stops a service.
+func (c *Client) SetServiceRunning(ctx context.Context, id string, on bool) ([]Service, error) {
+	action := "stop"
+	if on {
+		action = "start"
+	}
+	var out []Service
+	err := c.do(ctx, http.MethodPost, "/v1/services/"+url.PathEscape(id)+"/"+action, &out)
+	return out, err
+}
+
+// LinkSite serves dir (absolute) as a site; name defaults to the directory's name.
+func (c *Client) LinkSite(ctx context.Context, dir, name string) (Status, error) {
+	var out Status
+	err := c.send(ctx, http.MethodPost, "/v1/sites", map[string]string{"path": dir, "name": name}, &out)
+	return out, err
+}
+
+// UpdateSite changes a site's settings. Switching servers can take a while (FrankenPHP starts).
+func (c *Client) UpdateSite(ctx context.Context, name string, change SiteChange) (Status, error) {
+	var out Status
+	err := c.timeout(time.Minute).send(ctx, http.MethodPatch, "/v1/sites/"+url.PathEscape(name), change, &out)
+	return out, err
+}
+
+// AddDomain adds an extra domain to a site: a subdomain ("tenant1") or an alias ("my-app-2.test").
+func (c *Client) AddDomain(ctx context.Context, name, domain string) (Status, error) {
+	var out Status
+	err := c.send(ctx, http.MethodPost, "/v1/sites/"+url.PathEscape(name)+"/domains", map[string]string{"domain": domain}, &out)
+	return out, err
+}
+
+// PinSite pins a PHP or Node.js version into the site's project files (empty: the one it uses now).
+func (c *Client) PinSite(ctx context.Context, name, tool, version string) (Status, error) {
+	var out Status
+	err := c.send(ctx, http.MethodPost, "/v1/sites/"+url.PathEscape(name)+"/pin", map[string]string{"tool": tool, "version": version}, &out)
+	return out, err
+}
+
+// UnpinSite removes a pinned version from the site's project files.
+func (c *Client) UnpinSite(ctx context.Context, name, tool string) (Status, error) {
+	var out Status
+	err := c.do(ctx, http.MethodDelete, "/v1/sites/"+url.PathEscape(name)+"/pin/"+url.PathEscape(tool), &out)
+	return out, err
 }
 
 func configView(root string, cfg *config.Config) ConfigView {

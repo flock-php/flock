@@ -25,7 +25,7 @@ public static class Program
         using var single = new Mutex(initiallyOwned: true, @"Local\Flock.Tray", out var first);
         if (!first)
         {
-            Native.SignalRunningInstance(args.FirstOrDefault(a => InstallLink.Parse(a) is not null));
+            Native.SignalRunningInstance(args.FirstOrDefault(SecureLink.IsFlockLink));
             return 0;
         }
 

@@ -50,7 +50,7 @@ public sealed partial class App : Application, IXamlMetadataProvider
             tray = new Native.TrayIcon(IconPath(), "Flock");
             tray.Clicked += TogglePanel;
             tray.ShowRequested += ShowMain;
-            tray.LinkReceived += text => OpenLink(InstallLink.Parse(text));
+            tray.LinkReceived += OpenLink;
             tray.MenuRequested += ShowMenu;
             tray.ThemeChanged += UpdateTray;
 
@@ -65,9 +65,9 @@ public sealed partial class App : Application, IXamlMetadataProvider
             // Started by hand (e.g. from the Start menu): open the main window, so it is clear the
             // app runs (Windows 11 hides new notification area icons). The panel belongs to the
             // tray icon. The sign-in autostart passes --background and stays quiet. A flock://
-            // link that starts the app opens Settings → Services instead.
+            // link that starts the app opens Settings → Services or Sites instead.
             var arguments = Environment.GetCommandLineArgs();
-            if (arguments.Select(InstallLink.Parse).FirstOrDefault(link => link is not null) is { } link)
+            if (arguments.FirstOrDefault(SecureLink.IsFlockLink) is { } link)
             {
                 OpenLink(link);
             }
@@ -124,13 +124,20 @@ public sealed partial class App : Application, IXamlMetadataProvider
     private void ShowMain() => Open(Model.NeedsSetup ? WindowKind.Setup : WindowKind.Settings);
 
     /// <summary>
-    /// A flock://install link (registered by the installer), e.g. from the website's install
-    /// buttons: shows the service in Settings → Services, which asks before installing anything.
-    /// Before the setup the link waits, and Services asks about it once Flock is set up.
+    /// A flock:// link (registered by the installer). flock://install, e.g. from the website's
+    /// install buttons, shows the service in Settings → Services, which asks before installing
+    /// anything; before the setup the link waits, and Services asks about it once Flock is set up.
+    /// flock://secure, from the page served for a site that isn't secured, asks in Settings → Sites.
     /// </summary>
-    private void OpenLink(InstallLink? link)
+    private void OpenLink(string? text)
     {
-        if (link is null)
+        if (SecureLink.Parse(text) is { } secure && !Model.NeedsSetup)
+        {
+            Model.PendingSecure = secure;
+            Open(WindowKind.Settings, SettingsPane.Sites);
+            return;
+        }
+        if (InstallLink.Parse(text) is not { } link)
         {
             ShowMain();
             return;
@@ -188,6 +195,16 @@ public sealed partial class App : Application, IXamlMetadataProvider
             settings.Select(p);
         }
         ((FlockWindow)window).Present();
+    }
+
+    /// <summary>Opens the Logs window on one log.</summary>
+    public void OpenLog(LogStore.Source source)
+    {
+        Open(WindowKind.Logs);
+        if (windows.GetValueOrDefault(WindowKind.Logs) is LogsWindow logs)
+        {
+            _ = logs.ShowSource(source);
+        }
     }
 
     public void Quit()

@@ -370,17 +370,23 @@ func writeExtensionsIni(root, minor string) error {
 		return err
 	}
 
+	return os.WriteFile(filepath.Join(dir, "00-flock.ini"), []byte(ExtensionsIni(filepath.Join(Dir(root, minor), "ext"))), 0o644)
+}
+
+// ExtensionsIni is the ini that points an official Windows build at its ext/ directory and loads
+// the extensions present there (FrankenPHP's Windows builds ship the same).
+func ExtensionsIni(extDir string) string {
 	var b strings.Builder
-	fmt.Fprintf(&b, "; Managed by Flock — regenerated on install, edit php.ini instead.\nextension_dir = \"%s\"\n", filepath.Join(Dir(root, minor), "ext"))
-	if _, err := os.Stat(ExtensionPath(root, minor, "opcache")); err == nil {
+	fmt.Fprintf(&b, "; Managed by Flock — regenerated on install, edit php.ini instead.\nextension_dir = \"%s\"\n", extDir)
+	if fileExists(filepath.Join(extDir, "php_opcache.dll")) {
 		b.WriteString("zend_extension = opcache\n")
 	}
 	for _, name := range windowsExtensions {
-		if _, err := os.Stat(ExtensionPath(root, minor, name)); err == nil {
+		if fileExists(filepath.Join(extDir, "php_"+name+".dll")) {
 			fmt.Fprintf(&b, "extension = %s\n", name)
 		}
 	}
-	return os.WriteFile(filepath.Join(dir, "00-flock.ini"), []byte(b.String()), 0o644)
+	return b.String()
 }
 
 // XdebugDir is a version's extra ini scan dir that loads Xdebug. Only the debug pool and

@@ -108,6 +108,20 @@ public sealed class Status
         public List<SiteDomain> Domains { get; init; } = [];
         /// <summary>PhpStorm breakpoints send every request of the site to Xdebug.</summary>
         public bool Debugging { get; init; }
+        /// <summary>What runs the site's PHP: SiteServer.FastCgi (php-cgi) or SiteServer.FrankenPhp.</summary>
+        public string Server { get; init; } = SiteServer.FastCgi;
+        /// <summary>FrankenPHP's worker mode: "" (classic) or SiteServer.Octane.</summary>
+        public string Worker { get; init; } = "";
+        /// <summary>The project has Laravel Octane installed, so it can run in worker mode.</summary>
+        public bool OctaneAvailable { get; init; }
+        /// <summary>The site's FrankenPHP process, when Server is FrankenPHP.</summary>
+        [JsonPropertyName("frankenphp")]
+        public SiteFrankenPhp? FrankenPhp { get; init; }
+        /// <summary>Whether the project uses Laravel Boost and has Flock's guideline: "" (no Boost) or one of BoostState.</summary>
+        public string Boost { get; init; } = "";
+
+        [JsonIgnore]
+        public bool IsFrankenPhp => Server == SiteServer.FrankenPhp;
 
         /// <summary>The project file pinning PHP sits in the site's own folder (so it can be unpinned here).</summary>
         [System.Text.Json.Serialization.JsonIgnore]
@@ -119,6 +133,56 @@ public sealed class Status
         // Splits by hand rather than with Path.GetDirectoryName, which ignores '\\' off Windows (tests run anywhere).
         private static bool SameDir(string file, string dir) =>
             string.Equals(file[..Math.Max(0, file.LastIndexOfAny(['\\', '/']))].TrimEnd('\\', '/'), dir.TrimEnd('\\', '/'), StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>Values of Site.Server and Site.Worker.</summary>
+    public static class SiteServer
+    {
+        public const string FastCgi = "fastcgi";
+        public const string FrankenPhp = "frankenphp";
+        /// <summary>FrankenPHP's worker mode for Laravel Octane.</summary>
+        public const string Octane = "octane";
+    }
+
+    /// <summary>Values of Site.Boost: a project's Laravel Boost guidelines and Flock's guideline in them.</summary>
+    public static class BoostState
+    {
+        /// <summary>Uses Boost, without Flock's guideline.</summary>
+        public const string Missing = "missing";
+        public const string Current = "current";
+        /// <summary>Has an older version of Flock's guideline.</summary>
+        public const string Outdated = "outdated";
+        /// <summary>Has a flock.md Flock didn't write; Flock leaves it alone.</summary>
+        public const string Custom = "custom";
+    }
+
+    /// <summary>
+    /// A site's FrankenPHP process. Until it runs (State other than "running"), php-cgi serves the
+    /// site and Problem says why.
+    /// </summary>
+    public sealed class SiteFrankenPhp
+    {
+        /// <summary>"running", "installing", "failed" or "unavailable".</summary>
+        public string State { get; init; } = "";
+        /// <summary>FrankenPHP, e.g. "1.13.0"; may be empty.</summary>
+        public string Version { get; init; } = "";
+        /// <summary>The embedded PHP, e.g. "8.4.14"; may be empty.</summary>
+        public string PhpVersion { get; init; } = "";
+        public int Port { get; init; }
+        /// <summary>While installing: 0…1, or -1 when unknown.</summary>
+        public double Progress { get; init; } = -1;
+        public string Problem { get; init; } = "";
+        /// <summary>Name for /v1/logs/services/{name}.</summary>
+        public string Log { get; init; } = "";
+
+        [JsonIgnore]
+        public bool IsRunning => State == "running";
+
+        [JsonIgnore]
+        public bool IsInstalling => State == "installing";
+
+        [JsonIgnore]
+        public bool HasProgress => Progress is >= 0 and <= 1;
     }
 
     /// <summary>Where a site's PHP or Node.js version comes from, in this order.</summary>

@@ -25,6 +25,12 @@ public sealed class FlockClient : IDisposable
     private static readonly TimeSpan PhpChangeTimeout = TimeSpan.FromMinutes(2);
     // Installing or updating PostgreSQL downloads a server build and waits for it (and initdb).
     private static readonly TimeSpan PostgresDownloadTimeout = TimeSpan.FromMinutes(10);
+    // Switching a site to FrankenPHP or restarting it waits for the process to come up (~20 s at most).
+    private static readonly TimeSpan ServerSwitchTimeout = TimeSpan.FromMinutes(1);
+    // Registering with Claude Code runs its CLI.
+    private static readonly TimeSpan McpChangeTimeout = TimeSpan.FromSeconds(30);
+    // Adding Flock's Boost guideline runs `php artisan boost:update`, which boots the app.
+    private static readonly TimeSpan BoostTimeout = TimeSpan.FromMinutes(2);
 
     private readonly HttpClient http;
     private readonly SemaphoreSlim configLock = new(1, 1);
@@ -61,7 +67,13 @@ public sealed class FlockClient : IDisposable
     public Task<Status> LinkSiteAsync(string path, string? name = null, string? php = null, bool secured = false) =>
         Send<Status>(HttpMethod.Post, "/v1/sites", new { path, name, php, secured });
 
-    public Task<Status> UpdateSiteAsync(string name, SiteChange change) => Send<Status>(HttpMethod.Patch, $"/v1/sites/{Escape(name)}", change);
+    /// <summary>Switching the server or worker mode reloads the web server and may start FrankenPHP, so it gets longer.</summary>
+    public Task<Status> UpdateSiteAsync(string name, SiteChange change) =>
+        Send<Status>(HttpMethod.Patch, $"/v1/sites/{Escape(name)}", change,
+            timeout: change.Server is not null || change.Worker is not null ? ServerSwitchTimeout : null);
+
+    /// <summary>Restarts a FrankenPHP site's process, e.g. so Octane's workers load changed code.</summary>
+    public Task<Status> RestartSiteAsync(string name) => Send<Status>(HttpMethod.Post, $"/v1/sites/{Escape(name)}/restart", timeout: ServerSwitchTimeout);
 
     public Task<Status> UnlinkSiteAsync(string name) => Send<Status>(HttpMethod.Delete, $"/v1/sites/{Escape(name)}");
 
@@ -82,6 +94,21 @@ public sealed class FlockClient : IDisposable
 
     /// <summary>Removes a tool's version from the site's project files.</summary>
     public Task<Status> UnpinAsync(string site, string tool) => Send<Status>(HttpMethod.Delete, $"/v1/sites/{Escape(site)}/pin/{Escape(tool)}");
+
+    /// <summary>
+    /// Writes Flock's guideline into the site's Laravel Boost guidelines (.ai\guidelines\flock.md) and
+    /// runs `php artisan boost:update`, so the agents' guideline files include it.
+    /// </summary>
+    public Task<Status> AddBoostGuidelineAsync(string site) => Send<Status>(HttpMethod.Post, $"/v1/sites/{Escape(site)}/boost", timeout: BoostTimeout);
+
+    /// <summary>The AI clients Flock's MCP server can be registered with.</summary>
+    public Task<McpState> McpAsync() => Get<McpState>("/v1/mcp");
+
+    /// <summary>Registers Flock's MCP server with a client ("claude-code", "cursor", "vscode", "windsurf", "codex").</summary>
+    public Task<McpState> RegisterMcpAsync(string client) => Send<McpState>(HttpMethod.Post, $"/v1/mcp/clients/{Escape(client)}", timeout: McpChangeTimeout);
+
+    /// <summary>Removes Flock's MCP server from a client; nothing else in its configuration changes.</summary>
+    public Task<McpState> UnregisterMcpAsync(string client) => Send<McpState>(HttpMethod.Delete, $"/v1/mcp/clients/{Escape(client)}", timeout: McpChangeTimeout);
 
     public Task<Status> ParkAsync(string path) => Send<Status>(HttpMethod.Post, "/v1/parked", new { path });
 
@@ -130,6 +157,29 @@ public sealed class FlockClient : IDisposable
     public Task<PhpCatalog> CheckPhpReleasesAsync() => Send<PhpCatalog>(HttpMethod.Post, "/v1/php/check", timeout: TimeSpan.FromMinutes(1));
 
     public async Task<string> PhpBuildLogAsync(string minor) => await Text(HttpMethod.Get, $"/v1/php/versions/{Escape(minor)}/log");
+
+    // FrankenPHP builds
+
+    /// <summary>The builds per PHP minor; 501 (FlockServerException) when FrankenPHP isn't supported here.</summary>
+    public Task<FrankenPhpState> FrankenPhpAsync() => Get<FrankenPhpState>("/v1/frankenphp");
+
+    /// <summary>Asks the daemon to fetch the list of builds now.</summary>
+    public Task<FrankenPhpState> CheckFrankenPhpAsync() => Send<FrankenPhpState>(HttpMethod.Post, "/v1/frankenphp/check", timeout: TimeSpan.FromMinutes(1));
+
+    /// <summary>Starts installing, updating or retrying a minor's build in the background; poll FrankenPhpAsync.</summary>
+    public Task<FrankenPhpState> InstallFrankenPhpAsync(string minor) => Send<FrankenPhpState>(HttpMethod.Post, $"/v1/frankenphp/{Escape(minor)}/install");
+
+    public Task<FrankenPhpState> CancelFrankenPhpJobAsync(string minor) => Send<FrankenPhpState>(HttpMethod.Post, $"/v1/frankenphp/{Escape(minor)}/cancel");
+
+    /// <summary>Forgets a failed install.</summary>
+    public Task<FrankenPhpState> DismissFrankenPhpJobAsync(string minor) => Send<FrankenPhpState>(HttpMethod.Delete, $"/v1/frankenphp/{Escape(minor)}/job");
+
+    /// <summary>Removes a minor's build; 409 (FlockServerException) while a site runs on it.</summary>
+    public Task<FrankenPhpState> UninstallFrankenPhpAsync(string minor) =>
+        Send<FrankenPhpState>(HttpMethod.Delete, $"/v1/frankenphp/{Escape(minor)}", timeout: TimeSpan.FromMinutes(1));
+
+    /// <summary>The end of the current or last install's output; 404 (FlockServerException) when there is none.</summary>
+    public Task<string> FrankenPhpLogAsync(string minor) => Text(HttpMethod.Get, $"/v1/frankenphp/{Escape(minor)}/log");
 
     // PostgreSQL versions
 

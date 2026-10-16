@@ -28,8 +28,8 @@ internal sealed class PhpPane(SettingsWindow window, AppModel model) : Pane(wind
     {
         while (!hidden.IsCancellationRequested)
         {
-            await Store.RefreshPhpAsync();
-            var active = Store.Php?.HasActiveJob ?? false;
+            await Task.WhenAll(Store.RefreshPhpAsync(), Store.RefreshFrankenPhpAsync());
+            var active = (Store.Php?.HasActiveJob ?? false) || (Store.FrankenPhp?.HasRunningJob ?? false);
             try
             {
                 await Task.Delay(TimeSpan.FromSeconds(active ? 2 : 30), hidden);
@@ -74,6 +74,10 @@ internal sealed class PhpPane(SettingsWindow window, AppModel model) : Pane(wind
             versions.Children.Add(Ui.Row(6, Ui.Icon(Ui.GlyphWarning, 12, Ui.Caution), Ui.Caption(catalog.CheckError, Ui.Caution)));
         }
         page.Children.Add(versions);
+        if (Store.FrankenPhp is { Available: true } franken)
+        {
+            page.Children.Add(FrankenPhp(franken));
+        }
 
         var auto = new ToggleSwitch { IsOn = catalog.AutoBuild };
         auto.Toggled += async (_, _) =>
@@ -107,6 +111,79 @@ internal sealed class PhpPane(SettingsWindow window, AppModel model) : Pane(wind
         var icon = Ui.Icon(Ui.GlyphCode, 20, release.IsInstalled ? Ui.Accent : Ui.TertiaryText);
         var info = Ui.Row(14, icon, Ui.Column(2, title, Detail(release)));
         return Ui.Card(Ui.Spread(info, Actions(release)));
+    }
+
+    // FrankenPHP
+
+    /// <summary>The FrankenPHP builds, one per PHP minor; each downloads when a site first runs on it.</summary>
+    private StackPanel FrankenPhp(FrankenPhpState state)
+    {
+        var section = new StackPanel { Spacing = 4, Margin = new Thickness(0, 0, 0, 24) };
+        var header = Ui.Text("FrankenPHP", "BodyStrongTextBlockStyle");
+        header.Margin = new Thickness(1, 0, 0, 6);
+        section.Children.Add(header);
+        foreach (var build in state.Builds)
+        {
+            section.Children.Add(FrankenPhpRow(build));
+        }
+        if (state.CheckError.Length > 0)
+        {
+            var error = Ui.Caption(state.CheckError, Ui.Caution);
+            error.MaxLines = 2;
+            ToolTipService.SetToolTip(error, state.CheckError);
+            section.Children.Add(Ui.Row(6, Ui.Icon(Ui.GlyphWarning, 12, Ui.Caution), error));
+        }
+        return section;
+    }
+
+    private Border FrankenPhpRow(FrankenPhpBuild build)
+    {
+        var key = "frankenphp:" + build.Php;
+        var minor = build.Php;
+        var actions = Ui.Row(8);
+        UIElement detail;
+
+        if (build.Job is { IsRunning: true } job)
+        {
+            var text = job.Phase == "downloading" && job.HasProgress ? $"{job.PhaseText} {Math.Round(job.Progress * 100)}%" : job.PhaseText;
+            detail = Ui.Row(6, new ProgressRing { Width = 12, Height = 12 }, Ui.Caption(text, wrap: false));
+            actions.Children.Add(Ui.Button("Cancel", () => _ = Run(key, () => Store.PerformOnFrankenPhpAsync(c => c.CancelFrankenPhpJobAsync(minor)))));
+        }
+        else if (build.Job is { IsFailed: true } failed)
+        {
+            var error = Ui.Caption(failed.Error.Length > 0 ? failed.Error : "The download failed.", Ui.Critical);
+            error.MaxLines = 2;
+            error.MaxWidth = 380;
+            ToolTipService.SetToolTip(error, failed.Error);
+            detail = error;
+            actions.Children.Add(Ui.Button("Retry", () => _ = Run(key, () => Store.PerformOnFrankenPhpAsync(c => c.InstallFrankenPhpAsync(minor))), glyph: Ui.GlyphRefresh));
+            actions.Children.Add(Ui.Button("Dismiss", () => _ = Run(key, () => Store.PerformOnFrankenPhpAsync(c => c.DismissFrankenPhpJobAsync(minor)))));
+        }
+        else
+        {
+            detail = Ui.Caption(build.IsInstalled ? $"FrankenPHP {build.Installed} (PHP {build.PhpVersion})" : "Not installed — downloaded when a site needs it", wrap: false);
+            if (build.Update)
+            {
+                actions.Children.Add(Ui.Button($"Update to {build.Latest}", () => _ = Run(key, () => Store.PerformOnFrankenPhpAsync(c => c.InstallFrankenPhpAsync(minor))),
+                    accent: true, glyph: Ui.GlyphDownload, tooltip: build.Size > 0 ? $"Downloads FrankenPHP {build.Latest} ({build.Size / 1_000_000} MB)" : null));
+            }
+            if (build.IsInstalled)
+            {
+                actions.Children.Add(Ui.Button("Remove", () => _ = Run(key, () => Store.PerformOnFrankenPhpAsync(c => c.UninstallFrankenPhpAsync(minor)))));
+            }
+        }
+
+        if (busy.Contains(key))
+        {
+            Ui.SetEnabled(actions, false);
+            if (build.Job is not { IsRunning: true }) // a running download shows its own ring
+            {
+                actions.Children.Insert(0, new ProgressRing { Width = 16, Height = 16 });
+            }
+        }
+        var icon = Ui.Icon(Ui.GlyphServer, 20, build.IsInstalled ? Ui.Accent : Ui.TertiaryText);
+        var info = Ui.Row(14, icon, Ui.Column(2, Ui.Text($"PHP {build.Php}", "BodyStrongTextBlockStyle", wrap: false), detail));
+        return Ui.Card(Ui.Spread(info, actions));
     }
 
     private static string VersionText(PhpRelease release) => release.Status switch

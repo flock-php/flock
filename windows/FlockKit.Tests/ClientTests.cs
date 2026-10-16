@@ -210,6 +210,59 @@ public class ClientTests : IDisposable
     }
 
     [Fact]
+    public async Task CallsTheFrankenPhpEndpoints()
+    {
+        var handler = new Handler(r => new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StringContent(r.RequestUri!.AbsolutePath.EndsWith("/log") ? "downloading…\n" : """{"available":true,"builds":[{"php":"8.4"}]}"""),
+        });
+        using var client = new FlockClient(WriteApiJson("http://127.0.0.1:1", "t"), handler);
+
+        var state = await client.FrankenPhpAsync();
+        Assert.Equal("8.4", state.Builds[0].Php);
+        await client.CheckFrankenPhpAsync();
+        await client.InstallFrankenPhpAsync("8.4");
+        await client.CancelFrankenPhpJobAsync("8.4");
+        await client.DismissFrankenPhpJobAsync("8.4");
+        Assert.Equal("downloading…\n", await client.FrankenPhpLogAsync("8.4"));
+        await client.UninstallFrankenPhpAsync("8.4");
+
+        Assert.Equal(
+            [
+                "GET /v1/frankenphp", "POST /v1/frankenphp/check", "POST /v1/frankenphp/8.4/install",
+                "POST /v1/frankenphp/8.4/cancel", "DELETE /v1/frankenphp/8.4/job", "GET /v1/frankenphp/8.4/log",
+                "DELETE /v1/frankenphp/8.4",
+            ],
+            handler.Requests.Select(r => $"{r.Method} {r.RequestUri!.PathAndQuery}"));
+        // Installs return at once (the job runs in the daemon); uninstalling may stop a process first.
+        Assert.Equal(
+            [TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(60), TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(60)],
+            handler.Timeouts);
+    }
+
+    [Fact]
+    public async Task SwitchesAndRestartsASitesServer()
+    {
+        var handler = new Handler(_ => new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StringContent("""{"version":"dev","pid":1,"started_at":"2026-10-13T14:10:01Z"}"""),
+        });
+        using var client = new FlockClient(WriteApiJson("http://127.0.0.1:1", "t"), handler);
+
+        await client.UpdateSiteAsync("shop", new SiteChange(Server: Status.SiteServer.FrankenPhp));
+        await client.UpdateSiteAsync("shop", new SiteChange(Worker: ""));
+        await client.UpdateSiteAsync("shop", new SiteChange(Secured: true));
+        await client.RestartSiteAsync("shop");
+
+        Assert.Equal(
+            ["PATCH /v1/sites/shop", "PATCH /v1/sites/shop", "PATCH /v1/sites/shop", "POST /v1/sites/shop/restart"],
+            handler.Requests.Select(r => $"{r.Method} {r.RequestUri!.PathAndQuery}"));
+        Assert.Equal(["""{"server":"frankenphp"}""", """{"worker":""}""", """{"secured":true}""", ""], handler.Bodies);
+        // Switching servers and restarting wait for FrankenPHP to come up.
+        Assert.Equal([TimeSpan.FromMinutes(1), TimeSpan.FromMinutes(1), TimeSpan.FromSeconds(5), TimeSpan.FromMinutes(1)], handler.Timeouts);
+    }
+
+    [Fact]
     public async Task ReportsAMissingComponentLogAsAServerError()
     {
         var handler = new Handler(_ => new HttpResponseMessage(HttpStatusCode.NotFound) { Content = new StringContent("""{"error":"no log for redis"}""") });
@@ -217,5 +270,29 @@ public class ClientTests : IDisposable
 
         var error = await Assert.ThrowsAsync<FlockServerException>(() => client.ComponentLogAsync("redis"));
         Assert.Equal(404, error.StatusCode);
+    }
+
+    [Fact]
+    public async Task CallsTheAiClientAndBoostEndpoints()
+    {
+        var handler = new Handler(r => new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StringContent(r.RequestUri!.AbsolutePath.EndsWith("/boost")
+                ? """{"version":"dev","pid":1,"started_at":"2026-10-13T14:10:01Z","sites":[]}"""
+                : """{"clients":[{"id":"cursor","name":"Cursor","state":"registered"}],"command":"flock.exe","args":["mcp"],"snippet":"{}"}"""),
+        });
+        using var client = new FlockClient(WriteApiJson("http://127.0.0.1:1", "t"), handler);
+
+        await client.McpAsync();
+        var added = await client.RegisterMcpAsync("cursor");
+        Assert.Equal(McpClientState.Registered, added.Clients[0].State);
+        await client.UnregisterMcpAsync("cursor");
+        await client.AddBoostGuidelineAsync("my app");
+
+        Assert.Equal(
+            ["GET /v1/mcp", "POST /v1/mcp/clients/cursor", "DELETE /v1/mcp/clients/cursor", "POST /v1/sites/my%20app/boost"],
+            handler.Requests.Select(r => $"{r.Method} {r.RequestUri!.PathAndQuery}"));
+        Assert.Equal(TimeSpan.FromSeconds(30), handler.Timeouts[1]);
+        Assert.Equal(TimeSpan.FromMinutes(2), handler.Timeouts[^1]);
     }
 }

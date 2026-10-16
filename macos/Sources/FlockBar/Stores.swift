@@ -134,6 +134,9 @@ final class LogStore {
     var serviceText = ""
     /// The source `entries` / `serviceText` belong to; another one is still loading.
     private(set) var loaded: Source?
+    /// A log another window asked to show (a site's FrankenPHP log from Settings → Sites); the
+    /// Logs window selects it and clears this.
+    var requested: Source?
     var error: String?
 
     init(client: FlockClient) {

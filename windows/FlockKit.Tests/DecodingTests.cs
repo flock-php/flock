@@ -95,6 +95,68 @@ public class DecodingTests
     }
 
     [Fact]
+    public void DecodesWhatRunsASite()
+    {
+        var status = FlockJson.Decode<Status>("""
+            {"version":"dev","pid":1,"started_at":"2026-10-13T14:10:01Z","dns":{"tld":"test","addr":""},
+             "http_port":80,"https_port":443,"mail":"","xdebug":false,"dumps":false,"mail_count":0,"dump_count":0,"processes":[],
+             "sites":[{"name":"shop","domain":"shop.test","path":"C:\\code\\shop","php":"8.4","secured":false,"parked":false,
+                       "server":"frankenphp","worker":"octane","octane_available":true,
+                       "frankenphp":{"state":"running","version":"1.13.0","php_version":"8.4.14","port":21000,"progress":0,"log":"frankenphp-shop"}},
+                      {"name":"blog","domain":"blog.test","path":"C:\\code\\blog","php":"8.4","secured":false,"parked":false,
+                       "server":"frankenphp","worker":"","octane_available":false,
+                       "frankenphp":{"state":"installing","port":21001,"progress":-1,"problem":"FrankenPHP for PHP 8.4 is downloading","log":"frankenphp-blog"}},
+                      {"name":"legacy","domain":"legacy.test","path":"C:\\code\\legacy","php":"8.1","secured":false,"parked":true,"server":"fastcgi","worker":"","octane_available":false},
+                      {"name":"old","domain":"old.test","path":"C:\\code\\old","php":"8.3","secured":false,"parked":true}]}
+            """);
+
+        var shop = status.Sites[0];
+        Assert.True(shop.IsFrankenPhp);
+        Assert.Equal((Status.SiteServer.Octane, true), (shop.Worker, shop.OctaneAvailable));
+        Assert.True(shop.FrankenPhp!.IsRunning);
+        Assert.Equal(("1.13.0", "8.4.14", 21000, "frankenphp-shop"), (shop.FrankenPhp.Version, shop.FrankenPhp.PhpVersion, shop.FrankenPhp.Port, shop.FrankenPhp.Log));
+        var blog = status.Sites[1].FrankenPhp!;
+        Assert.True(blog.IsInstalling);
+        Assert.False(blog.HasProgress);
+        Assert.Empty(blog.Version);
+        Assert.NotEmpty(blog.Problem);
+        Assert.False(status.Sites[2].IsFrankenPhp);
+        Assert.Null(status.Sites[2].FrankenPhp);
+        // An older daemon sends none of these fields.
+        Assert.Equal((Status.SiteServer.FastCgi, "", false), (status.Sites[3].Server, status.Sites[3].Worker, status.Sites[3].OctaneAvailable));
+        Assert.Null(status.Sites[3].FrankenPhp);
+    }
+
+    [Fact]
+    public void DecodesTheFrankenPhpBuilds()
+    {
+        var state = FlockJson.Decode<FrankenPhpState>("""
+            {"available":true,"checked_at":"2026-10-13T14:10:01.5+02:00","check_error":"",
+             "builds":[{"php":"8.4","installed":"1.13.0","php_version":"8.4.14","latest":"1.13.1","update":true,"size":41943040,"job":null},
+                       {"php":"8.3","installed":"","php_version":"","latest":"1.13.1","update":false,"size":40000000,
+                        "job":{"action":"install","state":"running","phase":"downloading","progress":0.42,"error":"","started_at":"2026-10-13T14:11:00Z"}},
+                       {"php":"8.2","installed":"","php_version":"","latest":"","update":false,"size":0,
+                        "job":{"action":"install","state":"failed","phase":"downloading","progress":-1,"error":"checksum mismatch","started_at":"2026-10-13T14:11:00Z"}}]}
+            """);
+
+        Assert.True(state.Available);
+        Assert.NotNull(state.CheckedAt);
+        Assert.True(state.HasRunningJob);
+        Assert.True(state.Builds[0].IsInstalled);
+        Assert.Equal(("1.13.1", true, 41943040L), (state.Builds[0].Latest, state.Builds[0].Update, state.Builds[0].Size));
+        Assert.Null(state.Builds[0].Job);
+        Assert.Equal((0.42, "Downloading…"), (state.Builds[1].Job!.Progress, state.Builds[1].Job!.PhaseText));
+        Assert.True(state.Builds[2].Job!.IsFailed);
+        Assert.Equal("checksum mismatch", state.Builds[2].Job!.Error);
+
+        var unavailable = FlockJson.Decode<FrankenPhpState>("""{"available":false,"checked_at":null,"check_error":"offline","builds":null}""");
+        Assert.False(unavailable.Available);
+        Assert.Null(unavailable.CheckedAt);
+        Assert.Empty(unavailable.Builds);
+        Assert.False(unavailable.HasRunningJob);
+    }
+
+    [Fact]
     public void DecodesAMinimalStatusWithOmittedFields()
     {
         var status = FlockJson.Decode<Status>("""
@@ -167,5 +229,31 @@ public class DecodingTests
         var config = FlockJson.Decode<ApiConfig>("""{"url":"http://127.0.0.1:53531","token":"abc"}""");
         Assert.Equal(53531, new Uri(config.Url).Port);
         Assert.Equal("abc", config.Token);
+    }
+
+    [Fact]
+    public void DecodesTheAiClients()
+    {
+        var state = FlockJson.Decode<McpState>("""
+            {"clients":[{"id":"claude-code","name":"Claude Code","state":"registered","config":"C:\\Users\\ann\\.claude.json"},
+                        {"id":"vscode","name":"VS Code","state":"available","problem":"Flock can't read mcp.json — add Flock to it by hand"},
+                        {"id":"codex","name":"Codex","state":"missing"}],
+             "command":"C:\\Users\\ann\\AppData\\Roaming\\Flock\\bin\\flock.exe","args":["mcp"],"snippet":"{}"}
+            """);
+        Assert.Equal(["claude-code", "vscode", "codex"], state.Clients.Select(c => c.Id));
+        Assert.Equal([McpClientState.Registered, McpClientState.Available, McpClientState.Missing], state.Clients.Select(c => c.State));
+        Assert.Contains("by hand", state.Clients[1].Problem);
+        Assert.Equal(["mcp"], state.Args);
+        Assert.EndsWith("flock.exe", state.Command);
+    }
+
+    [Fact]
+    public void DecodesTheBoostStateOfSites()
+    {
+        var status = FlockJson.Decode<Status>("""
+            {"version":"dev","pid":1,"started_at":"2026-10-13T14:10:01Z","sites":[{"name":"a","boost":"missing"},{"name":"b"}]}
+            """);
+        Assert.Equal(Status.BoostState.Missing, status.Sites[0].Boost);
+        Assert.Equal("", status.Sites[1].Boost);
     }
 }

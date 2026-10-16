@@ -4,7 +4,7 @@ using Microsoft.UI.Xaml.Controls;
 namespace Flock.Tray;
 
 /// <summary>The panes of the Settings window, in navigation order.</summary>
-public enum SettingsPane { General, Sites, Php, Node, Services, Mail, Dumps, Debugger, About }
+public enum SettingsPane { General, Sites, Php, Node, Services, Mail, Dumps, Debugger, Ai, About }
 
 /// <summary>
 /// One pane of the Settings window. Build() renders it from the current state; it is called again
@@ -73,13 +73,14 @@ internal sealed partial class SettingsWindow : FlockWindow
         panes[SettingsPane.Mail] = new MailPane(this, model);
         panes[SettingsPane.Dumps] = new DumpsPane(this, model);
         panes[SettingsPane.Debugger] = new DebuggerPane(this, model);
+        panes[SettingsPane.Ai] = new AiPane(this, model);
         panes[SettingsPane.About] = new AboutPane(this, model);
 
         foreach (var (pane, glyph) in new[]
         {
             (SettingsPane.General, Ui.GlyphSettings), (SettingsPane.Sites, Ui.GlyphGlobe), (SettingsPane.Php, Ui.GlyphCode),
             (SettingsPane.Node, Ui.GlyphTerminal), (SettingsPane.Services, Ui.GlyphServer), (SettingsPane.Mail, Ui.GlyphMail),
-            (SettingsPane.Dumps, Ui.GlyphDownload), (SettingsPane.Debugger, Ui.GlyphBug), (SettingsPane.About, Ui.GlyphInfo),
+            (SettingsPane.Dumps, Ui.GlyphDownload), (SettingsPane.Debugger, Ui.GlyphBug), (SettingsPane.Ai, Ui.GlyphRobot), (SettingsPane.About, Ui.GlyphInfo),
         })
         {
             navigation.MenuItems.Add(new NavigationViewItem { Content = panes[pane].Title, Icon = new FontIcon { Glyph = glyph, FontFamily = Ui.Symbols }, Tag = pane });
