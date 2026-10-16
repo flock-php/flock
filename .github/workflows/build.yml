@@ -1,4 +1,5 @@
-# Builds the unsigned macOS disk image and Windows installer and keeps them as run artifacts.
+# Runs the Go tests, and builds the unsigned macOS disk image and Windows installer and keeps them
+# as run artifacts.
 #
 #   - by hand from the Actions tab (any branch): named dev-<commit>
 #   - on the release PR once it is marked ready for review (not while it is a draft), and again on
@@ -61,6 +62,32 @@ jobs:
             echo "::error::no version found" && exit 1
           fi
           echo "version=$version" >> "$GITHUB_OUTPUT"
+
+  # The Go tests on both platforms Flock supports (the race detector needs cgo, so macOS only).
+  go-test:
+    name: Go tests (${{ matrix.name }})
+    needs: version
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { name: macOS, os: macos-26, flags: -race }
+          - { name: Windows, os: windows-2025, flags: "" }
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref || github.event.pull_request.head.sha }}
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+
+      - name: Vet
+        run: go vet ./...
+
+      - name: Test
+        run: go test ${{ matrix.flags }} ./...
 
   macos:
     name: macOS (universal)
