@@ -90,7 +90,7 @@ jobs:
         run: go test ${{ matrix.flags }} ./...
 
   macos:
-    name: macOS (universal)
+    name: macOS (Apple silicon)
     needs: version
     runs-on: macos-26
     env:

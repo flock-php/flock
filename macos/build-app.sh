@@ -8,8 +8,8 @@ cd "$(dirname "$0")"
 VERSION="${VERSION:-$(git describe --tags --always --dirty 2>/dev/null || echo dev)}"
 OUT="../build/macos"
 
-# Universal (Apple silicon and Intel), like the CLI below.
-ARCHS=(--arch arm64 --arch x86_64)
+# Apple silicon only: Flock doesn't support Intel Macs, and an arm64-only app won't open on one.
+ARCHS=(--arch arm64)
 swift build -c release --product FlockBar "${ARCHS[@]}"
 
 APP="$OUT/Flock.app"
@@ -19,14 +19,9 @@ cp "$(swift build -c release "${ARCHS[@]}" --show-bin-path)/FlockBar" "$APP/Cont
 # The app icon and the menu bar's logomark, rendered by design/icongen.
 cp Resources/AppIcon.icns Resources/MenuBar*.png Resources/LogoMark*.png "$APP/Contents/Resources/"
 
-# The CLI for both architectures, built like `make build`; `flock install` copies it to the data dir.
-CLI="$OUT/cli"
-mkdir -p "$CLI"
-for arch in arm64 amd64; do
-	(cd .. && CGO_ENABLED=0 GOOS=darwin GOARCH="$arch" go build -ldflags "-s -w -X flock/internal/cli.Version=$VERSION" \
-		-o "build/macos/cli/flock-$arch" ./cmd/flock)
-done
-lipo -create -output "$APP/Contents/MacOS/flock" "$CLI/flock-arm64" "$CLI/flock-amd64"
+# The CLI, built like `make build`; `flock install` copies it to the data dir.
+(cd .. && CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build -ldflags "-s -w -X flock/internal/cli.Version=$VERSION" \
+	-o "build/macos/Flock.app/Contents/MacOS/flock" ./cmd/flock)
 
 cat > "$APP/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
