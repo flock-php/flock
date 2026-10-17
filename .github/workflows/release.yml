@@ -1,9 +1,9 @@
-# main (and maintenance branches like 1.x): release-please keeps a draft release PR open with the
-# next version and changelog from the conventional commits. Marking it ready for review builds it
-# (build.yml), and branch protection keeps it unmerged until those builds pass. Merging it tags the
-# release, and the builds of the merged code are attached to it, without building again.
+# main (and maintenance branches like 1.x): release-please keeps a release PR open with the next
+# version and changelog from the conventional commits. "Merge when ready" puts it in the merge queue,
+# which builds and signs it (build.yml) and merges it only once those builds pass. Merging it tags
+# the release, and the merge queue's builds are attached to it, without building again.
 #
-# Off while the repository is private: draft PRs and branch protection need a paid plan there.
+# Off while the repository is private: the merge queue and environments need a paid plan there.
 name: Release
 
 on:
@@ -35,12 +35,13 @@ jobs:
       - uses: googleapis/release-please-action@v5
         id: release
         with:
-          # RELEASE_PLEASE_TOKEN (a fine-grained PAT) is needed: the release PR must start build.yml,
-          # and PRs created with the default GITHUB_TOKEN don't trigger other workflows.
+          # RELEASE_PLEASE_TOKEN (a fine-grained PAT) is needed: the release PR must start build.yml's
+          # tests (required to enter the merge queue), and PRs created with the default GITHUB_TOKEN
+          # don't trigger other workflows.
           token: ${{ secrets.RELEASE_PLEASE_TOKEN || secrets.GITHUB_TOKEN }}
           target-branch: ${{ github.ref_name }}
 
-  # The successful build.yml run of the release PR whose code is exactly what was tagged.
+  # The successful build.yml run of the merge queue whose code is exactly what was tagged.
   find-builds:
     needs: release-please
     if: needs.release-please.outputs.release_created == 'true'
@@ -59,9 +60,9 @@ jobs:
         run: |
           tree() { gh api "repos/$GITHUB_REPOSITORY/commits/$1" --jq .commit.tree.sha; }
           want=$(tree "$TAG")
-          gh run list --repo "$GITHUB_REPOSITORY" --workflow build.yml --event pull_request \
-            --status success --limit 30 --json databaseId,headSha,headBranch \
-            --jq '.[] | select(.headBranch | startswith("release-please--")) | "\(.databaseId) \(.headSha)"' |
+          gh run list --repo "$GITHUB_REPOSITORY" --workflow build.yml --event merge_group \
+            --status success --limit 30 --json databaseId,headSha \
+            --jq '.[] | "\(.databaseId) \(.headSha)"' |
           while read -r id sha; do
             if [ "$(tree "$sha")" = "$want" ]; then
               echo "Using the builds of run $id ($sha)"
@@ -70,10 +71,14 @@ jobs:
             fi
           done
 
-  # Only when the release PR's builds can't be found (e.g. merged without them).
+  # Only when the merge queue's builds can't be found (e.g. merged past the queue).
   build:
     needs: [release-please, find-builds]
     if: needs.find-builds.outputs.run_id == ''
+    permissions:
+      contents: read
+      # Windows signing's Azure login.
+      id-token: write
     uses: ./.github/workflows/build.yml
     with:
       ref: ${{ needs.release-please.outputs.tag_name }}

@@ -35,10 +35,18 @@ finally {
     Pop-Location
 }
 
+# Signed when build.yml set up signing (sign.ps1), like the tray app (build.ps1) and the installer.
+$sign = Join-Path $PSScriptRoot "sign.ps1"
+& $sign "$out\flock.exe" "$out\flock-helper.exe"
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
 & (Join-Path $PSScriptRoot "build.ps1")
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
-& $iscc /Q "/DAppVersion=$version" "/DArch=$Arch" "/DGoArch=$goArch" (Join-Path $PSScriptRoot "installer\Flock.iss")
+# Inno Setup signs the installer and the uninstaller it contains with the "flock" sign tool ($f: the file).
+$signing = @()
+if ($env:SIGN_METADATA) { $signing = "/DSign", ('/Sflock=powershell.exe -NoProfile -ExecutionPolicy Bypass -File $q' + $sign + '$q $f') }
+& $iscc /Q "/DAppVersion=$version" "/DArch=$Arch" "/DGoArch=$goArch" @signing (Join-Path $PSScriptRoot "installer\Flock.iss")
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
 Write-Host "built $(Join-Path $PSScriptRoot "dist\Flock-Setup-$Arch.exe")"

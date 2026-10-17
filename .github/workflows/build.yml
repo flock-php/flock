@@ -1,18 +1,19 @@
-# Runs the Go tests, and builds the macOS disk image (signed and notarized when the MACOS_* secrets
-# are set, required for the release PR and releases) and the unsigned Windows installer and keeps
-# them as run artifacts.
+# Runs the Go tests, and builds the macOS disk image (signed and notarized) and the Windows installer
+# (signed with Artifact Signing) and keeps them as run artifacts. Signing takes the secrets and
+# variables of the "release" environment, and is required in the merge queue and for releases.
 #
-#   - by hand from the Actions tab (any branch): named dev-<commit>
-#   - on the release PR once it is marked ready for review (not while it is a draft), and again on
-#     every update to it: named with the PR's version. These are the checks that must pass before
-#     the release PR can be merged, and release.yml attaches these very files to the release.
-#   - from release.yml, only when it cannot find the release PR's builds
+#   - on every pull request: the Go tests only; the builds are skipped (which counts as passed)
+#   - in the merge queue: everything, named with the version in .release-please-manifest.json. These
+#     are the checks that must pass before a PR (the release PR) is merged, and release.yml attaches
+#     these very files to the release.
+#   - by hand from the Actions tab (any branch): unsigned, named dev-<commit>
+#   - from release.yml, only when it cannot find the merge queue's builds
 name: Build
 
 on:
   workflow_dispatch:
   pull_request:
-    types: [opened, synchronize, reopened, ready_for_review]
+  merge_group:
   workflow_call:
     inputs:
       ref:
@@ -28,16 +29,12 @@ permissions:
   contents: read
 
 concurrency:
-  # A newer push to the release PR replaces a build of the older one.
+  # A newer push to a PR replaces the tests of the older one.
   group: build-${{ github.event.pull_request.number || github.run_id }}
   cancel-in-progress: true
 
 jobs:
   version:
-    # Of all pull requests, only the release PR is built, and only once it is out of draft.
-    if: >-
-      github.event_name != 'pull_request' ||
-      (startsWith(github.head_ref, 'release-please--') && !github.event.pull_request.draft)
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.version.outputs.version }}
@@ -54,8 +51,10 @@ jobs:
         run: |
           if [ -n "$INPUT_VERSION" ]; then
             version="$INPUT_VERSION"
-          elif [ "$EVENT" = pull_request ]; then
-            version=$(jq -r '."."' .release-please-manifest.json)
+          elif [ "$EVENT" = merge_group ]; then
+            # The release PR's new version; any other PR keeps the last released one.
+            version=$(jq -r '."." // empty' .release-please-manifest.json)
+            version="${version:-dev-$(git rev-parse --short HEAD)}"
           else
             version="dev-$(git rev-parse --short HEAD)"
           fi
@@ -93,7 +92,10 @@ jobs:
   macos:
     name: macOS (Apple silicon)
     needs: version
+    if: github.event_name != 'pull_request'
     runs-on: macos-26
+    # Holds the signing secrets; only what may be released runs in it (builds by hand stay unsigned).
+    environment: ${{ (github.event_name == 'merge_group' || inputs.version != '') && 'release' || '' }}
     env:
       VERSION: ${{ needs.version.outputs.version }}
       SIGNING: ${{ secrets.MACOS_CERTIFICATE_P12 != '' }}
@@ -111,7 +113,7 @@ jobs:
 
       # Builds by hand may be ad-hoc signed; what gets released may not.
       - name: Require signing
-        if: env.SIGNING != 'true' && (github.event_name == 'pull_request' || inputs.version != '')
+        if: env.SIGNING != 'true' && (github.event_name == 'merge_group' || inputs.version != '')
         run: echo "::error::the MACOS_* signing secrets are not set" && exit 1
 
       # Into a keychain of its own; build-app.sh signs with $SIGN_IDENTITY and notarizes with the
@@ -170,9 +172,16 @@ jobs:
   windows:
     name: Windows (x64)
     needs: version
+    if: github.event_name != 'pull_request'
     runs-on: windows-2025
+    # As for macOS: the signing variables, and what Azure's federated credential trusts.
+    environment: ${{ (github.event_name == 'merge_group' || inputs.version != '') && 'release' || '' }}
+    permissions:
+      contents: read
+      id-token: write
     env:
       FLOCK_VERSION: ${{ needs.version.outputs.version }}
+      SIGNING: ${{ vars.ARTIFACT_SIGNING_ACCOUNT != '' }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -192,10 +201,57 @@ jobs:
             choco install innosetup --no-progress -y
           }
 
+      - name: Require signing
+        if: env.SIGNING != 'true' && (github.event_name == 'merge_group' || inputs.version != '')
+        run: echo "::error::the ARTIFACT_SIGNING_* variables are not set" && exit 1
+
+      # No secret: Azure trusts this repository's "release" environment (a federated credential).
+      - uses: azure/login@a641126d1b8aa4d1fa005f4f92df94a3a4c4c906 # v3.1.0
+        if: env.SIGNING == 'true'
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          allow-no-subscriptions: true
+
+      # SignTool's Artifact Signing plugin and its settings; windows/sign.ps1 signs with them.
+      - name: Set up signing
+        if: env.SIGNING == 'true'
+        env:
+          ENDPOINT: ${{ vars.ARTIFACT_SIGNING_ENDPOINT }}
+          ACCOUNT: ${{ vars.ARTIFACT_SIGNING_ACCOUNT }}
+          PROFILE: ${{ vars.ARTIFACT_SIGNING_PROFILE }}
+        run: |
+          $client = "$env:RUNNER_TEMP\artifact-signing"
+          Invoke-WebRequest https://api.nuget.org/v3-flatcontainer/microsoft.artifactsigning.client/1.0.146/microsoft.artifactsigning.client.1.0.146.nupkg -OutFile "$client.zip"
+          if ((Get-FileHash "$client.zip" -Algorithm SHA256).Hash -ne "7761E5D8F31E54B764DA21D33CD8B0A2940E1B05526C7DFCB5E94B0431426F70") {
+            throw "unexpected Microsoft.ArtifactSigning.Client package"
+          }
+          Expand-Archive "$client.zip" $client
+          # Signs as the Azure CLI login above, nothing else.
+          @{
+            Endpoint = $env:ENDPOINT; CodeSigningAccountName = $env:ACCOUNT; CertificateProfileName = $env:PROFILE
+            ExcludeCredentials = @("EnvironmentCredential", "ManagedIdentityCredential", "WorkloadIdentityCredential",
+              "SharedTokenCacheCredential", "VisualStudioCredential", "VisualStudioCodeCredential",
+              "AzurePowerShellCredential", "AzureDeveloperCliCredential", "InteractiveBrowserCredential")
+          } | ConvertTo-Json | Set-Content "$client\metadata.json"
+          # Takes the token now, while GitHub's short-lived ID token behind the login is still valid;
+          # the CLI keeps it for the signing after the build.
+          az account get-access-token --resource https://codesigning.azure.net --output none
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          "SIGN_DLIB=$client\bin\x64\Azure.CodeSigning.Dlib.dll" >> $env:GITHUB_ENV
+          "SIGN_METADATA=$client\metadata.json" >> $env:GITHUB_ENV
+
       - name: Build installer
         run: |
           ./windows/build-installer.ps1
           Move-Item windows/dist/Flock-Setup-x64.exe "windows/dist/Flock-Setup-$env:FLOCK_VERSION-x64.exe"
+
+      - name: Verify signature
+        if: env.SIGNING == 'true'
+        run: |
+          $signature = Get-AuthenticodeSignature windows/dist/Flock-Setup-*-x64.exe
+          $signature | Format-List Status, StatusMessage, SignerCertificate, TimeStamperCertificate
+          if ($signature.Status -ne "Valid") { throw "the installer's signature is $($signature.Status)" }
 
       - uses: actions/upload-artifact@v7
         with:

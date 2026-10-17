@@ -37,6 +37,10 @@ SolidCompression=yes
 CloseApplications=no
 ; Tells Explorer to refresh its icon cache, or the Start menu and taskbar keep an updated app's old icon.
 ChangesAssociations=yes
+#ifdef Sign
+; The "flock" sign tool build-installer.ps1 defines (windows\sign.ps1); signs the uninstaller too.
+SignTool=flock
+#endif
 
 [Tasks]
 Name: startup; Description: "Open Flock when I sign in"
