@@ -105,7 +105,7 @@ struct PostgresDetail: View {
                     .lineLimit(2)
                     .help(versions.checkError)
             }
-            Text("One version runs at a time. Each version keeps its own databases; updates within a version keep them.")
+            Text("Installed versions stay side by side. One runs at a time; each keeps its own databases, and updates within a version keep them.")
                 .font(.caption).foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
         }
@@ -357,8 +357,19 @@ private struct PostgresMajorRow: View {
             .help(major.latest.isEmpty ? "Downloads the newest PostgreSQL \(major.major)" : "Downloads PostgreSQL \(major.latest)")
         } else {
             HStack(spacing: 4) {
+                // The active major's update is in the card above.
+                if major.update, !major.latest.isEmpty, !major.active {
+                    Button("Update to \(major.latest)") {
+                        let id = major.major
+                        Task { await store.performOnPostgres(id, .updating) { try await $0.updatePostgres(id) } }
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.small)
+                    .disabled(locked)
+                    .help("Installs \(major.latest) in place of \(major.installed). Your databases stay.")
+                }
                 if !major.active {
-                    Button("Switch to \(major.major)", action: switchTo)
+                    Button("Switch…", action: switchTo)
                         .controlSize(.small)
                         .disabled(locked)
                         .help("Stops PostgreSQL \(activeMajor) and runs \(major.major) with its own databases")
@@ -391,16 +402,18 @@ private struct PostgresMajorRow: View {
     }
 }
 
-/// The first PostgreSQL: an invitation to install 18, or another major.
+/// The first PostgreSQL: the version and port, and Install, as for the catalog services.
 private struct EmptyPostgres: View {
     @Environment(AppModel.self) private var model
     let versions: PostgresVersions
     let locked: Bool
 
+    private let majorState = State<String?>(initialValue: nil)
+    private let portState = State<String?>(initialValue: nil)
+
     var body: some View {
         let store = model.settings
         let installing = versions.majors.first { store.busy($0) != .idle }
-        let newest = versions.majors.first
         let kept = versions.majors.filter(\.hasData)
 
         if let installing {
@@ -412,52 +425,51 @@ private struct EmptyPostgres: View {
             }
         } else {
             InstallInvitation(symbol: "cylinder.split.1x2.fill", color: .blue, title: "Install PostgreSQL",
-                              message: "The database for your Laravel apps, on port \(versions.port). Flock runs one version at a time, and each version keeps its own databases.") {
-                VStack(spacing: 8) {
-                    if let newest {
-                        Button {
-                            install(newest.major)
-                        } label: {
-                            Text("Install PostgreSQL \(newest.major)").padding(.horizontal, 6)
-                        }
-                        .buttonStyle(.borderedProminent)
-                        .controlSize(.large)
-                        .disabled(locked)
-                        .help(newest.latest.isEmpty ? "Downloads the newest PostgreSQL \(newest.major)" : "Downloads PostgreSQL \(newest.latest)")
-                    }
-                    Menu("Other Versions") {
-                        ForEach(versions.majors.dropFirst()) { major in
-                            Button(menuTitle(major)) { install(major.major) }
-                        }
-                    }
-                    .menuStyle(.borderlessButton)
-                    .fixedSize()
-                    .font(.callout)
-                    .disabled(locked)
-                }
+                              message: "The database for your Laravel apps. You can add other versions later; one runs at a time, and each keeps its own databases.") {
+                ServiceInstallForm(
+                    name: "PostgreSQL",
+                    options: versions.majors.map { ServiceInstallForm.Option(id: $0.major, label: optionLabel($0), latest: $0.latest) },
+                    version: Binding(get: { selectedMajor }, set: { majorState.wrappedValue = $0 }),
+                    portText: Binding(get: { portText }, set: { portState.wrappedValue = $0 }),
+                    note: nil,
+                    busy: locked,
+                    install: install
+                )
             } footer: {
-                VStack(spacing: 4) {
-                    if let newest, let support = newest.supportLabel {
-                        Text("\(newest.latest.isEmpty ? "PostgreSQL \(newest.major)" : "PostgreSQL \(newest.latest)") · \(support.text)")
-                    }
-                    if !kept.isEmpty {
-                        Text("Databases of PostgreSQL \(kept.map(\.major).joined(separator: ", ")) are still here — install that version to use them again.")
-                    }
+                if !kept.isEmpty {
+                    Text("Databases of PostgreSQL \(kept.map(\.major).joined(separator: ", ")) are still here — install that version to use them again.")
                 }
             }
         }
     }
 
-    private func menuTitle(_ major: PostgresMajor) -> String {
-        var title = "PostgreSQL \(major.major)"
-        if let support = major.supportLabel {
-            title += " — \(support.text)"
+    private var selectedMajor: String? { majorState.wrappedValue ?? versions.majors.first?.major }
+
+    private var portText: String { portState.wrappedValue ?? String(versions.port) }
+
+    /// "17 (17.6) — Until Nov 2029", or its kept databases.
+    private func optionLabel(_ major: PostgresMajor) -> String {
+        var label = major.latest.isEmpty ? major.major : "\(major.major) (\(major.latest))"
+        if major.hasData {
+            label += " — your databases"
+        } else if let support = major.supportLabel {
+            label += " — \(support.text)"
         }
-        return title
+        return label
     }
 
-    private func install(_ major: String) {
-        Task { await model.settings.performOnPostgres(major, .installing) { try await $0.installPostgres(major) } }
+    /// The port belongs to PostgreSQL, not to a version, so it is set before the install.
+    private func install() {
+        guard let major = selectedMajor, let port = ServiceInstallForm.port(portText) else { return }
+        let store = model.settings
+        let current = versions.port
+        Task {
+            if port != current {
+                await store.performOnServices { try await $0.setServicePort("postgres", port: port) }
+                guard store.error == nil else { return }
+            }
+            await store.performOnPostgres(major, .installing) { try await $0.installPostgres(major) }
+        }
     }
 }
 

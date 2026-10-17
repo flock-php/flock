@@ -59,14 +59,14 @@ struct GeneralPane: View {
                             Text("Domain")
                             Text(domainExplanation(config.tld))
                         }
-                        LabeledContent("HTTP port", value: String(config.ports.http))
-                        LabeledContent("HTTPS port", value: String(config.ports.https))
-                        LabeledContent("DNS port", value: String(config.ports.dns))
                     } header: {
                         Text("Network")
                     } footer: {
-                        Text("Changing the domain or these ports needs `flock install` (it updates DNS and certificates).")
-                            .font(.caption).foregroundStyle(.secondary)
+                        // Sites are served on 80 and 443; other ports are only set by editing config.json.
+                        if config.ports.http != 80 || config.ports.https != 443 {
+                            Text("Sites use ports \(String(config.ports.http)) (HTTP) and \(String(config.ports.https)) (HTTPS), set in config.json, so their addresses include the port.")
+                                .font(.caption).foregroundStyle(.secondary)
+                        }
                     }
 
                     Section("Data") {

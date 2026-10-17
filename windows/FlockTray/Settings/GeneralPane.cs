@@ -29,14 +29,19 @@ internal sealed class GeneralPane(SettingsWindow window, AppModel model) : Pane(
 
         if (Store.Config is { } config)
         {
-            page.Children.Add(Ui.Section("Network",
+            var network = new List<UIElement>
+            {
                 Ui.Setting("Domain", Model.Status?.Dns is { Wildcard: true }
                         ? "Every name, any subdomain included, is resolved by Flock's DNS server. Site domains are also in the hosts file."
                         : $"Only site domains and the domains added to sites resolve (the hosts file){(Model.Status?.Dns.WildcardProblem is { Length: > 0 } p ? $": {p}" : "")}.",
                     Value($"*.{config.Tld}")),
-                Ui.Setting("HTTP port", null, Value(config.Ports.Http.ToString(System.Globalization.CultureInfo.InvariantCulture))),
-                Ui.Setting("HTTPS port", null, Value(config.Ports.Https.ToString(System.Globalization.CultureInfo.InvariantCulture))),
-                Footnote("Changing the domain or these ports needs `flock install` (it updates the hosts helper and certificates).")));
+            };
+            // Sites are served on 80 and 443; other ports are only set by editing config.json.
+            if (config.Ports.Http != 80 || config.Ports.Https != 443)
+            {
+                network.Add(Footnote($"Sites use ports {config.Ports.Http} (HTTP) and {config.Ports.Https} (HTTPS), set in config.json, so their addresses include the port."));
+            }
+            page.Children.Add(Ui.Section("Network", [.. network]));
 
             var path = Ui.Text(config.Root, foreground: Ui.SecondaryText, wrap: false);
             path.MaxWidth = 420;

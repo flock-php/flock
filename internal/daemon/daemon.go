@@ -718,7 +718,7 @@ func (d *daemon) procUp(name string) bool {
 
 func (d *daemon) postgresSpec(cfg *config.Config, id string) (supervisor.Spec, error) {
 	if !postgres.Installed(d.root, id) {
-		return supervisor.Spec{}, fmt.Errorf("version %s is not installed — reinstall it with `flock postgres install`", id)
+		return supervisor.Spec{}, fmt.Errorf("version %s is not installed — reinstall it with `flock services install postgres`", id)
 	}
 	bin, data := postgres.BinDir(d.root, id), postgres.DataDir(d.root, postgres.MajorOf(id))
 	if err := postgres.InitDB(bin, data); err != nil {
@@ -898,6 +898,10 @@ func (d *daemon) Services() []api.Service {
 			hostsService.Problem = helperBlockedProblem
 		}
 		services = append(services, hostsService)
+	}
+	// Flock's own services run everywhere; only catalog services can be unavailable.
+	for i := range services {
+		services[i].Available = true
 	}
 
 	services = append(services, api.Service{

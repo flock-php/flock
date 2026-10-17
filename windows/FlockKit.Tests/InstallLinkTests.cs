@@ -59,7 +59,8 @@ public class InstallLinkTests
 
         Assert.Equal(InstallLinkResolution.AlreadyInstalled("PostgreSQL 17"), Resolve("postgres", "17"));
         Assert.Equal(InstallLinkResolution.AlreadyInstalled("Redis 8.4"), Resolve("redis", "8.4"));
-        Assert.Equal(InstallLinkResolution.OtherInstalled("Redis", "8.4", "8.10"), Resolve("redis", "8.10"));
+        // Another line installs next to the installed one.
+        Assert.Equal(new InstallLinkTarget("redis", "Redis", "8.10", "8.10", ""), Resolve("redis", "8.10")?.Target);
         Assert.Equal(InstallLinkResolution.Unavailable("Typesense", "Typesense has no Windows build."), Resolve("typesense"));
         Assert.Equal(InstallLinkResolution.UnknownVersion("MySQL", "5.7"), Resolve("mysql", "5.7"));
         Assert.Equal(InstallLinkResolution.UnknownVersion("PostgreSQL", "9"), Resolve("postgres", "9"));

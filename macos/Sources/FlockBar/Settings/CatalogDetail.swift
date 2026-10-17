@@ -36,14 +36,15 @@ struct UnavailableNotice: View {
 }
 
 /// A catalog service (MySQL, MariaDB, Redis, MongoDB, Meilisearch, Typesense, RustFS): pick a
-/// version line and port and install it, follow the install, update, switch lines or uninstall.
+/// version line and port and install it, follow the install; like PostgreSQL's majors, lines
+/// install side by side and one runs: install more, switch, update or uninstall them.
 struct CatalogDetail: View {
     @Environment(AppModel.self) private var model
     let service: Service
 
     private let logState = State<Bool>(initialValue: false)
     private let switchState = State<CatalogLine?>(initialValue: nil)
-    private let uninstallState = State<Bool>(initialValue: false)
+    private let uninstallState = State<CatalogLine?>(initialValue: nil)
 
     var body: some View {
         let store = model.settings
@@ -58,7 +59,7 @@ struct CatalogDetail: View {
                 if !service.available {
                     UnavailableNotice(service: service)
                 } else if let entry {
-                    if entry.isInstalled {
+                    if entry.lines.contains(where: \.installed) {
                         versions(entry)
                         Divider()
                         ServiceInfo(service: service)
@@ -84,12 +85,18 @@ struct CatalogDetail: View {
         .alert(item: switchState.projectedValue) { line in
             switchAlert(line, entry: entry)
         }
-        .confirmationDialog("Uninstall \(service.name)?", isPresented: uninstallState.projectedValue) {
-            Button("Uninstall, Keep Data") { uninstall(deleteData: false) }
-            Button("Uninstall and Delete Data", role: .destructive) { uninstall(deleteData: true) }
+        .confirmationDialog(uninstallState.wrappedValue.map { "Uninstall \(service.name) \($0.label)?" } ?? "",
+                            isPresented: Binding(get: { uninstallState.wrappedValue != nil }, set: { if !$0 { uninstallState.wrappedValue = nil } }),
+                            presenting: uninstallState.wrappedValue) { line in
+            if line.hasData {
+                Button("Uninstall, Keep Data") { uninstall(line, deleteData: false) }
+                Button("Uninstall and Delete Data", role: .destructive) { uninstall(line, deleteData: true) }
+            } else {
+                Button("Uninstall", role: .destructive) { uninstall(line, deleteData: false) }
+            }
             Button("Cancel", role: .cancel) {}
-        } message: {
-            Text("\(service.name) stops and your sites can't use it until you install it again. Keep its data to pick up where you left off when you reinstall.")
+        } message: { line in
+            Text(uninstallMessage(line, entry: entry))
         }
     }
 
@@ -135,7 +142,7 @@ struct CatalogDetail: View {
                     } switchTo: {
                         switchState.wrappedValue = line
                     } uninstall: {
-                        uninstallState.wrappedValue = true
+                        uninstallState.wrappedValue = line
                     } showLog: {
                         logState.wrappedValue = true
                     }
@@ -144,7 +151,7 @@ struct CatalogDetail: View {
             .card(padding: 0)
 
             Text(entry.lines.count > 1
-                 ? "One version runs at a time. Each version keeps its own data; updates within a version keep it."
+                 ? "Installed versions stay side by side. One runs at a time; each keeps its own data, and updates within a version keep it."
                  : "Updates keep your data.")
                 .font(.caption).foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -177,22 +184,41 @@ struct CatalogDetail: View {
         Task { await model.settings.performOnCatalog(id) { try await $0.installCatalogService(id, line: line) } }
     }
 
-    private func uninstall(deleteData: Bool) {
+    private func uninstall(_ line: CatalogLine, deleteData: Bool) {
         let id = service.id
-        Task { await model.settings.performOnCatalog(id) { try await $0.uninstallCatalogService(id, deleteData: deleteData) } }
+        let target = line.id
+        Task { await model.settings.performOnCatalog(id) { try await $0.uninstallCatalogService(id, line: target, deleteData: deleteData) } }
+    }
+
+    private func uninstallMessage(_ line: CatalogLine, entry: CatalogService?) -> String {
+        let name = service.name
+        var message = ""
+        if line.active {
+            if let next = entry?.lines.first(where: { $0.installed && $0.id != line.id }) {
+                message = "\(name) \(line.label) stops and \(name) \(next.label) becomes the active version. "
+            } else {
+                message = "\(name) \(line.label) stops; your sites can't use \(name) until you install a version again. "
+            }
+        }
+        return message + (line.hasData
+            ? "Keep its data to pick up where you left off when you install \(line.label) again."
+            : "It holds no data.")
     }
 
     private func switchAlert(_ target: CatalogLine, entry: CatalogService?) -> Alert {
         let name = service.name
-        let current = entry?.lines.first { $0.installed }?.label ?? entry?.line ?? ""
+        let current = entry?.line ?? ""
         let own = target.hasData
-            ? "\(name) \(target.label) uses its own data from before."
+            ? "\(name) \(target.label) uses its own data."
             : "\(name) \(target.label) starts with empty data."
-        let message = "\(name) \(current) is replaced; its data stays but isn't used until you switch back. \(own)"
+        let message = current.isEmpty ? own : "\(name) \(current) stops; its data stays but isn't used until you switch back. \(own)"
+        let id = service.id
         return Alert(
             title: Text("Switch to \(name) \(target.label)?"),
             message: Text(message),
-            primaryButton: .default(Text("Switch")) { install(line: target.id) },
+            primaryButton: .default(Text("Switch")) {
+                Task { await model.settings.performOnCatalog(id) { try await $0.activateCatalogService(id, line: target.id) } }
+            },
             secondaryButton: .cancel()
         )
     }
@@ -217,47 +243,66 @@ extension CatalogService {
     }
 }
 
-/// One line of an installed catalog service: the running one with update and uninstall, the
-/// others to switch to.
+/// One line of a catalog service, like a PostgreSQL major: install it next to the others, or
+/// update, switch to and uninstall an installed one.
 private struct CatalogLineRow: View {
     let entry: CatalogService
     let line: CatalogLine
     let locked: Bool
-    let update: () -> Void
+    /// Installs the line, or updates (reinstalls) it when it is installed.
+    let install: () -> Void
     let switchTo: () -> Void
     let uninstall: () -> Void
     let showLog: () -> Void
 
     var body: some View {
         HStack(spacing: 10) {
-            Image(systemName: line.installed ? "checkmark.circle.fill" : "circle")
+            Image(systemName: line.active ? "checkmark.circle.fill" : line.installed ? "checkmark.circle" : "circle")
                 .font(.system(size: 15))
-                .foregroundStyle(line.installed ? Color.green : Color.secondary.opacity(0.5))
+                .foregroundStyle(line.active ? Color.green : line.installed ? Color.secondary : Color.secondary.opacity(0.5))
                 .frame(width: 22)
             VStack(alignment: .leading, spacing: 1) {
-                Text("\(entry.name) \(line.label)").font(.body.weight(line.installed ? .medium : .regular))
-                Text(detail).font(.caption).foregroundStyle(.secondary).lineLimit(1)
-                if line.installed, !entry.yanked.isEmpty {
-                    Label(entry.update ? "Withdrawn: \(entry.yanked) — update to replace it" : "Withdrawn: \(entry.yanked)", systemImage: "exclamationmark.triangle.fill")
+                HStack(spacing: 6) {
+                    Text("\(entry.name) \(line.label)").font(.body.weight(line.installed ? .medium : .regular))
+                    if line.active {
+                        Badge(text: "Active")
+                    }
+                }
+                Text(detail).font(.caption).foregroundStyle(line.update ? AnyShapeStyle(Color.accentColor) : AnyShapeStyle(.secondary)).lineLimit(1)
+                if !line.yanked.isEmpty {
+                    Label(line.update ? "Withdrawn: \(line.yanked) — update to replace it" : "Withdrawn: \(line.yanked)", systemImage: "exclamationmark.triangle.fill")
                         .font(.caption).foregroundStyle(.orange)
                         .lineLimit(2)
                         .help("This build was withdrawn. Flock replaces it as soon as a fixed build is published.")
                 }
             }
             Spacer(minLength: 8)
-            if line.installed {
-                if entry.update, !entry.latest.isEmpty {
-                    Button("Update to \(entry.latest)", action: update)
+            if !line.installed {
+                Button("Install", action: install)
+                    .controlSize(.small)
+                    .disabled(locked)
+                    .help(installHelp)
+            } else {
+                if line.update, !line.latest.isEmpty {
+                    Button("Update to \(line.latest)", action: install)
                         .buttonStyle(.borderedProminent)
                         .controlSize(.small)
                         .disabled(locked)
-                        .help("Downloads \(entry.latest) and replaces \(entry.installed); your data stays.")
+                        .help("Downloads \(line.latest) and replaces \(line.version); your data stays.")
+                }
+                if !line.active {
+                    Button("Switch…", action: switchTo)
+                        .controlSize(.small)
+                        .disabled(locked)
+                        .help(entry.isInstalled ? "Stops \(entry.name) \(entry.line) and runs \(line.label) with its own data" : "Runs \(entry.name) \(line.label)")
                 }
                 Menu {
-                    Button(entry.update ? "Update to \(entry.latest)" : "Reinstall \(entry.installed)", action: update)
+                    if !line.update {
+                        Button("Reinstall \(line.version)", action: install)
+                    }
                     Button("Show Last Log", action: showLog)
                     Divider()
-                    Button("Uninstall…", role: .destructive, action: uninstall)
+                    Button("Uninstall \(entry.name) \(line.label)…", role: .destructive, action: uninstall)
                 } label: {
                     Image(systemName: "ellipsis.circle")
                 }
@@ -266,24 +311,33 @@ private struct CatalogLineRow: View {
                 .fixedSize()
                 .help("More")
                 .disabled(locked)
-            } else {
-                Button("Switch…", action: switchTo)
-                    .controlSize(.small)
-                    .disabled(locked)
-                    .help(line.latest.isEmpty ? "Installs the newest \(line.label) instead" : "Installs \(line.latest) instead of \(entry.installed)")
             }
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 9)
     }
 
-    private var detail: String {
-        if line.installed {
-            return entry.update ? "\(entry.installed) · \(entry.latest) is available" : entry.installed
+    private var installHelp: String {
+        var help = line.latest.isEmpty ? "Downloads the newest \(entry.name) \(line.label)." : "Downloads \(entry.name) \(line.latest)."
+        if entry.isInstalled {
+            help += " \(entry.name) \(entry.line) keeps running until you switch."
         }
-        var parts = [line.latest.isEmpty ? "Not installed" : "\(line.latest) available"]
         if line.hasData {
-            parts.append("has data")
+            help += " Its data is still here and comes back."
+        }
+        return help
+    }
+
+    private var detail: String {
+        var parts: [String] = []
+        if line.installed {
+            parts.append(line.version)
+            parts.append(line.update ? (line.latest == line.version ? "new build available" : "\(line.latest) available") : "up to date")
+        } else {
+            parts.append(line.latest.isEmpty ? "Not installed" : "Not installed · \(line.latest) available")
+        }
+        if line.hasData {
+            parts.append(line.installed ? "has data" : "data kept")
         }
         return parts.joined(separator: " · ")
     }
@@ -337,19 +391,65 @@ private struct CatalogInstallCard: View {
     private var portText: String { portState.wrappedValue ?? String(entry.port) }
 
     /// The port typed in, when it is valid.
-    private var port: Int? {
-        Int(portText).flatMap { (1024...65535).contains($0) ? $0 : nil }
-    }
+    private var port: Int? { ServiceInstallForm.port(portText) }
 
     private var form: some View {
+        ServiceInstallForm(
+            name: entry.name,
+            options: entry.lines.map { ServiceInstallForm.Option(id: $0.id, label: $0.latest.isEmpty ? $0.label : "\($0.label) (\($0.latest))", latest: $0.latest) },
+            version: Binding(get: { selectedLine }, set: { lineState.wrappedValue = $0 }),
+            portText: Binding(get: { portText }, set: { portState.wrappedValue = $0 }),
+            note: entry.port != entry.defaultPort && portState.wrappedValue == nil
+                ? "Port \(String(entry.defaultPort)) is taken, so Flock suggests \(String(entry.port))." : nil,
+            busy: busy
+        ) {
+            let line = selectedLine
+            let port = self.port
+            perform { try await $0.installCatalogService(entry.id, line: line, port: port) }
+        }
+    }
+
+    private func perform(_ change: @escaping @Sendable (FlockClient) async throws -> ServiceCatalog) {
+        let id = entry.id
+        Task { await model.settings.performOnCatalog(id, change) }
+    }
+}
+
+/// Installing a service that isn't installed yet, the same for PostgreSQL and the catalog
+/// services: the version (when there is a choice) and the port, then Install.
+struct ServiceInstallForm: View {
+    struct Option: Identifiable {
+        let id: String
+        let label: String
+        /// The release Install downloads; empty when unknown.
+        let latest: String
+    }
+
+    let name: String
+    let options: [Option]
+    @Binding var version: String?
+    @Binding var portText: String
+    /// Why the suggested port isn't the usual one.
+    let note: String?
+    let busy: Bool
+    let install: () -> Void
+
+    /// A port typed in, when it is valid.
+    static func port(_ text: String) -> Int? {
+        Int(text).flatMap { (1024...65535).contains($0) ? $0 : nil }
+    }
+
+    var body: some View {
+        let port = Self.port(portText)
+
         VStack(spacing: 12) {
             Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 8) {
-                if entry.lines.count > 1 {
+                if options.count > 1 {
                     GridRow {
                         Text("Version").foregroundStyle(.secondary).gridColumnAlignment(.trailing)
-                        Picker("Version", selection: Binding(get: { selectedLine ?? "" }, set: { lineState.wrappedValue = $0 })) {
-                            ForEach(entry.lines) { line in
-                                Text(line.latest.isEmpty ? line.label : "\(line.label) (\(line.latest))").tag(line.id)
+                        Picker("Version", selection: Binding(get: { version ?? "" }, set: { version = $0 })) {
+                            ForEach(options) { option in
+                                Text(option.label).tag(option.id)
                             }
                         }
                         .labelsHidden()
@@ -358,25 +458,20 @@ private struct CatalogInstallCard: View {
                 }
                 GridRow {
                     Text("Port").foregroundStyle(.secondary).gridColumnAlignment(.trailing)
-                    TextField("Port", text: Binding(get: { portText }, set: { portState.wrappedValue = $0 }))
+                    TextField("Port", text: $portText)
                         .labelsHidden()
                         .monospacedDigit()
                         .frame(width: 80)
                 }
             }
-            if entry.port != entry.defaultPort, portState.wrappedValue == nil {
-                Text("Port \(String(entry.defaultPort)) is taken, so Flock suggests \(String(entry.port)).")
-                    .font(.caption).foregroundStyle(.secondary)
-            } else if port == nil {
+            if port == nil {
                 Text("Pick a port between 1024 and 65535.")
                     .font(.caption).foregroundStyle(.orange)
+            } else if let note {
+                Text(note).font(.caption).foregroundStyle(.secondary)
             }
             HStack(spacing: 8) {
-                Button {
-                    let line = selectedLine
-                    let port = self.port
-                    perform { try await $0.installCatalogService(entry.id, line: line, port: port) }
-                } label: {
+                Button(action: install) {
                     Text(installLabel).padding(.horizontal, 6)
                 }
                 .buttonStyle(.borderedProminent)
@@ -390,13 +485,7 @@ private struct CatalogInstallCard: View {
     }
 
     private var installLabel: String {
-        let line = entry.lines.first { $0.id == selectedLine }
-        guard let latest = line?.latest, !latest.isEmpty else { return "Install \(entry.name)" }
-        return "Install \(entry.name) \(latest)"
-    }
-
-    private func perform(_ change: @escaping @Sendable (FlockClient) async throws -> ServiceCatalog) {
-        let id = entry.id
-        Task { await model.settings.performOnCatalog(id, change) }
+        guard let latest = options.first(where: { $0.id == version })?.latest, !latest.isEmpty else { return "Install \(name)" }
+        return "Install \(name) \(latest)"
     }
 }

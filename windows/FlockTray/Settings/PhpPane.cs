@@ -60,7 +60,8 @@ internal sealed class PhpPane(SettingsWindow window, AppModel model) : Pane(wind
                 checking = false;
                 Rerender();
             });
-        var header = Ui.Spread(Ui.Text("Versions", "BodyStrongTextBlockStyle"), Ui.Row(6, Ui.Caption(checkedText, wrap: false), check));
+        // Named after the server, like the FrankenPHP section below and a site's server picker.
+        var header = Ui.Spread(Ui.Text("PHP-CGI", "BodyStrongTextBlockStyle"), Ui.Row(6, Ui.Caption(checkedText, wrap: false), check));
         header.Margin = new Thickness(1, 0, 0, 6);
         var versions = new StackPanel { Spacing = 4, Margin = new Thickness(0, 0, 0, 24) };
         versions.Children.Add(header);
@@ -161,7 +162,13 @@ internal sealed class PhpPane(SettingsWindow window, AppModel model) : Pane(wind
             }
             else
             {
-                detail = Ui.Caption(build.IsInstalled ? $"FrankenPHP {build.Installed} (PHP {build.PhpVersion})" : "Not installed — downloaded when a site needs it", wrap: false);
+                detail = Ui.Caption(build.IsInstalled ? $"FrankenPHP {build.Installed} (PHP {build.PhpVersion})" : "Not installed · downloads by itself when a site uses it", wrap: false);
+            }
+            // Installing ahead makes switching a site to FrankenPHP immediate (else PHP-CGI serves it meanwhile).
+            if (!build.IsInstalled && build.Latest.Length > 0)
+            {
+                actions.Children.Add(Ui.Button("Install", () => _ = Run(key, () => Store.PerformOnFrankenPhpAsync(c => c.InstallFrankenPhpAsync(minor))),
+                    glyph: Ui.GlyphDownload, tooltip: build.Size > 0 ? $"Downloads FrankenPHP for PHP {build.Latest} ({build.Size / 1_000_000} MB)" : $"Downloads FrankenPHP for PHP {build.Latest}"));
             }
             if (build.Update)
             {

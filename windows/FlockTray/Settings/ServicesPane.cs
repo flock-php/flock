@@ -16,9 +16,14 @@ internal sealed partial class ServicesPane(SettingsWindow window, AppModel model
     // Show every service, or only the installed ones (and those installing). Kept while the app runs.
     private static bool showAll = true;
     private string? selection;
+    // The list and the details scroll separately, like on macOS. Kept across re-renders, which
+    // only swap their content, so they keep their place.
+    private readonly KeptScroller listScroller = new(window.DispatcherQueue);
+    private readonly KeptScroller detailScroller = new(window.DispatcherQueue);
 
     public override string Title => "Services";
     public override string Subtitle => "Databases, caches, search and the tools around your sites. Everything listens on 127.0.0.1 only.";
+    public override bool ScrollsItself => true;
 
     public override void Shown(CancellationToken hidden)
     {
@@ -30,6 +35,10 @@ internal sealed partial class ServicesPane(SettingsWindow window, AppModel model
     /// <summary>Shows a service's details, e.g. to install it.</summary>
     public void Select(string id)
     {
+        if (id != selection)
+        {
+            detailScroller.ToTop(); // another service's details start at the top
+        }
         selection = id;
         Rerender();
     }
@@ -99,7 +108,6 @@ internal sealed partial class ServicesPane(SettingsWindow window, AppModel model
         };
         ToolTipService.SetToolTip(filter, "Show only installed services, or every service Flock offers");
         filter.Margin = new Thickness(-4, -8, 0, 4);
-        list.Children.Add(filter);
         var present = services.Select(s => s.Category).Distinct().ToList();
         var categories = CategoryOrder.Where(present.Contains).Concat(present.Except(CategoryOrder).Order()).ToList();
         foreach (var category in categories)
@@ -124,14 +132,23 @@ internal sealed partial class ServicesPane(SettingsWindow window, AppModel model
             list.Children.Add(more);
         }
 
-        // The details get the wider share: PostgreSQL's versions and the install progress live there.
+        // A fixed list and the details in the rest, as on macOS: neither moves when another
+        // service is selected.
         var grid = new Grid { ColumnSpacing = 16 };
-        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star), MinWidth = 220 });
-        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1.15, GridUnitType.Star), MinWidth = 300, MaxWidth = 460 });
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(320) });
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star), MinWidth = 300 });
+        // The filter stays put above the list. Room on the right keeps the scroll bars off the cards.
+        list.Margin = new Thickness(0, 0, 14, 8);
+        var left = new Grid();
+        left.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        left.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
+        left.Children.Add(filter);
+        Grid.SetRow(listScroller.Place(left, list), 1);
+
         var detail = Detail(selected);
-        Grid.SetColumn(detail, 1);
-        grid.Children.Add(list);
-        grid.Children.Add(detail);
+        detail.Margin = new Thickness(0, 0, 14, 8);
+        grid.Children.Add(left);
+        Grid.SetColumn(detailScroller.Place(grid, detail), 1);
         return grid;
     }
 
@@ -194,7 +211,7 @@ internal sealed partial class ServicesPane(SettingsWindow window, AppModel model
         }
         else if (IsInstallable(service))
         {
-            // Opens the details, where it is installed (with a version choice for PostgreSQL).
+            // Opens the details, where the version and port are picked.
             actions.Children.Add(Ui.Button("Install…", () => Select(service.Id), glyph: Ui.GlyphDownload));
         }
         else
@@ -283,7 +300,7 @@ internal sealed partial class ServicesPane(SettingsWindow window, AppModel model
         {
             panel.Children.Add(Ui.Caption(service.Running
                 ? $"Windows sends every name under .{tld} here (a DNS rule set up by `flock install`), so any subdomain of a site works (tenant1.app.{tld}, a.b.app.{tld}) without adding it."
-                : $"Wildcard subdomains don't resolve: {(service.Problem.Length > 0 ? service.Problem : "the DNS server isn't running")}. Site domains still work through the hosts file; add the subdomains you use to their site (Sites → … → Add Domain…)."));
+                : $"Wildcard subdomains don't resolve: {(service.Problem.Length > 0 ? service.Problem : "the DNS server isn't running")}. Site domains still work through the hosts file; add the subdomains you use to their site (Sites → the site → Add Domain…)."));
         }
         // The web server and DNS ports: shown, but only `flock install` changes them.
         if (service.Installed && service.Port > 0 && service.Id is "web" or "dns")

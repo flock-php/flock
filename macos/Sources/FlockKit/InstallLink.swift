@@ -61,11 +61,6 @@ public struct InstallLink: Equatable, Sendable {
         if target.installed {
             return .installed(name: "\(entry.name) \(target.label)")
         }
-        if entry.isInstalled {
-            // Another line runs; switching replaces it, which the Services pane explains better.
-            let current = entry.lines.first { $0.installed }?.label ?? entry.line
-            return .otherInstalled(name: entry.name, installed: current, requested: target.label)
-        }
         return .install(Install(service: entry.id, name: entry.name, line: target.id, label: target.label, version: target.latest))
     }
 
@@ -74,8 +69,6 @@ public struct InstallLink: Equatable, Sendable {
         case install(Install)
         /// Already installed: nothing to do.
         case installed(name: String)
-        /// Another version line of the service is installed.
-        case otherInstalled(name: String, installed: String, requested: String)
         /// The service doesn't run on this platform.
         case unavailable(name: String, reason: String)
         /// This Flock doesn't know the service.
@@ -101,7 +94,6 @@ extension InstallLink.Resolution {
         switch self {
         case .install(let install): "Install \(install.name) \(install.label)?"
         case .installed(let name): "\(name) is already installed"
-        case .otherInstalled(let name, let installed, _): "\(name) \(installed) is installed"
         case .unavailable(let name, _): "\(name) isn't available on this computer"
         case .unknown(let name): "Flock doesn't offer \(name)"
         case .unknownVersion(let name, let line): "Flock doesn't offer \(name) \(line)"
@@ -115,8 +107,6 @@ extension InstallLink.Resolution {
             return "A link asked Flock to install \(what). It runs on 127.0.0.1 for your sites."
         case .installed:
             return "You'll find it in Settings → Services."
-        case .otherInstalled(let name, _, let requested):
-            return "To use \(name) \(requested) instead, switch versions in Settings → Services. Each version keeps its own data."
         case .unavailable(_, let reason):
             return reason.isEmpty ? "Flock can't run it on this platform." : reason
         case .unknown, .unknownVersion:

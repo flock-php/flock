@@ -8,7 +8,7 @@ import (
 	"flock/internal/binaries"
 )
 
-// DefaultMajor is the major `flock postgres install` installs without arguments.
+// DefaultMajor is the major `flock services install postgres` installs without arguments.
 const DefaultMajor = "18"
 
 // EndOfLife is when each major stops receiving fixes upstream (postgresql.org/support/versioning).

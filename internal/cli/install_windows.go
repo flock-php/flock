@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"errors"
 	"fmt"
+	"net"
 	"os"
 	"os/exec"
 	"os/user"
@@ -202,6 +203,7 @@ func installService(root, bin string) error {
 
 	// Stop the running daemon first: it holds flockd.exe and the ports.
 	_ = exec.Command("schtasks", "/End", "/TN", taskName).Run()
+	waitDaemonGone(root)
 	exe, args := daemonCommand(root)
 	if err := replaceExecutable(exe, gui); err != nil {
 		return err
@@ -431,6 +433,9 @@ func restartService() error {
 	}
 	if taskInstalled() {
 		_ = exec.Command("schtasks", "/End", "/TN", taskName).Run()
+		// Also a daemon the task didn't start (`flock install` starts one directly).
+		stopDaemonProcess()
+		waitDaemonGone(root)
 		if out, err := exec.Command("schtasks", "/Run", "/TN", taskName).CombinedOutput(); err != nil {
 			return fmt.Errorf("schtasks /Run: %v: %s", err, bytes.TrimSpace(out))
 		}
@@ -438,10 +443,25 @@ func restartService() error {
 	}
 	if runKeyInstalled() {
 		stopDaemonProcess()
+		waitDaemonGone(root)
 		exe, args := daemonCommand(root)
 		return startDetached(exe, args)
 	}
 	return fmt.Errorf("the background daemon is not installed — run `flock install`")
+}
+
+// waitDaemonGone waits (up to 10 s) until no daemon answers on the socket any more. Ending the task
+// or the process returns before Windows has ended it, and a daemon started meanwhile finds the old
+// one still answering, exits as "already running", and its watchdog doesn't retry: nothing runs.
+func waitDaemonGone(root string) {
+	socket := paths.Socket(root)
+	for deadline := time.Now().Add(10 * time.Second); time.Now().Before(deadline); time.Sleep(100 * time.Millisecond) {
+		conn, err := net.DialTimeout("unix", socket, 500*time.Millisecond)
+		if err != nil {
+			return
+		}
+		_ = conn.Close()
+	}
 }
 
 // ensurePrivileged checks the administrator-owned parts and, if anything is missing or outdated,

@@ -138,8 +138,8 @@ public sealed class ComponentJob
 
 /// <summary>
 /// GET /v1/catalog — the services Flock installs on request besides PostgreSQL: MySQL, MariaDB,
-/// MongoDB, Valkey, Redis, Meilisearch, Typesense, RustFS. Each runs one version (of a line the user
-/// picks) on its own port; installs run as jobs in the daemon.
+/// MongoDB, Valkey, Redis, Meilisearch, Typesense, RustFS. Their lines install side by side, and one
+/// of them (the active one) runs on the service's port; installs run as jobs in the daemon.
 /// </summary>
 public sealed class ServiceCatalog
 {
@@ -184,9 +184,9 @@ public sealed class CatalogService
     [JsonIgnore]
     public bool IsInstalled => Installed.Length > 0;
 
-    /// <summary>The installed line, else the newest.</summary>
+    /// <summary>The active line, else the newest.</summary>
     [JsonIgnore]
-    public CatalogLine? PreferredLine => Lines.FirstOrDefault(l => l.Installed) ?? Lines.FirstOrDefault();
+    public CatalogLine? PreferredLine => Lines.FirstOrDefault(l => l.Active) ?? Lines.FirstOrDefault();
 }
 
 /// <summary>A release line of a catalog service ("8.4 LTS").</summary>
@@ -197,7 +197,16 @@ public sealed class CatalogLine
     public string Id { get; init; } = "";
     public string Label { get => label ?? Id; init => label = value; }
     public string Latest { get; init; } = "";
+    /// <summary>Installed (lines install side by side; one of them is active).</summary>
     public bool Installed { get; init; }
+    /// <summary>The installed version; empty when not installed.</summary>
+    public string Version { get; init; } = "";
+    /// <summary>The installed version is the one that runs.</summary>
+    public bool Active { get; init; }
+    /// <summary>Latest (or a newer build of it) can replace Version.</summary>
+    public bool Update { get; init; }
+    /// <summary>Why the installed build was withdrawn; empty when it wasn't. Flock replaces it by itself.</summary>
+    public string Yanked { get; init; } = "";
     /// <summary>The line has data (each line keeps its own).</summary>
     public bool HasData { get; init; }
 }

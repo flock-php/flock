@@ -352,10 +352,23 @@ public actor FlockClient {
         try await decode(ServiceCatalog.self, "DELETE", "/v1/catalog/\(escape(id))/job")
     }
 
-    /// Uninstalls a catalog service; its data stays unless `deleteData` is set.
-    public func uninstallCatalogService(_ id: String, deleteData: Bool = false) async throws -> ServiceCatalog {
-        try await decode(ServiceCatalog.self, "DELETE", "/v1/catalog/\(escape(id))",
-                         query: deleteData ? [URLQueryItem(name: "delete_data", value: "1")] : [], timeout: 60)
+    /// Runs an installed line of a catalog service instead of the active one, on the service's port.
+    public func activateCatalogService(_ id: String, line: String) async throws -> ServiceCatalog {
+        let body = try JSONEncoder().encode(["line": line])
+        return try await decode(ServiceCatalog.self, "POST", "/v1/catalog/\(escape(id))/activate", body: body, timeout: 60)
+    }
+
+    /// Uninstalls a line of a catalog service (nil: every line); its data stays unless `deleteData`
+    /// is set. When the active line goes, the newest other installed line takes over.
+    public func uninstallCatalogService(_ id: String, line: String? = nil, deleteData: Bool = false) async throws -> ServiceCatalog {
+        var query: [URLQueryItem] = []
+        if let line {
+            query.append(URLQueryItem(name: "line", value: line))
+        }
+        if deleteData {
+            query.append(URLQueryItem(name: "delete_data", value: "1"))
+        }
+        return try await decode(ServiceCatalog.self, "DELETE", "/v1/catalog/\(escape(id))", query: query, timeout: 60)
     }
 
     /// The tail of the current or last install's output; empty when there is none.

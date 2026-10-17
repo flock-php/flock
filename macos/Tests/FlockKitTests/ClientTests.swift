@@ -201,8 +201,10 @@ struct ClientTests {
         _ = try await client.installCatalogService("redis")
         _ = try await client.cancelCatalogJob("mysql")
         _ = try await client.dismissCatalogJob("mysql")
+        _ = try await client.activateCatalogService("mysql", line: "9.7")
         _ = try await client.uninstallCatalogService("mysql")
-        _ = try await client.uninstallCatalogService("mongodb", deleteData: true)
+        _ = try await client.uninstallCatalogService("mysql", line: "8.4")
+        _ = try await client.uninstallCatalogService("mongodb", line: "7.0", deleteData: true)
         #expect(try await client.catalogLog("mysql") == "==> Downloading\n")
         #expect(try await client.catalogLog("redis") == "")
 
@@ -214,15 +216,18 @@ struct ClientTests {
             "POST \(base)/redis/install",
             "POST \(base)/mysql/cancel",
             "DELETE \(base)/mysql/job",
+            "POST \(base)/mysql/activate",
             "DELETE \(base)/mysql",
-            "DELETE \(base)/mongodb?delete_data=1",
+            "DELETE \(base)/mysql?line=8.4",
+            "DELETE \(base)/mongodb?line=7.0&delete_data=1",
             "GET \(base)/mysql/log",
             "GET \(base)/redis/log",
         ])
         let bodies = StubProtocol.requests.map(\.body)
         #expect(bodies[2].contains(#""line":"8.4""#) && bodies[2].contains(#""port":3307"#))
         #expect(bodies[3].contains(#""line":"""#) && bodies[3].contains(#""port":0"#))
-        #expect(StubProtocol.requests.map(\.timeout) == [5, 60, 5, 5, 5, 5, 60, 60, 5, 5])
+        #expect(bodies[6].contains(#""line":"9.7""#))
+        #expect(StubProtocol.requests.map(\.timeout) == [5, 60, 5, 5, 5, 5, 60, 60, 60, 60, 5, 5])
     }
 
     @Test func talksToTheAIClientAndBoostEndpoints() async throws {

@@ -29,7 +29,7 @@ struct PHPPane: View {
                         }
                     } header: {
                         HStack {
-                            Text("Versions")
+                            Text("PHP-FPM")
                             Spacer()
                             checkedLine(catalog)
                         }
@@ -343,7 +343,7 @@ private struct FrankenPHPBuildRow: View {
     }
 
     private var installedText: String {
-        guard build.isInstalled else { return "Not installed — downloaded when a site needs it" }
+        guard build.isInstalled else { return "Not installed · downloads by itself when a site uses it" }
         return build.phpVersion.isEmpty ? "FrankenPHP \(build.installed)" : "FrankenPHP \(build.installed) (PHP \(build.phpVersion))"
     }
 
@@ -403,6 +403,15 @@ private struct FrankenPHPBuildRow: View {
                 run { try await $0.dismissFrankenPHPJob(build.php) }
             }
         } else {
+            // Installing ahead makes switching a site to FrankenPHP immediate (else PHP-FPM serves it meanwhile).
+            if !build.isInstalled, !build.latest.isEmpty {
+                Button {
+                    run { try await $0.installFrankenPHP(build.php) }
+                } label: {
+                    Label("Install", systemImage: "arrow.down.circle")
+                }
+                .help(build.size > 0 ? "Downloads FrankenPHP for PHP \(build.latest) (\(build.size / 1_000_000) MB)" : "Downloads FrankenPHP for PHP \(build.latest)")
+            }
             if build.update {
                 Button {
                     run { try await $0.installFrankenPHP(build.php) }

@@ -6,8 +6,8 @@ namespace Flock.Tray;
 
 /// <summary>
 /// The catalog services (MySQL, MariaDB, Redis, MongoDB, Meilisearch, RustFS): pick a version line
-/// and a port and install, follow the install (a job in the daemon), update, switch lines or
-/// uninstall. Each line keeps its own data.
+/// and a port and install, follow the install (a job in the daemon); like PostgreSQL's majors,
+/// lines install side by side: install more, switch, update or uninstall them. Each keeps its own data.
 /// </summary>
 internal sealed partial class ServicesPane
 {
@@ -38,7 +38,7 @@ internal sealed partial class ServicesPane
         {
             panel.Children.Add(CatalogJobCard(entry, job));
         }
-        if (!entry.IsInstalled)
+        if (!entry.Lines.Any(l => l.Installed))
         {
             if (entry.Job is not { IsRunning: true } && !pendingCatalog.Contains(entry.Id))
             {
@@ -52,66 +52,12 @@ internal sealed partial class ServicesPane
         panel.Children.Add(CheckFooter(catalog.CheckedAt, catalog.CheckError, postgres: false));
     }
 
-    /// <summary>What it is, the version line and port, and Install.</summary>
-    private Border CatalogInstallCard(CatalogService entry)
-    {
-        var content = Ui.Column(10);
-        content.Children.Add(Ui.Text($"Install {entry.Name}", "BodyStrongTextBlockStyle"));
-        if (entry.Description.Length > 0)
-        {
-            content.Children.Add(Ui.Caption(entry.Description));
-        }
-
-        var lines = new ComboBox { Header = "Version", MinWidth = 220 };
-        foreach (var line in entry.Lines)
-        {
-            lines.Items.Add(new ComboBoxItem { Content = line.Latest.Length > 0 ? $"{line.Label} ({line.Latest})" : line.Label, Tag = line.Id });
-        }
-        var picked = pickedLine.GetValueOrDefault(entry.Id) ?? entry.PreferredLine?.Id;
-        lines.SelectedItem = lines.Items.OfType<ComboBoxItem>().FirstOrDefault(i => (string)i.Tag == picked) ?? lines.Items.FirstOrDefault();
-        lines.SelectionChanged += (_, _) =>
-        {
-            if (lines.SelectedItem is ComboBoxItem { Tag: string id })
-            {
-                pickedLine[entry.Id] = id;
-            }
-        };
-        if (entry.Lines.Count > 1)
-        {
-            content.Children.Add(lines);
-        }
-
-        var port = new NumberBox
-        {
-            Header = "Port",
-            Value = pickedPort.GetValueOrDefault(entry.Id, entry.Port),
-            Minimum = 1024,
-            Maximum = 65535,
-            SpinButtonPlacementMode = NumberBoxSpinButtonPlacementMode.Compact,
-            MinWidth = 140,
-            HorizontalAlignment = HorizontalAlignment.Left,
-        };
-        port.ValueChanged += (_, _) => pickedPort[entry.Id] = port.Value;
-        content.Children.Add(port);
-        if (entry.Port != entry.DefaultPort)
-        {
-            content.Children.Add(Ui.Caption($"Port {entry.DefaultPort} is taken, so Flock suggests {entry.Port}."));
-        }
-
-        var install = Ui.Button($"Install {entry.Name}", () =>
-        {
-            var line = (lines.SelectedItem as ComboBoxItem)?.Tag as string;
-            int? chosen = double.IsNaN(port.Value) ? null : (int)port.Value;
-            _ = RunCatalog(entry.Id, c => c.InstallCatalogServiceAsync(entry.Id, line, chosen));
-        }, accent: true, glyph: Ui.GlyphDownload);
-        var actions = Ui.Row(10, install);
-        if (entry.Estimate.Length > 0)
-        {
-            actions.Children.Add(Ui.Caption(Capitalize(entry.Estimate), wrap: false));
-        }
-        content.Children.Add(actions);
-        return Inner(content);
-    }
+    /// <summary>What it is, the version line and port, and Install (see InstallCard).</summary>
+    private Border CatalogInstallCard(CatalogService entry) =>
+        InstallCard(entry.Id, entry.Name, entry.Description.Length > 0 ? entry.Description : "Runs on 127.0.0.1 for your sites.",
+            entry.Lines.Select(l => (l.Id, l.Latest.Length > 0 ? $"{l.Label} ({l.Latest})" : l.Label, l.Latest)).ToList(), entry.PreferredLine?.Id,
+            entry.Port, entry.Port != entry.DefaultPort ? $"Port {entry.DefaultPort} is taken, so Flock suggests {entry.Port}." : null, entry.Estimate,
+            (line, port) => RunCatalog(entry.Id, c => c.InstallCatalogServiceAsync(entry.Id, line, port)));
 
     /// <summary>A running or failed install.</summary>
     private Border CatalogJobCard(CatalogService entry, CatalogJob job)
@@ -150,85 +96,124 @@ internal sealed partial class ServicesPane
         return Inner(content);
     }
 
-    /// <summary>The installed line with update and uninstall, and the other lines to switch to.</summary>
+    /// <summary>Every line, like PostgreSQL's majors: install next to the others, switch, update, uninstall.</summary>
     private StackPanel CatalogLines(CatalogService entry)
     {
         var id = entry.Id;
-        var locked = CatalogWorking(id);
-        var list = Ui.Column(6, Ui.Text("Versions", "BodyStrongTextBlockStyle"));
+        var rows = new List<UIElement>();
         foreach (var line in entry.Lines)
         {
-            var content = Ui.Column(8);
-            if (line.Installed)
+            var target = line;
+            var title = Ui.Row(8, Ui.Text($"{entry.Name} {line.Label}", line.Installed ? "BodyStrongTextBlockStyle" : "BodyTextBlockStyle", wrap: false));
+            if (line.Active)
             {
-                var status = entry.Update ? Ui.Caption($"{entry.Installed} · {entry.Latest} available", Ui.Accent) : Ui.Caption($"{entry.Installed} · up to date");
-                var more = new MenuFlyout();
-                more.Items.Add(Item(entry.Update ? $"Update to {entry.Latest}" : $"Reinstall {entry.Installed}", () => _ = RunCatalog(id, c => c.InstallCatalogServiceAsync(id, line.Id))));
-                more.Items.Add(Item("Show Last Log", () => _ = ShowCatalogLog(entry)));
-                more.Items.Add(new MenuFlyoutSeparator());
-                more.Items.Add(Item("Uninstall…", () => _ = UninstallCatalog(entry)));
-                var moreButton = Ui.IconButton(Ui.GlyphMore, "More", () => { });
-                moreButton.Flyout = more;
-                moreButton.IsEnabled = !locked;
-                content.Children.Add(Ui.Spread(Ui.Column(1, Ui.Text($"{entry.Name} {line.Label}", "BodyStrongTextBlockStyle", wrap: false), status), moreButton));
-                if (entry.Yanked.Length > 0)
-                {
-                    var withdrawn = Ui.Caption(entry.Update ? $"Withdrawn: {entry.Yanked} — update to replace it" : $"Withdrawn: {entry.Yanked}", Ui.Caution);
-                    ToolTipService.SetToolTip(withdrawn, "This build was withdrawn. Flock replaces it as soon as a fixed build is published.");
-                    content.Children.Add(Ui.Row(6, Ui.Icon(Ui.GlyphWarning, 12, Ui.Caution), withdrawn));
-                }
-                if (entry.Update)
-                {
-                    var update = Ui.Button($"Update to {entry.Latest}", () => _ = RunCatalog(id, c => c.InstallCatalogServiceAsync(id, line.Id)), glyph: Ui.GlyphDownload,
-                        tooltip: "Runs in the background; your data stays");
-                    update.IsEnabled = !locked;
-                    content.Children.Add(update);
-                }
+                title.Children.Add(Ui.Badge("Active"));
+            }
+            var info = Ui.Column(2, title, LineFacts(line));
+            if (line.Yanked.Length > 0)
+            {
+                var withdrawn = Ui.Caption(line.Update ? $"Withdrawn: {line.Yanked} — update to replace it" : $"Withdrawn: {line.Yanked}", Ui.Caution);
+                ToolTipService.SetToolTip(withdrawn, "This build was withdrawn. Flock replaces it as soon as a fixed build is published.");
+                info.Children.Add(Ui.Row(6, Ui.Icon(Ui.GlyphWarning, 12, Ui.Caution), withdrawn));
+            }
+
+            var actions = Ui.Row(8);
+            if (!line.Installed)
+            {
+                var tip = (line.Latest.Length > 0 ? $"Downloads {entry.Name} {line.Latest}." : "Downloads the newest release.")
+                    + (entry.IsInstalled ? $" {entry.Name} {entry.Line} keeps running until you switch." : "")
+                    + (line.HasData ? " Its data is still here and comes back." : "");
+                actions.Children.Add(Ui.Button("Install", () => _ = RunCatalog(id, c => c.InstallCatalogServiceAsync(id, target.Id)), glyph: Ui.GlyphDownload, tooltip: tip));
             }
             else
             {
-                var detail = line.Latest.Length > 0 ? $"{line.Latest} available" : "Not installed";
-                if (line.HasData)
+                if (line.Update)
                 {
-                    detail += " · has data";
+                    var restart = line.Active ? $"; {entry.Name} restarts for a moment" : "";
+                    actions.Children.Add(Ui.Button($"Update to {line.Latest}", () => _ = RunCatalog(id, c => c.InstallCatalogServiceAsync(id, target.Id)), glyph: Ui.GlyphDownload,
+                        tooltip: $"Installs {line.Latest} in place of {line.Version}. Your data stays{restart}."));
                 }
-                var target = line;
-                var switchButton = Ui.Button("Switch…", async () =>
+                if (!line.Active)
                 {
-                    var own = target.HasData ? $"{entry.Name} {target.Label} uses its own data from before." : $"{entry.Name} {target.Label} starts with empty data.";
-                    if (await Window.Confirm($"Switch to {entry.Name} {target.Label}?",
-                        $"The installed version is replaced; its data stays but isn't used until you switch back. {own}", "Switch"))
-                    {
-                        await RunCatalog(id, c => c.InstallCatalogServiceAsync(id, target.Id));
-                    }
-                });
-                switchButton.IsEnabled = !locked;
-                content.Children.Add(Ui.Spread(Ui.Column(1, Ui.Text($"{entry.Name} {line.Label}", wrap: false), Ui.Caption(detail, wrap: false)), switchButton));
+                    actions.Children.Add(Ui.Button("Switch…", () => _ = SwitchCatalog(entry, target),
+                        tooltip: entry.IsInstalled ? $"Stops {entry.Name} {entry.Line} and starts {line.Label} with its own data" : $"Starts {entry.Name} {line.Label}"));
+                }
+                var more = new MenuFlyout();
+                if (!line.Update)
+                {
+                    more.Items.Add(Item($"Reinstall {line.Version}", () => _ = RunCatalog(id, c => c.InstallCatalogServiceAsync(id, target.Id))));
+                }
+                more.Items.Add(Item("Show Last Log", () => _ = ShowCatalogLog(entry)));
+                more.Items.Add(new MenuFlyoutSeparator());
+                more.Items.Add(Item("Uninstall…", () => _ = UninstallCatalog(entry, target)));
+                var moreButton = Ui.IconButton(Ui.GlyphMore, "More", () => { });
+                moreButton.Flyout = more;
+                actions.Children.Add(moreButton);
             }
-            list.Children.Add(Inner(content));
+            Ui.SetEnabled(actions, !CatalogWorking(id));
+            rows.Add(VersionRow(info, actions));
         }
-        list.Children.Add(Ui.Caption(entry.Lines.Count > 1
-            ? "One version runs at a time. Each version keeps its own data; updates within a version keep it."
-            : "Updates keep your data."));
-        return list;
+        return Ui.Column(6, Ui.Text("Versions", "BodyStrongTextBlockStyle"), VersionRows(rows),
+            Ui.Caption(entry.Lines.Count > 1
+                ? "Installed versions stay side by side. One runs at a time; each keeps its own data, and updates within a version keep it."
+                : "Updates keep your data."));
     }
 
-    private async Task UninstallCatalog(CatalogService entry)
+    /// <summary>"8.4.6 · 8.4.7 available · has data", or what is available of a line that isn't installed.</summary>
+    private static TextBlock LineFacts(CatalogLine line)
     {
-        var deleteData = new CheckBox { Content = "Also delete its data" };
-        var dialog = new ContentDialog
+        var parts = new List<string> { line.Installed ? line.Version : line.Latest.Length > 0 ? $"Not installed · {line.Latest} available" : "Not installed" };
+        if (line.Update)
         {
-            Title = $"Uninstall {entry.Name}?",
-            Content = Ui.Column(12, Ui.Caption($"{entry.Name} stops and your sites can't use it until you install it again. Keep its data to pick up where you left off."), deleteData),
-            PrimaryButtonText = "Uninstall",
-            CloseButtonText = "Cancel",
-            DefaultButton = ContentDialogButton.Close,
-            XamlRoot = Window.XamlRoot,
-        };
-        if (await dialog.ShowAsync() == ContentDialogResult.Primary)
+            parts.Add(line.Latest == line.Version ? "new build available" : $"{line.Latest} available");
+        }
+        else if (line.Installed)
         {
-            var delete = deleteData.IsChecked == true;
-            await RunCatalog(entry.Id, c => c.UninstallCatalogServiceAsync(entry.Id, delete));
+            parts.Add("up to date");
+        }
+        if (line.HasData)
+        {
+            parts.Add(line.Installed ? "has data" : "data kept");
+        }
+        return Ui.Caption(string.Join(" · ", parts), line.Update ? Ui.Accent : null, wrap: false);
+    }
+
+    private async Task SwitchCatalog(CatalogService entry, CatalogLine target)
+    {
+        var own = target.HasData ? $"{entry.Name} {target.Label} uses its own data." : $"{entry.Name} {target.Label} starts with empty data.";
+        if (!entry.IsInstalled || await Window.Confirm($"Switch to {entry.Name} {target.Label}?",
+                $"{entry.Name} {entry.Line} stops; its data stays but isn't used until you switch back. {own}", "Switch"))
+        {
+            await RunCatalog(entry.Id, c => c.ActivateCatalogServiceAsync(entry.Id, target.Id));
+        }
+    }
+
+    private async Task UninstallCatalog(CatalogService entry, CatalogLine line)
+    {
+        var next = entry.Lines.FirstOrDefault(l => l.Installed && l.Id != line.Id);
+        var details = !line.Active ? ""
+            : next is not null ? $"{entry.Name} {line.Label} stops and {entry.Name} {next.Label} becomes the active version. "
+            : $"{entry.Name} {line.Label} stops; your sites can't use {entry.Name} until you install a version again. ";
+        details += line.HasData
+            ? $"Its data stays unless you delete it below; installing {line.Label} again picks it up."
+            : "It holds no data.";
+
+        CheckBox? delete = null;
+        UIElement? extra = null;
+        if (line.HasData)
+        {
+            delete = new CheckBox { Content = "Also delete its data" };
+            var warning = Ui.Caption("Deleted data can't be recovered.", Ui.Caution);
+            warning.Visibility = Visibility.Collapsed;
+            warning.Margin = new Thickness(28, -4, 0, 0);
+            delete.Checked += (_, _) => warning.Visibility = Visibility.Visible;
+            delete.Unchecked += (_, _) => warning.Visibility = Visibility.Collapsed;
+            extra = Ui.Column(4, delete, warning);
+        }
+        if (await Window.Confirm($"Uninstall {entry.Name} {line.Label}?", details, "Uninstall", destructive: true, extra: extra))
+        {
+            var deleteData = delete?.IsChecked == true;
+            await RunCatalog(entry.Id, c => c.UninstallCatalogServiceAsync(entry.Id, line.Id, deleteData));
         }
     }
 

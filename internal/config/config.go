@@ -50,7 +50,8 @@ type Services struct {
 	Postgres string `json:"postgres,omitempty"` // the active build, e.g. "18.6-build1"
 
 	// Extras are the services of the catalog (MySQL, Redis, Meilisearch, ...) that are installed,
-	// by id. Each runs one version on its own port.
+	// by id, with the active version: the one that runs, on the service's port. Other versions can
+	// be installed next to it (see internal/catalog).
 	Extras map[string]Extra `json:"extras,omitempty"`
 
 	// Stopped lists installed services the user switched off ("postgres", "valkey", "mysql").

@@ -5,15 +5,32 @@ using Microsoft.UI.Xaml.Controls;
 namespace Flock.Tray;
 
 /// <summary>
-/// Sites with their PHP and Node.js versions. Each picker offers the project's pinned version (or
-/// the default) first, then the installed versions, which isolate the site on this machine; the
-/// "…" menu pins a version into the project or removes it again. Each site runs on php-cgi or on
-/// FrankenPHP (classic, or Laravel Octane's worker mode).
+/// The sites in a list, and the selected one's details beside it, as in Services: its address and
+/// domains, its PHP and Node.js versions and what serves it. Each version picker offers the
+/// project's pinned version (or the default) first, then the installed versions, which isolate the
+/// site on this machine; the "…" menu pins a version into the project or removes it again. Each
+/// site runs on php-cgi or on FrankenPHP (classic, or Laravel Octane's worker mode).
 /// </summary>
 internal sealed class SitesPane(SettingsWindow window, AppModel model) : Pane(window, model)
 {
+    private string? selection;
+    // The list and the details scroll separately, and keep their place across re-renders.
+    private readonly KeptScroller listScroller = new(window.DispatcherQueue);
+    private readonly KeptScroller detailScroller = new(window.DispatcherQueue);
+
     public override string Title => "Sites";
     public override string Subtitle => "Sites you added one by one, plus every folder inside your project folders.";
+    public override bool ScrollsItself => true;
+
+    private void Select(string name)
+    {
+        if (name != selection)
+        {
+            detailScroller.ToTop();
+        }
+        selection = name;
+        Rerender();
+    }
 
     /// <summary>
     /// Asks about a pending flock://secure link (App.OpenLink) once the sites are loaded: nothing
@@ -26,6 +43,10 @@ internal sealed class SitesPane(SettingsWindow window, AppModel model) : Pane(wi
             return;
         }
         Model.PendingSecure = null;
+        if (request.Site is { } linked)
+        {
+            selection = linked;
+        }
         // Not while building the pane: a dialog needs the window's content in place.
         Window.DispatcherQueue.TryEnqueue(async () =>
         {
@@ -46,81 +67,101 @@ internal sealed class SitesPane(SettingsWindow window, AppModel model) : Pane(wi
         var sites = Model.Status?.Sites ?? [];
         ConfirmPendingLink();
 
-        var link = Ui.Button("Add Site…", async () =>
+        var add = Ui.Button("Add Site…", async () =>
         {
             if (await Window.PickFolder() is { } path)
             {
                 await Perform(c => c.LinkSiteAsync(path));
             }
         }, accent: true, glyph: Ui.GlyphAdd);
-        link.HorizontalAlignment = HorizontalAlignment.Right;
-        link.Margin = new Thickness(0, 0, 0, 12);
-
-        var page = Ui.Column(4, link);
         if (sites.Count == 0)
         {
-            page.Children.Add(Ui.EmptyState(Ui.GlyphGlobe, "No sites", "Add a single site here, or add a project folder in General."));
-            return page;
+            return Ui.EmptyState(Ui.GlyphGlobe, "No sites", "Add a single site here, or add a project folder in General.", add);
         }
-        if (Model.Status?.Dns is { Wildcard: false, WildcardProblem.Length: > 0 } dns)
-        {
-            var notice = Ui.Row(4, Ui.Icon(Ui.GlyphInfo, 12, Ui.Caution),
-                Ui.Caption($"Subdomains only work when you add them to a site (… → Add Domain…): {dns.WildcardProblem}.", Ui.Caution));
-            notice.Margin = new Thickness(2, 0, 0, 8);
-            page.Children.Add(notice);
-        }
+        var selected = sites.FirstOrDefault(s => s.Name == selection) ?? sites[0];
+
+        var list = new StackPanel { Spacing = 4, Margin = new Thickness(0, 0, 14, 8) };
         foreach (var site in sites)
         {
-            page.Children.Add(Row(site));
+            list.Children.Add(ListRow(site, site.Name == selected.Name));
         }
-        page.Children.Add(GeneralPane.Footnote("A version picked here applies on this machine only. To set it for everyone working on a project, pin it (…): PHP goes into .flockrc, Node.js into .nvmrc. Projects that pin a version use it automatically."));
-        return page;
+        add.Margin = new Thickness(0, 0, 0, 12);
+        var left = new Grid();
+        left.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        left.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
+        left.Children.Add(add);
+        Grid.SetRow(listScroller.Place(left, list), 1);
+
+        // A fixed list and the details in the rest, as in Services.
+        var grid = new Grid { ColumnSpacing = 16 };
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(280) });
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star), MinWidth = 340 });
+        grid.Children.Add(left);
+        var detail = Detail(selected);
+        detail.Margin = new Thickness(0, 0, 14, 8);
+        Grid.SetColumn(detailScroller.Place(grid, detail), 1);
+        return grid;
     }
 
-    private Border Row(Status.Site site)
+    /// <summary>A site in the list: its name and address, a lock when it is secured, a warning when something is wrong.</summary>
+    private Button ListRow(Status.Site site, bool isSelected)
+    {
+        var text = Ui.Column(1, Ui.Text(site.Name, "BodyStrongTextBlockStyle", wrap: false), Ui.Caption(site.Domain, wrap: false));
+        var marks = Ui.Row(6);
+        if (Problem(site) is { } problem)
+        {
+            var warning = Ui.Icon(Ui.GlyphWarning, 12, Ui.Caution);
+            ToolTipService.SetToolTip(warning, problem);
+            marks.Children.Add(warning);
+        }
+        if (site.Secured)
+        {
+            var secured = Ui.Icon(Ui.GlyphLock, 12, Ui.SecondaryText);
+            ToolTipService.SetToolTip(secured, "Served over HTTPS");
+            marks.Children.Add(secured);
+        }
+        var card = new Button
+        {
+            Content = Ui.Spread(text, marks),
+            HorizontalAlignment = HorizontalAlignment.Stretch,
+            HorizontalContentAlignment = HorizontalAlignment.Stretch,
+            Padding = new Thickness(14, 8, 12, 8),
+            Background = Ui.Brush(isSelected ? "SubtleFillColorSecondaryBrush" : "CardBackgroundFillColorDefaultBrush"),
+            BorderBrush = isSelected ? Ui.Accent : Ui.Brush("CardStrokeColorDefaultBrush"),
+        };
+        ToolTipService.SetToolTip(card, site.Path);
+        card.Click += (_, _) => Select(site.Name);
+        return card;
+    }
+
+    /// <summary>What a site's list row warns about: the site, one of its domains, or its FrankenPHP.</summary>
+    private static string? Problem(Status.Site site) =>
+        site.Problem
+        ?? site.Domains.Select(d => d.Problem is { } p ? $"{d.Host}: {p}" : null).FirstOrDefault(p => p is not null)
+        ?? (site.IsFrankenPhp && site.FrankenPhp is { IsRunning: false, IsInstalling: false, Problem.Length: > 0 } f ? f.Problem : null);
+
+    /// <summary>The selected site: its address, then Site, Versions and Server sections of labelled settings.</summary>
+    private Border Detail(Status.Site site)
     {
         var config = Store.Config;
-        var name = Ui.Row(6, Ui.Text(site.Name, "BodyStrongTextBlockStyle", wrap: false));
+        var panel = new StackPanel { Spacing = 20 };
+
+        // Header: name, address and folder, and the site's actions.
+        var name = Ui.Row(8, Ui.Text(site.Name, "SubtitleTextBlockStyle", wrap: false));
         if (site.Parked)
         {
             name.Children.Add(Ui.Badge("Project folder", Ui.Tone.Neutral));
         }
-        var info = Ui.Column(2, name);
-        if (site.Problem is { } problem)
+        var heading = Ui.Column(2, name);
+        if (site.Url is { } siteUrl)
         {
-            info.Children.Add(Ui.Row(4, Ui.Icon(Ui.GlyphWarning, 12, Ui.Caution), Ui.Caption(problem, Ui.Caution)));
+            var link = Ui.Link(siteUrl, () => AppModel.Open(site));
+            link.Padding = new Thickness(0);
+            heading.Children.Add(link);
         }
-        else
-        {
-            info.Children.Add(Ui.Caption(site.Url ?? site.Domain, wrap: false));
-            info.Children.Add(Ui.Caption(site.Path, Ui.TertiaryText, wrap: false));
-        }
-        foreach (var domain in site.Domains)
-        {
-            // A domain with neither a URL nor a problem (the site itself isn't served) has nothing to show.
-            if (domain.Problem is { } domainProblem)
-            {
-                info.Children.Add(Ui.Row(4, Ui.Icon(Ui.GlyphWarning, 12, Ui.Caution), Ui.Caption($"{domain.Host}: {domainProblem}", Ui.Caution, wrap: false)));
-            }
-            else if (domain.Url is { Length: > 0 } url)
-            {
-                info.Children.Add(DomainLink(domain, url));
-            }
-        }
-        foreach (var hint in Hints(site))
-        {
-            info.Children.Add(hint);
-        }
-
-        var php = Picker("PHP", site.Php, site.PhpSource, site.PhpPinned, site.PhpFile, config?.DefaultPhp ?? "",
-            config?.Php.Select(p => p.Version).ToList() ?? [],
-            version => new SiteChange(Php: version), site.Name);
-        var node = Picker("Node", Major(site.Node ?? ""), site.NodeSource, Major(site.NodePinned), site.NodeFile, config?.DefaultNode ?? "",
-            config?.NodeMajors ?? [],
-            version => new SiteChange(Node: version), site.Name);
-
-        var https = new ToggleSwitch { IsOn = site.Secured, OnContent = "HTTPS", OffContent = "HTTP", MinWidth = 0 };
-        https.Toggled += (_, _) => _ = Perform(c => c.UpdateSiteAsync(site.Name, new SiteChange(Secured: https.IsOn)));
+        var path = Ui.Caption(site.Path, Ui.TertiaryText, wrap: false);
+        ToolTipService.SetToolTip(path, site.Path);
+        heading.Children.Add(path);
 
         var open = Ui.IconButton(Ui.GlyphOpen, $"Open {site.Url ?? site.Domain}", () => AppModel.Open(site));
         open.IsEnabled = site.Url is not null;
@@ -136,8 +177,124 @@ internal sealed class SitesPane(SettingsWindow window, AppModel model) : Pane(wi
                 }
             }));
         }
+        actions.VerticalAlignment = VerticalAlignment.Top;
+        var header = new Grid { ColumnSpacing = 8 };
+        header.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        header.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        Grid.SetColumn(actions, 1);
+        header.Children.Add(heading);
+        header.Children.Add(actions);
+        panel.Children.Add(header);
+        if (site.Problem is { } problem)
+        {
+            panel.Children.Add(Warning(problem));
+        }
 
-        return Ui.Card(Ui.Column(12, Ui.Spread(info, Ui.Column(6, php, node), https, actions), Server(site)));
+        // Site: HTTPS and the domains besides its own.
+        var https = new ToggleSwitch { IsOn = site.Secured, MinWidth = 0 };
+        Ui.AutomationName(https, "HTTPS");
+        https.Toggled += (_, _) => _ = Perform(c => c.UpdateSiteAsync(site.Name, new SiteChange(Secured: https.IsOn)));
+        var domains = Ui.Column(2);
+        foreach (var domain in site.Domains)
+        {
+            UIElement shown = domain.Problem is { } domainProblem ? Warning($"{domain.Host}: {domainProblem}")
+                : domain.Url is { Length: > 0 } url ? DomainLink(domain, url)
+                : Ui.Text(domain.Host, wrap: false);
+            var target = domain;
+            var remove = Ui.IconButton(Ui.GlyphRemove, $"Remove {domain.Host}", () => _ = RemoveDomain(site, target));
+            remove.Padding = new Thickness(4);
+            var row = new Grid { ColumnSpacing = 4 };
+            row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            Grid.SetColumn(remove, 1);
+            row.Children.Add(shown);
+            row.Children.Add(remove);
+            domains.Children.Add(row);
+        }
+        var addDomain = Ui.Link("Add Domain…", () => _ = AddDomain(site));
+        addDomain.Padding = new Thickness(0);
+        domains.Children.Add(addDomain);
+        var siteSection = Section("Site", Field("HTTPS", https), Field("Domains", domains));
+        if (Model.Status?.Dns is { Wildcard: false, WildcardProblem.Length: > 0 } dns)
+        {
+            siteSection.Children.Add(Ui.Caption($"Subdomains only work when you add them here: {dns.WildcardProblem}.", Ui.Caution));
+        }
+        panel.Children.Add(siteSection);
+
+        // Versions: PHP and Node.js, with what pins or isolates them.
+        var php = Picker("PHP", site.Php, site.PhpSource, site.PhpPinned, site.PhpFile, config?.DefaultPhp ?? "",
+            config?.Php.Select(p => p.Version).ToList() ?? [],
+            version => new SiteChange(Php: version), site.Name);
+        var node = Picker("Node", Major(site.Node ?? ""), site.NodeSource, Major(site.NodePinned), site.NodeFile, config?.DefaultNode ?? "",
+            config?.NodeMajors ?? [],
+            version => new SiteChange(Node: version), site.Name);
+        var versions = Section("Versions", Field("PHP", php), Field("Node.js", node));
+        foreach (var hint in Hints(site))
+        {
+            versions.Children.Add(hint);
+        }
+        versions.Children.Add(Ui.Caption("A version picked here applies on this machine only. To set it for everyone working on the project, pin it (…): PHP goes into .flockrc, Node.js into .nvmrc.", Ui.TertiaryText));
+        panel.Children.Add(versions);
+
+        panel.Children.Add(Server(site));
+
+        if (Boost(site) is { } boost)
+        {
+            panel.Children.Add(Section("Laravel Boost", boost));
+        }
+
+        var card = Ui.Card(panel, new Thickness(20, 16, 16, 20));
+        card.VerticalAlignment = VerticalAlignment.Top;
+        return card;
+    }
+
+    /// <summary>A section of the details: a heading and its settings.</summary>
+    private static StackPanel Section(string title, params UIElement[] rows)
+    {
+        var section = Ui.Column(8, Ui.Text(title, "BodyStrongTextBlockStyle"));
+        foreach (var row in rows)
+        {
+            section.Children.Add(row);
+        }
+        return section;
+    }
+
+    /// <summary>A labelled setting: the label in a fixed column, so the controls line up.</summary>
+    private static Grid Field(string label, UIElement control)
+    {
+        var row = new Grid { ColumnSpacing = 12 };
+        row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(96) });
+        row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        var text = Ui.Text(label, foreground: Ui.SecondaryText, wrap: false);
+        text.VerticalAlignment = VerticalAlignment.Center;
+        if (control is FrameworkElement element)
+        {
+            element.HorizontalAlignment = HorizontalAlignment.Left;
+            if (element is StackPanel)
+            {
+                text.VerticalAlignment = VerticalAlignment.Top;
+            }
+        }
+        Grid.SetColumn((FrameworkElement)control, 1);
+        row.Children.Add(text);
+        row.Children.Add(control);
+        return row;
+    }
+
+    private static Grid Warning(string text)
+    {
+        var icon = Ui.Icon(Ui.GlyphWarning, 12, Ui.Caution);
+        icon.VerticalAlignment = VerticalAlignment.Top;
+        icon.Margin = new Thickness(0, 3, 0, 0);
+        var caption = Ui.Caption(text, Ui.Caution);
+        caption.IsTextSelectionEnabled = true;
+        var row = new Grid { ColumnSpacing = 6 };
+        row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        Grid.SetColumn(caption, 1);
+        row.Children.Add(icon);
+        row.Children.Add(caption);
+        return row;
     }
 
     // Sites whose FrankenPHP restart is in flight.
@@ -165,9 +322,8 @@ internal sealed class SitesPane(SettingsWindow window, AppModel model) : Pane(wi
             _ = Perform(c => c.UpdateSiteAsync(site.Name, new SiteChange(Server: change)));
         };
         Ui.AutomationName(server, "Server");
-        var controls = Ui.Row(8, Ui.Caption("Server", wrap: false), server);
 
-        var section = Ui.Column(4);
+        var section = Section("Server", Field("Runs on", server));
         if (franken)
         {
             var octane = site.Worker == Status.SiteServer.Octane;
@@ -185,9 +341,19 @@ internal sealed class SitesPane(SettingsWindow window, AppModel model) : Pane(wi
                 _ = Perform(c => c.UpdateSiteAsync(site.Name, new SiteChange(Worker: worker)));
             };
             Ui.AutomationName(mode, "Mode");
-            controls.Children.Add(Ui.Caption("Mode", wrap: false));
-            controls.Children.Add(mode);
+            section.Children.Add(Field("Mode", mode));
+            if (!site.OctaneAvailable)
+            {
+                ToolTipService.SetToolTip(mode, "Install Laravel Octane in the project (composer require laravel/octane) to use worker mode.");
+            }
 
+            if (site.FrankenPhp is { } state)
+            {
+                foreach (var line in FrankenPhpState(site, state))
+                {
+                    section.Children.Add(line);
+                }
+            }
             var restart = Ui.Button("Restart", () => _ = Restart(site.Name), tooltip: "Restart FrankenPHP, e.g. so Octane's workers load changed code");
             restart.IsEnabled = site.FrankenPhp is { IsRunning: true } && !restarting.Contains(site.Name);
             var log = site.FrankenPhp is { Log.Length: > 0 } f ? f.Log : $"frankenphp-{site.Name}";
@@ -196,25 +362,11 @@ internal sealed class SitesPane(SettingsWindow window, AppModel model) : Pane(wi
             {
                 buttons.Children.Insert(0, new ProgressRing { Width = 16, Height = 16 });
             }
-            section.Children.Add(Ui.Spread(controls, buttons));
+            section.Children.Add(buttons);
         }
-        else
-        {
-            section.Children.Add(controls);
-        }
-
-        section.Children.Add(Ui.Caption("FrankenPHP needs PHP 8.2 or newer. Requests that ask for Xdebug still go to PHP-CGI.", Ui.TertiaryText));
-        if (franken && !site.OctaneAvailable)
-        {
-            section.Children.Add(Ui.Caption("Install Laravel Octane in the project (composer require laravel/octane) to use worker mode.", Ui.TertiaryText));
-        }
-        if (franken && site.FrankenPhp is { } state)
-        {
-            foreach (var line in FrankenPhpState(site, state))
-            {
-                section.Children.Add(line);
-            }
-        }
+        section.Children.Add(Ui.Caption(franken && !site.OctaneAvailable
+            ? "FrankenPHP needs PHP 8.2 or newer. Requests that ask for Xdebug still go to PHP-CGI. For worker mode, install Laravel Octane in the project (composer require laravel/octane)."
+            : "FrankenPHP needs PHP 8.2 or newer. Requests that ask for Xdebug still go to PHP-CGI.", Ui.TertiaryText));
         return section;
     }
 
@@ -245,7 +397,7 @@ internal sealed class SitesPane(SettingsWindow window, AppModel model) : Pane(wi
         {
             if (state.Problem.Length > 0)
             {
-                yield return Ui.Row(4, Ui.Icon(Ui.GlyphWarning, 12, Ui.Caution), Ui.Caption(state.Problem, Ui.Caution));
+                yield return Warning(state.Problem);
             }
             yield return Ui.Caption("PHP-CGI serves the site meanwhile.");
         }
@@ -333,13 +485,21 @@ internal sealed class SitesPane(SettingsWindow window, AppModel model) : Pane(wi
         {
             yield return Hint($".flockrc's Node {site.NodePinned} wins over {site.NodeShadowed}.", null, null);
         }
-        if (site.Boost is Status.BoostState.Missing or Status.BoostState.Outdated)
+    }
+
+    /// <summary>The project uses Laravel Boost, and Flock's guideline is missing from it or outdated.</summary>
+    private StackPanel? Boost(Status.Site site)
+    {
+        if (site.Boost is not (Status.BoostState.Missing or Status.BoostState.Outdated))
         {
-            var missing = site.Boost == Status.BoostState.Missing;
-            yield return Ui.Row(4,
-                Ui.Caption(missing ? "Uses Laravel Boost." : "Flock's Boost guideline is outdated.", Ui.SecondaryText, wrap: false),
-                Ui.Link(missing ? "Add Flock to its guidelines…" : "Update it…", () => _ = AddBoostGuideline(site, missing)));
+            return null;
         }
+        var missing = site.Boost == Status.BoostState.Missing;
+        var link = Ui.Link(missing ? "Add Flock to its guidelines…" : "Update it…", () => _ = AddBoostGuideline(site, missing));
+        link.Padding = new Thickness(0);
+        return Ui.Column(2, Ui.Caption(missing
+            ? "The project uses Laravel Boost. Adding Flock to its guidelines tells AI agents that Flock serves the app and picks its PHP version."
+            : "Flock's guideline in the project's Boost guidelines is outdated."), link);
     }
 
     private async Task AddBoostGuideline(Status.Site site, bool missing)
@@ -470,14 +630,27 @@ internal sealed class SitesPane(SettingsWindow window, AppModel model) : Pane(wi
         }
     }
 
+    /// <summary>A note that wraps, with an action under it.</summary>
     private static StackPanel Hint(string text, string? action, Action? onClick)
     {
-        var row = Ui.Row(4, Ui.Icon(Ui.GlyphInfo, 12, Ui.Caution), Ui.Caption(text, Ui.Caution, wrap: false));
+        var icon = Ui.Icon(Ui.GlyphInfo, 12, Ui.Caution);
+        icon.VerticalAlignment = VerticalAlignment.Top;
+        icon.Margin = new Thickness(0, 3, 0, 0);
+        var note = new Grid { ColumnSpacing = 6 };
+        note.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        note.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        var caption = Ui.Caption(text, Ui.Caution);
+        Grid.SetColumn(caption, 1);
+        note.Children.Add(icon);
+        note.Children.Add(caption);
+        var hint = Ui.Column(0, note);
         if (action is not null && onClick is not null)
         {
-            row.Children.Add(Ui.Link(action, onClick));
+            var link = Ui.Link(action, onClick);
+            link.Margin = new Thickness(18, 0, 0, 0);
+            hint.Children.Add(link);
         }
-        return row;
+        return hint;
     }
 
     private Button More(Status.Site site)
@@ -515,25 +688,18 @@ internal sealed class SitesPane(SettingsWindow window, AppModel model) : Pane(wi
             }
         }
 
-        if (menu.Items.Count > 0)
-        {
-            menu.Items.Add(new MenuFlyoutSeparator());
-        }
-        menu.Items.Add(Item("Add Domain…", () => _ = AddDomain(site)));
-        foreach (var domain in site.Domains)
-        {
-            menu.Items.Add(Item($"Remove {domain.Host}…", async () =>
-            {
-                if (await Window.Confirm($"Remove {domain.Host}?", $"{domain.Host} no longer opens {site.Name}.", "Remove", destructive: true))
-                {
-                    await Perform(c => c.RemoveDomainAsync(site.Name, domain.Entry));
-                }
-            }));
-        }
-
-        var button = Ui.IconButton(Ui.GlyphMore, "Domains and project versions", () => { });
+        var button = Ui.IconButton(Ui.GlyphMore, "Pin versions to the project", () => { });
         button.Flyout = menu;
+        button.IsEnabled = menu.Items.Count > 0;
         return button;
+    }
+
+    private async Task RemoveDomain(Status.Site site, Status.SiteDomain domain)
+    {
+        if (await Window.Confirm($"Remove {domain.Host}?", $"{domain.Host} no longer opens {site.Name}.", "Remove", destructive: true))
+        {
+            await Perform(c => c.RemoveDomainAsync(site.Name, domain.Entry));
+        }
     }
 
     private async Task Pin(Status.Site site, string tool, string version, string details)

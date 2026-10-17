@@ -233,9 +233,28 @@ public sealed class FlockClient : IDisposable
     /// <summary>The end of the current or last install's output; 404 (FlockServerException) when there is none.</summary>
     public Task<string> CatalogLogAsync(string id) => Text(HttpMethod.Get, $"/v1/catalog/{Escape(id)}/log");
 
-    /// <summary>Stops and removes a catalog service; its data goes too only when asked.</summary>
-    public Task<ServiceCatalog> UninstallCatalogServiceAsync(string id, bool deleteData = false) =>
-        Send<ServiceCatalog>(HttpMethod.Delete, $"/v1/catalog/{Escape(id)}" + (deleteData ? "?delete_data=1" : ""), timeout: TimeSpan.FromMinutes(1));
+    /// <summary>Runs an installed line of a catalog service instead of the active one, on the service's port.</summary>
+    public Task<ServiceCatalog> ActivateCatalogServiceAsync(string id, string line) =>
+        Send<ServiceCatalog>(HttpMethod.Post, $"/v1/catalog/{Escape(id)}/activate", new { line }, timeout: TimeSpan.FromMinutes(1));
+
+    /// <summary>
+    /// Removes a line of a catalog service (null: every line); its data goes too only when asked.
+    /// When the active line goes, the newest other installed line takes over.
+    /// </summary>
+    public Task<ServiceCatalog> UninstallCatalogServiceAsync(string id, string? line = null, bool deleteData = false)
+    {
+        var query = new List<string>();
+        if (line is not null)
+        {
+            query.Add("line=" + Escape(line));
+        }
+        if (deleteData)
+        {
+            query.Add("delete_data=1");
+        }
+        var path = $"/v1/catalog/{Escape(id)}" + (query.Count > 0 ? "?" + string.Join("&", query) : "");
+        return Send<ServiceCatalog>(HttpMethod.Delete, path, timeout: TimeSpan.FromMinutes(1));
+    }
 
     // Mail
 

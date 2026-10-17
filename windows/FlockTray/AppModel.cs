@@ -192,6 +192,9 @@ public sealed class AppModel
             UseShellExecute = false,
             RedirectStandardOutput = true,
             RedirectStandardError = true,
+            // flock writes UTF-8; the default (the console's code page) turns "—" into "â€”".
+            StandardOutputEncoding = System.Text.Encoding.UTF8,
+            StandardErrorEncoding = System.Text.Encoding.UTF8,
         };
         foreach (var arg in args)
         {

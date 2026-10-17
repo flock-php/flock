@@ -303,7 +303,7 @@ func (s *server) installService(ctx context.Context, req *mcp.CallToolRequest, i
 			return nil, actionOut{}, err
 		}
 		e, _ := cat.Find(id)
-		name = cmpOr(e.Name, id)
+		name = strings.TrimSpace(cmpOr(e.Name, id) + " " + version)
 		check = func(ctx context.Context) (step, error) {
 			c, err := s.Daemon.Catalog(ctx)
 			if err != nil {
@@ -332,7 +332,11 @@ func (s *server) installService(ctx context.Context, req *mcp.CallToolRequest, i
 	msg := name + " is installed"
 	if services, err := s.Daemon.Services(ctx); err == nil {
 		for _, svc := range services {
-			if svc.ID == id {
+			if svc.ID == id && version != "" && svc.Version != version && !strings.HasPrefix(svc.Version, version+".") {
+				// Versions install side by side; the one that ran before keeps running.
+				msg = fmt.Sprintf("%s is installed next to %s %s, which keeps running. The user can switch versions in Flock's Settings → Services or with `flock services use %s %s`.",
+					name, svc.Name, svc.Version, id, version)
+			} else if svc.ID == id {
 				msg = fmt.Sprintf("%s %s is installed and %s.", svc.Name, svc.Version, runState(svc))
 				if svc.Env != "" {
 					msg += " To connect a Laravel app, set in .env:\n" + svc.Env
