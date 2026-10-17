@@ -1,5 +1,6 @@
-# Runs the Go tests, and builds the unsigned macOS disk image and Windows installer and keeps them
-# as run artifacts.
+# Runs the Go tests, and builds the macOS disk image (signed and notarized when the MACOS_* secrets
+# are set, required for the release PR and releases) and the unsigned Windows installer and keeps
+# them as run artifacts.
 #
 #   - by hand from the Actions tab (any branch): named dev-<commit>
 #   - on the release PR once it is marked ready for review (not while it is a draft), and again on
@@ -95,6 +96,7 @@ jobs:
     runs-on: macos-26
     env:
       VERSION: ${{ needs.version.outputs.version }}
+      SIGNING: ${{ secrets.MACOS_CERTIFICATE_P12 != '' }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -107,6 +109,47 @@ jobs:
       - name: Test
         run: swift test --package-path macos
 
+      # Builds by hand may be ad-hoc signed; what gets released may not.
+      - name: Require signing
+        if: env.SIGNING != 'true' && (github.event_name == 'pull_request' || inputs.version != '')
+        run: echo "::error::the MACOS_* signing secrets are not set" && exit 1
+
+      # Into a keychain of its own; build-app.sh signs with $SIGN_IDENTITY and notarizes with the
+      # API key at $NOTARY_KEY_PATH.
+      - name: Set up signing
+        if: env.SIGNING == 'true'
+        env:
+          CERTIFICATE_P12: ${{ secrets.MACOS_CERTIFICATE_P12 }}
+          CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+          NOTARY_KEY: ${{ secrets.MACOS_NOTARY_KEY }}
+          NOTARY_KEY_ID: ${{ secrets.MACOS_NOTARY_KEY_ID }}
+          NOTARY_ISSUER_ID: ${{ secrets.MACOS_NOTARY_ISSUER_ID }}
+        run: |
+          keychain="$RUNNER_TEMP/signing.keychain-db"
+          password=$(uuidgen)
+          security create-keychain -p "$password" "$keychain"
+          security set-keychain-settings -lut 21600 "$keychain"
+          security unlock-keychain -p "$password" "$keychain"
+          echo "$CERTIFICATE_P12" | base64 --decode > "$RUNNER_TEMP/certificate.p12"
+          security import "$RUNNER_TEMP/certificate.p12" -k "$keychain" -P "$CERTIFICATE_PASSWORD" -T /usr/bin/codesign
+          rm "$RUNNER_TEMP/certificate.p12"
+          # The intermediate certificate, in case the runner image lacks it.
+          curl -fsSL https://www.apple.com/certificateauthority/DeveloperIDG2CA.cer -o "$RUNNER_TEMP/DeveloperIDG2CA.cer"
+          security import "$RUNNER_TEMP/DeveloperIDG2CA.cer" -k "$keychain" || true
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$password" "$keychain" > /dev/null
+          security list-keychains -d user -s "$keychain" $(security list-keychains -d user | tr -d '"')
+
+          identity=$(security find-identity -v -p codesigning "$keychain" | grep -o '"Developer ID Application: [^"]*"' | head -1 | tr -d '"')
+          [ -n "$identity" ] || { echo "::error::no Developer ID Application identity in MACOS_CERTIFICATE_P12"; exit 1; }
+          echo "SIGN_IDENTITY=$identity" >> "$GITHUB_ENV"
+
+          printf '%s\n' "$NOTARY_KEY" > "$RUNNER_TEMP/notary-key.p8"
+          {
+            echo "NOTARY_KEY_PATH=$RUNNER_TEMP/notary-key.p8"
+            echo "NOTARY_KEY_ID=$NOTARY_KEY_ID"
+            echo "NOTARY_ISSUER_ID=$NOTARY_ISSUER_ID"
+          } >> "$GITHUB_ENV"
+
       - name: Build app and disk image
         run: |
           macos/build-app.sh
@@ -117,6 +160,12 @@ jobs:
           name: flock-macos
           path: build/macos/Flock-*-macOS.dmg
           if-no-files-found: error
+
+      - name: Clean up signing
+        if: always() && env.SIGNING == 'true'
+        run: |
+          security delete-keychain "$RUNNER_TEMP/signing.keychain-db" || true
+          rm -f "$RUNNER_TEMP/notary-key.p8"
 
   windows:
     name: Windows (x64)
