@@ -17,6 +17,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"flock/internal/api"
+	"flock/internal/phpext"
 )
 
 // Daemon is what the server needs from the Flock daemon; *api.Client implements it.
@@ -30,6 +31,7 @@ type Daemon interface {
 	PHPVersions(ctx context.Context) (api.PHPVersions, error)
 	CheckPHP(ctx context.Context) (api.PHPVersions, error)
 	NodeVersions(ctx context.Context) (api.NodeVersions, error)
+	SiteExtensions(ctx context.Context, name string) (phpext.Report, error)
 
 	SetServiceRunning(ctx context.Context, id string, on bool) ([]api.Service, error)
 	InstallService(ctx context.Context, id, line string, port int) (api.Catalog, error)
@@ -113,6 +115,7 @@ func (s *server) instructions(ctx context.Context) string {
 
 	b.WriteString(`- Flock always serves its sites: don't run "php artisan serve" or another web server. Use site_info for the URL.
 - Run php, composer, node and npm as usual: Flock's shims pick the versions the project uses.
+- When code uses a PHP extension (imagick, intl, ...), require it in composer.json ("composer require ext-<name>:*"). php_extensions shows what the project requires and what Flock's PHP has.
 - Mail the app sends is caught by Flock, not delivered: read it with list_mail and read_mail.
 - To debug: get_errors (the Laravel log and PHP errors), get_dumps (dump() and dd() output) and service_logs.
 - If other guidelines describe a different local development server, follow them only when Flock isn't the one serving the project.`)

@@ -148,6 +148,15 @@ public actor FlockClient {
         try await decode(Status.self, "POST", "/v1/sites/\(escape(site))/boost", timeout: Self.boostTimeout)
     }
 
+    public func siteExtensions(site: String) async throws -> ExtensionReport {
+        try await decode(ExtensionReport.self, "GET", "/v1/sites/\(escape(site))/extensions")
+    }
+
+    /// Adds `ext-<name>` to the site's composer.json with Composer (up to 5 minutes).
+    public func requireExtension(site: String, name: String) async throws -> ExtensionReport {
+        try await decode(ExtensionReport.self, "POST", "/v1/sites/\(escape(site))/extensions/\(escape(name))/require", timeout: 300)
+    }
+
     // MARK: AI clients
 
     /// The AI clients Flock's MCP server can be registered with.

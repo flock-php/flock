@@ -31,8 +31,9 @@ func TestStates(t *testing.T) {
 		t.Fatal("CRLF")
 	}
 
+	saved := previous
 	previous = []string{"## Flock\n\nold text\n"}
-	t.Cleanup(func() { previous = nil })
+	t.Cleanup(func() { previous = saved })
 	_ = os.WriteFile(File(dir), []byte(previous[0]), 0o644)
 	if State(dir) != Outdated || Write(dir) != nil || State(dir) != Current {
 		t.Fatal("an older guideline is replaced")

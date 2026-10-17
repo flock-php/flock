@@ -18,6 +18,7 @@ import (
 	"flock/internal/laravellog"
 	"flock/internal/mail"
 	"flock/internal/php"
+	"flock/internal/phpext"
 )
 
 // readOnly marks tools that only look; clients may run them without asking.
@@ -41,6 +42,13 @@ func (s *server) addReadTools(srv *mcp.Server) {
 			"(isolated in Flock, pinned in .flockrc/.nvmrc, or Flock's default), and whether FastCGI or FrankenPHP serves it.",
 		Annotations: readOnly,
 	}, s.siteInfo)
+
+	mcp.AddTool(srv, &mcp.Tool{
+		Name: "php_extensions",
+		Description: "The PHP extensions a site requires (ext-* in composer.json and its locked packages), the ones its " +
+			"Laravel .env and config show it uses without requiring them, and whether Flock's PHP has each.",
+		Annotations: readOnly,
+	}, s.phpExtensions)
 
 	mcp.AddTool(srv, &mcp.Tool{
 		Name:        "list_sites",
@@ -712,4 +720,16 @@ func cmpOr(a, b string) string {
 		return a
 	}
 	return b
+}
+
+// ---------------------------------------------------------------------------------------------
+// extensions
+
+func (s *server) phpExtensions(ctx context.Context, _ *mcp.CallToolRequest, in siteArg) (*mcp.CallToolResult, phpext.Report, error) {
+	site, err := s.site(ctx, in.Site)
+	if err != nil {
+		return nil, phpext.Report{}, err
+	}
+	report, err := s.Daemon.SiteExtensions(ctx, site.Name)
+	return nil, report, err
 }

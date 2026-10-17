@@ -101,6 +101,11 @@ public sealed class FlockClient : IDisposable
     /// </summary>
     public Task<Status> AddBoostGuidelineAsync(string site) => Send<Status>(HttpMethod.Post, $"/v1/sites/{Escape(site)}/boost", timeout: BoostTimeout);
 
+    public Task<ExtensionReport> SiteExtensionsAsync(string site) => Get<ExtensionReport>($"/v1/sites/{Escape(site)}/extensions");
+
+    /// <summary>Adds the extension to the site's composer.json (ext-NAME) with Composer (up to 5 minutes).</summary>
+    public Task<ExtensionReport> RequireExtensionAsync(string site, string name) => Send<ExtensionReport>(HttpMethod.Post, $"/v1/sites/{Escape(site)}/extensions/{Escape(name)}/require", timeout: TimeSpan.FromMinutes(5));
+
     /// <summary>The AI clients Flock's MCP server can be registered with.</summary>
     public Task<McpState> McpAsync() => Get<McpState>("/v1/mcp");
 

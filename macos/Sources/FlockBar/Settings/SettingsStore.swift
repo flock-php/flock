@@ -318,6 +318,27 @@ final class SettingsStore {
         (try? await client.phpInstallLog(minor)) ?? ""
     }
 
+    /// The PHP extensions a site needs, or why the daemon couldn't tell.
+    func siteExtensions(_ site: String) async -> Result<ExtensionReport, Error> {
+        do {
+            return .success(try await client.siteExtensions(site: site))
+        } catch {
+            return .failure(error)
+        }
+    }
+
+    /// Adds `ext-<name>` to a site's composer.json, then refreshes the sites (a problem may be gone).
+    func requireExtension(site: String, name: String) async -> Result<ExtensionReport, Error> {
+        let result: Result<ExtensionReport, Error>
+        do {
+            result = .success(try await client.requireExtension(site: site, name: name))
+        } catch {
+            result = .failure(error)
+        }
+        await onChange?()
+        return result
+    }
+
     /// Lets the user pick folders; empty when cancelled.
     static func chooseDirectories(prompt: String, multiple: Bool) -> [URL] {
         let panel = NSOpenPanel()

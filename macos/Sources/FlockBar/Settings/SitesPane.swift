@@ -21,6 +21,8 @@ struct SitesPane: View {
         nonmutating set { addingState.wrappedValue = newValue }
     }
     private let newDomainState = State<String>(initialValue: "")
+    /// The site whose PHP extensions are shown.
+    private let extensionsState = State<Status.Site?>(initialValue: nil)
     /// The site whose FrankenPHP is restarting.
     private let restartingState = State<String?>(initialValue: nil)
     private var restarting: String? {
@@ -128,6 +130,8 @@ struct SitesPane: View {
                             .disabled(site.url == nil)
                         Button { reveal(site.path) } label: { Image(systemName: "folder") }
                             .help("Show in Finder")
+                        Button { extensionsState.wrappedValue = site } label: { Image(systemName: "puzzlepiece.extension") }
+                            .help("PHP extensions")
                         domainMenu(site)
                         pinMenu(site)
                         if !site.parked {
@@ -142,7 +146,7 @@ struct SitesPane: View {
                     }
                     .buttonStyle(.borderless)
                 }
-                .width(150)
+                .width(176)
             }
             .tableStyle(.inset)
             .padding(.horizontal, 20)
@@ -162,6 +166,9 @@ struct SitesPane: View {
             .fixedSize(horizontal: false, vertical: true)
             .padding(.horizontal, 24)
             .padding(.vertical, 10)
+        }
+        .sheet(item: extensionsState.projectedValue) { site in
+            SiteExtensionsSheet(site: site)
         }
         .confirmationDialog(confirm?.title ?? "", isPresented: Binding(get: { confirm != nil }, set: { if !$0 { confirm = nil } }), presenting: confirm) { action in
             Button(action.button, role: action.destructive ? .destructive : nil) {

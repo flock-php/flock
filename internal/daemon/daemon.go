@@ -31,6 +31,7 @@ import (
 	"flock/internal/node"
 	"flock/internal/paths"
 	"flock/internal/php"
+	"flock/internal/phpext"
 	"flock/internal/ports"
 	"flock/internal/postgres"
 	"flock/internal/project"
@@ -570,6 +571,7 @@ func (d *daemon) reload() error {
 			statuses = append(statuses, status)
 			continue
 		}
+		status.Problem = extensionsProblem(d.root, site.Path, version)
 
 		ws := web.Site{Domain: domain, Aliases: aliases, Root: web.DocumentRoot(site.Path)}
 		if cfg.Xdebug {
@@ -1035,4 +1037,21 @@ func claimSocket(socket string) error {
 	}
 
 	return nil
+}
+
+// extensionsProblem names the extensions a site requires (composer.json, composer.lock) that its
+// PHP doesn't have; "" when it has them all.
+func extensionsProblem(root, dir, minor string) string {
+	exts, err := php.Extensions(root, minor)
+	if err != nil {
+		return ""
+	}
+	missing := phpext.Check(dir, minor, exts).Missing()
+	switch len(missing) {
+	case 0:
+		return ""
+	case 1:
+		return fmt.Sprintf("Requires the PHP extension %s, which Flock's PHP %s doesn't include", missing[0], minor)
+	}
+	return fmt.Sprintf("Requires the PHP extensions %s, which Flock's PHP %s doesn't include", strings.Join(missing, ", "), minor)
 }

@@ -206,6 +206,7 @@ func NewHandler(b Backend, token string) http.Handler {
 
 	registerConfig(mux, b)
 	registerPHPVersions(mux, b)
+	registerExtensions(mux, b)
 	registerNodeVersions(mux, b)
 	registerPostgresVersions(mux, b)
 	registerComponents(mux, b)

@@ -124,7 +124,8 @@ internal sealed class SitesPane(SettingsWindow window, AppModel model) : Pane(wi
 
         var open = Ui.IconButton(Ui.GlyphOpen, $"Open {site.Url ?? site.Domain}", () => AppModel.Open(site));
         open.IsEnabled = site.Url is not null;
-        var actions = Ui.Row(0, open, Ui.IconButton(Ui.GlyphFolder, "Show in Explorer", () => Native.Reveal(site.Path)), More(site));
+        var actions = Ui.Row(0, open, Ui.IconButton(Ui.GlyphFolder, "Show in Explorer", () => Native.Reveal(site.Path)),
+            Ui.IconButton(Ui.GlyphPuzzle, "PHP extensions", () => _ = ShowExtensions(site)), More(site));
         if (!site.Parked)
         {
             actions.Children.Add(Ui.IconButton(Ui.GlyphDelete, "Remove site", async () =>
@@ -358,6 +359,102 @@ internal sealed class SitesPane(SettingsWindow window, AppModel model) : Pane(wi
         link.Padding = new Thickness(0);
         ToolTipService.SetToolTip(link, $"Open {url}");
         return link;
+    }
+
+    /// <summary>
+    /// A site's PHP extensions: what composer.json and the locked packages require, what a Laravel
+    /// app's configuration shows it uses without requiring it, and whether Flock's PHP has each.
+    /// Adding one to composer.json is confirmed inline (only one dialog can be open at a time).
+    /// </summary>
+    private async Task ShowExtensions(Status.Site site)
+    {
+        var list = new StackPanel { Spacing = 6 };
+        var scroller = new ScrollViewer { Content = list, Width = 560, Height = 320 };
+        var dialog = new ContentDialog
+        {
+            Title = $"PHP extensions of {site.Name}",
+            Content = Ui.Column(10, scroller, Ui.Caption("Requiring an extension in composer.json makes composer install refuse a server without it, instead of the app failing there.")),
+            CloseButtonText = "Done",
+            DefaultButton = ContentDialogButton.Close,
+            XamlRoot = Window.XamlRoot,
+        };
+        dialog.Resources["ContentDialogMaxWidth"] = 640.0;
+
+        ExtensionReport? report = null;
+        string? error = null;
+        string? confirming = null, adding = null;
+
+        void Render()
+        {
+            list.Children.Clear();
+            if (error is not null)
+            {
+                list.Children.Add(Ui.Row(6, Ui.Icon(Ui.GlyphWarning, 12, Ui.Critical), Ui.Caption(error, Ui.Critical)));
+            }
+            if (report is null)
+            {
+                if (error is null)
+                {
+                    list.Children.Add(Ui.Row(10, new ProgressRing { Width = 16, Height = 16 }, Ui.Caption("Loading…")));
+                }
+                return;
+            }
+            list.Children.Add(Ui.Caption(report.Laravel ? $"PHP {report.Php} · Laravel app" : $"PHP {report.Php}"));
+            if (report.Extensions.Count == 0)
+            {
+                list.Children.Add(Ui.Text("The project requires no PHP extensions.", foreground: Ui.SecondaryText));
+            }
+            foreach (var ext in report.Extensions)
+            {
+                var (glyph, color) = !ext.Available ? (Ui.GlyphWarning, Ui.Critical) : ext.Declared ? (Ui.GlyphPuzzle, Ui.Success) : (Ui.GlyphInfo, Ui.Caution);
+                var detail = ext.Declared ? $"Required by {string.Join(", ", ext.RequiredBy)}" : $"Not required, but used: {ext.Hint}";
+                if (!ext.Available)
+                {
+                    detail += $" — Flock's PHP {report.Php} doesn't include it";
+                }
+                var caption = Ui.Caption(detail);
+                caption.MaxWidth = 360;
+                var info = Ui.Row(10, Ui.Icon(glyph, 14, color), Ui.Column(2, Ui.Text(ext.Name, wrap: false), caption));
+
+                var actions = Ui.Row(8);
+                if (adding == ext.Name)
+                {
+                    actions.Children.Add(new ProgressRing { Width = 16, Height = 16 });
+                }
+                else if (confirming == ext.Name)
+                {
+                    var name = ext.Name;
+                    actions.Children.Add(Ui.Link("Cancel", () => { confirming = null; Render(); }));
+                    actions.Children.Add(Ui.Button("Require", () => _ = Add(name), accent: true,
+                        tooltip: $"Runs composer require ext-{name}:* in {site.Path}, which changes composer.json and composer.lock. Commit them with the project."));
+                }
+                else if (!ext.Declared)
+                {
+                    var name = ext.Name;
+                    var add = Ui.Button("Add to composer.json…", () => { confirming = name; Render(); });
+                    add.IsEnabled = adding is null;
+                    actions.Children.Add(add);
+                }
+                list.Children.Add(Ui.Spread(info, actions));
+            }
+        }
+
+        async Task Add(string name)
+        {
+            confirming = null;
+            adding = name;
+            Render();
+            (var fresh, error) = await Store.RequireExtensionAsync(site.Name, name);
+            report = fresh ?? report;
+            adding = null;
+            Render();
+        }
+
+        Render();
+        var load = Store.SiteExtensionsAsync(site.Name);
+        _ = dialog.ShowAsync();
+        (report, error) = await load;
+        Render();
     }
 
     private async Task AddDomain(Status.Site site)

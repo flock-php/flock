@@ -50,4 +50,21 @@ public class PhpVersionsTests
         var job = catalog.Versions[0].Job!;
         Assert.True(job.IsFailed && job.Action == "update" && job.Error == "checksum mismatch");
     }
+
+    [Fact]
+    public void DecodesSiteExtensions()
+    {
+        var report = FlockJson.Decode<ExtensionReport>("""
+            {"php":"8.4","laravel":true,"extensions":[
+              {"name":"intl","required_by":["composer.json","mongodb/mongodb"],"available":true},
+              {"name":"pdo_pgsql","required_by":[],"hint":"DB_CONNECTION=pgsql in .env","available":true},
+              {"name":"swoole","required_by":["composer.json"],"available":false}]}
+            """);
+
+        Assert.True(report.Php == "8.4" && report.Laravel && report.Extensions.Count == 3);
+        Assert.True(report.Extensions[0].Declared);
+        Assert.Equal(["composer.json", "mongodb/mongodb"], report.Extensions[0].RequiredBy);
+        Assert.True(!report.Extensions[1].Declared && report.Extensions[1].Hint == "DB_CONNECTION=pgsql in .env");
+        Assert.False(report.Extensions[2].Available);
+    }
 }

@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -17,6 +18,7 @@ import (
 	"flock/internal/dumps"
 	"flock/internal/frankenphp"
 	"flock/internal/php"
+	"flock/internal/phpext"
 	"flock/internal/postgres"
 )
 
@@ -383,4 +385,38 @@ func TestSitesSwitchToFrankenPHPAndBack(t *testing.T) {
 func jsonString(s string) string {
 	b, _ := json.Marshal(s)
 	return string(b)
+}
+
+func TestSiteExtensionsAndRequiringOne(t *testing.T) {
+	root, project := t.TempDir(), t.TempDir()
+	if err := os.WriteFile(filepath.Join(project, "composer.json"), []byte(`{"require": {"ext-intl": "*"}}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	srv := serve(t, &fakeBackend{root: root, sites: []SiteStatus{{Name: "shop", Path: project, PHP: "8.4"}}}, "")
+
+	var report phpext.Report
+	resp, body := call(t, "GET", srv.URL+"/v1/sites/shop/extensions", "", "")
+	if err := json.Unmarshal([]byte(body), &report); err != nil || resp.StatusCode != http.StatusOK {
+		t.Fatalf("%d %s", resp.StatusCode, body)
+	}
+	if len(report.Extensions) != 1 || report.Extensions[0].Name != "intl" || report.Extensions[0].Available {
+		t.Fatalf("%+v (PHP 8.4 isn't installed, so nothing is available)", report)
+	}
+
+	saved := composerRequire
+	t.Cleanup(func() { composerRequire = saved })
+	var required string
+	composerRequire = func(_ context.Context, _, minor, dir, name string) error {
+		required = minor + " " + dir + " " + name
+		return nil
+	}
+	if resp, body := call(t, "POST", srv.URL+"/v1/sites/shop/extensions/ext-PDO_pgsql/require", "", ""); resp.StatusCode != http.StatusOK || required != "8.4 "+project+" pdo_pgsql" {
+		t.Fatalf("required %q: %d %s", required, resp.StatusCode, body)
+	}
+	if resp, _ := call(t, "POST", srv.URL+"/v1/sites/shop/extensions/intl%3Brm/require", "", ""); resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("an invalid name must be refused: %d", resp.StatusCode)
+	}
+	if resp, _ := call(t, "GET", srv.URL+"/v1/sites/nope/extensions", "", ""); resp.StatusCode != http.StatusNotFound {
+		t.Fatalf("an unknown site: %d", resp.StatusCode)
+	}
 }

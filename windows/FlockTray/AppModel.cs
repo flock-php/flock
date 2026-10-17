@@ -805,6 +805,38 @@ public sealed class SettingsStore(FlockClient client) : Store
         }
     }
 
+    /// <summary>The PHP extensions a site needs, or why the daemon couldn't tell.</summary>
+    public async Task<(ExtensionReport? Report, string? Error)> SiteExtensionsAsync(string site)
+    {
+        try
+        {
+            return (await client.SiteExtensionsAsync(site), null);
+        }
+        catch (FlockException e)
+        {
+            return (null, e.Message);
+        }
+    }
+
+    /// <summary>Adds the extension to a site's composer.json, then refreshes the sites (a problem may be gone).</summary>
+    public async Task<(ExtensionReport? Report, string? Error)> RequireExtensionAsync(string site, string name)
+    {
+        (ExtensionReport?, string?) result;
+        try
+        {
+            result = (await client.RequireExtensionAsync(site, name), null);
+        }
+        catch (FlockException e)
+        {
+            result = (null, e.Message);
+        }
+        if (OnChange is not null)
+        {
+            await OnChange();
+        }
+        return result;
+    }
+
     public void DismissError()
     {
         Error = null;

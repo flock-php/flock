@@ -16,6 +16,7 @@ import (
 	"flock/internal/catalog"
 	"flock/internal/components"
 	"flock/internal/php"
+	"flock/internal/phpext"
 )
 
 // fakeDaemon answers like the daemon and records the changes asked of it.
@@ -59,6 +60,10 @@ func (f *fakeDaemon) PostgresVersions(context.Context) (api.PostgresVersions, er
 }
 func (f *fakeDaemon) CheckPHP(ctx context.Context) (api.PHPVersions, error) {
 	return f.PHPVersions(ctx)
+}
+func (f *fakeDaemon) SiteExtensions(_ context.Context, name string) (phpext.Report, error) {
+	f.record("extensions", name)
+	return phpext.Report{PHP: "8.4", Extensions: []phpext.Extension{{Name: "intl", RequiredBy: []string{"composer.json"}, Available: true}}}, f.err()
 }
 func (f *fakeDaemon) NodeVersions(context.Context) (api.NodeVersions, error) {
 	return api.NodeVersions{}, f.err()
@@ -216,7 +221,7 @@ func TestToolsAndAnnotations(t *testing.T) {
 		}
 	}
 	for _, name := range []string{"status", "site_info", "list_sites", "list_services", "list_php_versions", "list_node_versions",
-		"get_errors", "get_dumps", "list_mail", "read_mail", "service_logs"} {
+		"get_errors", "get_dumps", "list_mail", "read_mail", "service_logs", "php_extensions"} {
 		if !readOnly[name] {
 			t.Errorf("%s should be a read-only tool", name)
 		}
@@ -226,7 +231,7 @@ func TestToolsAndAnnotations(t *testing.T) {
 			t.Errorf("%s should be a tool that changes things (listed: %v)", name, ok)
 		}
 	}
-	if len(res.Tools) != 17 {
+	if len(res.Tools) != 18 {
 		t.Errorf("got %d tools", len(res.Tools))
 	}
 }
@@ -527,4 +532,14 @@ func TestHTMLText(t *testing.T) {
 func jsonString(s string) string {
 	b, _ := json.Marshal(s)
 	return string(b)
+}
+
+func TestPHPExtensionsOfTheCurrentSite(t *testing.T) {
+	_, opts := fixture(t)
+	cs := connect(t, opts)
+
+	var out phpext.Report
+	if e := callTool(t, cs, "php_extensions", nil, &out); e != "" || out.PHP != "8.4" || len(out.Extensions) != 1 || out.Extensions[0].Name != "intl" {
+		t.Fatalf("%q %+v", e, out)
+	}
 }

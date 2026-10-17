@@ -57,3 +57,17 @@ import Testing
     #expect(beta.channel == "beta")
     #expect(missing.channel == "stable")
 }
+
+@Test func decodesSiteExtensions() throws {
+    let report = try FlockJSON.decoder().decode(ExtensionReport.self, from: Data("""
+    {"php":"8.4","laravel":true,"extensions":[
+      {"name":"intl","required_by":["composer.json","mongodb/mongodb"],"available":true},
+      {"name":"pdo_pgsql","required_by":[],"hint":"DB_CONNECTION=pgsql in .env","available":true},
+      {"name":"swoole","required_by":["composer.json"],"available":false}]}
+    """.utf8))
+
+    #expect(report.php == "8.4" && report.laravel && report.extensions.count == 3)
+    #expect(report.extensions[0].declared && report.extensions[0].requiredBy == ["composer.json", "mongodb/mongodb"])
+    #expect(!report.extensions[1].declared && report.extensions[1].hint == "DB_CONNECTION=pgsql in .env")
+    #expect(!report.extensions[2].available)
+}

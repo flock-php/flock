@@ -695,6 +695,42 @@ func FullVersion(root, minor string) string {
 	return version
 }
 
+var loadedExtensions sync.Map // binary + ini files and their mtimes → extensions
+
+// Extensions lists what command-line PHP of an installed minor loads (lower case, spaces as
+// dashes: "intl", "zend-opcache"), plus Xdebug when the build ships it. It is cached until the
+// binary or Flock's ini files change.
+func Extensions(root, minor string) (map[string]bool, error) {
+	key := ""
+	for _, path := range []string{Binary(root, minor), filepath.Join(Dir(root, minor), "conf.d", "00-flock.ini"), filepath.Join(CLIDir(root, minor), "pcov.ini"), IniPath(root, minor)} {
+		if info, err := os.Stat(path); err == nil {
+			key += path + "@" + info.ModTime().String() + ";"
+		} else if path == Binary(root, minor) {
+			return nil, fmt.Errorf("PHP %s is not installed", minor)
+		}
+	}
+	if v, ok := loadedExtensions.Load(key); ok {
+		return v.(map[string]bool), nil
+	}
+	cmd := exec.Command(Binary(root, minor), "-r", `echo implode("\n", array_merge(get_loaded_extensions(), get_loaded_extensions(true)));`)
+	cmd.Env = append(os.Environ(), CLIEnv(root, minor)...)
+	out, err := cmd.Output()
+	if err != nil {
+		return nil, fmt.Errorf("list the extensions of PHP %s: %w", minor, err)
+	}
+	exts := map[string]bool{}
+	for _, line := range strings.Split(string(out), "\n") {
+		if name := strings.ReplaceAll(strings.ToLower(strings.TrimSpace(line)), " ", "-"); name != "" {
+			exts[name] = true
+		}
+	}
+	if XdebugAvailable(root, minor) {
+		exts["xdebug"] = true
+	}
+	loadedExtensions.Store(key, exts)
+	return exts, nil
+}
+
 // Uninstall removes a PHP version including its php.ini.
 func Uninstall(root, minor string) error {
 	if !minorPattern.MatchString(minor) {
