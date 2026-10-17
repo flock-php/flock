@@ -16,7 +16,7 @@ import (
 	"flock/internal/config"
 	"flock/internal/dumps"
 	"flock/internal/frankenphp"
-	"flock/internal/phpbuild"
+	"flock/internal/php"
 	"flock/internal/postgres"
 )
 
@@ -25,14 +25,14 @@ type fakeBackend struct {
 	catalog *catalog.Manager
 	root    string
 	sites   []SiteStatus
-	builds  *phpbuild.Manager
+	php     *php.Manager
 
 	pg         *postgres.Manager
 	components *components.Manager
 	frankenphp *frankenphp.Manager
 }
 
-func (f *fakeBackend) PHPBuilds() *phpbuild.Manager { return f.builds }
+func (f *fakeBackend) PHP() *php.Manager { return f.php }
 
 func (f *fakeBackend) PostgresVersions() *postgres.Manager { return f.pg }
 func (f *fakeBackend) Components() *components.Manager     { return f.components }

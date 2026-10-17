@@ -9,7 +9,7 @@ import (
 	"flock/internal/api"
 	"flock/internal/config"
 	"flock/internal/node"
-	"flock/internal/phpbuild"
+	"flock/internal/php"
 )
 
 // The shims only offer an install for these typed errors, so they must survive resolveTool.
@@ -43,30 +43,18 @@ func TestPHPQuestionSaysWhatInstallingTakes(t *testing.T) {
 		return q
 	}
 
-	release := func(status string) api.PHPRelease {
-		return api.PHPRelease{Version: phpbuild.Version{Status: status}}
+	available := api.PHPRelease{Release: php.Release{Latest: "8.5.11", Size: 64 << 20}}
+	if q := ask(available); !strings.Contains(q, "Download PHP 8.5.11 (64 MB)") {
+		t.Errorf("available: %q", q)
+	}
+	running := available
+	running.Job = &php.Job{State: "running"}
+	if q := ask(running); !strings.Contains(q, "already downloading") {
+		t.Errorf("running install: %q", q)
 	}
 
-	if q := ask(release("ready")); !strings.Contains(q, "Install it now?") {
-		t.Errorf("ready build: %q", q)
-	}
-	running := release("likely")
-	running.Job = &phpbuild.Job{State: phpbuild.Running}
-	if q := ask(running); !strings.Contains(q, "already preparing") {
-		t.Errorf("running build: %q", q)
-	}
-	want := "Compiling PHP takes a few minutes"
-	if runtime.GOOS == "windows" {
-		want = "Download and install it now?"
-	}
-	if q := ask(release("likely")); !strings.Contains(q, want) {
-		t.Errorf("no build yet: %q, want %q", q, want)
-	}
-
-	unsupported := release("unsupported")
-	unsupported.Minor, unsupported.Note = "9.0", "not supported yet."
-	if _, err := phpQuestion(unsupported); err == nil || !strings.Contains(err.Error(), "not supported yet.") {
-		t.Errorf("unsupported versions must not prompt but explain: %v", err)
+	if _, err := phpQuestion(api.PHPRelease{Release: php.Release{Minor: "9.0"}}); err == nil || !strings.Contains(err.Error(), "no build of it is published") {
+		t.Errorf("a version without a build must not prompt but explain: %v", err)
 	}
 }
 

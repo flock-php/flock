@@ -31,7 +31,6 @@ import (
 	"flock/internal/node"
 	"flock/internal/paths"
 	"flock/internal/php"
-	"flock/internal/phpbuild"
 	"flock/internal/ports"
 	"flock/internal/postgres"
 	"flock/internal/project"
@@ -66,7 +65,7 @@ type daemon struct {
 	dnsErr   error       // why the DNS server isn't running (Windows, where it is optional)
 	mail     *mail.Server
 	webUp    bool
-	builds   *phpbuild.Manager
+	php      *php.Manager
 	// binaries is the manifest of prebuilt packages for the configured channel, shared by the managers.
 	binaries *binaries.Catalog
 	// frankenphp installs FrankenPHP builds; restarts counts RestartSite calls per site (see frankenphp.Site.Restart).
@@ -241,20 +240,16 @@ func Run(ctx context.Context, cfg Config) error {
 	d := &daemon{root: cfg.Root, version: cfg.Version, startedAt: time.Now(), procs: supervisor.New(), leaves: certs.NewLeaves(), restarts: map[string]int{}}
 	defer d.shutdown()
 
-	if workspace, err := phpbuild.DefaultWorkspace(); err == nil && runtime.GOOS != "linux" {
-		d.builds = phpbuild.NewManager(cfg.Root, workspace, phpbuild.DefaultSources(), phpbuild.Hooks{
-			Installed: d.installedPHP,
-			Install:   d.installPHP,
-		})
-		go d.builds.Run(ctx)
-	}
-
 	if pg, err := postgres.NewManager(cfg.Root, pgService{d}); err == nil {
 		d.pg = pg
 		go pg.Catalog.Run(ctx)
 	}
 	d.binaries = binaries.NewCatalog(binaries.DefaultSource(cfg.Root), d.channel)
 	go d.binaries.Run(ctx)
+	d.php = php.NewManager(cfg.Root, d.binaries)
+	d.php.Release = d.ReleasePHP
+	d.php.Finished = func(string) { _ = d.reload() }
+	go d.php.Run(ctx)
 	d.frankenphp = frankenphp.NewManager(cfg.Root, d.binaries)
 	d.frankenphp.Release = d.releaseFrankenPHP
 	d.frankenphp.Installed = func(string) { _ = d.reload() }
@@ -889,31 +884,8 @@ func (d *daemon) Status() api.Status {
 	return st
 }
 
-// PHPBuilds implements api.Backend.
-func (d *daemon) PHPBuilds() *phpbuild.Manager { return d.builds }
-
-func (d *daemon) installedPHP() map[string]string {
-	installed, _ := php.Installed(d.root)
-	out := map[string]string{}
-	for _, minor := range installed {
-		out[minor] = php.FullVersion(d.root, minor)
-	}
-	return out
-}
-
-// installPHP installs a finished build and restarts that version's pool.
-func (d *daemon) installPHP(dir string) error {
-	if runtime.GOOS == "windows" {
-		// Windows locks the files of running programs: stop every PHP process first.
-		// The minor of the build isn't known yet; reload brings everything back right after.
-		d.ReleasePHP("")
-	}
-	if _, err := php.InstallFrom(d.root, dir); err != nil {
-		_ = d.reload()
-		return err
-	}
-	return d.reload()
-}
+// PHP implements api.Backend.
+func (d *daemon) PHP() *php.Manager { return d.php }
 
 // ReleasePHP implements api.Backend: on Windows it stops the processes that run a PHP version
 // ("" for all), so its files can be replaced or deleted. The next reload starts what is needed.

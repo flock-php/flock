@@ -122,7 +122,7 @@ func resolveTool(s *state, cwd, tool string, args []string) (path string, argv, 
 		// "php" would be looked up on PATH, so child processes (artisan test, queue workers) could
 		// end up running another PHP installation.
 		path = php.Binary(s.root, minor)
-		env = php.Env(s.root, minor)
+		env = php.CLIEnv(s.root, minor) // with pcov, for test coverage
 		if s.cfg.Dumps {
 			env = append(env, dumps.Env(s.cfg.Ports.Dumps)...)
 		}

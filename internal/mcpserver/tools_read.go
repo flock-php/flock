@@ -18,7 +18,6 @@ import (
 	"flock/internal/laravellog"
 	"flock/internal/mail"
 	"flock/internal/php"
-	"flock/internal/phpbuild"
 )
 
 // readOnly marks tools that only look; clients may run them without asking.
@@ -338,8 +337,9 @@ type phpVersionOut struct {
 	Installed  string `json:"installed,omitempty"` // full version
 	Latest     string `json:"latest,omitempty"`
 	Default    bool   `json:"default,omitempty"`
-	Status     string `json:"status"`
-	Note       string `json:"note,omitempty"`
+	Status     string `json:"status"` // installed, update or available
+	Prerelease bool   `json:"prerelease,omitempty"`
+	Withdrawn  string `json:"withdrawn,omitempty"` // why the installed build was withdrawn
 	Installing string `json:"installing,omitempty"`
 	InstallErr string `json:"install_error,omitempty"`
 }
@@ -365,12 +365,12 @@ func (s *server) listPHPVersions(ctx context.Context, _ *mcp.CallToolRequest, _ 
 		return nil, out, nil
 	}
 	for _, v := range versions.Versions {
-		o := phpVersionOut{Version: v.Minor, Installed: v.Installed, Latest: v.Latest, Default: v.Default, Status: v.Status, Note: v.Note}
+		o := phpVersionOut{Version: v.Minor, Installed: v.Installed, Latest: v.Latest, Default: v.Default, Status: v.Status, Prerelease: v.Prerelease, Withdrawn: v.Yanked}
 		if v.Job != nil {
-			if v.Job.State == phpbuild.Failed {
+			if v.Job.State == "failed" {
 				o.InstallErr = v.Job.Error
-			} else if v.Job.Install {
-				o.Installing = cmpOr(v.Job.Step, string(v.Job.State))
+			} else {
+				o.Installing = v.Job.Text(v.Minor)
 			}
 		}
 		out.Versions = append(out.Versions, o)

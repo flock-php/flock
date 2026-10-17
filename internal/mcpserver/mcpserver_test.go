@@ -16,7 +16,6 @@ import (
 	"flock/internal/catalog"
 	"flock/internal/components"
 	"flock/internal/php"
-	"flock/internal/phpbuild"
 )
 
 // fakeDaemon answers like the daemon and records the changes asked of it.
@@ -84,7 +83,7 @@ func (f *fakeDaemon) InstallPHP(_ context.Context, minor string) (api.PHPVersion
 	f.polled = 0
 	for i, v := range f.php.Versions {
 		if v.Minor == minor {
-			f.php.Versions[i].Job = &phpbuild.Job{State: phpbuild.Running, Install: true, Step: "compiling"}
+			f.php.Versions[i].Job = &php.Job{State: "running", Phase: "downloading", Progress: 0.5}
 		}
 	}
 	return f.php, nil
@@ -377,7 +376,7 @@ func TestMailTools(t *testing.T) {
 
 func TestInstallPHPWaitsAndReportsProgress(t *testing.T) {
 	d, opts := fixture(t)
-	d.php = api.PHPVersions{Versions: []api.PHPRelease{{Version: phpbuild.Version{Minor: "8.3", Latest: "8.3.20", Status: "ready"}}}}
+	d.php = api.PHPVersions{Versions: []api.PHPRelease{{Release: php.Release{Minor: "8.3", Latest: "8.3.20", Status: "available"}}}}
 	d.phpPolls = 3
 	cs := connect(t, opts)
 

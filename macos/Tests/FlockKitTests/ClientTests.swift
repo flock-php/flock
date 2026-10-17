@@ -154,12 +154,11 @@ struct ClientTests {
         _ = try await client.nodeVersions()
         // Changing PHP versions waits for the daemon's work, like the Go CLI (2 min).
         _ = try await client.installPHP("8.4")
-        _ = try await client.buildPHP("8.4")
-        _ = try await client.cancelPHPBuild("8.4")
+        _ = try await client.cancelPHPInstall("8.4")
         _ = try await client.uninstallPHP("8.4")
         _ = try await client.phpVersions()
 
-        #expect(StubProtocol.requests.map(\.timeout) == [5, 60, 120, 120, 120, 120, 5])
+        #expect(StubProtocol.requests.map(\.timeout) == [5, 60, 120, 120, 120, 5])
     }
     @Test func talksToThePostgresVersionEndpoints() async throws {
         StubProtocol.reset { _ in (200, #"{"active":"18","port":5432,"checked_at":null,"majors":[]}"#) }

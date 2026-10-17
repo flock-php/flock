@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"flock/internal/binaries"
+	"flock/internal/php"
 )
 
 // Errors of Manager operations; the API maps them to HTTP status codes.
@@ -115,6 +116,17 @@ func latest(manifest *binaries.Manifest, platform, minor string) (binaries.Versi
 	return binaries.Version{}, false
 }
 
+// extensionPack is the extension pack for minor (published for Windows, where it is added to the
+// official PHP build FrankenPHP runs on).
+func extensionPack(manifest *binaries.Manifest, platform, minor string) (binaries.Entry, bool) {
+	for _, v := range manifest.Versions(php.ExtensionsPackage, platform) {
+		if v.Version == minor {
+			return v.Entry, true
+		}
+	}
+	return binaries.Entry{}, false
+}
+
 // release finds a PHP release of the manifest.
 func release(manifest *binaries.Manifest, platform, version string) (binaries.Entry, bool) {
 	for _, v := range manifest.Versions(Package, platform) {
@@ -142,8 +154,12 @@ func minors(manifest *binaries.Manifest, platform string) []string {
 func build(manifest *binaries.Manifest, platform, root, minor string) Build {
 	b := Build{PHP: minor}
 	v, ok := latest(manifest, platform, minor)
+	pack, hasPack := extensionPack(manifest, platform, minor)
 	if ok {
 		b.Latest, b.Size, b.Prerelease = v.Version, v.Size, v.Prerelease
+		if hasPack {
+			b.Size += pack.Size
+		}
 	}
 	if info, installed := InstalledInfo(root, minor); installed {
 		b.Installed, b.PHPVersion = info.Version, info.PHP
@@ -153,10 +169,10 @@ func build(manifest *binaries.Manifest, platform, root, minor string) Build {
 		if e, ok := release(manifest, platform, info.PHP); ok && info.Build > 0 {
 			b.Yanked = e.YankReason(info.Build)
 		}
-		if ok && v.Installable() {
-			// Builds installed before the manifest named them by PHP release have no build number.
+		if ok && v.Installable() && (!hasPack || pack.Installable()) {
+			// A build from a local file (build 0) is replaced by the published one.
 			c := binaries.CompareVersions(v.Version, info.PHP)
-			b.Update = c > 0 || (c == 0 && (info.Build == 0 || v.Build > info.Build))
+			b.Update = c > 0 || (c == 0 && (info.Build == 0 || v.Build > info.Build || (hasPack && pack.Build > info.ExtensionsBuild)))
 		}
 	}
 	return b
@@ -349,8 +365,22 @@ func (m *Manager) install(ctx context.Context, minor string, log io.Writer, set 
 	}
 	fmt.Fprintf(log, "[flock] verified SHA-256 %s\n", entry.SHA256)
 
+	extensionsBuild := 0
+	if pack, ok := extensionPack(manifest, m.platform, minor); ok {
+		fmt.Fprintf(log, "[flock] downloading the extensions for PHP %s, build %d: %s\n", minor, pack.Build, pack.URL)
+		packDir := filepath.Join(staging, "exts")
+		if err := binaries.Install(ctx, m.http, pack, packDir, nil); err != nil {
+			return err
+		}
+		fmt.Fprintf(log, "[flock] verified SHA-256 %s\n", pack.SHA256)
+		if err := php.MergeExtensionPack(dir, packDir); err != nil {
+			return err
+		}
+		extensionsBuild = pack.Build
+	}
+
 	set("installing", -1)
-	got, info, err := activate(m.root, dir, entry.Build, m.Release)
+	got, info, err := activate(m.root, dir, entry.Build, extensionsBuild, m.Release)
 	if err != nil {
 		return err
 	}

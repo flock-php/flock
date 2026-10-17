@@ -143,20 +143,20 @@ public sealed class FlockClient : IDisposable
 
     public Task<PhpCatalog> PhpVersionsAsync() => Get<PhpCatalog>("/v1/php/versions");
 
-    /// <summary>Installs a version: instantly when a verified build is waiting, otherwise it queues one that installs when done.</summary>
+    /// <summary>Starts installing (or updating to) the channel's newest release of a version; follow it with PhpVersionsAsync.</summary>
     public Task<PhpCatalog> InstallPhpAsync(string minor) => Send<PhpCatalog>(HttpMethod.Post, $"/v1/php/versions/{Escape(minor)}/install", timeout: PhpChangeTimeout);
 
-    /// <summary>Prepares a version without installing it (on Windows: downloads it again).</summary>
-    public Task<PhpCatalog> BuildPhpAsync(string minor) => Send<PhpCatalog>(HttpMethod.Post, $"/v1/php/versions/{Escape(minor)}/build", timeout: PhpChangeTimeout);
+    public Task<PhpCatalog> CancelPhpInstallAsync(string minor) => Send<PhpCatalog>(HttpMethod.Post, $"/v1/php/versions/{Escape(minor)}/cancel", timeout: PhpChangeTimeout);
 
-    public Task<PhpCatalog> CancelPhpBuildAsync(string minor) => Send<PhpCatalog>(HttpMethod.Post, $"/v1/php/versions/{Escape(minor)}/cancel", timeout: PhpChangeTimeout);
+    /// <summary>Forgets a failed install.</summary>
+    public Task<PhpCatalog> DismissPhpJobAsync(string minor) => Send<PhpCatalog>(HttpMethod.Delete, $"/v1/php/versions/{Escape(minor)}/job");
 
     public Task<PhpCatalog> UninstallPhpAsync(string minor) => Send<PhpCatalog>(HttpMethod.Delete, $"/v1/php/versions/{Escape(minor)}", timeout: PhpChangeTimeout);
 
-    /// <summary>Asks the daemon to check php.net for new releases now.</summary>
+    /// <summary>Asks the daemon to fetch the binaries manifest now.</summary>
     public Task<PhpCatalog> CheckPhpReleasesAsync() => Send<PhpCatalog>(HttpMethod.Post, "/v1/php/check", timeout: TimeSpan.FromMinutes(1));
 
-    public async Task<string> PhpBuildLogAsync(string minor) => await Text(HttpMethod.Get, $"/v1/php/versions/{Escape(minor)}/log");
+    public async Task<string> PhpInstallLogAsync(string minor) => await Text(HttpMethod.Get, $"/v1/php/versions/{Escape(minor)}/log");
 
     // FrankenPHP builds
 

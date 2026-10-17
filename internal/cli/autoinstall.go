@@ -16,7 +16,7 @@ import (
 
 	"flock/internal/api"
 	"flock/internal/node"
-	"flock/internal/phpbuild"
+	"flock/internal/php"
 	"flock/internal/postgres"
 )
 
@@ -118,24 +118,21 @@ func offerInstall(ctx context.Context, s *state, err error) (bool, error) {
 	return true, install(ctx)
 }
 
-// phpQuestion is the prompt for a missing PHP version: what installing it takes differs between
-// a ready build, a download (Windows) and a build from source (macOS).
+// phpQuestion is the prompt for a missing PHP version.
 func phpQuestion(v api.PHPRelease) (string, error) {
 	switch {
-	case v.Status == "unsupported":
-		return "", fmt.Errorf("PHP %s is not installed, and can't be: %s", v.Minor, v.Note)
-	case v.Job != nil && (v.Job.State == phpbuild.Queued || v.Job.State == phpbuild.Running):
-		return fmt.Sprintf("PHP %s isn't installed, but Flock is already preparing it. Wait for it and install it?", v.Minor), nil
-	case v.Status == "ready":
-		return fmt.Sprintf("PHP %s isn't installed. Install it now?", v.Minor), nil
-	case runtime.GOOS == "windows":
-		return fmt.Sprintf("PHP %s isn't installed. Download and install it now?", v.Minor), nil
+	case v.Job != nil && v.Job.State == "running":
+		return fmt.Sprintf("PHP %s isn't installed, but Flock is already downloading it. Wait for it?", v.Minor), nil
+	case v.Latest == "":
+		return "", fmt.Errorf("PHP %s is not installed, and no build of it is published for this platform", v.Minor)
+	case v.Size > 0:
+		return fmt.Sprintf("PHP %s isn't installed. Download PHP %s (%d MB) and install it now?", v.Minor, v.Latest, v.Size>>20), nil
 	default:
-		return fmt.Sprintf("PHP %s isn't installed. Build it now? Compiling PHP takes a few minutes.", v.Minor), nil
+		return fmt.Sprintf("PHP %s isn't installed. Download PHP %s and install it now?", v.Minor, v.Latest), nil
 	}
 }
 
-// phpRelease returns the daemon's view of minor, fetching the releases first when it doesn't
+// phpRelease returns the daemon's view of minor, fetching the manifest first when it doesn't
 // know it yet (right after the daemon started, or for a brand-new PHP version).
 func phpRelease(ctx context.Context, c *api.Client, minor string) (api.PHPRelease, error) {
 	versions, err := c.PHPVersions(ctx)
@@ -153,16 +150,16 @@ func phpRelease(ctx context.Context, c *api.Client, minor string) (api.PHPReleas
 		return v, nil
 	}
 	if versions.CheckError != "" {
-		return api.PHPRelease{}, fmt.Errorf("could not look up PHP releases: %s", versions.CheckError)
+		return api.PHPRelease{}, fmt.Errorf("could not look up PHP versions: %s", versions.CheckError)
 	}
-	return api.PHPRelease{}, fmt.Errorf("there is no PHP %s release Flock can install", minor)
+	return api.PHPRelease{}, fmt.Errorf("no PHP %s build is published for this platform", minor)
 }
 
-// installPHP has the daemon install the latest release of minor and waits until it is installed,
-// showing the build's progress on out. When ctx ends (Ctrl+C) the build is canceled.
+// installPHP has the daemon install the newest release of minor and waits until it is installed,
+// showing the download's progress on out. When ctx ends (Ctrl+C) the install is canceled.
 func installPHP(ctx context.Context, s *state, minor string, out io.Writer) error {
 	c := s.client()
-	if _, err := c.InstallPHP(ctx, minor); err != nil {
+	if _, err := c.InstallPHP(ctx, minor); err != nil && !strings.Contains(err.Error(), php.ErrBusy.Error()) {
 		return err
 	}
 
@@ -175,8 +172,8 @@ func installPHP(ctx context.Context, s *state, minor string, out io.Writer) erro
 		versions, err := c.PHPVersions(ctx)
 		if ctx.Err() != nil {
 			p.clear()
-			if err := c.CancelPHPBuild(context.Background(), minor); err != nil {
-				return fmt.Errorf("could not cancel the PHP %s build: %w", minor, err)
+			if err := c.CancelPHPInstall(context.Background(), minor); err != nil {
+				return fmt.Errorf("could not cancel the PHP %s install: %w", minor, err)
 			}
 			return fmt.Errorf("canceled — PHP %s was not installed", minor)
 		}
@@ -192,13 +189,11 @@ func installPHP(ctx context.Context, s *state, minor string, out io.Writer) erro
 			return nil
 		case v.Job == nil:
 			return fmt.Errorf("the PHP %s install was canceled", minor)
-		case v.Job.State == phpbuild.Failed:
+		case v.Job.State == "failed":
 			p.clear()
-			return fmt.Errorf("installing PHP %s failed: %s (log: %s)", minor, v.Job.Error, phpbuild.LogPath(s.root, minor))
-		case v.Job.State == phpbuild.Queued:
-			p.set(fmt.Sprintf("PHP %s: waiting for another PHP build to finish", minor))
+			return fmt.Errorf("installing PHP %s failed: %s (log: %s)", minor, v.Job.Error, php.LogPath(s.root, minor))
 		default:
-			p.set(v.Job.Step)
+			p.set(v.Job.Text(minor))
 		}
 
 		select {

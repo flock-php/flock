@@ -11,7 +11,6 @@ import (
 
 	"flock/internal/node"
 	"flock/internal/php"
-	"flock/internal/phpbuild"
 )
 
 func newPHPCommand() *cobra.Command {
@@ -76,10 +75,10 @@ func newPHPCommand() *cobra.Command {
 	return cmd
 }
 
-// installPHPVersion installs the latest release of minor through the daemon, which downloads it
-// (Windows) or builds it (macOS), and waits for it. Ctrl+C cancels the build.
+// installPHPVersion installs the newest release of minor through the daemon, which downloads it
+// from the manifest, and waits for it. Ctrl+C cancels the download.
 func installPHPVersion(cmd *cobra.Command, s *state, minor string) error {
-	if phpbuild.MinorOf(minor) != minor {
+	if php.MinorOf(minor) != minor {
 		return fmt.Errorf("give a version like 8.4 (Flock installs its latest release), not %q", minor)
 	}
 	if installed, _ := php.Installed(s.root); slices.Contains(installed, minor) {
@@ -91,8 +90,8 @@ func installPHPVersion(cmd *cobra.Command, s *state, minor string) error {
 	if err != nil {
 		return err
 	}
-	if v.Status == "unsupported" {
-		return fmt.Errorf("PHP %s can't be installed: %s", minor, v.Note)
+	if v.Latest == "" {
+		return fmt.Errorf("no PHP %s build is published for this platform", minor)
 	}
 
 	ctx, stop := signal.NotifyContext(cmd.Context(), os.Interrupt)

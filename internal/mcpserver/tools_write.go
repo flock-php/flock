@@ -18,7 +18,7 @@ import (
 	"flock/internal/components"
 	"flock/internal/config"
 	"flock/internal/node"
-	"flock/internal/phpbuild"
+	"flock/internal/php"
 	"flock/internal/postgres"
 	"flock/internal/project"
 )
@@ -390,7 +390,7 @@ func (s *server) installVersion(ctx context.Context, req *mcp.CallToolRequest, i
 }
 
 func (s *server) installPHP(ctx context.Context, req *mcp.CallToolRequest, version string) (*mcp.CallToolResult, actionOut, error) {
-	minor := phpbuild.MinorOf(version)
+	minor := php.MinorOf(version)
 	if minor == "" {
 		return nil, actionOut{}, fmt.Errorf("give a PHP version like 8.4, not %q", version)
 	}
@@ -412,8 +412,8 @@ func (s *server) installPHP(ctx context.Context, req *mcp.CallToolRequest, versi
 	switch {
 	case v.Installed != "" && v.Job == nil:
 		return nil, actionOut{Done: true, Message: fmt.Sprintf("PHP %s is already installed (%s).", minor, v.Installed)}, nil
-	case v.Status == "unsupported":
-		return nil, actionOut{}, fmt.Errorf("PHP %s can't be installed: %s", minor, v.Note)
+	case v.Latest == "":
+		return nil, actionOut{}, fmt.Errorf("no PHP %s build is published for this platform", minor)
 	}
 
 	if _, err := s.Daemon.InstallPHP(ctx, minor); err != nil {
@@ -430,12 +430,10 @@ func (s *server) installPHP(ctx context.Context, req *mcp.CallToolRequest, versi
 			return step{done: true, text: v.Installed}, nil
 		case v.Job == nil:
 			return step{}, fmt.Errorf("the PHP %s install was canceled", minor)
-		case v.Job.State == phpbuild.Failed:
-			return step{}, fmt.Errorf("installing PHP %s failed: %s (the log is %s)", minor, v.Job.Error, phpbuild.LogPath(s.Root, minor))
-		case v.Job.State == phpbuild.Queued:
-			return step{text: "waiting for another PHP build to finish"}, nil
+		case v.Job.State == "failed":
+			return step{}, fmt.Errorf("installing PHP %s failed: %s (the log is %s)", minor, v.Job.Error, php.LogPath(s.Root, minor))
 		}
-		return step{text: v.Job.Step}, nil
+		return step{text: v.Job.Text(minor)}, nil
 	})
 	if err != nil {
 		return nil, actionOut{}, err

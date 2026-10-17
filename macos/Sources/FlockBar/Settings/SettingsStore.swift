@@ -314,8 +314,8 @@ final class SettingsStore {
         self.catalog = catalog
     }
 
-    func phpBuildLog(_ minor: String) async -> String {
-        (try? await client.phpBuildLog(minor)) ?? ""
+    func phpInstallLog(_ minor: String) async -> String {
+        (try? await client.phpInstallLog(minor)) ?? ""
     }
 
     /// Lets the user pick folders; empty when cancelled.

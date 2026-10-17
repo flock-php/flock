@@ -211,30 +211,30 @@ public actor FlockClient {
         try await decode(PHPCatalog.self, "GET", "/v1/php/versions")
     }
 
-    /// Installs a version: instantly when a verified build is waiting, otherwise it queues a build that installs when done.
+    /// Starts installing (or updating to) the channel's newest release of a version; follow it with `phpVersions()`.
     public func installPHP(_ minor: String) async throws -> PHPCatalog {
         try await decode(PHPCatalog.self, "POST", "/v1/php/versions/\(escape(minor))/install", timeout: Self.phpChangeTimeout)
     }
 
-    /// Builds a version without installing it, to verify it or prepare an instant install.
-    public func buildPHP(_ minor: String) async throws -> PHPCatalog {
-        try await decode(PHPCatalog.self, "POST", "/v1/php/versions/\(escape(minor))/build", timeout: Self.phpChangeTimeout)
+    public func cancelPHPInstall(_ minor: String) async throws -> PHPCatalog {
+        try await decode(PHPCatalog.self, "POST", "/v1/php/versions/\(escape(minor))/cancel", timeout: Self.phpChangeTimeout)
     }
 
-    public func cancelPHPBuild(_ minor: String) async throws -> PHPCatalog {
-        try await decode(PHPCatalog.self, "POST", "/v1/php/versions/\(escape(minor))/cancel", timeout: Self.phpChangeTimeout)
+    /// Forgets a failed install.
+    public func dismissPHPJob(_ minor: String) async throws -> PHPCatalog {
+        try await decode(PHPCatalog.self, "DELETE", "/v1/php/versions/\(escape(minor))/job")
     }
 
     public func uninstallPHP(_ minor: String) async throws -> PHPCatalog {
         try await decode(PHPCatalog.self, "DELETE", "/v1/php/versions/\(escape(minor))", timeout: Self.phpChangeTimeout)
     }
 
-    /// Asks the daemon to check php.net for new releases now.
+    /// Asks the daemon to fetch the binaries manifest now.
     public func checkPHPReleases() async throws -> PHPCatalog {
         try await decode(PHPCatalog.self, "POST", "/v1/php/check", timeout: 60)
     }
 
-    public func phpBuildLog(_ minor: String) async throws -> String {
+    public func phpInstallLog(_ minor: String) async throws -> String {
         String(decoding: try await send("GET", "/v1/php/versions/\(escape(minor))/log"), as: UTF8.self)
     }
 

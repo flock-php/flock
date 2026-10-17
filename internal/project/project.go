@@ -18,7 +18,7 @@ import (
 
 	"flock/internal/config"
 	"flock/internal/node"
-	"flock/internal/phpbuild"
+	"flock/internal/php"
 )
 
 // RC is Flock's own project file: "php=8.4" and "node=22" lines, # comments.
@@ -89,7 +89,7 @@ var ErrInvalid = errors.New("invalid version")
 func ValidVersion(tool, version string) error {
 	switch tool {
 	case PHP:
-		if phpbuild.MinorOf(version) != version {
+		if php.MinorOf(version) != version {
 			return fmt.Errorf("%w: give a PHP version like 8.4, not %q", ErrInvalid, version)
 		}
 	case Node:
@@ -219,7 +219,7 @@ func readKey(path, key string) (string, error) {
 			if key == Node {
 				return node.ValidSpec(v), nil
 			}
-			return phpbuild.MinorOf(v), nil // "8.4.1" pins 8.4
+			return php.MinorOf(v), nil // "8.4.1" pins 8.4
 		}
 	}
 	return "", nil

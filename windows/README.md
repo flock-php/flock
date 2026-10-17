@@ -29,7 +29,7 @@ Running and publishing it needs Windows (the Windows App SDK's packaging tools a
 | `/etc/resolver/test` → Flock's DNS server | An **NRPT rule** (`Get-DnsClientNrptRule`, comment "Flock") sends every `*.test` name to Flock's DNS server on 127.0.0.1:53 — port 53 because NRPT rules can't name a port. It answers A records only (sites listen on IPv4 only; an AAAA `::1` answer cost PHP ~2 s per connection). So every subdomain works, up to 4 levels below a site or alias (`a.b.c.d.app.test`). The daemon checks every minute that lookups really arrive (Group Policy, VPN clients or a program on port 53 can get in the way) and reports it in `flock status` / Settings. |
 | — | Fallback: the **hosts helper**, a small Windows service (LocalSystem), copies site domains and their extra domains (`flock domain add tenant1`, `flock domain add app-2.test`) from `%AppData%\Flock\hosts.txt` into a marked block of the hosts file. It only accepts `*.<tld>` names → 127.0.0.1. These names resolve even where the NRPT rule is overridden, and in browsers whose own secure DNS (DoH in "secure" mode) skips NRPT. It is its own program, `flock-helper.exe` (Caddy, linked into `flock.exe`, claims the service dispatcher of any process that runs as a service); it logs failures to `C:\Program Files\Flock\hosts-helper.log`. |
 | PHP-FPM pool per version | 6 `php-cgi.exe` workers per version on 127.0.0.1:19000+ (e.g. 19840–19845 for 8.4); Caddy balances requests to the least busy one. |
-| PHP built from source by static-php-cli | Official builds from windows.php.net (NTS x64) + the matching Xdebug DLL from xdebug.org, verified by SHA-256. "Building" a version = downloading it. |
+| PHP from the binaries manifest: Flock's own build (`bin/php`, `php-fpm`, shared extensions) | PHP from the binaries manifest: the official windows.php.net build (thread-safe x64) plus Flock's extension pack (apcu, igbinary, imagick, mongodb, pcov, redis, xdebug), verified by SHA-256 |
 | Shell script shims in `bin/` | `php.exe`, `composer.exe`, `node.exe`, … in `%AppData%\Flock\bin` are hard links to `flock.exe`, which acts as `flock exec <tool>` under those names. The folder is prepended to the user PATH. |
 | CA trusted in the System keychain | CA added to the machine's Trusted Root store (`certutil -addstore Root`). PHP gets a bundle of the Windows root store + Flock's CA. |
 
@@ -103,5 +103,5 @@ fails, or a service hasn't exited after 10 seconds, it is killed. php-cgi worker
       files (binaries, PHP/Node versions, certificates, logs, caches), keeping only `config.json`
       and the services' data (PostgreSQL, MySQL, Redis, ...); `flock uninstall --purge` removes those too
 
-Logs: `%AppData%\Flock\log\` (daemon.log, web.log, php8.x-cgi.log, php-build-8.x.log) and
+Logs: `%AppData%\Flock\log\` (daemon.log, web.log, php8.x-cgi.log, php8.x-install.log) and
 `%LocalAppData%\Flock\tray.log` for unexpected errors in the tray app.

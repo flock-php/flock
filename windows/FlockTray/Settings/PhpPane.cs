@@ -5,9 +5,8 @@ using Microsoft.UI.Xaml.Controls;
 namespace Flock.Tray;
 
 /// <summary>
-/// PHP versions from php.net: install, update, download again and uninstall them, with progress.
-/// On Windows a "build" downloads the official windows.php.net build (plus Xdebug) — the daemon's
-/// API and the macOS app call it building because there it compiles.
+/// PHP versions from the binaries manifest: install, update and uninstall them, with download
+/// progress. A version is the official windows.php.net build plus Flock's extension pack.
 /// </summary>
 internal sealed class PhpPane(SettingsWindow window, AppModel model) : Pane(window, model)
 {
@@ -88,9 +87,11 @@ internal sealed class PhpPane(SettingsWindow window, AppModel model) : Pane(wind
         {
             title.Children.Add(Ui.Badge("Default"));
         }
-        if (!release.Supported)
+        if (release.Prerelease)
         {
-            title.Children.Add(Ui.Badge("End of life", Ui.Tone.Caution));
+            var badge = Ui.Badge("Pre-release", Ui.Tone.Caution);
+            ToolTipService.SetToolTip(badge, $"PHP {release.Latest} isn't released yet — it may not work. Offered on the beta channel.");
+            title.Children.Add(badge);
         }
         if (release.IsInstalled && release.Xdebug)
         {
@@ -194,42 +195,38 @@ internal sealed class PhpPane(SettingsWindow window, AppModel model) : Pane(wind
         return Ui.Card(Ui.Spread(info, actions));
     }
 
-    private static string VersionText(PhpRelease release) => release.Status switch
-    {
-        PhpStatus.Update => $"{release.Installed} → {release.Latest}",
-        _ => release.IsInstalled ? release.Installed : release.Latest,
-    };
+    private static string VersionText(PhpRelease release) =>
+        release.Update && release.Latest != release.Installed ? $"{release.Installed} → {release.Latest}" : release.IsInstalled ? release.Installed : release.Latest;
 
-    /// <summary>The status line under the name.</summary>
+    /// <summary>The status line under the name: an install in progress, the error of a failed one, a withdrawn build, or the state.</summary>
     private static UIElement Detail(PhpRelease release)
     {
-        if (release.Job is { IsActive: true } job)
+        if (release.Job is { IsRunning: true } job)
         {
-            var step = job.State == "queued" ? "Waiting for another download…" : job.Step.Length == 0 ? "Downloading…" : job.Step;
-            var text = Ui.Caption(step + (job.Auto ? " · in the background" : ""), wrap: false);
-            text.MaxWidth = 380;
-            return Ui.Row(6, new ProgressRing { Width = 12, Height = 12 }, text);
+            var text = job.Phase == "downloading" && job.HasProgress ? $"{job.PhaseText} {Math.Round(job.Progress * 100)}%" : job.PhaseText;
+            return Ui.Row(6, new ProgressRing { Width = 12, Height = 12 }, Ui.Caption(text, wrap: false));
         }
-        if (release.Status == PhpStatus.Failed || release.Job?.State == "failed")
+        if (release.Job is { IsFailed: true } failed)
         {
-            var error = Ui.Caption(release.Job is { Error.Length: > 0 } j ? j.Error : "The last download failed.", Ui.Critical);
+            var error = Ui.Caption(failed.Error.Length > 0 ? failed.Error : "The download failed.", Ui.Critical);
             error.MaxLines = 2;
+            error.MaxWidth = 380;
+            ToolTipService.SetToolTip(error, failed.Error);
             return error;
         }
-        if (release.Status == PhpStatus.Unsupported && release.Note.Length > 0)
+        if (release.Yanked.Length > 0)
         {
-            var note = Ui.Caption(release.Note);
-            note.MaxLines = 2;
-            ToolTipService.SetToolTip(note, release.Note);
-            return note;
+            var withdrawn = Ui.Caption(release.Update ? $"Withdrawn: {release.Yanked} — update to replace it" : $"Withdrawn: {release.Yanked}", Ui.Caution);
+            withdrawn.MaxLines = 2;
+            withdrawn.MaxWidth = 380;
+            ToolTipService.SetToolTip(withdrawn, "This build was withdrawn. Flock replaces it as soon as a fixed build is published.");
+            return Ui.Row(6, Ui.Icon(Ui.GlyphWarning, 12, Ui.Caution), withdrawn);
         }
         var (status, color) = release.Status switch
         {
             PhpStatus.Installed => ("Up to date", Ui.SecondaryText),
-            PhpStatus.Update => (release.UpdateReady ? "Update downloaded — installs instantly" : "Update available", Ui.Accent),
-            PhpStatus.Ready => ("Downloaded and ready to install", Ui.Success),
-            PhpStatus.Likely => ("Not installed", Ui.SecondaryText),
-            PhpStatus.Unsupported => ("No Windows build", Ui.SecondaryText),
+            PhpStatus.Update => (release.Latest == release.Installed ? "A new build is available" : "Update available", Ui.Accent),
+            PhpStatus.Available => ("Not installed", Ui.SecondaryText),
             _ => ("", Ui.SecondaryText),
         };
         return Ui.Caption(status, color);
@@ -237,57 +234,43 @@ internal sealed class PhpPane(SettingsWindow window, AppModel model) : Pane(wind
 
     private StackPanel Actions(PhpRelease release)
     {
+        var minor = release.Minor;
         var actions = Ui.Row(8);
-        if (release.Job is { IsActive: true })
+        var size = release.Size > 0 ? $"Downloads PHP {release.Latest} ({release.Size / 1_000_000} MB)" : null;
+        if (release.Job is { IsRunning: true })
         {
-            actions.Children.Add(Ui.Link("Show Log", () => _ = ShowLog(release.Minor)));
-            actions.Children.Add(Ui.Button("Cancel", () => _ = Run(release.Minor, () => Store.PerformOnPhpAsync(c => c.CancelPhpBuildAsync(release.Minor)))));
-            return Busy(release, actions);
+            actions.Children.Add(Ui.Link("Show Log", () => _ = ShowLog(minor)));
+            actions.Children.Add(Ui.Button("Cancel", () => _ = Run(minor, () => Store.PerformOnPhpAsync(c => c.CancelPhpInstallAsync(minor)))));
+        }
+        else if (release.Job is { IsFailed: true })
+        {
+            actions.Children.Add(Ui.Link("Show Log", () => _ = ShowLog(minor)));
+            actions.Children.Add(Ui.Button("Retry", () => _ = Run(minor, () => Store.PerformOnPhpAsync(c => c.InstallPhpAsync(minor))), glyph: Ui.GlyphRefresh));
+            actions.Children.Add(Ui.Button("Dismiss", () => _ = Run(minor, () => Store.PerformOnPhpAsync(c => c.DismissPhpJobAsync(minor)))));
+        }
+        else if (release.IsInstalled)
+        {
+            if (release.Update)
+            {
+                var label = release.Latest == release.Installed ? "Update" : $"Update to {release.Latest}";
+                actions.Children.Add(Ui.Button(label, () => _ = Run(minor, () => Store.PerformOnPhpAsync(c => c.InstallPhpAsync(minor))),
+                    accent: true, glyph: Ui.GlyphDownload, tooltip: size));
+            }
+            if (!release.IsDefault)
+            {
+                actions.Children.Add(Ui.Button("Make Default", () => _ = Run(minor, () => Perform(c => c.UpdateSettingsAsync(new SettingsChange(DefaultPhp: minor))))));
+            }
+            actions.Children.Add(More(release));
+        }
+        else
+        {
+            actions.Children.Add(Ui.Button("Install", () => _ = Run(minor, () => Store.PerformOnPhpAsync(c => c.InstallPhpAsync(minor))), glyph: Ui.GlyphDownload, tooltip: size));
         }
 
-        switch (release.Status)
-        {
-            case PhpStatus.Installed or PhpStatus.Update:
-                if (release.Status == PhpStatus.Update)
-                {
-                    actions.Children.Add(Ui.Button($"Update to {release.Latest}", () => _ = Run(release.Minor, () => Store.PerformOnPhpAsync(c => c.InstallPhpAsync(release.Minor))),
-                        accent: true, glyph: release.UpdateReady ? Ui.GlyphLightning : Ui.GlyphDownload,
-                        tooltip: release.UpdateReady ? "Already downloaded — installs instantly" : $"Downloads PHP {release.Latest}, then installs it"));
-                }
-                if (!release.IsDefault)
-                {
-                    actions.Children.Add(Ui.Button("Make Default", () => _ = Run(release.Minor, () => Perform(c => c.UpdateSettingsAsync(new SettingsChange(DefaultPhp: release.Minor))))));
-                }
-                actions.Children.Add(More(release));
-                break;
-
-            case PhpStatus.Unsupported:
-                var unavailable = new Button { Content = "Not available", IsEnabled = false };
-                ToolTipService.SetToolTip(unavailable, release.Note.Length > 0 ? release.Note : $"There is no Windows build of PHP {release.Minor} yet. Flock checks again automatically.");
-                actions.Children.Add(unavailable);
-                break;
-
-            default:
-                if (release.Status == PhpStatus.Failed)
-                {
-                    actions.Children.Add(Ui.Link("Show Log", () => _ = ShowLog(release.Minor)));
-                }
-                actions.Children.Add(Ui.Button(release.Status == PhpStatus.Failed ? "Retry" : "Install",
-                    () => _ = Run(release.Minor, () => Store.PerformOnPhpAsync(c => c.InstallPhpAsync(release.Minor))),
-                    glyph: release.Status == PhpStatus.Ready ? Ui.GlyphLightning : Ui.GlyphDownload,
-                    tooltip: release.Status == PhpStatus.Ready ? "Already downloaded — installs instantly" : $"Downloads PHP {release.Latest} from windows.php.net, then installs it"));
-                break;
-        }
-        return Busy(release, actions);
-    }
-
-    /// <summary>A row's actions, disabled with a progress ring while its request runs.</summary>
-    private StackPanel Busy(PhpRelease release, StackPanel actions)
-    {
-        if (busy.Contains(release.Minor))
+        if (busy.Contains(minor))
         {
             Ui.SetEnabled(actions, false);
-            if (release.Job is not { IsActive: true }) // a running download shows its own ring
+            if (release.Job is not { IsRunning: true }) // a running download shows its own ring
             {
                 actions.Children.Insert(0, new ProgressRing { Width = 16, Height = 16 });
             }
@@ -319,8 +302,7 @@ internal sealed class PhpPane(SettingsWindow window, AppModel model) : Pane(wind
             menu.Items.Add(Item("Open php.ini", () => Native.Open(ini)));
             menu.Items.Add(Item("Show php.ini in Explorer", () => Native.Reveal(ini)));
         }
-        menu.Items.Add(Item("Download Again", () => _ = Run(release.Minor, () => Store.PerformOnPhpAsync(c => c.BuildPhpAsync(release.Minor)))));
-        menu.Items.Add(Item("Show Last Log", () => _ = ShowLog(release.Minor)));
+        menu.Items.Add(Item("Show Last Install Log", () => _ = ShowLog(release.Minor)));
         menu.Items.Add(new MenuFlyoutSeparator());
         var uninstall = Item("Uninstall…", async () =>
         {
@@ -383,7 +365,7 @@ internal sealed class PhpPane(SettingsWindow window, AppModel model) : Pane(wind
         {
             while (!closed.IsCancellationRequested)
             {
-                var log = await Store.PhpBuildLogAsync(minor);
+                var log = await Store.PhpInstallLogAsync(minor);
                 var tail = string.Join("\n", log.Split('\n').TakeLast(400));
                 var shown = tail.Length == 0 ? "No log yet." : tail;
                 if (shown != text.Text)
@@ -393,7 +375,7 @@ internal sealed class PhpPane(SettingsWindow window, AppModel model) : Pane(wind
                     scroller.UpdateLayout();
                     scroller.ChangeView(null, scroller.ScrollableHeight, null, disableAnimation: true);
                 }
-                var active = Store.Php?.Versions.FirstOrDefault(v => v.Minor == minor)?.Job?.IsActive ?? false;
+                var active = Store.Php?.Versions.FirstOrDefault(v => v.Minor == minor)?.Job?.IsRunning ?? false;
                 if (!active && tail.Length > 0)
                 {
                     return;

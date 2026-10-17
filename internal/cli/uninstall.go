@@ -9,8 +9,6 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
-
-	"flock/internal/phpbuild"
 )
 
 // Flock's data dir, entry by entry. Only these names are ever deleted, so a FLOCK_HOME pointing
@@ -106,8 +104,8 @@ func cleanUp(root string, purge bool) ([]string, error) {
 // outsideDirs are Flock's caches and the app's own files, outside the data dir.
 var outsideDirs = func() []string {
 	dirs := appDirs()
-	if ws, err := phpbuild.DefaultWorkspace(); err == nil {
-		dirs = append(dirs, filepath.Dir(ws))
+	if cache, err := os.UserCacheDir(); err == nil { // build caches (dev.flock/components-build)
+		dirs = append(dirs, filepath.Join(cache, "dev.flock"))
 	}
 	return dirs
 }

@@ -793,11 +793,11 @@ public sealed class SettingsStore(FlockClient client) : Store
         }
     }
 
-    public async Task<string> PhpBuildLogAsync(string minor)
+    public async Task<string> PhpInstallLogAsync(string minor)
     {
         try
         {
-            return await client.PhpBuildLogAsync(minor);
+            return await client.PhpInstallLogAsync(minor);
         }
         catch (FlockException)
         {

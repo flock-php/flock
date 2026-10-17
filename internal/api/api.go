@@ -18,7 +18,7 @@ import (
 	"flock/internal/components"
 	"flock/internal/config"
 	"flock/internal/frankenphp"
-	"flock/internal/phpbuild"
+	"flock/internal/php"
 	"flock/internal/postgres"
 	"flock/internal/supervisor"
 )
@@ -159,8 +159,8 @@ type Backend interface {
 	Mutate(change func(*config.Config) error) error
 	// Services describes every service with its live state.
 	Services() []Service
-	// PHPBuilds manages PHP releases and builds (nil when unavailable).
-	PHPBuilds() *phpbuild.Manager
+	// PHP installs PHP versions from the binaries manifest.
+	PHP() *php.Manager
 	// ReleasePHP stops whatever runs a PHP version so its files can be removed (Windows locks them).
 	ReleasePHP(minor string)
 	// PostgresVersions manages the PostgreSQL majors (nil when unavailable).
@@ -205,7 +205,7 @@ func NewHandler(b Backend, token string) http.Handler {
 	})
 
 	registerConfig(mux, b)
-	registerPHPBuilds(mux, b)
+	registerPHPVersions(mux, b)
 	registerNodeVersions(mux, b)
 	registerPostgresVersions(mux, b)
 	registerComponents(mux, b)

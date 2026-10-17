@@ -68,6 +68,8 @@ type Info struct {
 	Version string `json:"version"` // FrankenPHP, e.g. "1.13.0"
 	PHP     string `json:"php"`     // the embedded PHP, e.g. "8.4.14"
 	Build   int    `json:"build"`   // the package build from the manifest (0 when installed from a file)
+	// ExtensionsBuild is the build of the extension pack added on Windows (0 without one).
+	ExtensionsBuild int `json:"extensions_build,omitempty"`
 }
 
 func infoFile(root, minor string) string { return filepath.Join(Dir(root, minor), "flock.json") }
@@ -149,11 +151,12 @@ func InstallFrom(root, src string, build int, release func(minor string)) (strin
 	if err != nil {
 		return "", Info{}, err
 	}
-	return activate(root, dir, build, release)
+	return activate(root, dir, build, 0, release)
 }
 
 // activate moves an unpacked package into place as the build of the minor it embeds.
-func activate(root, dir string, build int, release func(minor string)) (string, Info, error) {
+// extensionsBuild is the build of the extension pack merged into it (0 for none).
+func activate(root, dir string, build, extensionsBuild int, release func(minor string)) (string, Info, error) {
 	binary := findBinary(dir)
 	if binary == "" {
 		return "", Info{}, errors.New("the package has no frankenphp executable (bin/frankenphp or frankenphp.exe)")
@@ -165,7 +168,7 @@ func activate(root, dir string, build int, release func(minor string)) (string, 
 	if err != nil {
 		return "", Info{}, err
 	}
-	info.Build = build
+	info.Build, info.ExtensionsBuild = build, extensionsBuild
 	minor := minorOf(info.PHP)
 	if !Supports(minor) {
 		return "", Info{}, fmt.Errorf("the package embeds PHP %s; FrankenPHP needs %s or newer", info.PHP, MinimumMinor)
@@ -208,16 +211,13 @@ func Uninstall(root, minor string) error {
 // confDir holds Flock's ini files for a build.
 func confDir(root, minor string) string { return filepath.Join(Dir(root, minor), "conf.d") }
 
-// EnsureIni (re)writes Flock's ini files for a build. On Windows the package is the official PHP
-// build, which keeps almost every extension in ext/: they are loaded as for php-cgi. The macOS
-// builds compile their extensions in.
+// EnsureIni (re)writes Flock's ini files for a build: the extensions in its ext/ load as for the
+// regular PHP (on Windows the official build's plus Flock's extension pack; on macOS the larger
+// ones the build doesn't compile in).
 func EnsureIni(root, minor string) error {
 	dir := confDir(root, minor)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return err
-	}
-	if runtime.GOOS != "windows" {
-		return nil
 	}
 	return os.WriteFile(filepath.Join(dir, "00-flock.ini"), []byte(php.ExtensionsIni(filepath.Join(Dir(root, minor), "ext"))), 0o644)
 }

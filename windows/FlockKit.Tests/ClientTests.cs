@@ -108,13 +108,12 @@ public class ClientTests : IDisposable
         await client.NodeVersionsAsync();
         // Changing PHP versions waits for the daemon's work, like the Go CLI (2 min).
         await client.InstallPhpAsync("8.4");
-        await client.BuildPhpAsync("8.4");
-        await client.CancelPhpBuildAsync("8.4");
+        await client.CancelPhpInstallAsync("8.4");
         await client.UninstallPhpAsync("8.4");
         await client.PhpVersionsAsync();
 
         Assert.Equal(
-            [TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(60), TimeSpan.FromMinutes(2), TimeSpan.FromMinutes(2), TimeSpan.FromMinutes(2), TimeSpan.FromMinutes(2), TimeSpan.FromSeconds(5)],
+            [TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(60), TimeSpan.FromMinutes(2), TimeSpan.FromMinutes(2), TimeSpan.FromMinutes(2), TimeSpan.FromSeconds(5)],
             handler.Timeouts);
     }
 

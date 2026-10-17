@@ -2,7 +2,7 @@ import AppKit
 import FlockKit
 import SwiftUI
 
-/// PHP versions from php.net: install, update, rebuild and uninstall them, with build progress.
+/// PHP versions from the binaries manifest: install, update and uninstall them, with download progress.
 struct PHPPane: View {
     @Environment(AppModel.self) private var model
     private let logMinorState = State<String?>(initialValue: nil)
@@ -65,10 +65,10 @@ struct PHPPane: View {
             .scrollContentBackground(.hidden)
         }
         .sheet(item: Binding(get: { logMinor.map(LogTarget.init) }, set: { logMinor = $0?.minor })) { target in
-            PHPBuildLogSheet(minor: target.minor)
+            PHPInstallLogSheet(minor: target.minor)
         }
         .task {
-            // Poll quickly while something builds or downloads, slowly otherwise.
+            // Poll quickly while something downloads, slowly otherwise.
             while !Task.isCancelled {
                 await store.refreshPHP()
                 await store.refreshFrankenPHP()
@@ -143,7 +143,9 @@ private struct PHPReleaseRow: View {
                     Text("PHP \(release.minor)").font(.body.weight(.semibold))
                     Text(versionText).font(.callout.monospacedDigit()).foregroundStyle(.secondary)
                     if release.isDefault { Badge(text: "Default") }
-                    if !release.supported { Badge(text: "End of life", color: .orange) }
+                    if release.prerelease {
+                        Badge(text: "Pre-release", color: .orange).help("PHP \(release.latest) isn’t released yet — it may not work. Offered on the beta channel.")
+                    }
                     if release.isInstalled && release.xdebug { Badge(text: "Xdebug", color: .red) }
                 }
                 detail
@@ -167,129 +169,127 @@ private struct PHPReleaseRow: View {
     }
 
     private var versionText: String {
-        switch release.status {
-        case .update: "\(release.installed) → \(release.latest)"
-        default: release.isInstalled ? release.installed : release.latest
+        if release.update && release.latest != release.installed {
+            return "\(release.installed) → \(release.latest)"
         }
+        return release.isInstalled ? release.installed : release.latest
     }
 
-    /// The status line under the name.
+    /// The status line under the name: an install in progress, the error of a failed one, a
+    /// withdrawn build, or the state.
     @ViewBuilder
     private var detail: some View {
-        if let job = release.job, job.isActive {
+        if let job = release.job, job.isRunning {
             HStack(spacing: 6) {
-                ProgressView().controlSize(.mini)
-                Text(job.state == .queued ? "Waiting for another build…" : (job.step.isEmpty ? "Building…" : job.step))
-                    .lineLimit(1).truncationMode(.middle)
-                if job.auto {
-                    Text("· Background build").foregroundStyle(.tertiary)
+                if let progress = job.progress, job.phase != .installing {
+                    ProgressView(value: progress).frame(width: 120)
+                } else {
+                    ProgressView().controlSize(.mini)
                 }
+                Text(Self.jobText(job))
             }
             .font(.caption).foregroundStyle(.secondary)
-        } else if release.status == .failed || release.job?.state == .failed {
-            Text(release.job?.error.isEmpty == false ? release.job!.error : "The last build failed.")
+        } else if let job = release.job, job.isFailed {
+            Text(job.error.isEmpty ? "The download failed." : job.error)
                 .font(.caption).foregroundStyle(.red)
                 .lineLimit(2)
-        } else if release.status == .unsupported, !release.note.isEmpty {
-            Text(release.note)
-                .font(.caption).foregroundStyle(.secondary)
+                .textSelection(.enabled)
+                .help(job.error)
+        } else if !release.yanked.isEmpty {
+            Label(release.update ? "Withdrawn: \(release.yanked) — update to replace it" : "Withdrawn: \(release.yanked)", systemImage: "exclamationmark.triangle.fill")
+                .font(.caption).foregroundStyle(.orange)
                 .lineLimit(2)
-                .help(release.note)
+                .help("This build was withdrawn. Flock replaces it as soon as a fixed build is published.")
         } else {
-            Text(statusText).font(.caption).foregroundStyle(statusColor)
+            Text(statusText).font(.caption).foregroundStyle(release.update ? Color.blue : Color.secondary)
         }
     }
 
     private var statusText: String {
         switch release.status {
         case .installed: "Up to date"
-        case .update: release.updateReady ? "Update ready to install" : "Update available"
-        case .ready: "Built and ready to install"
-        case .likely: "Not installed"
-        case .unsupported: "Not yet buildable"
-        case .failed: "The last build failed"
+        case .update: release.latest == release.installed ? "A new build is available" : "Update available"
+        case .available: "Not installed"
         case .unknown: ""
         }
     }
 
-    private var statusColor: Color {
-        switch release.status {
-        case .update: .blue
-        case .ready: .green
-        case .unsupported: .secondary
-        case .failed: .red
-        default: .secondary
+    /// "Downloading… 42%", "Downloading…" (size unknown) or "Installing…".
+    private static func jobText(_ job: ComponentJob) -> String {
+        if job.phase == .installing {
+            return "Installing…"
         }
+        if let progress = job.progress {
+            return "Downloading… \(Int((progress * 100).rounded()))%"
+        }
+        return "Downloading…"
+    }
+
+    private var sizeHelp: String {
+        release.size > 0 ? "Downloads PHP \(release.latest) (\(release.size / 1_000_000) MB)" : ""
     }
 
     @ViewBuilder
     private var actions: some View {
         let store = model.settings
 
-        if let job = release.job, job.isActive {
+        if let job = release.job, job.isRunning {
             Button("Show Log", action: showLog).buttonStyle(.link)
             Button("Cancel") {
-                run { try await $0.cancelPHPBuild(release.minor) }
+                run { try await $0.cancelPHPInstall(release.minor) }
             }
-        } else {
-            switch release.status {
-            case .installed, .update:
-                if release.status == .update {
-                    Button {
-                        run { try await $0.installPHP(release.minor) }
-                    } label: {
-                        Label("Update to \(release.latest)", systemImage: release.updateReady ? "bolt.fill" : "arrow.down.circle")
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .help(release.updateReady ? "Already built — installs instantly" : "Builds \(release.latest) (5–10 minutes), then installs it")
-                }
-                if !release.isDefault {
-                    Button("Make Default") {
-                        busy = true
-                        Task {
-                            await store.perform { _ = try await $0.updateSettings(SettingsChange(defaultPHP: release.minor)) }
-                            await store.refreshPHP()
-                            busy = false
-                        }
-                    }
-                }
-                Menu {
-                    if let ini, !ini.isEmpty {
-                        Button("Open php.ini") { NSWorkspace.shared.open(URL(fileURLWithPath: ini)) }
-                    }
-                    Button("Rebuild") {
-                        run { try await $0.buildPHP(release.minor) }
-                    }
-                    Button("Show Last Build Log", action: showLog)
-                    Divider()
-                    Button("Uninstall…", role: .destructive) { confirmUninstall = true }
-                        .disabled(release.isDefault)
-                } label: {
-                    Image(systemName: "ellipsis.circle")
-                }
-                .menuStyle(.borderlessButton)
-                .menuIndicator(.hidden)
-                .fixedSize()
-                .help("More")
-
-            case .ready, .likely, .failed, .unknown:
-                if release.status == .failed {
-                    Button("Show Log", action: showLog).buttonStyle(.link)
-                }
+        } else if let job = release.job, job.isFailed {
+            Button("Show Log", action: showLog).buttonStyle(.link)
+            Button {
+                run { try await $0.installPHP(release.minor) }
+            } label: {
+                Label("Retry", systemImage: "arrow.clockwise")
+            }
+            Button("Dismiss") {
+                run { try await $0.dismissPHPJob(release.minor) }
+            }
+        } else if release.isInstalled {
+            if release.update {
                 Button {
                     run { try await $0.installPHP(release.minor) }
                 } label: {
-                    Label(release.status == .failed ? "Retry" : "Install",
-                          systemImage: release.status == .ready ? "bolt.fill" : "arrow.down.circle")
+                    Label(release.latest == release.installed ? "Update" : "Update to \(release.latest)", systemImage: "arrow.down.circle")
                 }
-                .help(release.status == .ready ? "Already built — installs instantly" : "Builds PHP \(release.latest) (5–10 minutes), then installs it")
-
-            case .unsupported:
-                // With a note the version is permanently out of reach; without one the tooling just lags behind.
-                Button(release.note.isEmpty ? "Not yet buildable" : "Not buildable") {}
-                    .disabled(true)
-                    .help(release.note.isEmpty ? "The build tooling doesn't support PHP \(release.minor) yet. Flock checks again automatically." : release.note)
+                .buttonStyle(.borderedProminent)
+                .help(sizeHelp)
             }
+            if !release.isDefault {
+                Button("Make Default") {
+                    busy = true
+                    Task {
+                        await store.perform { _ = try await $0.updateSettings(SettingsChange(defaultPHP: release.minor)) }
+                        await store.refreshPHP()
+                        busy = false
+                    }
+                }
+            }
+            Menu {
+                if let ini, !ini.isEmpty {
+                    Button("Open php.ini") { NSWorkspace.shared.open(URL(fileURLWithPath: ini)) }
+                }
+                Button("Show Last Install Log", action: showLog)
+                Divider()
+                Button("Uninstall…", role: .destructive) { confirmUninstall = true }
+                    .disabled(release.isDefault)
+            } label: {
+                Image(systemName: "ellipsis.circle")
+            }
+            .menuStyle(.borderlessButton)
+            .menuIndicator(.hidden)
+            .fixedSize()
+            .help("More")
+        } else {
+            Button {
+                run { try await $0.installPHP(release.minor) }
+            } label: {
+                Label("Install", systemImage: "arrow.down.circle")
+            }
+            .help(sizeHelp)
         }
     }
 }
@@ -432,8 +432,8 @@ extension FrankenPHPBuildRow {
     }
 }
 
-/// The tail of a version's build log, refreshed while the sheet is open.
-private struct PHPBuildLogSheet: View {
+/// The tail of a version's install log, refreshed while the sheet is open.
+private struct PHPInstallLogSheet: View {
     @Environment(AppModel.self) private var model
     @Environment(\.dismiss) private var dismiss
     let minor: String
@@ -447,7 +447,7 @@ private struct PHPBuildLogSheet: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
-                Text("PHP \(minor) build log").font(.headline)
+                Text("PHP \(minor) install log").font(.headline)
                 Spacer()
                 Button("Copy") {
                     NSPasteboard.general.clearContents()
@@ -459,7 +459,7 @@ private struct PHPBuildLogSheet: View {
 
             ScrollViewReader { proxy in
                 ScrollView {
-                    Text(text.isEmpty ? "No build log yet." : text)
+                    Text(text.isEmpty ? "No install log yet." : text)
                         .font(.system(.caption, design: .monospaced))
                         .textSelection(.enabled)
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -475,13 +475,13 @@ private struct PHPBuildLogSheet: View {
         .frame(width: 720, height: 460)
         .task {
             while !Task.isCancelled {
-                let log = await model.settings.phpBuildLog(minor)
+                let log = await model.settings.phpInstallLog(minor)
                 let lines = log.split(separator: "\n", omittingEmptySubsequences: false)
                 let tail = lines.suffix(400).joined(separator: "\n")
                 if tail != text {
                     text = tail
                 }
-                let active = model.settings.php?.versions.first { $0.minor == minor }?.job?.isActive ?? false
+                let active = model.settings.php?.versions.first { $0.minor == minor }?.job?.isRunning ?? false
                 if !active, !text.isEmpty {
                     break
                 }

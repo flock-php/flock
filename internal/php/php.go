@@ -1,21 +1,25 @@
-// Package php manages installed PHP versions: their binaries, php.ini and FastCGI pools.
+// Package php manages installed PHP versions: their binaries, php.ini and FastCGI pools, and
+// installs them from the binaries manifest (see Manager).
 //
 // Layout under the Flock root:
 //
-//	php/<minor>/bin/php, php-fpm   binaries (one static build per minor version)
+//	php/<minor>/bin/php, php-fpm   binaries (the macOS package, built by Flock)
+//	php/<minor>/ext/               shared extensions
+//	php/<minor>/flock.json         what was installed (version, builds)
 //	php/<minor>/php.ini            user-editable, created once
+//	php/<minor>/conf.d/            Flock's ini files: extension_dir and the extensions to load
+//	php/<minor>/conf.d-cli/        loaded only by command-line PHP (pcov)
+//	php/<minor>/conf.d-xdebug/     loaded only for debugging (Xdebug)
 //	php/<minor>/php-fpm.conf       regenerated on every start
 //	run/php<minor>.sock            FPM socket the web server connects to
 //
 // Windows has no PHP-FPM: there bin/ holds the official windows.php.net build (php.exe,
-// php-cgi.exe and their DLLs), ext/ its extension DLLs, conf.d/00-flock.ini loads them,
-// and every version runs a few php-cgi.exe workers on loopback ports instead of an FPM pool.
+// php-cgi.exe and their DLLs) with Flock's extension pack added, and every version runs a few
+// php-cgi.exe workers on loopback ports instead of an FPM pool.
 package php
 
 import (
-	"archive/tar"
-	"archive/zip"
-	"compress/gzip"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -32,6 +36,8 @@ import (
 	"syscall"
 	"time"
 
+	"flock/internal/archive"
+	"flock/internal/fsutil"
 	"flock/internal/supervisor"
 )
 
@@ -94,151 +100,143 @@ func Installed(root string) ([]string, error) {
 	return versions, nil
 }
 
-// InstallFrom installs a PHP build from a directory or .tar.gz containing `php` and `php-fpm`
-// (on Windows: a directory or .zip with php.exe, php-cgi.exe, their DLLs and ext/).
-// It returns the installed minor version, detected by running the binary.
+// InstallFrom installs a PHP package from a directory, .tar.gz or .zip, laid out as the binaries
+// manifest publishes it: bin/php, bin/php-fpm and ext/ on macOS; the official build (php.exe,
+// php-cgi.exe, ext/) on Windows. It returns the installed minor version, detected by running it.
 func InstallFrom(root, src string) (string, error) {
-	staging, err := os.MkdirTemp(root, ".php-install-")
+	base := filepath.Join(root, "php")
+	if err := os.MkdirAll(base, 0o755); err != nil {
+		return "", err
+	}
+	staging, err := os.MkdirTemp(base, ".install-")
 	if err != nil {
-		if err := os.MkdirAll(root, 0o700); err != nil {
-			return "", err
-		}
-		if staging, err = os.MkdirTemp(root, ".php-install-"); err != nil {
-			return "", err
-		}
+		return "", err
 	}
 	defer os.RemoveAll(staging)
 
-	bin := filepath.Join(staging, "bin")
-	if err := os.MkdirAll(bin, 0o755); err != nil {
+	// A copy, since installing moves the package's files into place.
+	dir := filepath.Join(staging, "package")
+	if info, err := os.Stat(src); err != nil {
 		return "", err
-	}
-
-	ext := filepath.Join(staging, "ext")
-	if err := os.MkdirAll(ext, 0o755); err != nil {
-		return "", err
-	}
-
-	switch {
-	case strings.HasSuffix(src, ".tar.gz") || strings.HasSuffix(src, ".tgz"):
-		err = extractBinaries(src, bin, ext)
-	case strings.HasSuffix(strings.ToLower(src), ".zip"):
-		unpacked := filepath.Join(staging, "zip")
-		if err = ExtractZip(src, unpacked); err == nil {
-			err = copyBinaries(unpacked, bin, ext)
-		}
-	default:
-		err = copyBinaries(src, bin, ext)
+	} else if info.IsDir() {
+		err = fsutil.CopyTree(src, dir)
+	} else if archive.IsArchive(src) {
+		err = archive.Extract(src, dir)
+	} else {
+		err = fmt.Errorf("%s is not a directory, .tar.gz or .zip", src)
 	}
 	if err != nil {
 		return "", err
 	}
-
-	out, err := exec.Command(filepath.Join(bin, exe("php")), "-n", "-r", "echo PHP_MAJOR_VERSION.'.'.PHP_MINOR_VERSION;").Output()
+	version, err := probe(packageBinary(dir))
 	if err != nil {
-		return "", fmt.Errorf("run installed php: %w", err)
+		return "", err
 	}
-	minor := strings.TrimSpace(string(out))
-	if !minorPattern.MatchString(minor) {
-		return "", fmt.Errorf("unexpected php version %q", minor)
+	minor := MinorOf(version)
+	if minor == "" {
+		return "", fmt.Errorf("unexpected PHP version %q", version)
+	}
+	return minor, place(root, minor, dir, Info{Version: version}, nil)
+}
+
+// packageBinary is the php binary of an unpacked package.
+func packageBinary(dir string) string {
+	if runtime.GOOS == "windows" {
+		return filepath.Join(dir, "php.exe")
+	}
+	return filepath.Join(dir, "bin", "php")
+}
+
+// place installs an unpacked package as minor: bin/ and ext/ are replaced, so php.ini and Flock's
+// ini files survive. release, when set, is called first so the running version can be stopped.
+func place(root, minor, dir string, info Info, release func(minor string)) error {
+	version, err := probe(packageBinary(dir))
+	if err != nil {
+		return err
+	}
+	if version != info.Version {
+		return fmt.Errorf("the package for PHP %s contains PHP %s", info.Version, version)
 	}
 
 	target := Dir(root, minor)
 	if err := os.MkdirAll(target, 0o755); err != nil {
-		return "", err
+		return err
 	}
-	// Replace only binaries and shared extensions so an existing php.ini survives upgrades.
-	for name, dir := range map[string]string{"bin": bin, "ext": ext} {
-		if err := os.RemoveAll(filepath.Join(target, name)); err != nil {
-			return "", err
-		}
-		if err := os.Rename(dir, filepath.Join(target, name)); err != nil {
-			return "", err
-		}
+	staging, err := os.MkdirTemp(filepath.Dir(target), ".place-")
+	if err != nil {
+		return err
 	}
+	defer os.RemoveAll(staging)
 
+	// The parts of the new install, ready to be moved into place.
+	parts := map[string]string{"bin": filepath.Join(dir, "bin"), "ext": filepath.Join(dir, "ext"), "LICENSES": filepath.Join(dir, "LICENSES")}
 	if runtime.GOOS == "windows" {
-		if err := writeExtensionsIni(root, minor); err != nil {
-			return "", err
-		}
-	}
-
-	return minor, nil
-}
-
-func copyBinaries(src, dst, extDst string) error {
-	if runtime.GOOS == "windows" {
-		return copyWindowsBuild(src, dst, extDst)
-	}
-	if sos, _ := filepath.Glob(filepath.Join(src, "ext", "*"+sharedSuffix())); len(sos) > 0 {
-		for _, so := range sos {
-			if err := copyFile(so, filepath.Join(extDst, filepath.Base(so)), 0o755); err != nil {
+		bin, ext := filepath.Join(staging, "bin"), filepath.Join(staging, "ext")
+		for _, d := range []string{bin, ext} {
+			if err := os.MkdirAll(d, 0o755); err != nil {
 				return err
 			}
 		}
-	}
-
-	for _, name := range []string{exe("php"), exe("php-fpm")} {
-		from := filepath.Join(src, name)
-		if _, err := os.Stat(from); err != nil {
-			if name == exe("php-fpm") && runtime.GOOS == "windows" {
-				continue
-			}
-			return fmt.Errorf("%s not found in %s", name, src)
+		if err := copyWindowsBuild(dir, bin, ext); err != nil {
+			return err
 		}
-		if err := copyFile(from, filepath.Join(dst, name), 0o755); err != nil {
+		parts["bin"], parts["ext"] = bin, ext
+	} else {
+		if !fileExists(filepath.Join(dir, "bin", "php-fpm")) {
+			return errors.New("the package has no bin/php-fpm")
+		}
+		if err := os.MkdirAll(parts["ext"], 0o755); err != nil {
 			return err
 		}
 	}
-	return nil
+
+	if release != nil {
+		release(minor)
+	}
+	for name, from := range parts {
+		to := filepath.Join(target, name)
+		if err := os.RemoveAll(to); err != nil {
+			return err
+		}
+		if !fileExists(from) {
+			continue
+		}
+		if err := os.Rename(from, to); err != nil {
+			return err
+		}
+	}
+	data, _ := json.MarshalIndent(info, "", "  ")
+	if err := os.WriteFile(infoFile(root, minor), append(data, '\n'), 0o644); err != nil {
+		return err
+	}
+	return EnsureIni(root, minor)
 }
 
-func extractBinaries(archive, dst, extDst string) error {
-	f, err := os.Open(archive)
-	if err != nil {
-		return err
-	}
-	defer f.Close()
-
-	gz, err := gzip.NewReader(f)
-	if err != nil {
-		return err
-	}
-	tr := tar.NewReader(gz)
-
-	found := map[string]bool{}
-	for {
-		hdr, err := tr.Next()
-		if err == io.EOF {
-			break
+// MergeExtensionPack adds an extension pack (Windows) to an unpacked PHP or FrankenPHP package:
+// its ext/ DLLs go to the package's ext/, the libraries they load (ImageMagick's) next to the
+// executables, and its licenses to LICENSES/.
+func MergeExtensionPack(dir, pack string) error {
+	moves := map[string]string{filepath.Join(pack, "ext"): filepath.Join(dir, "ext"), pack: dir, filepath.Join(pack, "LICENSES"): filepath.Join(dir, "LICENSES")}
+	for from, to := range moves {
+		entries, err := os.ReadDir(from)
+		if errors.Is(err, os.ErrNotExist) {
+			continue
 		}
 		if err != nil {
 			return err
 		}
-		name := filepath.Base(hdr.Name)
-		target := filepath.Join(dst, name)
-		switch {
-		case hdr.Typeflag != tar.TypeReg:
-			continue
-		case filepath.Base(filepath.Dir(hdr.Name)) == "ext" && strings.HasSuffix(name, sharedSuffix()):
-			target = filepath.Join(extDst, name)
-		case name != exe("php") && name != exe("php-fpm"):
-			continue
-		}
-		out, err := os.OpenFile(target, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o755)
-		if err != nil {
+		if err := os.MkdirAll(to, 0o755); err != nil {
 			return err
 		}
-		if _, err := io.Copy(out, tr); err != nil {
-			out.Close()
-			return err
+		for _, e := range entries {
+			name := e.Name()
+			if !e.Type().IsRegular() || (from == pack && !strings.EqualFold(filepath.Ext(name), ".dll")) {
+				continue
+			}
+			if err := copyFile(filepath.Join(from, name), filepath.Join(to, name), 0o755); err != nil {
+				return err
+			}
 		}
-		out.Close()
-		found[name] = true
-	}
-
-	if !found[exe("php")] {
-		return fmt.Errorf("%s: no php binary in archive", archive)
 	}
 	return nil
 }
@@ -261,6 +259,9 @@ func copyWindowsBuild(src, dst, extDst string) error {
 
 	for from, to := range map[string]string{src: dst, filepath.Join(src, "ext"): extDst} {
 		entries, err := os.ReadDir(from)
+		if errors.Is(err, os.ErrNotExist) && from != src {
+			continue
+		}
 		if err != nil {
 			return err
 		}
@@ -271,50 +272,6 @@ func copyWindowsBuild(src, dst, extDst string) error {
 			if err := copyFile(filepath.Join(from, e.Name()), filepath.Join(to, e.Name()), 0o755); err != nil {
 				return err
 			}
-		}
-	}
-	return nil
-}
-
-// ExtractZip unpacks a .zip into dest, rejecting entries that would escape it.
-func ExtractZip(archive, dest string) error {
-	zr, err := zip.OpenReader(archive)
-	if err != nil {
-		return err
-	}
-	defer zr.Close()
-
-	clean := filepath.Clean(dest) + string(filepath.Separator)
-	for _, f := range zr.File {
-		target := filepath.Join(dest, filepath.FromSlash(f.Name))
-		if !strings.HasPrefix(target, clean) {
-			return fmt.Errorf("illegal path in archive: %s", f.Name)
-		}
-		if f.FileInfo().IsDir() {
-			if err := os.MkdirAll(target, 0o755); err != nil {
-				return err
-			}
-			continue
-		}
-		if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
-			return err
-		}
-		rc, err := f.Open()
-		if err != nil {
-			return err
-		}
-		out, err := os.OpenFile(target, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o755)
-		if err != nil {
-			rc.Close()
-			return err
-		}
-		_, err = io.Copy(out, rc)
-		rc.Close()
-		if cerr := out.Close(); err == nil {
-			err = cerr
-		}
-		if err != nil {
-			return err
 		}
 	}
 	return nil
@@ -354,12 +311,22 @@ func ExtensionPath(root, minor, name string) string {
 	return filepath.Join(Dir(root, minor), "ext", name+sharedSuffix())
 }
 
-// windowsExtensions are loaded from ext/ when the build ships them (8.5 compiles opcache in).
-// The official builds keep almost everything shared; this is what Laravel apps commonly need.
-var windowsExtensions = []string{
+// extensions are loaded from ext/ when the package ships them, in this order (redis and memcached
+// use igbinary). The official Windows builds keep almost everything shared; the macOS builds
+// compile most of these in and ship only the larger ones (imagick, mongodb, memcached) shared.
+// Xdebug and pcov aren't here: Xdebug loads only for debugging, pcov only for the CLI.
+var extensions = []string{
 	"bz2", "curl", "exif", "fileinfo", "ftp", "gd", "gettext", "gmp", "intl", "mbstring", "mysqli",
 	"openssl", "pdo_mysql", "pdo_pgsql", "pdo_sqlite", "pgsql", "sockets", "sodium", "sqlite3", "xsl", "zip",
-	"igbinary", "redis",
+	"apcu", "igbinary", "redis", "imagick", "mongodb", "memcached",
+}
+
+// extensionFile is a shared extension's file in extDir: imagick.so, or php_imagick.dll on Windows.
+func extensionFile(extDir, name string) string {
+	if runtime.GOOS == "windows" {
+		name = "php_" + name
+	}
+	return filepath.Join(extDir, name+sharedSuffix())
 }
 
 // writeExtensionsIni (re)writes conf.d/00-flock.ini, which points PHP at ext/ and loads the
@@ -373,20 +340,42 @@ func writeExtensionsIni(root, minor string) error {
 	return os.WriteFile(filepath.Join(dir, "00-flock.ini"), []byte(ExtensionsIni(filepath.Join(Dir(root, minor), "ext"))), 0o644)
 }
 
-// ExtensionsIni is the ini that points an official Windows build at its ext/ directory and loads
-// the extensions present there (FrankenPHP's Windows builds ship the same).
+// ExtensionsIni is the ini that points a build at its ext/ directory and loads the extensions
+// present there (FrankenPHP's builds use the same).
 func ExtensionsIni(extDir string) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "; Managed by Flock — regenerated on install, edit php.ini instead.\nextension_dir = \"%s\"\n", extDir)
-	if fileExists(filepath.Join(extDir, "php_opcache.dll")) {
+	// opcache is compiled in from PHP 8.5 on, and into the macOS builds from PHP 8.0 on.
+	if fileExists(extensionFile(extDir, "opcache")) {
 		b.WriteString("zend_extension = opcache\n")
 	}
-	for _, name := range windowsExtensions {
-		if fileExists(filepath.Join(extDir, "php_"+name+".dll")) {
+	for _, name := range extensions {
+		if fileExists(extensionFile(extDir, name)) {
 			fmt.Fprintf(&b, "extension = %s\n", name)
 		}
 	}
 	return b.String()
+}
+
+// CLIDir is a version's extra ini scan dir for command-line PHP (the shims, `flock debug`): it
+// loads pcov, so test suites can measure coverage while web requests don't pay for it.
+func CLIDir(root, minor string) string { return filepath.Join(Dir(root, minor), "conf.d-cli") }
+
+// writeCLIIni (re)writes conf.d-cli/pcov.ini when the build ships pcov.
+func writeCLIIni(root, minor string) error {
+	dir := CLIDir(root, minor)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return err
+	}
+	path := filepath.Join(dir, "pcov.ini")
+	if !fileExists(ExtensionPath(root, minor, "pcov")) {
+		if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
+			return err
+		}
+		return nil
+	}
+	body := fmt.Sprintf("; Managed by Flock — loaded only by command-line PHP, for code coverage.\nextension = \"%s\"\npcov.enabled = 1\n", ExtensionPath(root, minor, "pcov"))
+	return os.WriteFile(path, []byte(body), 0o644)
 }
 
 // XdebugDir is a version's extra ini scan dir that loads Xdebug. Only the debug pool and
@@ -455,13 +444,10 @@ curl.cainfo = "%s"
 // EnsureIni creates php.ini for a version when it does not exist yet, and (re)writes the ini
 // files Flock manages.
 func EnsureIni(root, minor string) error {
-	if runtime.GOOS == "windows" {
-		if err := writeExtensionsIni(root, minor); err != nil {
+	for _, write := range []func(root, minor string) error{writeExtensionsIni, writeCLIIni, writeXdebugIni} {
+		if err := write(root, minor); err != nil {
 			return err
 		}
-	}
-	if err := writeXdebugIni(root, minor); err != nil {
-		return err
 	}
 	path := IniPath(root, minor)
 	if _, err := os.Stat(path); err == nil {
@@ -659,6 +645,11 @@ func WaitReady(upstreams []string, timeout time.Duration) bool {
 // config from its compiled-in default paths (e.g. /usr/local/etc/php).
 func Env(root, minor string) []string {
 	return env(root, minor, filepath.Join(Dir(root, minor), "conf.d"))
+}
+
+// CLIEnv is Env for command-line PHP: it also scans CLIDir, so PHP loads pcov.
+func CLIEnv(root, minor string) []string {
+	return env(root, minor, filepath.Join(Dir(root, minor), "conf.d")+string(os.PathListSeparator)+CLIDir(root, minor))
 }
 
 // DebugEnv is Env that also scans XdebugDir, so PHP loads Xdebug.
