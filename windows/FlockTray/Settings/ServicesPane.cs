@@ -271,11 +271,24 @@ internal sealed partial class ServicesPane(SettingsWindow window, AppModel model
             panel.Children.Add(row);
         }
 
+        // What the core services do, as on macOS (ServiceInfo.explanation): they have nothing else to show.
+        var tld = Model.Status?.Dns.Tld is { Length: > 0 } t ? t : "test";
+        if (service.Id == "web")
+        {
+            panel.Children.Add(Ui.Caption(service.Running
+                ? $"Caddy serves every site over HTTPS (https://app.{tld}) with certificates from Flock's local certificate authority, which `flock install` trusts."
+                : "Sites don't open while the web server is down. Its log may tell why; `flock restart` starts it again."));
+        }
         if (service.Id == "dns")
         {
             panel.Children.Add(Ui.Caption(service.Running
-                ? "Windows sends every name under the Flock domain here (a DNS rule set up by `flock install`), so any subdomain of a site works — tenant1.app.test, a.b.app.test — without adding it."
+                ? $"Windows sends every name under .{tld} here (a DNS rule set up by `flock install`), so any subdomain of a site works (tenant1.app.{tld}, a.b.app.{tld}) without adding it."
                 : $"Wildcard subdomains don't resolve: {(service.Problem.Length > 0 ? service.Problem : "the DNS server isn't running")}. Site domains still work through the hosts file; add the subdomains you use to their site (Sites → … → Add Domain…)."));
+        }
+        // The web server and DNS ports: shown, but only `flock install` changes them.
+        if (service.Installed && service.Port > 0 && service.Id is "web" or "dns")
+        {
+            panel.Children.Add(Ui.Spread(Ui.Text("Port", "BodyStrongTextBlockStyle"), Ui.Caption($"{service.Port} · set by `flock install`", wrap: false)));
         }
         if (service.Id == "hosts")
         {
