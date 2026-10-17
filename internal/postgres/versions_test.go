@@ -54,13 +54,16 @@ func (f *fakeService) current() string {
 }
 
 // pgPackage is a fake PostgreSQL package whose initdb creates a cluster of the major it is given
-// in the environment-free way: the major is the name of the data directory (-D <dir>).
+// in the environment-free way: the major is the name of the data directory (-D <dir>). Like the
+// real package it has more than bin/ at the top: an archive with a single top-level directory is
+// unwrapped.
 func pgPackage(t *testing.T) []byte {
 	return binariestest.Zip(t, map[string]string{
-		"bin/postgres": "#!/bin/sh\n",
-		"bin/initdb":   "#!/bin/sh\nmkdir -p \"$2\" && basename \"$2\" > \"$2/PG_VERSION\"\n",
-		"bin/pg_ctl":   "#!/bin/sh\n",
-		"bin/psql":     "#!/bin/sh\n",
+		"bin/postgres":       "#!/bin/sh\n",
+		"bin/initdb":         "#!/bin/sh\nmkdir -p \"$2\" && basename \"$2\" > \"$2/PG_VERSION\"\n",
+		"bin/pg_ctl":         "#!/bin/sh\n",
+		"bin/psql":           "#!/bin/sh\n",
+		"share/postgres.bki": "",
 	})
 }
 
