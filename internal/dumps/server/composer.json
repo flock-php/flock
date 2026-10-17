@@ -1,7 +1,7 @@
 {
     "name": "flock/dump-server",
     "description": "Receives Symfony VarDumper payloads (VAR_DUMPER_FORMAT=server) for Flock's dumps window.",
-    "license": "MIT",
+    "license": "AGPL-3.0-only",
     "require": {
         "php": ">=8.4",
         "symfony/var-dumper": "^8.0"

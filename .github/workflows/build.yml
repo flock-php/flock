@@ -89,6 +89,11 @@ jobs:
       - name: Test
         run: go test ${{ matrix.flags }} ./...
 
+      # The licenses that ship with the builds; run `make notices` after changing dependencies.
+      - name: Third-party notices
+        if: matrix.name == 'macOS'
+        run: go run ./tools/notices -check
+
   macos:
     name: macOS (Apple silicon)
     needs: version

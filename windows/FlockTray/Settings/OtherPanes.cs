@@ -137,7 +137,8 @@ internal sealed class AboutPane(SettingsWindow window, AppModel model) : Pane(wi
                 Ui.Setting("App", null, Ui.Text(version.Split('+')[0], foreground: Ui.SecondaryText, wrap: false)),
                 Ui.Setting("Daemon", null, Ui.Text(Model.Status?.Version ?? "not running", foreground: Ui.SecondaryText, wrap: false)),
                 Ui.Setting("Data folder", FlockPaths.Root, Ui.Button("Show in Explorer", () => Native.Reveal(FlockPaths.Root))),
-                Ui.Setting("Laravel documentation", null, Ui.Button("Open", () => Native.Open("https://laravel.com/docs")))),
+                Ui.Setting("Laravel documentation", null, Ui.Button("Open", () => Native.Open("https://laravel.com/docs"))),
+                Ui.Setting("License", "Copyright © Guava s.r.o. Licensed under the AGPL-3.0.", Ui.Button("View", () => Native.Open("https://github.com/flock-php/flock/blob/main/LICENSE")))),
             Ui.Section("Uninstall",
                 Ui.Setting("Uninstall Flock", "Stops Flock and removes it from this PC. Your sites, databases and settings are kept.",
                     Ui.Button("Uninstall…", () => _ = ConfirmUninstall()))));
