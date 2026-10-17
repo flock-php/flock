@@ -21,7 +21,7 @@ import (
 func newServicesCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "services",
-		Short: "List, install and remove MySQL, MariaDB, MongoDB, Redis, Meilisearch, Typesense and RustFS",
+		Short: "List, install and remove MySQL, MariaDB, MongoDB, Valkey, Redis (macOS), Meilisearch, Typesense and RustFS",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			s, err := load()
