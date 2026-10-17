@@ -1,32 +1,29 @@
-// Package catalog installs and runs the services Flock offers on request besides PostgreSQL and
-// Valkey: MySQL, MariaDB, Redis, MongoDB, Meilisearch, Typesense and RustFS. Each one runs a
-// single version (of a line the user picks, like MySQL 8.4) on its own port; installs run as
-// background jobs the apps follow by polling, like components.
+// Package catalog installs and runs the services Flock offers on request besides PostgreSQL:
+// MySQL, MariaDB, MongoDB, Redis, Valkey, Meilisearch, Typesense and RustFS. Their builds come
+// from the binaries manifest of the configured channel. Each service runs a single version (of a
+// line the user picks, like MySQL 8.4) on its own port; installs run as background jobs the apps
+// follow by polling.
 package catalog
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"os"
 	"path/filepath"
-	"slices"
+	"sort"
+	"strconv"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"time"
 
-	"flock/internal/components"
+	"flock/internal/binaries"
 	"flock/internal/config"
 	"flock/internal/ports"
 	"flock/internal/supervisor"
 )
-
-// CheckInterval is how old the latest versions may get before the daemon looks them up again.
-var CheckInterval = 24 * time.Hour
 
 // Errors of Manager operations; the API maps them to HTTP status codes.
 var (
@@ -36,12 +33,17 @@ var (
 	ErrInvalid     = errors.New("invalid request")
 )
 
-// Line is a release line the user picks, e.g. MySQL "8.4". Versions belong to the line they
-// start with ("8.4.6"), and each line keeps its own data: newer lines can't be downgraded.
-type Line struct {
-	ID    string `json:"id"`
-	Label string `json:"label"` // "8.4 LTS"
-}
+// Mutate edits config.json and applies it (the daemon's Mutate, or a CLI equivalent).
+type Mutate func(change func(*config.Config) error) error
+
+// Install methods (only downloads are left: every service comes from the manifest).
+const MethodDownload = "download"
+
+// Job phases.
+const (
+	PhaseDownloading = "downloading"
+	PhaseInstalling  = "installing"
+)
 
 // Paths are where an installed version lives.
 type Paths struct {
@@ -60,18 +62,16 @@ type Kind struct {
 	Category    string
 	Description string
 	DefaultPort int
-	Lines       []Line // newest first
-
-	// Method is how this platform gets it (components.MethodBuild or MethodDownload), "" when it
-	// can't; Unavailable then says why.
-	Method      string
-	Estimate    string
+	// Package is the service's name in the manifest ("" for ID).
+	Package string
+	// Line is the release line a version belongs to: "8.4" for MySQL 8.4.11. Versions of a line
+	// share its data; newer lines can't be downgraded, so each keeps its own.
+	Line func(version string) string
+	// Unavailable is why the service isn't offered where the manifest has no build of it.
 	Unavailable string
 
-	// Latest looks up the newest release of each line it can (by line id).
-	Latest func(ctx context.Context) (map[string]string, error)
-	// Install puts version into dir (which doesn't exist yet), reporting through r.
-	Install func(ctx context.Context, dir, version string, r *components.Reporter) error
+	// Prepare fixes up an unpacked package (removing what Flock doesn't need) before it is used.
+	Prepare func(dir string) error
 	// Spec prepares the data directory (initialising it the first time) and describes the server.
 	Spec func(p Paths, port int) (supervisor.Spec, error)
 	// Env is the .env snippet that connects a Laravel app, URL a connection URL ("" for none).
@@ -79,19 +79,35 @@ type Kind struct {
 	URL func(port int) string
 }
 
-// LineOf returns the line a version belongs to, "" when none.
-func (k *Kind) LineOf(version string) string {
-	best := ""
-	for _, l := range k.Lines {
-		if (version == l.ID || strings.HasPrefix(version, l.ID+".") || strings.HasPrefix(version, l.ID+"-")) && len(l.ID) > len(best) {
-			best = l.ID
-		}
+func (k *Kind) pkg() string {
+	if k.Package != "" {
+		return k.Package
 	}
-	return best
+	return k.ID
 }
 
-func (k *Kind) hasLine(id string) bool {
-	return slices.ContainsFunc(k.Lines, func(l Line) bool { return l.ID == id })
+// LineOf returns the line a version belongs to, "" when none.
+func (k *Kind) LineOf(version string) string { return k.Line(version) }
+
+// majorMinor is the line of most services: "8.4" for "8.4.11".
+func majorMinor(v string) string {
+	parts := strings.SplitN(v, ".", 3)
+	if len(parts) < 2 {
+		return ""
+	}
+	if _, err := strconv.Atoi(parts[0]); err != nil {
+		return ""
+	}
+	return parts[0] + "." + parts[1]
+}
+
+// major is the line of services that version by major: "30" for Typesense "30.2".
+func major(v string) string {
+	m, _, _ := strings.Cut(v, ".")
+	if _, err := strconv.Atoi(m); err != nil {
+		return ""
+	}
+	return m
 }
 
 // Dir is where version of service id is installed.
@@ -136,11 +152,12 @@ type Entry struct {
 	Available   bool   `json:"available"`
 	Unavailable string `json:"unavailable"` // why it isn't available here
 	Method      string `json:"method"`
-	Estimate    string `json:"estimate"`
+	Estimate    string `json:"estimate"`  // download size of the newest line, e.g. "about 170 MB download"
 	Installed   string `json:"installed"` // version, "" when not installed
 	Line        string `json:"line"`      // of the installed version
 	Latest      string `json:"latest"`    // newest release of Line
-	Update      bool   `json:"update"`
+	Update      bool   `json:"update"`    // Latest (or a newer build of it) can be installed
+	Yanked      string `json:"yanked"`    // why the installed build was withdrawn, "" when it wasn't
 	// Port is the configured port, or for a service that isn't installed the one Flock suggests:
 	// the default unless another service has it.
 	Port        int         `json:"port"`
@@ -149,43 +166,40 @@ type Entry struct {
 	Job         *Job        `json:"job"`
 }
 
-// LineState is one line with what Flock knows about it.
+// LineState is one line the channel offers (or that is installed or has data).
 type LineState struct {
-	ID        string `json:"id"`
-	Label     string `json:"label"`
-	Latest    string `json:"latest"`
-	Installed bool   `json:"installed"`
-	HasData   bool   `json:"has_data"`
+	ID         string `json:"id"`
+	Label      string `json:"label"`
+	Latest     string `json:"latest"`
+	Prerelease bool   `json:"prerelease"`
+	Installed  bool   `json:"installed"`
+	HasData    bool   `json:"has_data"`
 }
 
 // Job is a running or failed install.
 type Job struct {
-	components.Job
-	Version string `json:"version"`
-	Line    string `json:"line"`
+	Action    string    `json:"action"` // install | update
+	State     string    `json:"state"`  // running | failed
+	Phase     string    `json:"phase"`  // downloading | installing
+	Progress  float64   `json:"progress"`
+	Error     string    `json:"error"`
+	StartedAt time.Time `json:"started_at"`
+	Version   string    `json:"version"`
+	Line      string    `json:"line"`
 }
 
-// Manager runs one install job per service at a time and caches the latest versions.
+// Manager runs one install job per service at a time.
 type Manager struct {
-	root   string
-	path   string // state file
-	kinds  []*Kind
-	mutate components.Mutate
+	root     string
+	kinds    []*Kind
+	catalog  *binaries.Catalog
+	platform string
+	mutate   Mutate
 
-	mu       sync.Mutex
-	loaded   bool
-	state    persisted
-	jobs     map[string]*job
-	base     context.Context
-	checkMu  sync.Mutex
-	checking atomic.Bool
-	wg       sync.WaitGroup
-}
-
-type persisted struct {
-	CheckedAt  time.Time                    `json:"checked_at"`
-	CheckError string                       `json:"check_error"`
-	Latest     map[string]map[string]string `json:"latest"` // id → line → version
+	mu   sync.Mutex
+	jobs map[string]*job
+	base context.Context
+	wg   sync.WaitGroup
 }
 
 type job struct {
@@ -193,17 +207,16 @@ type job struct {
 	cancel context.CancelFunc
 }
 
-// NewManager creates a manager for kinds, keeping its state and logs under root. mutate edits
-// config.json and applies it.
-func NewManager(root string, kinds []*Kind, mutate components.Mutate) *Manager {
-	return &Manager{
-		root:   root,
-		path:   filepath.Join(root, "cache", "catalog.json"),
-		kinds:  kinds,
-		mutate: mutate,
-		jobs:   map[string]*job{},
-		base:   context.Background(),
+// NewManager creates a manager for kinds installing from catalog under root. mutate edits
+// config.json and applies it. A withdrawn (yanked) build is replaced by the next good one as soon
+// as the manifest has it.
+func NewManager(root string, kinds []*Kind, catalog *binaries.Catalog, mutate Mutate) *Manager {
+	m := &Manager{root: root, kinds: kinds, catalog: catalog, platform: binaries.Platform(), mutate: mutate,
+		jobs: map[string]*job{}, base: context.Background()}
+	if catalog != nil {
+		catalog.OnChange(m.replaceYanked)
 	}
+	return m
 }
 
 // Kinds returns the services of the catalog.
@@ -224,81 +237,146 @@ func (m *Manager) LogPath(id string) string {
 	return filepath.Join(m.root, "log", id+"-install.log")
 }
 
-// load must be called with m.mu held.
-func (m *Manager) load() {
-	if m.loaded {
-		return
+func (m *Manager) manifest() *binaries.Manifest {
+	if m.catalog == nil {
+		return nil
 	}
-	m.loaded = true
-	if data, err := os.ReadFile(m.path); err == nil {
-		_ = json.Unmarshal(data, &m.state)
-	}
-	if m.state.Latest == nil {
-		m.state.Latest = map[string]map[string]string{}
-	}
+	return m.catalog.Manifest()
 }
 
-// save must be called with m.mu held.
-func (m *Manager) save() {
-	data, err := json.MarshalIndent(m.state, "", "  ")
-	if err != nil {
-		return
+// offers is the newest build of every line of k the manifest has for this platform.
+func (m *Manager) offers(manifest *binaries.Manifest, k *Kind) map[string]binaries.Version {
+	out := map[string]binaries.Version{}
+	for _, v := range manifest.Versions(k.pkg(), m.platform) { // newest first
+		if line := k.LineOf(v.Version); line != "" {
+			if _, ok := out[line]; !ok {
+				out[line] = v
+			}
+		}
 	}
-	_ = os.MkdirAll(filepath.Dir(m.path), 0o755)
-	_ = os.WriteFile(m.path, data, 0o644)
+	return out
 }
 
-// Catalog returns every service's state without waiting on the network; stale versions are
-// looked up in the background.
+// Available reports whether the manifest offers k for this platform, and else why not.
+func (m *Manager) Available(k *Kind) (bool, string) {
+	if len(m.offers(m.manifest(), k)) > 0 {
+		return true, ""
+	}
+	if k.Unavailable != "" {
+		return false, k.Unavailable
+	}
+	return false, fmt.Sprintf("Flock publishes no %s build for this computer.", k.Name)
+}
+
+// Catalog returns every service's state without waiting on the network.
 func (m *Manager) Catalog() Catalog {
-	if m.Stale() {
-		m.CheckInBackground()
-	}
 	cfg, err := config.Load(m.root)
 	if err != nil {
 		cfg = config.Default()
 	}
+	manifest := m.manifest()
+	out := Catalog{Services: []Entry{}}
+	if m.catalog != nil {
+		cs := m.catalog.Status()
+		out.CheckedAt, out.CheckError = cs.CheckedAt, cs.CheckError
+	}
 
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	m.load()
-	out := Catalog{CheckError: m.state.CheckError, Services: []Entry{}}
-	if !m.state.CheckedAt.IsZero() {
-		at := m.state.CheckedAt
-		out.CheckedAt = &at
-	}
 	for _, k := range m.kinds {
-		out.Services = append(out.Services, m.entry(k, cfg))
+		out.Services = append(out.Services, m.entry(manifest, k, cfg))
 	}
 	return out
 }
 
 // entry must be called with m.mu held.
-func (m *Manager) entry(k *Kind, cfg *config.Config) Entry {
+func (m *Manager) entry(manifest *binaries.Manifest, k *Kind, cfg *config.Config) Entry {
+	offers := m.offers(manifest, k)
 	e := Entry{
 		ID: k.ID, Name: k.Name, Category: k.Category, Description: k.Description,
-		Available: k.Method != "", Unavailable: k.Unavailable, Method: k.Method, Estimate: k.Estimate,
-		DefaultPort: k.DefaultPort, Lines: []LineState{},
+		Available: len(offers) > 0, DefaultPort: k.DefaultPort, Lines: []LineState{},
 	}
-	latest := m.state.Latest[k.ID]
+	if e.Available {
+		e.Method = MethodDownload
+	} else {
+		_, e.Unavailable = m.Available(k)
+	}
+
+	lines := map[string]bool{}
+	for line := range offers {
+		lines[line] = true
+	}
 	if x, ok := cfg.Services.Extra(k.ID); ok && installed(m.root, k.ID, x.Version) {
 		e.Installed, e.Line, e.Port = x.Version, k.LineOf(x.Version), x.Port
-		e.Latest = latest[e.Line]
-		e.Update = e.Latest != "" && components.Newer(e.Latest, e.Installed)
+		lines[e.Line] = true
+		if offer, ok := offers[e.Line]; ok {
+			e.Latest = offer.Version
+			e.Update = offer.Installable() && newer(offer.Version, offer.Build, x.Version, x.Build)
+		}
+		e.Yanked = yankReason(manifest, m.platform, k, x)
 	} else {
 		e.Port = SuggestPort(cfg, k.ID, k.DefaultPort)
 	}
-	for _, l := range k.Lines {
+	if entries, err := os.ReadDir(filepath.Join(m.root, "services", k.ID, "data")); err == nil {
+		for _, d := range entries {
+			if d.IsDir() && hasData(filepath.Join(m.root, "services", k.ID, "data", d.Name())) {
+				lines[d.Name()] = true
+			}
+		}
+	}
+
+	ids := make([]string, 0, len(lines))
+	for line := range lines {
+		ids = append(ids, line)
+	}
+	sort.Slice(ids, func(i, j int) bool { return binaries.CompareVersions(ids[i], ids[j]) > 0 })
+	for _, line := range ids {
+		offer := offers[line]
 		e.Lines = append(e.Lines, LineState{
-			ID: l.ID, Label: l.Label, Latest: latest[l.ID], Installed: e.Line == l.ID,
-			HasData: hasData(DataDir(m.root, k.ID, l.ID)),
+			ID: line, Label: line, Latest: offer.Version, Prerelease: offer.Prerelease, Installed: e.Line == line,
+			HasData: hasData(DataDir(m.root, k.ID, line)),
 		})
+	}
+	if newest, ok := offers[firstOffered(ids, offers)]; ok {
+		e.Estimate = fmt.Sprintf("about %d MB download", max(1, newest.Size/1_000_000))
 	}
 	if j := m.jobs[k.ID]; j != nil {
 		copied := j.Job
 		e.Job = &copied
 	}
 	return e
+}
+
+// firstOffered is the newest line of ids the manifest offers.
+func firstOffered(ids []string, offers map[string]binaries.Version) string {
+	for _, id := range ids {
+		if _, ok := offers[id]; ok {
+			return id
+		}
+	}
+	return ""
+}
+
+// newer reports whether version (build) is newer than the installed one: a later version, or a
+// higher build of it. An install from before builds were recorded (build 0) counts as older.
+func newer(version string, build int, installed string, installedBuild int) bool {
+	if c := binaries.CompareVersions(version, installed); c != 0 {
+		return c > 0
+	}
+	return build > installedBuild
+}
+
+// yankReason is why the installed build of k was withdrawn, or "".
+func yankReason(manifest *binaries.Manifest, platform string, k *Kind, x config.Extra) string {
+	if x.Build == 0 {
+		return ""
+	}
+	for _, v := range manifest.Versions(k.pkg(), platform) {
+		if v.Version == x.Version {
+			return v.YankReason(x.Build)
+		}
+	}
+	return ""
 }
 
 // installed reports whether version of service id is on disk.
@@ -324,118 +402,40 @@ func SuggestPort(cfg *config.Config, id string, port int) int {
 	return port
 }
 
-// Stale reports whether the latest versions were never looked up or are older than CheckInterval.
-func (m *Manager) Stale() bool {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	m.load()
-	return m.state.CheckedAt.IsZero() || time.Since(m.state.CheckedAt) > CheckInterval
-}
-
-// CheckInBackground starts a check unless one is running.
-func (m *Manager) CheckInBackground() {
-	if !m.checking.CompareAndSwap(false, true) {
-		return
-	}
-	go func() {
-		defer m.checking.Store(false)
-		ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
-		defer cancel()
-		_ = m.Check(ctx)
-	}()
-}
-
-// Check looks up the newest versions of every available service now, all at once. Versions
-// that can't be looked up keep their previous value; the errors are joined into check_error.
+// Check fetches the manifest now.
 func (m *Manager) Check(ctx context.Context) error {
-	m.checkMu.Lock()
-	defer m.checkMu.Unlock()
-
-	type result struct {
-		id     string
-		latest map[string]string
-		err    error
+	if m.catalog == nil {
+		return errors.New("no package manifest")
 	}
-	results := make(chan result)
-	n := 0
-	for _, k := range m.kinds {
-		if k.Method == "" || k.Latest == nil {
-			continue
-		}
-		n++
-		go func() {
-			latest, err := k.Latest(ctx)
-			if err != nil {
-				err = fmt.Errorf("%s: %w", k.Name, err)
-			}
-			results <- result{k.ID, latest, err}
-		}()
-	}
-	found := map[string]map[string]string{}
-	var errs []string
-	for range n {
-		r := <-results
-		if r.err != nil {
-			errs = append(errs, r.err.Error())
-		}
-		if len(r.latest) > 0 {
-			found[r.id] = r.latest
-		}
-	}
-	slices.Sort(errs)
-
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	m.load()
-	m.state.CheckedAt = time.Now().UTC()
-	m.state.CheckError = strings.Join(errs, "; ")
-	for id, latest := range found {
-		if m.state.Latest[id] == nil {
-			m.state.Latest[id] = map[string]string{}
-		}
-		for line, v := range latest {
-			m.state.Latest[id][line] = v
-		}
-	}
-	m.save()
-	if len(errs) > 0 {
-		return errors.New(m.state.CheckError)
-	}
-	return nil
+	_, err := m.catalog.Check(ctx)
+	return err
 }
 
-// Run checks for new versions when stale (soon after start, then looked at hourly) until ctx
-// ends, and then cancels running jobs.
+// replaceYanked reinstalls every installed service whose build was withdrawn, when a good one exists.
+func (m *Manager) replaceYanked() {
+	for _, e := range m.Catalog().Services {
+		if e.Yanked != "" && e.Update && e.Job == nil {
+			_ = m.Start(e.ID, e.Line, 0)
+		}
+	}
+}
+
+// Run cancels running jobs when ctx ends (the binaries catalog keeps the manifest fresh).
 func (m *Manager) Run(ctx context.Context) {
 	m.mu.Lock()
 	m.base = ctx
 	m.mu.Unlock()
-
-	timer := time.NewTimer(30 * time.Second)
-	defer timer.Stop()
-	for {
-		select {
-		case <-ctx.Done():
-			m.mu.Lock()
-			for _, j := range m.jobs {
-				if j.cancel != nil {
-					j.cancel()
-				}
-			}
-			m.mu.Unlock()
-			return
-		case <-timer.C:
-			if m.Stale() {
-				checkCtx, cancel := context.WithTimeout(ctx, time.Minute)
-				_ = m.Check(checkCtx)
-				cancel()
-			}
-			timer.Reset(time.Hour)
+	<-ctx.Done()
+	m.mu.Lock()
+	for _, j := range m.jobs {
+		if j.cancel != nil {
+			j.cancel()
 		}
 	}
+	m.mu.Unlock()
 }
 
-// Start begins installing the newest release of line (the installed line, else the newest, when
+// Start begins installing the newest build of line (the installed line, else the newest, when
 // "") in the background, on port (the configured or suggested one when 0). Installing replaces
 // the installed version; each line keeps its own data.
 func (m *Manager) Start(id, line string, port int) error {
@@ -443,8 +443,13 @@ func (m *Manager) Start(id, line string, port int) error {
 	if err != nil {
 		return err
 	}
-	if k.Method == "" {
-		return fmt.Errorf("%s is %w: %s", k.Name, ErrUnavailable, k.Unavailable)
+	offers := m.offers(m.manifest(), k)
+	if len(offers) == 0 {
+		why := k.Unavailable
+		if why == "" {
+			why = "the package manifest has no build of it for this computer"
+		}
+		return fmt.Errorf("%s is %w: %s", k.Name, ErrUnavailable, why)
 	}
 	cfg, err := config.Load(m.root)
 	if err != nil {
@@ -452,14 +457,23 @@ func (m *Manager) Start(id, line string, port int) error {
 	}
 	current, isInstalled := cfg.Services.Extra(id)
 	if line == "" {
-		if isInstalled && k.LineOf(current.Version) != "" {
+		if isInstalled && offers[k.LineOf(current.Version)].Version != "" {
 			line = k.LineOf(current.Version)
 		} else {
-			line = k.Lines[0].ID
+			lines := make([]string, 0, len(offers))
+			for l := range offers {
+				lines = append(lines, l)
+			}
+			sort.Slice(lines, func(i, j int) bool { return binaries.CompareVersions(lines[i], lines[j]) > 0 })
+			line = lines[0]
 		}
 	}
-	if !k.hasLine(line) {
+	offer, ok := offers[line]
+	if !ok {
 		return fmt.Errorf("%w: %s has no line %q", ErrInvalid, k.Name, line)
+	}
+	if !offer.Installable() {
+		return fmt.Errorf("%s %s build %d was withdrawn: %s", k.Name, offer.Version, offer.Build, offer.YankReason(offer.Build))
 	}
 	if port == 0 {
 		port = current.Port
@@ -473,28 +487,23 @@ func (m *Manager) Start(id, line string, port int) error {
 
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	m.load()
 	if j := m.jobs[id]; j != nil && j.State == "running" {
 		return fmt.Errorf("%w for %s", ErrBusy, k.Name)
 	}
 	action := "install"
-	if isInstalled {
+	if isInstalled && k.LineOf(current.Version) == line {
 		action = "update"
-		if k.LineOf(current.Version) != line {
-			action = "install"
-		}
 	}
-	version := m.state.Latest[id][line]
 	ctx, cancel := context.WithCancel(m.base)
-	j := &job{Job: Job{Job: components.Job{Action: action, State: "running", Phase: components.PhaseDownloading, Progress: -1,
-		StartedAt: time.Now().UTC()}, Version: version, Line: line}, cancel: cancel}
+	j := &job{Job: Job{Action: action, State: "running", Phase: PhaseDownloading, Progress: -1,
+		StartedAt: time.Now().UTC(), Version: offer.Version, Line: line}, cancel: cancel}
 	m.jobs[id] = j
 
 	m.wg.Add(1)
 	go func() {
 		defer m.wg.Done()
 		defer cancel()
-		m.run(ctx, k, j, line, port)
+		m.run(ctx, k, j, offer, port)
 	}()
 	return nil
 }
@@ -510,42 +519,21 @@ func CheckPort(cfg *config.Config, id string, port int) error {
 	return nil
 }
 
-func (m *Manager) run(ctx context.Context, k *Kind, j *job, line string, port int) {
+func (m *Manager) run(ctx context.Context, k *Kind, j *job, offer binaries.Version, port int) {
 	_ = os.MkdirAll(filepath.Dir(m.LogPath(k.ID)), 0o700)
-	logFile, err := os.Create(m.LogPath(k.ID))
 	var log io.Writer = io.Discard
-	if err == nil {
-		defer logFile.Close()
-		log = &lockedWriter{w: logFile}
+	if f, err := os.Create(m.LogPath(k.ID)); err == nil {
+		defer f.Close()
+		log = f
 	}
-
-	r := components.NewReporter(log, func(phase string, progress float64) {
+	set := func(phase string, progress float64) {
 		m.mu.Lock()
 		j.Phase, j.Progress = phase, progress
 		m.mu.Unlock()
-	})
+	}
 
-	m.mu.Lock()
-	version := j.Version
-	m.mu.Unlock()
-	if version == "" {
-		fmt.Fprintf(log, "[flock] looking up the newest %s %s\n", k.Name, line)
-		var latest map[string]string
-		if latest, err = k.Latest(ctx); err == nil {
-			m.mu.Lock()
-			m.state.Latest[k.ID] = latest
-			version = latest[line]
-			j.Version = version
-			m.mu.Unlock()
-			if version == "" {
-				err = fmt.Errorf("found no %s %s release for this platform", k.Name, line)
-			}
-		}
-	}
-	if err == nil {
-		fmt.Fprintf(log, "[flock] %s %s %s at %s\n", j.Action, k.Name, version, time.Now().Format(time.RFC3339))
-		err = m.install(ctx, k, version, port, r)
-	}
+	fmt.Fprintf(log, "[flock] %s %s %s, build %d, at %s\n", j.Action, k.Name, offer.Version, offer.Build, time.Now().Format(time.RFC3339))
+	err := m.install(ctx, k, offer, port, log, set)
 
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -557,13 +545,13 @@ func (m *Manager) run(ctx context.Context, k *Kind, j *job, line string, port in
 		fmt.Fprintf(log, "[flock] failed: %v\n", err)
 		j.State, j.Error = "failed", err.Error()
 	default:
-		fmt.Fprintf(log, "[flock] installed %s %s on port %d\n", k.Name, version, port)
+		fmt.Fprintf(log, "[flock] installed %s %s on port %d\n", k.Name, offer.Version, port)
 		delete(m.jobs, k.ID)
 	}
 }
 
-// install fetches version next to the installed ones, makes it the service and removes the others.
-func (m *Manager) install(ctx context.Context, k *Kind, version string, port int, r *components.Reporter) error {
+// install downloads a build next to the installed ones, makes it the service and removes the others.
+func (m *Manager) install(ctx context.Context, k *Kind, offer binaries.Version, port int, log io.Writer, set func(string, float64)) error {
 	parent := filepath.Join(m.root, "services", k.ID)
 	if err := os.MkdirAll(parent, 0o755); err != nil {
 		return err
@@ -574,13 +562,30 @@ func (m *Manager) install(ctx context.Context, k *Kind, version string, port int
 	}
 	defer os.RemoveAll(tmp)
 
+	fmt.Fprintf(log, "[flock] downloading %s\n", offer.URL)
+	set(PhaseDownloading, 0)
 	staged := filepath.Join(tmp, "out")
-	if err := k.Install(ctx, staged, version, r); err != nil {
+	err = binaries.Install(ctx, HTTPClient, offer.Entry, staged, func(done, total int64) {
+		p := -1.0
+		if total > 0 {
+			p = float64(done) / float64(total)
+		}
+		set(PhaseDownloading, p)
+	})
+	if err != nil {
 		return err
 	}
-	r.Phase(components.PhaseInstalling, -1)
+	fmt.Fprintf(log, "[flock] verified SHA-256 %s\n", offer.SHA256)
+	set(PhaseInstalling, -1)
+	if k.Prepare != nil {
+		if err := k.Prepare(staged); err != nil {
+			return err
+		}
+	}
 
-	// A reinstall replaces the running version: stop it first (Windows locks its files).
+	// A reinstall (a new build of the same version) replaces the running one: stop it first
+	// (Windows locks its files).
+	version := offer.Version
 	dir := Dir(m.root, k.ID, version)
 	if _, err := os.Stat(dir); err == nil {
 		if err := m.mutate(func(cfg *config.Config) error { cfg.Services.RemoveExtra(k.ID); return nil }); err != nil {
@@ -598,7 +603,7 @@ func (m *Manager) install(ctx context.Context, k *Kind, version string, port int
 		if err := CheckPort(cfg, k.ID, port); err != nil {
 			return err
 		}
-		cfg.Services.SetExtra(k.ID, config.Extra{Version: version, Port: port})
+		cfg.Services.SetExtra(k.ID, config.Extra{Version: version, Build: offer.Build, Port: port})
 		cfg.Services.SetRunning(k.ID, true)
 		return nil
 	})
@@ -700,21 +705,5 @@ func Spec(root string, k *Kind, x config.Extra) (supervisor.Spec, error) {
 	return spec, nil
 }
 
-// lockedWriter serialises writes from a build's stdout and stderr and the manager, leaving out
-// terminal colour codes.
-type lockedWriter struct {
-	mu sync.Mutex
-	w  io.Writer
-}
-
-func (l *lockedWriter) Write(p []byte) (int, error) {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-	if _, err := l.w.Write(ansi(p)); err != nil {
-		return 0, err
-	}
-	return len(p), nil
-}
-
-// HTTPClient is used for version lookups and downloads (tests replace it).
+// HTTPClient downloads the packages (tests replace it).
 var HTTPClient = http.DefaultClient

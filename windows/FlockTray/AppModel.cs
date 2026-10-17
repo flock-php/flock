@@ -641,14 +641,12 @@ public sealed class SettingsStore(FlockClient client) : Store
 
     /// <summary>PostgreSQL majors with install state; loaded by the Services pane.</summary>
     public PostgresVersions? Postgres { get; private set; }
-    /// <summary>The components (none on Windows today) with their install jobs; loaded by the Services pane.</summary>
-    public ComponentCatalog? Components { get; private set; }
-    /// <summary>MySQL, MariaDB, Redis, MongoDB, Meilisearch, Typesense, RustFS; loaded by the Services pane.</summary>
+    /// <summary>MySQL, MariaDB, MongoDB, Valkey, Meilisearch, RustFS; loaded by the Services pane.</summary>
     public ServiceCatalog? Catalog { get; private set; }
-    /// <summary>The Services pane is shown, so service changes also reload Postgres and Components.</summary>
+    /// <summary>The Services pane is shown, so service changes also reload Postgres and the catalog.</summary>
     public bool WatchesServices { get; set; }
 
-    public Task RefreshServiceVersionsAsync() => Task.WhenAll(RefreshPostgresAsync(), RefreshComponentsAsync(), RefreshCatalogAsync());
+    public Task RefreshServiceVersionsAsync() => Task.WhenAll(RefreshPostgresAsync(), RefreshCatalogAsync());
 
     public async Task RefreshCatalogAsync()
     {
@@ -719,24 +717,6 @@ public sealed class SettingsStore(FlockClient client) : Store
         }
     }
 
-    public async Task RefreshComponentsAsync()
-    {
-        try
-        {
-            var fresh = await client.ComponentsAsync();
-            if (!Json.Same(fresh, Components))
-            {
-                Components = fresh;
-                Notify();
-            }
-        }
-        catch (FlockException e)
-        {
-            Error = e.Message;
-            Notify();
-        }
-    }
-
     /// <summary>
     /// Runs a PostgreSQL action and adopts the versions it returns, then lets the service list and
     /// the tray catch up. Not Busy(): an install takes minutes and shouldn't freeze other services.
@@ -757,39 +737,6 @@ public sealed class SettingsStore(FlockClient client) : Store
         if (OnChange is not null)
         {
             await OnChange();
-        }
-    }
-
-    /// <summary>Runs a component action (they return at once; installs continue as jobs) and adopts the catalog.</summary>
-    public async Task PerformOnComponentsAsync(Func<FlockClient, Task<ComponentCatalog>> change)
-    {
-        try
-        {
-            Components = await change(client);
-            Error = null;
-        }
-        catch (FlockException e)
-        {
-            Error = e.Message;
-        }
-        Notify();
-        await RefreshAsync();
-        if (OnChange is not null)
-        {
-            await OnChange();
-        }
-    }
-
-    /// <summary>The tail of a component job's output; empty when there is none (yet).</summary>
-    public async Task<string> ComponentLogAsync(string id)
-    {
-        try
-        {
-            return await client.ComponentLogAsync(id);
-        }
-        catch (FlockException)
-        {
-            return "";
         }
     }
 

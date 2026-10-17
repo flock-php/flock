@@ -15,7 +15,6 @@ import (
 
 	"flock/internal/api"
 	"flock/internal/catalog"
-	"flock/internal/components"
 	"flock/internal/config"
 	"flock/internal/node"
 	"flock/internal/php"
@@ -52,7 +51,7 @@ func (s *server) addWriteTools(srv *mcp.Server) {
 	mcp.AddTool(srv, &mcp.Tool{
 		Name: "install_version",
 		Description: "Install a PHP version (e.g. 8.4: its newest release) or a Node.js version (a major, e.g. 22). " +
-			"When it takes longer than about a minute (PHP is built from source on macOS) the tool answers that it is still " +
+			"When the download takes longer than about a minute the tool answers that it is still " +
 			"installing; list_php_versions / list_node_versions show the progress.",
 		Annotations: additive(true),
 		InputSchema: schema[installVersionIn](map[string][]any{"tool": {"php", "node"}}),
@@ -296,33 +295,6 @@ func (s *server) installService(ctx context.Context, req *mcp.CallToolRequest, i
 				}
 			}
 			return step{text: text}, nil
-		}
-
-	case components.Valkey:
-		name = "Valkey"
-		if c, err := s.Daemon.Components(ctx); err != nil {
-			return nil, actionOut{}, err
-		} else if x, _ := c.Find(id); x.Installed == "" || x.Job != nil {
-			if _, err := s.Daemon.InstallComponent(ctx, id); err != nil {
-				return nil, actionOut{}, err
-			}
-		}
-		check = func(ctx context.Context) (step, error) {
-			c, err := s.Daemon.Components(ctx)
-			if err != nil {
-				return step{}, err
-			}
-			x, _ := c.Find(id)
-			switch {
-			case x.Job == nil && x.Installed != "":
-				return step{done: true}, nil
-			case x.Job == nil:
-				return step{}, errors.New("the Valkey install was canceled")
-			case x.Job.State == "failed":
-				return step{}, fmt.Errorf("installing Valkey failed: %s", x.Job.Error)
-			}
-			text, _ := jobState(x.Job.State, x.Job.Phase, x.Job.Progress, "")
-			return step{text: text, progress: x.Job.Progress}, nil
 		}
 
 	default:

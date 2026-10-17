@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"runtime"
 	"slices"
 	"sort"
 	"strings"
@@ -42,7 +41,6 @@ type Ports struct {
 	DNS      int `json:"dns"`
 	SMTP     int `json:"smtp"`
 	Postgres int `json:"postgres"`
-	Valkey   int `json:"valkey"`
 	Dumps    int `json:"dumps"`
 	API      int `json:"api"` // token-protected HTTP API for the native apps
 }
@@ -50,7 +48,6 @@ type Ports struct {
 // Services are optional background services; an empty version means not installed.
 type Services struct {
 	Postgres string `json:"postgres,omitempty"` // the active build, e.g. "18.6-build1"
-	Valkey   string `json:"valkey,omitempty"`   // e.g. "9.1.2"
 
 	// Extras are the services of the catalog (MySQL, Redis, Meilisearch, ...) that are installed,
 	// by id. Each runs one version on its own port.
@@ -62,7 +59,8 @@ type Services struct {
 
 // Extra is an installed catalog service.
 type Extra struct {
-	Version string `json:"version"` // e.g. "8.4.6"
+	Version string `json:"version"`         // e.g. "8.4.6"
+	Build   int    `json:"build,omitempty"` // the manifest build installed (0 when unknown)
 	Port    int    `json:"port"`
 }
 
@@ -191,7 +189,7 @@ func Default() *Config {
 		DefaultNode:       "22",
 		Xdebug:            true,
 		XdebugBreakpoints: true,
-		Ports:             Ports{HTTP: 80, HTTPS: 443, DNS: 53535, SMTP: 2525, Postgres: 5432, Valkey: 6379, Dumps: 9912, API: 53531},
+		Ports:             Ports{HTTP: 80, HTTPS: 443, DNS: 53535, SMTP: 2525, Postgres: 5432, Dumps: 9912, API: 53531},
 	}
 }
 
@@ -214,55 +212,8 @@ func Load(root string) (*Config, error) {
 	if err := json.Unmarshal(data, cfg); err != nil {
 		return nil, fmt.Errorf("parse %s: %w", file(root), err)
 	}
-	if err := migrate(cfg, data, runtime.GOOS); err != nil {
-		return nil, fmt.Errorf("parse %s: %w", file(root), err)
-	}
 
 	return cfg, nil
-}
-
-// migrate moves what older versions stored as "redis" to where it belongs now. That was Valkey
-// on macOS, which is its own service now, and Redis itself on Windows, which is a catalog
-// service (the catalog package moves its files).
-func migrate(cfg *Config, data []byte, goos string) error {
-	var legacy struct {
-		Ports struct {
-			Redis  int `json:"redis"`
-			Valkey int `json:"valkey"`
-		} `json:"ports"`
-		Services struct {
-			Redis string `json:"redis"`
-		} `json:"services"`
-	}
-	if err := json.Unmarshal(data, &legacy); err != nil {
-		return err
-	}
-	if legacy.Ports.Redis == 0 && legacy.Services.Redis == "" {
-		return nil
-	}
-
-	port := legacy.Ports.Redis
-	if port == 0 {
-		port = Default().Ports.Valkey
-	}
-	if goos == "windows" {
-		if _, ok := cfg.Services.Extra("redis"); !ok && legacy.Services.Redis != "" {
-			cfg.Services.SetExtra("redis", Extra{Version: legacy.Services.Redis, Port: port})
-		}
-		return nil
-	}
-
-	if legacy.Ports.Valkey == 0 {
-		cfg.Ports.Valkey = port
-	}
-	if cfg.Services.Valkey == "" && legacy.Services.Redis != "" {
-		cfg.Services.Valkey = legacy.Services.Redis
-	}
-	if !cfg.Services.Running("redis") {
-		cfg.Services.SetRunning("redis", true)
-		cfg.Services.SetRunning("valkey", false)
-	}
-	return nil
 }
 
 // UsedPorts maps every port a Flock service is configured for to that service's id, leaving out
@@ -274,9 +225,6 @@ func (c *Config) UsedPorts(except string) map[int]string {
 	}
 	if c.Services.Postgres != "" {
 		used[c.Ports.Postgres] = "postgres"
-	}
-	if c.Services.Valkey != "" {
-		used[c.Ports.Valkey] = "valkey"
 	}
 	for id, x := range c.Services.Extras {
 		if id != except && x.Version != "" {

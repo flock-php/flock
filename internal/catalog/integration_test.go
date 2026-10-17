@@ -12,14 +12,15 @@ import (
 	"testing"
 	"time"
 
+	"flock/internal/binaries"
 	"flock/internal/config"
 	"flock/internal/supervisor"
 )
 
 // TestIntegrationInstallAndRun installs real services through the manager (downloads of up to
-// 350 MB each; MariaDB builds for several minutes), starts each one and talks to it. Run with:
+// 350 MB each) from the published manifest, starts each one and talks to it. Run with:
 //
-//	FLOCK_CATALOG_INTEGRATION=mysql,redis go test ./internal/catalog -run Integration -v -timeout 30m
+//	FLOCK_CATALOG_INTEGRATION=mysql,valkey go test ./internal/catalog -run Integration -v -timeout 30m
 //
 // FLOCK_CATALOG_INTEGRATION=all runs every service available here.
 func TestIntegrationInstallAndRun(t *testing.T) {
@@ -28,8 +29,8 @@ func TestIntegrationInstallAndRun(t *testing.T) {
 		t.Skip("set FLOCK_CATALOG_INTEGRATION=all (or a list of services) to run")
 	}
 
-	for _, k := range Kinds(runtime.GOOS, runtime.GOARCH) {
-		if k.Method == "" || (want != "all" && !strings.Contains(","+want+",", ","+k.ID+",")) {
+	for _, k := range Kinds(runtime.GOOS) {
+		if want != "all" && !strings.Contains(","+want+",", ","+k.ID+",") {
 			continue
 		}
 		t.Run(k.ID, func(t *testing.T) {
@@ -40,7 +41,8 @@ func TestIntegrationInstallAndRun(t *testing.T) {
 			}
 			defer os.RemoveAll(root)
 
-			m := NewManager(root, []*Kind{k}, configMutate(root))
+			source := binaries.NewCatalog(binaries.DefaultSource(root), func() binaries.Channel { return binaries.Stable })
+			m := NewManager(root, []*Kind{k}, source, configMutate(root))
 			ctx, cancel := context.WithTimeout(context.Background(), 25*time.Minute)
 			defer cancel()
 			if err := m.Check(ctx); err != nil {
@@ -48,10 +50,13 @@ func TestIntegrationInstallAndRun(t *testing.T) {
 			}
 			e, _ := m.Catalog().Find(k.ID)
 			for _, l := range e.Lines {
-				t.Logf("%s %s: newest %q", k.Name, l.Label, l.Latest)
+				t.Logf("%s %s: newest %q", k.Name, l.ID, l.Latest)
 			}
 
 			port := freePort(t)
+			if ok, why := m.Available(k); !ok {
+				t.Skip(why)
+			}
 			if err := m.Start(k.ID, "", port); err != nil {
 				t.Fatal(err)
 			}
@@ -98,7 +103,7 @@ func TestIntegrationInstallAndRun(t *testing.T) {
 func probeService(id string, port int) error {
 	addr := fmt.Sprintf("127.0.0.1:%d", port)
 	switch id {
-	case "redis":
+	case "redis", "valkey":
 		conn, err := net.DialTimeout("tcp", addr, 2*time.Second)
 		if err != nil {
 			return err

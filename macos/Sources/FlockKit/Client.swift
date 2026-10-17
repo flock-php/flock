@@ -209,7 +209,7 @@ public actor FlockClient {
         try await decode(NodeCatalog.self, "DELETE", "/v1/node/versions/\(escape(major))")
     }
 
-    /// Asks the daemon to check nodejs.org (and npm's registry) for new releases now.
+    /// Asks the daemon to fetch the package manifest (and npm's registry) now.
     public func checkNodeReleases() async throws -> NodeCatalog {
         try await decode(NodeCatalog.self, "POST", "/v1/node/check", timeout: 60)
     }
@@ -372,43 +372,7 @@ public actor FlockClient {
         var port: Int
     }
 
-    // MARK: Components (Valkey)
-
-    public func components() async throws -> ComponentCatalog {
-        try await decode(ComponentCatalog.self, "GET", "/v1/components")
-    }
-
-    /// Asks the daemon to look for new releases of the components now.
-    public func checkComponents() async throws -> ComponentCatalog {
-        try await decode(ComponentCatalog.self, "POST", "/v1/components/check", timeout: 60)
-    }
-
-    /// Starts installing (or updating) a component in the background; poll `components()` for the job.
-    public func installComponent(_ id: String) async throws -> ComponentCatalog {
-        try await decode(ComponentCatalog.self, "POST", "/v1/components/\(escape(id))/install")
-    }
-
-    public func cancelComponentJob(_ id: String) async throws -> ComponentCatalog {
-        try await decode(ComponentCatalog.self, "POST", "/v1/components/\(escape(id))/cancel")
-    }
-
-    /// Dismisses a failed job.
-    public func dismissComponentJob(_ id: String) async throws -> ComponentCatalog {
-        try await decode(ComponentCatalog.self, "DELETE", "/v1/components/\(escape(id))/job")
-    }
-
-    public func uninstallComponent(_ id: String) async throws -> ComponentCatalog {
-        try await decode(ComponentCatalog.self, "DELETE", "/v1/components/\(escape(id))", timeout: 30)
-    }
-
-    /// The tail of the current or last job's output; empty when there is none.
-    public func componentLog(_ id: String) async throws -> String {
-        do {
-            return String(decoding: try await send("GET", "/v1/components/\(escape(id))/log"), as: UTF8.self)
-        } catch FlockError.server(404, _) {
-            return ""
-        }
-    }
+    // MARK: Mail
 
     public func mail() async throws -> [MailSummary] {
         try await decode([MailSummary]?.self, "GET", "/v1/mail") ?? []

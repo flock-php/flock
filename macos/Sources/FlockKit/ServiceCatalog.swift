@@ -36,8 +36,21 @@ public struct CatalogService: Decodable, Sendable, Equatable, Identifiable {
     public var available: Bool
     /// Why it isn't available on this platform.
     public var unavailable: String
-    public var method: ServiceComponent.Method
-    /// How long installing takes, e.g. "about 10 minutes" or "180 MB download".
+    public var method: Method
+
+    /// How Flock gets it: a download from the package manifest.
+    public enum Method: String, Decodable, Sendable {
+        /// Compiled from source (older daemons).
+        case build
+        case download
+        case unknown
+
+        public init(from decoder: Decoder) throws {
+            self = Method(rawValue: try decoder.singleValueContainer().decode(String.self)) ?? .unknown
+        }
+    }
+
+    /// How long installing takes, e.g. "about 180 MB download".
     public var estimate: String
     /// The installed version; empty when not installed.
     public var installed: String
@@ -46,6 +59,8 @@ public struct CatalogService: Decodable, Sendable, Equatable, Identifiable {
     /// The newest release of `line`; empty when unknown.
     public var latest: String
     public var update: Bool
+    /// Why the installed build was withdrawn; empty when it wasn't. Flock replaces it by itself.
+    public var yanked: String
     /// The configured port, or the one Flock suggests when not installed.
     public var port: Int
     public var defaultPort: Int
@@ -61,7 +76,7 @@ public struct CatalogService: Decodable, Sendable, Equatable, Identifiable {
     }
 
     enum CodingKeys: String, CodingKey {
-        case id, name, category, description, available, unavailable, method, estimate, installed, line, latest, update, port, defaultPort, lines, job
+        case id, name, category, description, available, unavailable, method, estimate, installed, line, latest, update, yanked, port, defaultPort, lines, job
     }
 
     public init(from decoder: Decoder) throws {
@@ -72,12 +87,13 @@ public struct CatalogService: Decodable, Sendable, Equatable, Identifiable {
         description = try c.decodeIfPresent(String.self, forKey: .description) ?? ""
         available = try c.decodeIfPresent(Bool.self, forKey: .available) ?? true
         unavailable = try c.decodeIfPresent(String.self, forKey: .unavailable) ?? ""
-        method = try c.decodeIfPresent(ServiceComponent.Method.self, forKey: .method) ?? .unknown
+        method = try c.decodeIfPresent(Method.self, forKey: .method) ?? .unknown
         estimate = try c.decodeIfPresent(String.self, forKey: .estimate) ?? ""
         installed = try c.decodeIfPresent(String.self, forKey: .installed) ?? ""
         line = try c.decodeIfPresent(String.self, forKey: .line) ?? ""
         latest = try c.decodeIfPresent(String.self, forKey: .latest) ?? ""
         update = try c.decodeIfPresent(Bool.self, forKey: .update) ?? false
+        yanked = try c.decodeIfPresent(String.self, forKey: .yanked) ?? ""
         port = try c.decodeIfPresent(Int.self, forKey: .port) ?? 0
         defaultPort = try c.decodeIfPresent(Int.self, forKey: .defaultPort) ?? port
         lines = try c.decodeIfPresent([CatalogLine]?.self, forKey: .lines).flatMap { $0 } ?? []

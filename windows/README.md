@@ -37,27 +37,29 @@ Running and publishing it needs Windows (the Windows App SDK's packaging tools a
 CA. It asks again only when the helper is outdated (after updating Flock), the rule is missing, or
 either is set up for another TLD.
 
-Everything downloads on Windows, verified by the vendors' published checksums — nothing is built from source:
+Everything comes from the binaries manifest of the configured channel (stable, beta), verified by
+SHA-256 against a signed list — nothing is built on the machine:
 
 | Service | macOS | Windows |
 | --- | --- | --- |
-| PostgreSQL (`flock postgres install`), with `psql`, `pg_dump` and the other client tools | the binaries manifest (built by Flock) | the binaries manifest (built by Flock) |
-| Valkey (`flock valkey install`) | built from source | not available (no established Windows build) — use Redis |
-| Redis (`flock services install redis [8.10\|8.4\|7.4\|7.2]`) | built from source | built from the upstream tags with MSYS2 by the public CI of [redis-windows/redis-windows](https://github.com/redis-windows/redis-windows) (~10 MB). A Redis that an older Flock installed moves over (line 7.2, with its data). |
-| MySQL, MariaDB, MongoDB (`flock services install <id> [version]`) | MySQL, MongoDB: official builds; MariaDB: built from source | the official zips (MySQL ~330 MB, MariaDB ~100 MB, MongoDB ~800 MB — Flock drops the debug symbols) |
-| Meilisearch, RustFS | official binaries | official binaries |
-| Typesense | official builds | not available (no Windows build) |
-| Node.js | nodejs.org | nodejs.org |
+| PostgreSQL (`flock postgres install`), with `psql`, `pg_dump` and the other client tools | built by Flock | built by Flock |
+| Valkey (`flock services install valkey`) | built by Flock | built by Flock with MSYS2 (`fork()` for snapshots) |
+| Redis (`flock services install redis`) | built by Flock | not offered — use Valkey, which speaks the same protocol |
+| MySQL, MongoDB (`flock services install <id> [line]`) | the official builds | the official zips (Flock drops the debug symbols) |
+| MariaDB | built by Flock | the official zip |
+| Meilisearch, RustFS | the official binaries | the official binaries |
+| Typesense | the official build | not available (no Windows build) |
+| Node.js | the official builds | the official builds |
 
-`--from <dir>` still works on Windows for your own builds. Running `psql` in a terminal before
-the tools are installed offers to download them; `redis-cli` talks to the installed Redis. The PostgreSQL tools, like PHP, need
-the [Visual C++ Redistributable](https://aka.ms/vs/17/release/vc_redist.x64.exe).
+Running `psql` in a terminal before PostgreSQL is installed offers to install it; `redis-cli`
+talks to the installed Redis, else to Valkey. PostgreSQL, like PHP, needs the
+[Visual C++ Redistributable](https://aka.ms/vs/17/release/vc_redist.x64.exe).
 
-Windows PHP builds don't include the phpredis extension, so Flock suggests `REDIS_CLIENT=predis`
-there (macOS: `phpredis`); add the client to the project with `composer require predis/predis`.
+Flock's PHP includes the phpredis extension on Windows too, so Laravel's default
+`REDIS_CLIENT=phpredis` works without a Composer package.
 
 Services are stopped gracefully, as on macOS, although Windows has no signals: PostgreSQL through
-`pg_ctl stop -m fast`, Redis with a `SHUTDOWN` command (which saves its snapshot). Only when that
+`pg_ctl stop -m fast`, Valkey with a `SHUTDOWN` command (which saves its snapshot). Only when that
 fails, or a service hasn't exited after 10 seconds, it is killed. php-cgi workers are just killed.
 
 ## Trying it on a Windows machine
@@ -89,9 +91,9 @@ fails, or a service hasn't exited after 10 seconds, it is killed. php-cgi worker
 - [ ] A PhpStorm breakpoint hits on reload with no browser extension, and the site goes back to the fast pool once it is removed
 - [ ] `?XDEBUG_TRIGGER=1` and the Xdebug browser extension hit a breakpoint; requests without them never load Xdebug
 - [ ] `flock debug artisan …` hits a breakpoint; plain `php` does not load Xdebug
-- [ ] `flock services install redis` downloads Redis and starts it; `redis-cli ping` → PONG; `flock postgres install` → `psql -c "select 1"`
+- [ ] `flock services install valkey` downloads Valkey and starts it; `redis-cli ping` → PONG; `flock postgres install` → `psql -c "select 1"`
 - [ ] Upgrading from a Flock that had Redis: it keeps running from `services\redis\7.2.16` with its data
-- [ ] Settings → Services → All: install MySQL, MariaDB (port suggested as 3307 next to MySQL), MongoDB, Meilisearch, RustFS; each starts and its connection works; Typesense and Valkey show as not available
+- [ ] Settings → Services → All: install MySQL, MariaDB (port suggested as 3307 next to MySQL), MongoDB, Valkey, Meilisearch, RustFS; each starts and its connection works; Typesense and Redis show as not available
 - [ ] Stopping Redis/MySQL/MariaDB/PostgreSQL in Services (or `flock restart`) logs a clean shutdown (redis.log: "Redis is now ready to exit"; mysql.log: "Shutdown complete"; postgres.log: "database system is shut down"), not a kill
 - [ ] Mail: send from tinker → appears in Mail, HTML view, attachments save
 - [ ] Dumps: `dump()` in a route → Dumps window, the file link opens the editor

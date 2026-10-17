@@ -1,21 +1,16 @@
 package api
 
 import (
-	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"net/http"
-	"os"
 	"path/filepath"
 	"strings"
-	"sync/atomic"
 	"testing"
 	"time"
 
 	"flock/internal/binaries/binariestest"
 	"flock/internal/catalog"
-	"flock/internal/components"
 	"flock/internal/postgres"
 )
 
@@ -95,109 +90,23 @@ func TestPostgresVersionsEndpoints(t *testing.T) {
 	}
 }
 
-func TestComponentsEndpoints(t *testing.T) {
-	release := make(chan error)
-	var installed atomic.Value
-	installed.Store("")
-	driver := &components.Driver{
-		ID: components.Valkey, Name: "Valkey", Method: components.MethodBuild, Estimate: "about 1 minute",
-		Installed: func() string { return installed.Load().(string) },
-		Latest:    func(context.Context) (string, error) { return "9.1.2", nil },
-		Install: func(ctx context.Context, version string, r *components.Reporter) error {
-			r.Phase(components.PhaseBuilding, -1)
-			_, _ = r.Log.Write([]byte("cc server.c\n"))
-			if err := <-release; err != nil {
-				return err
-			}
-			installed.Store(version)
-			return nil
-		},
-		Uninstall: func() error { installed.Store(""); return nil },
-	}
-	broken := &components.Driver{
-		ID: "other", Name: "Other tool", Method: components.MethodBuild,
-		Installed: func() string { return "" },
-		Latest:    func(context.Context) (string, error) { return "", errors.New("offline") },
-		Install:   func(context.Context, string, *components.Reporter) error { return nil },
-		Uninstall: func() error { return nil },
-	}
-	root := t.TempDir()
-	m := components.NewManager(root, []*components.Driver{driver, broken})
-	srv := serve(t, &fakeBackend{root: root, components: m}, "")
-
-	resp, body := call(t, "POST", srv.URL+"/v1/components/check", "", "")
-	if resp.StatusCode != http.StatusOK || !strings.Contains(body, `"check_error":"Other tool: offline"`) || !strings.Contains(body, `"latest":"9.1.2"`) {
-		t.Fatalf("%d %s", resp.StatusCode, body)
-	}
-	if resp, _ := call(t, "GET", srv.URL+"/v1/components/valkey/log", "", ""); resp.StatusCode != http.StatusNotFound {
-		t.Fatalf("log before any job: %d", resp.StatusCode)
-	}
-
-	resp, body = call(t, "POST", srv.URL+"/v1/components/valkey/install", "", "")
-	if resp.StatusCode != http.StatusOK || !strings.Contains(body, `"state":"running"`) || !strings.Contains(body, `"action":"install"`) {
-		t.Fatalf("%d %s", resp.StatusCode, body)
-	}
-	if resp, _ := call(t, "POST", srv.URL+"/v1/components/valkey/install", "", ""); resp.StatusCode != http.StatusConflict {
-		t.Fatalf("second install: %d", resp.StatusCode)
-	}
-	for deadline := time.Now().Add(5 * time.Second); ; time.Sleep(10 * time.Millisecond) {
-		if _, log := call(t, "GET", srv.URL+"/v1/components/valkey/log", "", ""); strings.Contains(log, "cc server.c") {
-			break
-		}
-		if time.Now().After(deadline) {
-			t.Fatal("no log")
-		}
-	}
-	release <- errors.New("make failed")
-	m.Wait()
-	_, body = call(t, "GET", srv.URL+"/v1/components", "", "")
-	if !strings.Contains(body, `"state":"failed"`) || !strings.Contains(body, `"error":"make failed"`) {
-		t.Fatalf("got %s", body)
-	}
-	if _, body = call(t, "DELETE", srv.URL+"/v1/components/valkey/job", "", ""); strings.Contains(body, "failed") {
-		t.Fatalf("dismiss: %s", body)
-	}
-
-	call(t, "POST", srv.URL+"/v1/components/valkey/install", "", "")
-	release <- nil
-	m.Wait()
-	_, body = call(t, "GET", srv.URL+"/v1/components", "", "")
-	if !strings.Contains(body, `"installed":"9.1.2"`) || !strings.Contains(body, `"job":null`) {
-		t.Fatalf("got %s", body)
-	}
-	if resp, _ := call(t, "DELETE", srv.URL+"/v1/components/valkey", "", ""); resp.StatusCode != http.StatusOK || installed.Load() != "" {
-		t.Fatalf("uninstall: %d", resp.StatusCode)
-	}
-	if resp, _ := call(t, "POST", srv.URL+"/v1/components/memcached/install", "", ""); resp.StatusCode != http.StatusNotFound {
-		t.Fatalf("unknown: %d", resp.StatusCode)
-	}
-}
-
 func TestCatalogEndpoints(t *testing.T) {
-	release := make(chan error)
+	srv0 := binariestest.New(t)
+	srv0.Publish("mariadb", "11.8.9", 1, binariestest.Zip(t, map[string]string{"bin/mariadbd": "server", "share/x": "x"}), nil)
 	kind := &catalog.Kind{
 		ID: "mariadb", Name: "MariaDB", Category: "Database", DefaultPort: 3306,
-		Lines:  []catalog.Line{{ID: "11.8", Label: "11.8 LTS"}},
-		Method: components.MethodBuild, Estimate: "about 10 minutes",
-		Latest: func(context.Context) (map[string]string, error) { return map[string]string{"11.8": "11.8.9"}, nil },
-		Install: func(ctx context.Context, dir, version string, r *components.Reporter) error {
-			r.Phase(components.PhaseBuilding, -1)
-			_, _ = r.Log.Write([]byte("cmake --build\n"))
-			if err := <-release; err != nil {
-				return err
-			}
-			return os.MkdirAll(dir, 0o755)
-		},
-		Env: func(port int) string { return fmt.Sprintf("DB_PORT=%d", port) },
+		Line: func(v string) string { return strings.Join(strings.SplitN(v, ".", 3)[:2], ".") },
+		Env:  func(port int) string { return fmt.Sprintf("DB_PORT=%d", port) },
 	}
 	root := t.TempDir()
 	b := &fakeBackend{root: root}
-	m := catalog.NewManager(root, []*catalog.Kind{kind}, b.Mutate)
+	m := catalog.NewManager(root, []*catalog.Kind{kind}, srv0.Catalog(filepath.Join(root, "cache")), b.Mutate)
 	b.catalog = m
 	srv := serve(t, b, "")
 
 	resp, body := call(t, "POST", srv.URL+"/v1/catalog/check", "", "")
-	if resp.StatusCode != http.StatusOK || !strings.Contains(body, `"latest":"11.8.9"`) || !strings.Contains(body, `"default_port":3306`) {
+	if resp.StatusCode != http.StatusOK || !strings.Contains(body, `"latest":"11.8.9"`) || !strings.Contains(body, `"default_port":3306`) ||
+		!strings.Contains(body, `"method":"download"`) {
 		t.Fatalf("%d %s", resp.StatusCode, body)
 	}
 	if resp, _ := call(t, "POST", srv.URL+"/v1/catalog/mariadb/install", "", `{"line":"10.6"}`); resp.StatusCode != http.StatusBadRequest {
@@ -211,22 +120,13 @@ func TestCatalogEndpoints(t *testing.T) {
 	}
 
 	resp, body = call(t, "POST", srv.URL+"/v1/catalog/mariadb/install", "", `{"line":"11.8","port":3307}`)
-	if resp.StatusCode != http.StatusOK || !strings.Contains(body, `"state":"running"`) || !strings.Contains(body, `"version":"11.8.9"`) {
+	if resp.StatusCode != http.StatusOK || !strings.Contains(body, `"version":"11.8.9"`) {
 		t.Fatalf("%d %s", resp.StatusCode, body)
 	}
-	if resp, _ := call(t, "POST", srv.URL+"/v1/catalog/mariadb/install", "", ""); resp.StatusCode != http.StatusConflict {
-		t.Fatalf("second install: %d", resp.StatusCode)
-	}
-	for deadline := time.Now().Add(5 * time.Second); ; time.Sleep(10 * time.Millisecond) {
-		if _, log := call(t, "GET", srv.URL+"/v1/catalog/mariadb/log", "", ""); strings.Contains(log, "cmake --build") {
-			break
-		}
-		if time.Now().After(deadline) {
-			t.Fatal("no log")
-		}
-	}
-	release <- nil
 	m.Wait()
+	if _, log := call(t, "GET", srv.URL+"/v1/catalog/mariadb/log", "", ""); !strings.Contains(log, "installed MariaDB 11.8.9 on port 3307") {
+		t.Fatalf("log: %s", log)
+	}
 	_, body = call(t, "GET", srv.URL+"/v1/catalog", "", "")
 	if !strings.Contains(body, `"installed":"11.8.9"`) || !strings.Contains(body, `"port":3307`) || !strings.Contains(body, `"job":null`) {
 		t.Fatalf("got %s", body)
@@ -239,11 +139,11 @@ func TestCatalogEndpoints(t *testing.T) {
 	if resp, _ := call(t, "PATCH", srv.URL+"/v1/services/mariadb", "", `{"port":3308}`); resp.StatusCode != http.StatusOK {
 		t.Fatalf("port: %d", resp.StatusCode)
 	}
-	if x, _ := b.config(t).Services.Extra("mariadb"); x.Port != 3308 {
+	if x, _ := b.config(t).Services.Extra("mariadb"); x.Port != 3308 || x.Build != 1 {
 		t.Fatalf("port not saved: %+v", x)
 	}
-	if resp, body := call(t, "PATCH", srv.URL+"/v1/services/valkey", "", `{"port":3308}`); resp.StatusCode != http.StatusBadRequest || !strings.Contains(body, "mariadb") {
-		t.Fatalf("Valkey on MariaDB's port: %d %s", resp.StatusCode, body)
+	if resp, body := call(t, "PATCH", srv.URL+"/v1/services/postgres", "", `{"port":3308}`); resp.StatusCode != http.StatusBadRequest || !strings.Contains(body, "mariadb") {
+		t.Fatalf("PostgreSQL on MariaDB's port: %d %s", resp.StatusCode, body)
 	}
 
 	if resp, _ := call(t, "DELETE", srv.URL+"/v1/catalog/mariadb?delete_data=1", "", ""); resp.StatusCode != http.StatusOK {

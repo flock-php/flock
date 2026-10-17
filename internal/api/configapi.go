@@ -13,7 +13,6 @@ import (
 	"slices"
 	"time"
 
-	"flock/internal/components"
 	"flock/internal/binaries"
 	"flock/internal/config"
 	"flock/internal/frankenphp"
@@ -393,7 +392,7 @@ func registerConfig(mux *http.ServeMux, b Backend) {
 		}
 		ctx, cancel := context.WithTimeout(r.Context(), 10*time.Minute)
 		defer cancel()
-		version, err := (&node.Installer{Root: b.Root()}).Install(ctx, body.Version)
+		version, err := (&node.Installer{Root: b.Root(), Catalog: b.Binaries()}).Install(ctx, body.Version)
 		if err != nil {
 			writeError(w, http.StatusBadGateway, err)
 			return
@@ -415,7 +414,7 @@ func registerConfig(mux *http.ServeMux, b Backend) {
 	setRunning := func(on bool) func(*config.Config, string) error {
 		return func(cfg *config.Config, id string) error {
 			switch id {
-			case "postgres", components.Valkey:
+			case "postgres":
 				cfg.Services.SetRunning(id, on)
 			case "dumps":
 				cfg.Dumps = on
@@ -454,8 +453,6 @@ func registerConfig(mux *http.ServeMux, b Backend) {
 			switch id {
 			case "postgres":
 				cfg.Ports.Postgres = body.Port
-			case components.Valkey:
-				cfg.Ports.Valkey = body.Port
 			case "mail":
 				cfg.Ports.SMTP = body.Port
 			case "dumps":

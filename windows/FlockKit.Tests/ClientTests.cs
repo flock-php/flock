@@ -146,36 +146,6 @@ public class ClientTests : IDisposable
     }
 
     [Fact]
-    public async Task CallsTheComponentEndpoints()
-    {
-        var handler = new Handler(r => new HttpResponseMessage(HttpStatusCode.OK)
-        {
-            Content = new StringContent(r.RequestUri!.AbsolutePath.EndsWith("/log") ? "downloading…\n" : """{"components":[]}"""),
-        });
-        using var client = new FlockClient(WriteApiJson("http://127.0.0.1:1", "t"), handler);
-
-        await client.ComponentsAsync();
-        await client.CheckComponentsAsync();
-        await client.InstallComponentAsync("other");
-        await client.CancelComponentJobAsync("other");
-        await client.DismissComponentJobAsync("other");
-        Assert.Equal("downloading…\n", await client.ComponentLogAsync("other"));
-        await client.UninstallComponentAsync("other");
-
-        Assert.Equal(
-            [
-                "GET /v1/components", "POST /v1/components/check", "POST /v1/components/other/install",
-                "POST /v1/components/other/cancel", "DELETE /v1/components/other/job", "GET /v1/components/other/log",
-                "DELETE /v1/components/other",
-            ],
-            handler.Requests.Select(r => $"{r.Method} {r.RequestUri!.PathAndQuery}"));
-        // Installs return at once (the job runs in the daemon); uninstalling may stop a service first.
-        Assert.Equal(
-            [TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(60), TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(30)],
-            handler.Timeouts);
-    }
-
-    [Fact]
     public async Task CallsTheCatalogEndpoints()
     {
         var handler = new Handler(r => new HttpResponseMessage(HttpStatusCode.OK)
@@ -262,12 +232,12 @@ public class ClientTests : IDisposable
     }
 
     [Fact]
-    public async Task ReportsAMissingComponentLogAsAServerError()
+    public async Task ReportsAMissingCatalogLogAsAServerError()
     {
         var handler = new Handler(_ => new HttpResponseMessage(HttpStatusCode.NotFound) { Content = new StringContent("""{"error":"no log for redis"}""") });
         using var client = new FlockClient(WriteApiJson("http://127.0.0.1:1", "t"), handler);
 
-        var error = await Assert.ThrowsAsync<FlockServerException>(() => client.ComponentLogAsync("redis"));
+        var error = await Assert.ThrowsAsync<FlockServerException>(() => client.CatalogLogAsync("redis"));
         Assert.Equal(404, error.StatusCode);
     }
 

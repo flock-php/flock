@@ -81,9 +81,9 @@ public sealed class Service
     [JsonIgnore]
     public bool HasConfigurablePort => Installed && Port > 0 && Id != "web" && Id != "dns";
 
-    /// <summary>A catalog service (MySQL, Redis, ...), installed on request from its detail.</summary>
+    /// <summary>A catalog service (MySQL, Valkey, ...), installed on request from its detail.</summary>
     [JsonIgnore]
-    public bool IsOnRequest => Id is not ("web" or "dns" or "hosts" or "mail" or "dumps" or "postgres" or ComponentId.Valkey);
+    public bool IsOnRequest => Id is not ("web" or "dns" or "hosts" or "mail" or "dumps" or "postgres");
 }
 
 /// <summary>Body of POST /v1/settings; null fields are left out and stay unchanged.</summary>

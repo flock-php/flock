@@ -26,7 +26,6 @@ enum SnapshotFixtures {
         let mysql = ["catalog-port", "catalog-failed", "catalog-installed"].contains(name)
         store.loadFixture(services: services(postgres: pgInstalled, valkey: valkeyInstalled, mysql: mysql),
                           postgres: decode(postgres(name)),
-                          components: decode(components(name)),
                           catalog: decode(catalog(name, mysql: mysql)))
     }
 
@@ -101,27 +100,6 @@ enum SnapshotFixtures {
         {"active":"\(empty ? "" : "18")","running":\(!empty && name != "pg-busy"),"enabled":true,"port":5432,
          "checked_at":"\(time(3 * 3600))","check_error":"\(name == "pg-failed" ? "the package manifest could not be fetched: connection timed out" : "")",
          "majors":[\(majors.joined(separator: ","))]}
-        """
-    }
-
-    private static func components(_ name: String) -> String {
-        let redisJob: String
-        switch name {
-        case "valkey-building":
-            redisJob = #"{"action":"install","state":"running","phase":"building","progress":-1,"error":"","started_at":"\#(time(71))"}"#
-        case "valkey-failed":
-            redisJob = #"{"action":"install","state":"failed","phase":"building","progress":-1,"error":"xcrun: error: invalid active developer path (/Library/Developer/CommandLineTools), missing xcrun","started_at":"\#(time(30))"}"#
-        default:
-            redisJob = "null"
-        }
-        let redisInstalled = ["valkey-installed", "pg-installed", "pg-busy"].contains(name)
-
-        return """
-        {"checked_at":"\(time(3 * 3600))","check_error":"",
-         "components":[
-          {"id":"valkey","name":"Valkey","description":"","installed":"\(redisInstalled ? "9.1.2" : "")","latest":"9.1.3",
-           "update":\(redisInstalled),"method":"build","estimate":"about 2 minutes","job":\(redisJob)}
-         ]}
         """
     }
 

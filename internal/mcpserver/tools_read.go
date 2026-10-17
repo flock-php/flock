@@ -281,9 +281,8 @@ func (s *server) listServices(ctx context.Context, _ *mcp.CallToolRequest, _ str
 	if err != nil {
 		return nil, servicesOut{}, err
 	}
-	// The catalog, components and PostgreSQL may be unsupported on a platform; skip what fails.
+	// The catalog and PostgreSQL may be unsupported on a platform; skip what fails.
 	cat, _ := s.Daemon.Catalog(ctx)
-	comps, _ := s.Daemon.Components(ctx)
 	pg, pgErr := s.Daemon.PostgresVersions(ctx)
 
 	out := servicesOut{Services: []serviceOut{}}
@@ -306,9 +305,6 @@ func (s *server) listServices(ctx context.Context, _ *mcp.CallToolRequest, _ str
 			if e.Job != nil {
 				o.Installing, o.InstallErr = jobState(e.Job.State, e.Job.Phase, e.Job.Progress, e.Job.Error)
 			}
-		}
-		if c, ok := comps.Find(svc.ID); ok && c.Job != nil {
-			o.Installing, o.InstallErr = jobState(c.Job.State, c.Job.Phase, c.Job.Progress, c.Job.Error)
 		}
 		if svc.ID == "postgres" && pgErr == nil {
 			for _, m := range pg.Majors {
@@ -390,7 +386,6 @@ type nodeVersionOut struct {
 	Major     string `json:"major"`
 	Installed string `json:"installed,omitempty"`
 	Latest    string `json:"latest,omitempty"`
-	Support   string `json:"support,omitempty"` // Current, LTS, Maintenance or EndOfLife
 	Default   bool   `json:"default,omitempty"`
 	Update    bool   `json:"update_available,omitempty"`
 }
@@ -417,7 +412,7 @@ func (s *server) listNodeVersions(ctx context.Context, _ *mcp.CallToolRequest, _
 		}
 	}
 	for _, v := range versions.Versions {
-		out.Versions = append(out.Versions, nodeVersionOut{Major: v.Major, Installed: v.Installed, Latest: v.Latest, Support: v.Support, Default: v.Default, Update: v.Update})
+		out.Versions = append(out.Versions, nodeVersionOut{Major: v.Major, Installed: v.Installed, Latest: v.Latest, Default: v.Default, Update: v.Update})
 	}
 	return nil, out, nil
 }

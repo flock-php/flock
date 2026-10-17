@@ -23,7 +23,7 @@ public sealed class Status
     public int HttpsPort { get; init; }
     public string Mail { get; init; } = "";
     public string? Postgres { get; init; }
-    /// <summary>"9.1.2 on 127.0.0.1:6379" when Valkey is installed (macOS only).</summary>
+    /// <summary>"9.1.2 on 127.0.0.1:6379" when Valkey is installed.</summary>
     public string? Valkey { get; init; }
     /// <summary>The installed catalog services (MySQL, Redis, ...).</summary>
     public List<ExtraService> Extras { get; init; } = [];

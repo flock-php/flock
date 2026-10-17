@@ -245,6 +245,12 @@ private struct CatalogLineRow: View {
             VStack(alignment: .leading, spacing: 1) {
                 Text("\(entry.name) \(line.label)").font(.body.weight(line.installed ? .medium : .regular))
                 Text(detail).font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                if line.installed, !entry.yanked.isEmpty {
+                    Label(entry.update ? "Withdrawn: \(entry.yanked) — update to replace it" : "Withdrawn: \(entry.yanked)", systemImage: "exclamationmark.triangle.fill")
+                        .font(.caption).foregroundStyle(.orange)
+                        .lineLimit(2)
+                        .help("This build was withdrawn. Flock replaces it as soon as a fixed build is published.")
+                }
             }
             Spacer(minLength: 8)
             if line.installed {

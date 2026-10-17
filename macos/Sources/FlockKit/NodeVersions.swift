@@ -1,7 +1,7 @@
 import Foundation
 
-/// GET /v1/node/versions — every Node.js major line from nodejs.org worth offering (supported
-/// lines, and end-of-life LTS lines back to 16), plus anything installed, with install state.
+/// GET /v1/node/versions — every Node.js major the package manifest offers (16 and newer, one
+/// release each), plus anything installed, with install state.
 public struct NodeCatalog: Decodable, Sendable, Equatable {
     public var checkedAt: Date?
     public var checkError: String

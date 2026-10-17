@@ -5,7 +5,7 @@ using Microsoft.UI.Xaml.Controls;
 namespace Flock.Tray;
 
 /// <summary>
-/// Node.js lines from nodejs.org, like the PHP pane: install, update, make default and uninstall
+/// Node.js majors from the package manifest, like the PHP pane: install, update, make default and uninstall
 /// them. Exact versions a project pins (.nvmrc) are offered by `node` in the terminal instead.
 /// </summary>
 internal sealed class NodePane(SettingsWindow window, AppModel model) : Pane(window, model)
@@ -52,9 +52,9 @@ internal sealed class NodePane(SettingsWindow window, AppModel model) : Pane(win
         }
         if (catalog.CheckError.Length > 0)
         {
-            versions.Children.Add(Ui.Row(6, Ui.Icon(Ui.GlyphWarning, 12, Ui.Caution), Ui.Caption($"Couldn't reach nodejs.org: {catalog.CheckError}", Ui.Caution)));
+            versions.Children.Add(Ui.Row(6, Ui.Icon(Ui.GlyphWarning, 12, Ui.Caution), Ui.Caption($"Couldn't check for updates: {catalog.CheckError}", Ui.Caution)));
         }
-        versions.Children.Add(GeneralPane.Footnote("Official builds from nodejs.org, verified against their checksums. A project that pins an exact version in .nvmrc gets it offered when you run node, npm or npx there. "
+        versions.Children.Add(GeneralPane.Footnote("Official Node.js builds, the newest release of each major. A project that pins a version in .nvmrc gets that major offered when you run node, npm or npx there. "
             + "Global packages (npm install -g) belong to a Node line and survive its updates; those of the default version are on your PATH."));
         return versions;
     }
@@ -138,7 +138,7 @@ internal sealed class NodePane(SettingsWindow window, AppModel model) : Pane(win
         if (!release.IsInstalled)
         {
             actions.Children.Add(Ui.Button("Install", () => _ = Run(release.Major, $"Downloading Node.js {release.Latest}…", c => c.InstallNodeMajorAsync(release.Major)),
-                glyph: Ui.GlyphDownload, tooltip: $"Downloads Node.js {release.Latest} from nodejs.org"));
+                glyph: Ui.GlyphDownload, tooltip: $"Downloads Node.js {release.Latest}"));
             return actions;
         }
         if (release.Update)

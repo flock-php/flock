@@ -1,7 +1,7 @@
 import FlockKit
 import SwiftUI
 
-/// Node.js lines from nodejs.org, like the PHP pane: install, update, make default and uninstall
+/// Node.js majors from the package manifest, like the PHP pane: install, update, make default and uninstall
 /// them, and update their npm. Exact versions a project pins (.nvmrc) are offered by `node` in
 /// the terminal instead.
 struct NodePane: View {
@@ -35,10 +35,10 @@ struct NodePane: View {
                     } footer: {
                         VStack(alignment: .leading, spacing: 6) {
                             if !catalog.checkError.isEmpty {
-                                Label("Couldn't reach nodejs.org: \(catalog.checkError)", systemImage: "exclamationmark.triangle.fill")
+                                Label("Couldn't check for updates: \(catalog.checkError)", systemImage: "exclamationmark.triangle.fill")
                                     .foregroundStyle(.orange)
                             }
-                            Text("Official builds from nodejs.org, verified against their checksums. A project that pins an exact version in .nvmrc gets it offered when you run node, npm or npx there. Global packages (npm install -g) belong to a Node line and survive its updates; those of the default version are on your PATH.")
+                            Text("Official Node.js builds, the newest release of each major. A project that pins a version in .nvmrc gets that major offered when you run node, npm or npx there. Global packages (npm install -g) belong to a Node line and survive its updates; those of the default version are on your PATH.")
                                 .foregroundStyle(.secondary)
                                 .fixedSize(horizontal: false, vertical: true)
                         }
@@ -183,7 +183,7 @@ private struct NodeReleaseRow: View {
             } label: {
                 Label("Install", systemImage: "arrow.down.circle")
             }
-            .help("Downloads Node.js \(release.latest) from nodejs.org")
+            .help("Downloads Node.js \(release.latest)")
         } else {
             if release.update {
                 Button {

@@ -2,8 +2,8 @@ import AppKit
 import FlockKit
 import SwiftUI
 
-/// Grouped list of services with a detail column, like Herd's Services pane. Shows the installed
-/// services or every service Flock offers; PostgreSQL, Valkey and the catalog services (MySQL,
+/// Grouped list of services with a detail column. Shows the installed
+/// services or every service Flock offers; PostgreSQL and the catalog services (MySQL, Valkey,
 /// Redis, Meilisearch, ...) are installed, updated and switched from their detail.
 struct ServicesPane: View {
     @Environment(AppModel.self) private var model
@@ -108,7 +108,7 @@ struct ServicesPane: View {
         } message: { request in
             Text(request.message)
         }
-        // Versions and components load when the pane appears, then follow the status (AppModel);
+        // Versions and the catalog load when the pane appears, then follow the status (AppModel);
         // while something installs, builds or switches they are polled every 2 seconds.
         .task { await store.refreshInstalls() }
         .task(id: store.installsBusy) {
@@ -125,7 +125,6 @@ struct ServicesPane: View {
     private func detail(_ service: Service) -> some View {
         switch service.id {
         case "postgres": PostgresDetail(service: service)
-        case ServiceComponent.valkey: ValkeyDetail(service: service)
         default:
             if service.isOnRequest {
                 CatalogDetail(service: service)
@@ -169,18 +168,12 @@ struct ServicesPane: View {
     /// What the row shows next to the name: work in progress, or an available update.
     private func activity(of service: Service) -> ServiceRow.Activity {
         let store = model.settings
-        let components = store.components
         switch service.id {
         case "postgres":
             if store.postgres?.isBusy == true || !store.postgresPending.isEmpty {
                 return .working
             }
             return store.postgres?.hasUpdate == true ? .update : .none
-        case ServiceComponent.valkey:
-            let valkey = components?[ServiceComponent.valkey]
-            if valkey?.job?.isRunning == true { return .working }
-            if valkey?.job?.isFailed == true { return .failed }
-            return valkey?.update == true ? .update : .none
         default:
             guard let entry = store.catalog?[service.id] else { return .none }
             if entry.job?.isRunning == true || store.catalogPending.contains(service.id) { return .working }
@@ -284,12 +277,12 @@ extension Service {
     /// The web server and DNS ports are tied to certificates and /etc/resolver; `flock install` changes them.
     var hasConfigurablePort: Bool { installed && port > 0 && id != "web" && id != "dns" }
 
-    /// PostgreSQL, Valkey and the catalog services are installed from their detail.
-    var isInstallable: Bool { id == "postgres" || id == ServiceComponent.valkey || isOnRequest }
+    /// PostgreSQL and the catalog services are installed from their detail.
+    var isInstallable: Bool { id == "postgres" || isOnRequest }
 
-    /// A catalog service (MySQL, Redis, ...): installed on request, its detail is a CatalogDetail.
+    /// A catalog service (MySQL, Valkey, ...): installed on request, its detail is a CatalogDetail.
     var isOnRequest: Bool {
-        !["web", "dns", "hosts", "mail", "dumps", "postgres", ServiceComponent.valkey].contains(id)
+        !["web", "dns", "hosts", "mail", "dumps", "postgres"].contains(id)
     }
 }
 

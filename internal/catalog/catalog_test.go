@@ -1,32 +1,23 @@
 package catalog
 
 import (
-	"archive/tar"
-	"archive/zip"
-	"bytes"
-	"compress/gzip"
 	"context"
-	"crypto/md5"
-	"encoding/hex"
 	"errors"
 	"fmt"
 	"net"
-	"net/http"
-	"net/http/httptest"
 	"os"
 	"path/filepath"
-	"runtime"
-	"slices"
 	"strings"
 	"testing"
 	"time"
 
-	"flock/internal/components"
+	"flock/internal/binaries"
+	"flock/internal/binaries/binariestest"
 	"flock/internal/config"
 	"flock/internal/supervisor"
 )
 
-func configMutate(root string) components.Mutate {
+func configMutate(root string) Mutate {
 	return func(change func(*config.Config) error) error {
 		cfg, err := config.Load(root)
 		if err != nil {
@@ -39,31 +30,11 @@ func configMutate(root string) components.Mutate {
 	}
 }
 
-// fakeKind installs a marker file; release controls when installs finish.
-type fakeKind struct {
-	release chan error
-	latest  map[string]string
-}
-
-func (f *fakeKind) kind() *Kind {
+// testKind is a MySQL-like service whose package needs bin/mysqld.
+func testKind() *Kind {
 	return &Kind{
-		ID: "mysql", Name: "MySQL", Category: "Database", DefaultPort: 3306,
-		Lines:  []Line{{"9.7", "9.7 LTS"}, {"8.4", "8.4 LTS"}},
-		Method: components.MethodDownload, Estimate: "170 MB download",
-		Latest: func(context.Context) (map[string]string, error) { return f.latest, nil },
-		Install: func(ctx context.Context, dir, version string, r *components.Reporter) error {
-			r.Phase(components.PhaseDownloading, 0.5)
-			fmt.Fprintf(r.Log, "downloading %s\n", version)
-			select {
-			case err := <-f.release:
-				if err != nil {
-					return err
-				}
-			case <-ctx.Done():
-				return ctx.Err()
-			}
-			return os.MkdirAll(filepath.Join(dir, "bin"), 0o755)
-		},
+		ID: "mysql", Name: "MySQL", Category: "Database", DefaultPort: 3306, Line: majorMinor,
+		Prepare: needs("bin/mysqld"),
 		Spec: func(p Paths, port int) (supervisor.Spec, error) {
 			return supervisor.Spec{Path: filepath.Join(p.Dir, "bin", "mysqld"), Args: []string{p.Data, fmt.Sprint(port)}}, nil
 		},
@@ -71,9 +42,24 @@ func (f *fakeKind) kind() *Kind {
 	}
 }
 
+// mysqlPackage is a package of testKind; a second top-level directory keeps bin/ from being unwrapped.
+func mysqlPackage(t *testing.T, version string) []byte {
+	return binariestest.Zip(t, map[string]string{"bin/mysqld": version, "share/errmsg.sys": "x"})
+}
+
+func newTestManager(t *testing.T, kinds ...*Kind) (*Manager, *binariestest.Server, string) {
+	t.Helper()
+	if binaries.Platform() == "" {
+		t.Skip("no packages for this platform")
+	}
+	srv := binariestest.New(t)
+	root := t.TempDir()
+	return NewManager(root, kinds, srv.Catalog(filepath.Join(root, "cache")), configMutate(root)), srv, root
+}
+
 func waitJob(t *testing.T, m *Manager, id string, done func(Entry) bool) Entry {
 	t.Helper()
-	for deadline := time.Now().Add(5 * time.Second); ; time.Sleep(5 * time.Millisecond) {
+	for deadline := time.Now().Add(10 * time.Second); ; time.Sleep(5 * time.Millisecond) {
 		e, _ := m.Catalog().Find(id)
 		if done(e) {
 			return e
@@ -96,36 +82,28 @@ func freePort(t *testing.T) int {
 }
 
 func TestInstallUpdateSwitchAndUninstall(t *testing.T) {
-	root := t.TempDir()
-	f := &fakeKind{release: make(chan error), latest: map[string]string{"9.7": "9.7.2", "8.4": "8.4.11"}}
-	m := NewManager(root, []*Kind{f.kind()}, configMutate(root))
+	m, srv, root := newTestManager(t, testKind())
+	srv.Publish("mysql", "9.7.2", 1, mysqlPackage(t, "9.7.2"), nil)
+	srv.Publish("mysql", "8.4.11", 1, mysqlPackage(t, "8.4.11"), nil)
+	srv.Publish("mysql", "5.1.0", 1, binariestest.Zip(t, map[string]string{"README": "no server", "docs/x": "x"}), nil)
 	if err := m.Check(context.Background()); err != nil {
 		t.Fatal(err)
 	}
 	port := freePort(t)
 
 	e, _ := m.Catalog().Find("mysql")
-	if e.Installed != "" || !e.Available || e.Lines[0].Latest != "9.7.2" || e.DefaultPort != 3306 {
+	if e.Installed != "" || !e.Available || e.Method != MethodDownload || len(e.Lines) != 3 || e.Lines[0].ID != "9.7" ||
+		e.Lines[0].Latest != "9.7.2" || e.DefaultPort != 3306 || !strings.HasSuffix(e.Estimate, "MB download") {
 		t.Fatalf("before install: %+v", e)
 	}
 
-	if err := m.Start("mysql", "8.4", port); err != nil {
+	// A package that doesn't have what the service needs fails, and leaves nothing behind.
+	if err := m.Start("mysql", "5.1", port); err != nil {
 		t.Fatal(err)
 	}
-	if err := m.Start("mysql", "8.4", port); !errors.Is(err, ErrBusy) {
-		t.Fatalf("second start: %v", err)
-	}
-	e = waitJob(t, m, "mysql", func(e Entry) bool { return e.Job != nil && e.Job.Progress == 0.5 })
-	if e.Job.Version != "8.4.11" || e.Job.Line != "8.4" || e.Job.Action != "install" || e.Job.State != "running" {
-		t.Fatalf("job: %+v", e.Job)
-	}
-	f.release <- errors.New("503")
 	e = waitJob(t, m, "mysql", func(e Entry) bool { return e.Job != nil && e.Job.State == "failed" })
-	if e.Job.Error != "503" || e.Installed != "" {
+	if !strings.Contains(e.Job.Error, "bin/mysqld") || e.Installed != "" || e.Job.Version != "5.1.0" {
 		t.Fatalf("failed job: %+v", e)
-	}
-	if log, _ := os.ReadFile(m.LogPath("mysql")); !strings.Contains(string(log), "downloading 8.4.11") {
-		t.Fatalf("log: %s", log)
 	}
 	if entries, _ := os.ReadDir(filepath.Join(root, "services", "mysql")); len(entries) != 0 {
 		t.Fatalf("a failed install leaves %v", entries)
@@ -137,15 +115,17 @@ func TestInstallUpdateSwitchAndUninstall(t *testing.T) {
 	if err := m.Start("mysql", "8.4", port); err != nil {
 		t.Fatal(err)
 	}
-	f.release <- nil
 	m.Wait()
 	e, _ = m.Catalog().Find("mysql")
 	if e.Installed != "8.4.11" || e.Line != "8.4" || e.Port != port || e.Job != nil || e.Update || !e.Lines[1].Installed {
 		t.Fatalf("installed: %+v", e)
 	}
 	cfg, _ := config.Load(root)
-	if x, ok := cfg.Services.Extra("mysql"); !ok || x.Version != "8.4.11" || x.Port != port || !cfg.Services.Running("mysql") {
+	if x, ok := cfg.Services.Extra("mysql"); !ok || x.Version != "8.4.11" || x.Build != 1 || x.Port != port || !cfg.Services.Running("mysql") {
 		t.Fatalf("config: %+v", cfg.Services)
+	}
+	if log, _ := os.ReadFile(m.LogPath("mysql")); !strings.Contains(string(log), "installed MySQL 8.4.11") {
+		t.Fatalf("log: %s", log)
 	}
 
 	// The spec runs it with the line's data directory, which a running server fills.
@@ -158,7 +138,8 @@ func TestInstallUpdateSwitchAndUninstall(t *testing.T) {
 	}
 
 	// A newer patch is an update within the line; the port stays.
-	f.latest = map[string]string{"9.7": "9.7.2", "8.4": "8.4.12"}
+	srv.Withdraw("mysql", "8.4.11")
+	srv.Publish("mysql", "8.4.12", 1, mysqlPackage(t, "8.4.12"), nil)
 	_ = m.Check(context.Background())
 	if e, _ = m.Catalog().Find("mysql"); !e.Update || e.Latest != "8.4.12" {
 		t.Fatalf("update: %+v", e)
@@ -166,10 +147,9 @@ func TestInstallUpdateSwitchAndUninstall(t *testing.T) {
 	if err := m.Start("mysql", "", 0); err != nil {
 		t.Fatal(err)
 	}
-	if e, _ = m.Catalog().Find("mysql"); e.Job == nil || e.Job.Action != "update" {
+	if e, _ = m.Catalog().Find("mysql"); e.Job != nil && e.Job.Action != "update" {
 		t.Fatalf("update job: %+v", e.Job)
 	}
-	f.release <- nil
 	m.Wait()
 	if e, _ = m.Catalog().Find("mysql"); e.Installed != "8.4.12" || e.Port != port {
 		t.Fatalf("updated: %+v", e)
@@ -178,18 +158,34 @@ func TestInstallUpdateSwitchAndUninstall(t *testing.T) {
 		t.Fatal("old version kept")
 	}
 
+	// A higher build of the installed version is an update too, and replaces it in place.
+	srv.Publish("mysql", "8.4.12", 2, mysqlPackage(t, "8.4.12 build 2"), nil)
+	_ = m.Check(context.Background())
+	if e, _ = m.Catalog().Find("mysql"); !e.Update || e.Latest != "8.4.12" {
+		t.Fatalf("a new build isn't an update: %+v", e)
+	}
+	if err := m.Start("mysql", "", 0); err != nil {
+		t.Fatal(err)
+	}
+	m.Wait()
+	if data, _ := os.ReadFile(filepath.Join(Dir(root, "mysql", "8.4.12"), "bin", "mysqld")); string(data) != "8.4.12 build 2" {
+		t.Fatalf("not replaced: %q", data)
+	}
+	if cfg, _ := config.Load(root); cfg.Services.Extras["mysql"].Build != 2 || !cfg.Services.Running("mysql") {
+		t.Fatalf("config after the new build: %+v", cfg.Services)
+	}
+
 	// Switching lines replaces the binaries; each line keeps its data.
 	if err := m.Start("mysql", "9.7", 0); err != nil {
 		t.Fatal(err)
 	}
-	f.release <- nil
 	m.Wait()
 	e, _ = m.Catalog().Find("mysql")
 	if e.Installed != "9.7.2" || e.Line != "9.7" || !e.Lines[1].HasData || e.Lines[0].HasData {
 		t.Fatalf("switched: %+v", e)
 	}
 
-	// Uninstalling keeps the data unless asked.
+	// Uninstalling keeps the data unless asked; a line with data stays listed.
 	if err := m.Uninstall("mysql", false); err != nil {
 		t.Fatal(err)
 	}
@@ -207,30 +203,43 @@ func TestInstallUpdateSwitchAndUninstall(t *testing.T) {
 	}
 }
 
-func TestCancelForgetsTheJob(t *testing.T) {
-	root := t.TempDir()
-	f := &fakeKind{release: make(chan error), latest: map[string]string{"9.7": "9.7.2"}}
-	m := NewManager(root, []*Kind{f.kind()}, configMutate(root))
-	_ = m.Check(context.Background()) // fresh, so reading the catalog doesn't check in the background
-	if err := m.Start("mysql", "", freePort(t)); err != nil {
+func TestWithdrawnBuildsAreReplaced(t *testing.T) {
+	m, srv, root := newTestManager(t, testKind())
+	srv.Publish("mysql", "8.4.11", 1, mysqlPackage(t, "build 1"), nil)
+	if err := m.Check(context.Background()); err != nil {
 		t.Fatal(err)
 	}
-	waitJob(t, m, "mysql", func(e Entry) bool { return e.Job != nil && e.Job.Version == "9.7.2" })
-	if err := m.Cancel("mysql"); err != nil {
+	if err := m.Start("mysql", "8.4", freePort(t)); err != nil {
 		t.Fatal(err)
 	}
 	m.Wait()
-	if e, _ := m.Catalog().Find("mysql"); e.Job != nil || e.Installed != "" {
-		t.Fatalf("after cancel: %+v", e)
+
+	// Build 1 is withdrawn and build 2 published: it replaces build 1 without being asked.
+	srv.Publish("mysql", "8.4.11", 2, mysqlPackage(t, "build 2"), map[string]string{"1": "crashes on start"})
+	if err := m.Check(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	waitJob(t, m, "mysql", func(e Entry) bool {
+		cfg, _ := config.Load(root)
+		return e.Job == nil && cfg.Services.Extras["mysql"].Build == 2
+	})
+	if e, _ := m.Catalog().Find("mysql"); e.Yanked != "" || e.Update {
+		t.Fatalf("after the replacement: %+v", e)
+	}
+
+	// A withdrawn build isn't installed.
+	srv.Publish("mysql", "9.7.2", 1, mysqlPackage(t, "9.7.2"), map[string]string{"1": "broken"})
+	_ = m.Check(context.Background())
+	if err := m.Start("mysql", "9.7", 0); err == nil || !strings.Contains(err.Error(), "withdrawn") {
+		t.Fatalf("installed a withdrawn build: %v", err)
 	}
 }
 
 func TestStartRejectsBadRequests(t *testing.T) {
-	root := t.TempDir()
-	f := &fakeKind{release: make(chan error), latest: map[string]string{}}
-	off := f.kind()
-	off.ID, off.Method, off.Unavailable = "typesense", "", "no Windows build"
-	m := NewManager(root, []*Kind{f.kind(), off}, configMutate(root))
+	off := testKind()
+	off.ID, off.Name, off.Unavailable = "typesense", "Typesense", "no Windows build"
+	m, srv, root := newTestManager(t, testKind(), off)
+	srv.Publish("mysql", "9.7.2", 1, mysqlPackage(t, "9.7.2"), nil)
 	_ = m.Check(context.Background())
 
 	cfg := config.Default()
@@ -250,14 +259,18 @@ func TestStartRejectsBadRequests(t *testing.T) {
 			t.Errorf("Start(%q, %q, %d) = %v, want %v", c.id, c.line, c.port, err, c.want)
 		}
 	}
-	if e, _ := m.Catalog().Find("typesense"); e.Available || e.Unavailable != "no Windows build" {
+	if e, _ := m.Catalog().Find("typesense"); e.Available || e.Unavailable != "no Windows build" || e.Method != "" {
 		t.Fatalf("unavailable entry: %+v", e)
+	}
+	if ok, why := m.Available(off); ok || why != "no Windows build" {
+		t.Fatalf("Available: %v %q", ok, why)
 	}
 }
 
 func TestSuggestPortSkipsFlockServicesAndBusyPorts(t *testing.T) {
 	cfg := config.Default()
-	cfg.Services.Valkey = "9.1.2"
+	valkeyPort := freePort(t)
+	cfg.Services.SetExtra("valkey", config.Extra{Version: "9.1.2", Port: valkeyPort})
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)
@@ -265,7 +278,7 @@ func TestSuggestPortSkipsFlockServicesAndBusyPorts(t *testing.T) {
 	defer ln.Close()
 	busy := ln.Addr().(*net.TCPAddr).Port
 
-	if got := SuggestPort(cfg, "redis", cfg.Ports.Valkey); got == cfg.Ports.Valkey {
+	if got := SuggestPort(cfg, "redis", valkeyPort); got == valkeyPort {
 		t.Fatalf("suggested Valkey's port %d", got)
 	}
 	if got := SuggestPort(cfg, "redis", busy); got == busy {
@@ -282,238 +295,74 @@ func TestSuggestPortSkipsFlockServicesAndBusyPorts(t *testing.T) {
 	}
 }
 
-func TestLineOf(t *testing.T) {
-	k := &Kind{Lines: []Line{{"8.10", ""}, {"8.4", ""}, {"8", ""}, {"30", ""}, {"1", ""}}}
-	for v, want := range map[string]string{
-		"8.10.2": "8.10", "8.4.7": "8.4", "8.1.0": "8", "30.2": "30", "1.55.0": "1", "1.0.0-alpha.3": "1", "7.2.16": "", "80.1": "",
-	} {
-		if got := k.LineOf(v); got != want {
-			t.Errorf("LineOf(%q) = %q, want %q", v, got, want)
+func TestLines(t *testing.T) {
+	for v, want := range map[string]string{"8.10.2": "8.10", "8.4.7": "8.4", "11.8.9": "11.8", "8": "", "abc.1": ""} {
+		if got := majorMinor(v); got != want {
+			t.Errorf("majorMinor(%q) = %q, want %q", v, got, want)
 		}
 	}
-}
-
-func TestNewestByLineSkipsPreReleasesAndOtherLines(t *testing.T) {
-	k := &Kind{Lines: []Line{{"8.10", ""}, {"7.4", ""}}}
-	got := newestByLine(k, [][]string{{"", "8.10.1"}, {"", "8.10.10"}, {"", "8.10.2"}, {"", "8.12-rc1"}, {"", "v7.4.3"}, {"", "7.2.16"}, {"", "8.1.0"}})
-	if got["8.10"] != "8.10.10" || got["7.4"] != "7.4.3" || len(got) != 2 {
-		t.Fatalf("got %v", got)
-	}
-}
-
-func TestProbeFindsTheNewestPatch(t *testing.T) {
-	present := map[string]bool{"/9.7.2": true, "/9.7.3": true, "/9.7.5": true, "/9.7.8": true}
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodHead || !present[r.URL.Path] {
-			http.Error(w, "no", http.StatusForbidden)
-		}
-	}))
-	defer srv.Close()
-
-	// One gap is skipped (9.7.4), two end the search (9.7.6, 9.7.7).
-	got, err := probeLines(context.Background(), map[string]string{"9.7": "9.7.2"}, func(v string) string { return srv.URL + "/" + v })
-	if err != nil || got["9.7"] != "9.7.5" {
-		t.Fatalf("got %v %v", got, err)
-	}
-}
-
-func TestChecksumLists(t *testing.T) {
-	sha := strings.Repeat("ab", 32)
-	if got, err := sumFor([]byte(sha+"  mongodb-macos-arm64-8.0.34.tgz\n"), "mongodb-macos-arm64-8.0.34.tgz"); err != nil || got != sha {
-		t.Fatalf("sha256sum line: %q %v", got, err)
-	}
-	if got, err := sumFor([]byte(strings.ToUpper(sha)+" *./mariadb-11.8.9-winx64.zip\n"), "mariadb-11.8.9-winx64.zip"); err != nil || got != sha {
-		t.Fatalf("binary-mode line: %q %v", got, err)
-	}
-	if _, err := sumFor([]byte(sha+"  other.zip\n"+sha+"  another.zip"), "mine.zip"); err == nil {
-		t.Fatal("found a checksum for another file")
-	}
-	readme := "hash redis-8.10.2.tar.gz sha256 " + sha + " http://download.redis.io/releases/redis-8.10.2.tar.gz\n"
-	if got, err := parseHashes([]byte(readme), "redis-8.10.2.tar.gz"); err != nil || got != sha {
-		t.Fatalf("redis-hashes: %q %v", got, err)
-	}
-	if _, err := parseHashes([]byte(readme), "redis-8.10.1.tar.gz"); err == nil {
-		t.Fatal("found another version's checksum")
-	}
-	md := strings.Repeat("cd", 16)
-	if got, err := md5For([]byte(md+"  mysql-9.7.2-macos15-arm64.tar.gz"), "mysql-9.7.2-macos15-arm64.tar.gz"); err != nil || got != md {
-		t.Fatalf("md5: %q %v", got, err)
-	}
-}
-
-func writeTarGz(t *testing.T, path string, files map[string]string) {
-	t.Helper()
-	var buf bytes.Buffer
-	gz := gzip.NewWriter(&buf)
-	tw := tar.NewWriter(gz)
-	names := make([]string, 0, len(files))
-	for name := range files {
-		names = append(names, name)
-	}
-	slices.Sort(names)
-	for _, name := range names {
-		if strings.HasSuffix(name, "/") {
-			_ = tw.WriteHeader(&tar.Header{Name: name, Typeflag: tar.TypeDir, Mode: 0o755})
-			continue
-		}
-		if target, ok := strings.CutPrefix(files[name], "->"); ok {
-			_ = tw.WriteHeader(&tar.Header{Name: name, Typeflag: tar.TypeSymlink, Linkname: target})
-			continue
-		}
-		_ = tw.WriteHeader(&tar.Header{Name: name, Typeflag: tar.TypeReg, Mode: 0o755, Size: int64(len(files[name]))})
-		_, _ = tw.Write([]byte(files[name]))
-	}
-	_ = tw.Close()
-	_ = gz.Close()
-	if err := os.WriteFile(path, buf.Bytes(), 0o644); err != nil {
-		t.Fatal(err)
-	}
-}
-
-func TestUnpackDropsTheTopDirectory(t *testing.T) {
-	requireSymlinks(t)
-	dir := t.TempDir()
-	archive := filepath.Join(dir, "mysql.tar.gz")
-	writeTarGz(t, archive, map[string]string{
-		"mysql-9.7.2/":                  "",
-		"mysql-9.7.2/bin/mysqld":        "server",
-		"mysql-9.7.2/lib/libssl.dylib":  "ssl",
-		"mysql-9.7.2/lib/libssl.3.link": "->libssl.dylib",
-	})
-	out := filepath.Join(dir, "out")
-	if err := unpack(archive, out, ""); err != nil {
-		t.Fatal(err)
-	}
-	if data, _ := os.ReadFile(filepath.Join(out, "bin", "mysqld")); string(data) != "server" {
-		t.Fatalf("bin/mysqld holds %q", data)
-	}
-	// Windows has no execute bit.
-	if info, err := os.Stat(filepath.Join(out, "bin", "mysqld")); err != nil || (runtime.GOOS != "windows" && info.Mode().Perm()&0o100 == 0) {
-		t.Fatalf("mysqld isn't executable: %v %v", info, err)
-	}
-	if target, _ := os.Readlink(filepath.Join(out, "lib", "libssl.3.link")); target != "libssl.dylib" {
-		t.Fatalf("symlink: %q", target)
-	}
-}
-
-func TestUnpackZipWithFilesAtTheRootAndBareBinaries(t *testing.T) {
-	dir := t.TempDir()
-	archive := filepath.Join(dir, "rustfs.zip")
-	var buf bytes.Buffer
-	zw := zip.NewWriter(&buf)
-	for _, name := range []string{"rustfs.exe", "LICENSE"} {
-		w, _ := zw.Create(name)
-		_, _ = w.Write([]byte(name))
-	}
-	_ = zw.Close()
-	_ = os.WriteFile(archive, buf.Bytes(), 0o644)
-	out := filepath.Join(dir, "out")
-	if err := unpack(archive, out, ""); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := os.Stat(filepath.Join(out, "rustfs.exe")); err != nil {
-		t.Fatal(err)
-	}
-
-	binary := filepath.Join(dir, "meilisearch-macos-apple-silicon")
-	_ = os.WriteFile(binary, []byte("meili"), 0o644)
-	out = filepath.Join(dir, "meili")
-	if err := unpack(binary, out, "meilisearch"); err != nil {
-		t.Fatal(err)
-	}
-	if info, err := os.Stat(filepath.Join(out, "meilisearch")); err != nil || (runtime.GOOS != "windows" && info.Mode().Perm()&0o100 == 0) {
-		t.Fatalf("binary: %v %v", info, err)
-	}
-}
-
-func TestUnpackRefusesEntriesOutsideTheTarget(t *testing.T) {
-	dir := t.TempDir()
-	for name, files := range map[string]map[string]string{
-		"dotdot.tar.gz":  {"../evil": "x"},
-		"symlink.tar.gz": {"a/link": "->../../evil"},
-	} {
-		archive := filepath.Join(dir, name)
-		writeTarGz(t, archive, files)
-		if err := unpack(archive, filepath.Join(dir, "out-"+name), ""); err == nil {
-			t.Errorf("%s: unpacked", name)
+	for v, want := range map[string]string{"30.2": "30", "1.55.0": "1", "1.0.0-alpha.3": "1", "x": ""} {
+		if got := major(v); got != want {
+			t.Errorf("major(%q) = %q, want %q", v, got, want)
 		}
 	}
-	if _, err := os.Stat(filepath.Join(dir, "evil")); err == nil {
-		t.Fatal("wrote outside the target")
+	if !newer("8.4.12", 1, "8.4.11", 3) || !newer("8.4.11", 2, "8.4.11", 1) || newer("8.4.11", 1, "8.4.11", 1) || !newer("8.4.11", 1, "8.4.11", 0) {
+		t.Fatal("newer")
 	}
 }
 
-func TestTypesenseIsCheckedAgainstTheMD5InItsArchive(t *testing.T) {
-	dir := t.TempDir()
-	_ = os.WriteFile(filepath.Join(dir, "typesense-server"), []byte("server"), 0o755)
-	_ = os.WriteFile(filepath.Join(dir, "typesense-server.md5.txt"), []byte(strings.Repeat("0", 32)+"  typesense-server\n"), 0o644)
-	if err := checkTypesenseMD5(dir); err == nil || !strings.Contains(err.Error(), "checksum mismatch") {
-		t.Fatalf("a wrong MD5 passed: %v", err)
-	}
-	sum := md5.Sum([]byte("server"))
-	_ = os.WriteFile(filepath.Join(dir, "typesense-server.md5.txt"), []byte(hex.EncodeToString(sum[:])+"\n"), 0o644)
-	if err := checkTypesenseMD5(dir); err != nil {
-		t.Fatal(err)
-	}
-}
+// examples are a version of each service, for the specs.
+var examples = map[string]string{"mysql": "9.7.2", "mariadb": "11.8.9", "mongodb": "8.0.34", "valkey": "9.1.2", "redis": "8.4.7",
+	"meilisearch": "1.55.0", "typesense": "30.2", "rustfs": "1.0.2"}
 
-func TestKindsPerPlatform(t *testing.T) {
-	ids := func(kinds []*Kind) []string {
-		var out []string
+func TestKinds(t *testing.T) {
+	for _, goos := range []string{"darwin", "windows"} {
+		kinds := Kinds(goos)
+		if len(kinds) != len(examples) {
+			t.Fatalf("%s: %d kinds", goos, len(kinds))
+		}
 		for _, k := range kinds {
-			if k.Method != "" {
-				out = append(out, k.ID)
-			} else if k.Unavailable == "" {
-				t.Errorf("%s is unavailable without a reason", k.ID)
+			if k.Name == "" || k.Category == "" || k.Description == "" || k.DefaultPort == 0 || k.Line == nil || k.Spec == nil || k.Env == nil ||
+				k.LineOf(examples[k.ID]) == "" {
+				t.Errorf("incomplete kind %+v", k)
+			}
+			if k.Env(1234) == "" || !strings.Contains(k.Env(1234), "1234") {
+				t.Errorf("%s env: %q", k.ID, k.Env(1234))
 			}
 		}
-		return out
 	}
-	all := []string{"mysql", "mariadb", "mongodb", "redis", "meilisearch", "typesense", "rustfs"}
-	if got := ids(Kinds("darwin", "arm64")); !slices.Equal(got, all) {
-		t.Errorf("darwin/arm64: %v", got)
-	}
-	if got := ids(Kinds("darwin", "amd64")); slices.Contains(got, "rustfs") || len(got) != 6 {
-		t.Errorf("darwin/amd64: %v", got)
-	}
-	if got := ids(Kinds("windows", "amd64")); slices.Contains(got, "typesense") || len(got) != 6 {
-		t.Errorf("windows/amd64: %v", got)
-	}
-	if got := ids(Kinds("windows", "arm64")); len(got) != 0 {
-		t.Errorf("windows/arm64: %v", got)
-	}
-	for _, k := range Kinds("darwin", "arm64") {
-		if k.Name == "" || k.Category == "" || k.Description == "" || k.DefaultPort == 0 || len(k.Lines) == 0 ||
-			k.Latest == nil || k.Install == nil || k.Spec == nil || k.Env == nil || k.Estimate == "" {
-			t.Errorf("incomplete kind %+v", k)
-		}
-		if k.Env(1234) == "" || !strings.Contains(k.Env(1234), "1234") {
-			t.Errorf("%s env: %q", k.ID, k.Env(1234))
+	for _, k := range Kinds("windows") {
+		if (k.ID == "redis" || k.ID == "typesense") && k.Unavailable == "" {
+			t.Errorf("%s says nothing about Windows", k.ID)
 		}
 	}
 }
 
 func TestSpecsBindToLocalhost(t *testing.T) {
 	root := t.TempDir()
-	for _, k := range Kinds("darwin", "arm64") {
-		if k.ID == "mysql" || k.ID == "mariadb" {
-			continue // they initialise their data with the real server first
-		}
-		version := k.Lines[0].ID + ".0"
-		if strings.Count(version, ".") < 2 {
-			version += ".0"
-		}
-		p := PathsOf(root, k, version)
-		spec, err := k.Spec(p, 4567)
-		if err != nil {
-			t.Fatalf("%s: %v", k.ID, err)
-		}
-		args := strings.Join(spec.Args, " ")
-		if !strings.Contains(args, "127.0.0.1") || !strings.Contains(args, "4567") || !strings.HasPrefix(spec.Path, p.Dir) {
-			t.Errorf("%s: %s %s", k.ID, spec.Path, args)
-		}
-		if k.ID == "typesense" && !strings.Contains(args, "--peering-address=127.0.0.1") {
-			t.Errorf("typesense peers on the LAN: %s", args)
+	for _, goos := range []string{"darwin", "windows"} {
+		for _, k := range Kinds(goos) {
+			if k.ID == "mysql" || k.ID == "mariadb" {
+				continue // they initialise their data with the real server first
+			}
+			p := PathsOf(root, k, examples[k.ID])
+			spec, err := k.Spec(p, 4567)
+			if err != nil {
+				t.Fatalf("%s: %v", k.ID, err)
+			}
+			args := strings.Join(spec.Args, " ")
+			if !strings.Contains(args, "127.0.0.1") || !strings.Contains(args, "4567") || !strings.HasPrefix(spec.Path, p.Dir) {
+				t.Errorf("%s: %s %s", k.ID, spec.Path, args)
+			}
+			if k.ID == "typesense" && !strings.Contains(args, "--peering-address=127.0.0.1") {
+				t.Errorf("typesense peers on the LAN: %s", args)
+			}
+			if k.ID == "valkey" && goos == "windows" {
+				// The MSYS2 build reads C:/… paths, and has to be asked to save before it stops.
+				if strings.Contains(args, `\`) || spec.Stop == nil || !strings.HasSuffix(spec.Path, "valkey-server.exe") {
+					t.Errorf("valkey on Windows: %s %s", spec.Path, args)
+				}
+			}
 		}
 	}
 }
@@ -559,50 +408,22 @@ func TestSQLSpecInitialisesOnce(t *testing.T) {
 	}
 }
 
-func TestMariaDBChecksumsFromTheReleaseAPI(t *testing.T) {
-	sha := strings.Repeat("ef", 32)
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch r.URL.Path {
-		case "/rest-api/mariadb/11.8/latest/":
-			fmt.Fprint(w, `{"releases":{"11.8.9":{"files":[]}}}`)
-		case "/rest-api/mariadb/11.8.9/":
-			fmt.Fprintf(w, `{"release_data":{"11.8.9":{"files":[{"file_name":"repo/","checksum":{"sha256sum":null}},
-				{"file_name":"mariadb-11.8.9.tar.gz","checksum":{"sha256sum":"%s"}}]}}}`, sha)
-		default:
-			http.NotFound(w, r)
-		}
-	}))
-	defer srv.Close()
-	old := HTTPClient
-	HTTPClient = &http.Client{Transport: rewrite{srv.URL}}
-	defer func() { HTTPClient = old }()
-
-	if v, err := mariadbLatest(context.Background(), "11.8"); err != nil || v != "11.8.9" {
-		t.Fatalf("latest: %q %v", v, err)
-	}
-	if got, err := mariadbSHA256(context.Background(), "11.8.9", "mariadb-11.8.9.tar.gz"); err != nil || got != sha {
-		t.Fatalf("sha: %q %v", got, err)
-	}
-	if _, err := mariadbSHA256(context.Background(), "11.8.9", "mariadb-11.8.9-winx64.zip"); err == nil {
-		t.Fatal("found a checksum for a file that isn't listed")
-	}
-}
-
-// rewrite sends every request to a test server, keeping the path.
-type rewrite struct{ base string }
-
-func (r rewrite) RoundTrip(req *http.Request) (*http.Response, error) {
-	u := *req.URL
-	target, _ := http.NewRequestWithContext(req.Context(), req.Method, r.base+u.Path, req.Body)
-	return http.DefaultTransport.RoundTrip(target)
-}
-
-// requireSymlinks skips a test where symbolic links can't be made: Windows allows them only in
-// Developer Mode or for administrators (GitHub's runners are).
-func requireSymlinks(t *testing.T) {
-	t.Helper()
+func TestPreparesTrimWhatFlockDoesntNeed(t *testing.T) {
 	dir := t.TempDir()
-	if err := os.Symlink("target", filepath.Join(dir, "link")); err != nil {
-		t.Skipf("symbolic links aren't allowed here: %v", err)
+	for _, f := range []string{"bin/mysqld", "bin/mysqld-debug", "lib/libmysql.a", "mysql-test/x", "lib/plugin/debug/x.so", "share/english/errmsg.sys"} {
+		_ = os.MkdirAll(filepath.Dir(filepath.Join(dir, f)), 0o755)
+		_ = os.WriteFile(filepath.Join(dir, f), nil, 0o644)
+	}
+	if err := mysql("darwin").Prepare(dir); err != nil {
+		t.Fatal(err)
+	}
+	for f, want := range map[string]bool{"bin/mysqld": true, "share/english/errmsg.sys": true, "bin/mysqld-debug": false, "lib/libmysql.a": false,
+		"mysql-test": false, "lib/plugin/debug": false} {
+		if _, err := os.Stat(filepath.Join(dir, f)); (err == nil) != want {
+			t.Errorf("%s: kept %v, want %v", f, err == nil, want)
+		}
+	}
+	if err := valkey("darwin").Prepare(dir); err == nil || !strings.Contains(err.Error(), "valkey-server") {
+		t.Fatalf("a Valkey package without valkey-server: %v", err)
 	}
 }

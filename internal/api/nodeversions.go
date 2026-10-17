@@ -32,7 +32,7 @@ type NodeRelease struct {
 	NpmLatest string `json:"npm_latest"`
 }
 
-// nodeCatalog caches nodejs.org's release lines for the daemon's lifetime.
+// nodeCatalog caches npm's registry data for the daemon's lifetime.
 var nodeCatalog = &node.Catalog{Installer: &node.Installer{}, MaxAge: 6 * time.Hour}
 
 func registerNodeVersions(mux *http.ServeMux, b Backend) {
@@ -62,7 +62,7 @@ func registerNodeVersions(mux *http.ServeMux, b Backend) {
 		}
 		ctx, cancel := context.WithTimeout(r.Context(), 10*time.Minute)
 		defer cancel()
-		version, err := (&node.Installer{Root: b.Root()}).Install(ctx, m)
+		version, err := (&node.Installer{Root: b.Root(), Catalog: b.Binaries()}).Install(ctx, m)
 		if err != nil {
 			writeError(w, http.StatusBadGateway, err)
 			return
@@ -156,13 +156,15 @@ func nodeVersions(ctx context.Context, b Backend, refresh bool) NodeVersions {
 		cfg = config.Default()
 	}
 
-	lines, checkedAt, err := nodeCatalog.Lines(ctx, refresh)
 	out := NodeVersions{Versions: []NodeRelease{}}
-	if !checkedAt.IsZero() {
-		out.CheckedAt = &checkedAt
-	}
-	if err != nil {
-		out.CheckError = err.Error()
+	var lines []node.Line
+	if catalog := b.Binaries(); catalog != nil {
+		if refresh {
+			_, _ = catalog.Check(ctx) // a failed check is reported in check_error
+		}
+		lines = node.Lines(catalog.Manifest())
+		status := catalog.Status()
+		out.CheckedAt, out.CheckError = status.CheckedAt, status.CheckError
 	}
 
 	installed := map[string]string{}        // major → newest installed version

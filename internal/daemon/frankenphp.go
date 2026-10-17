@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"flock/internal/api"
+	"flock/internal/binaries"
 	"flock/internal/config"
 	"flock/internal/frankenphp"
 	"flock/internal/ports"
@@ -97,6 +98,9 @@ func (d *daemon) RestartSite(name string) error {
 
 // FrankenPHP implements api.Backend.
 func (d *daemon) FrankenPHP() *frankenphp.Manager { return d.frankenphp }
+
+// Binaries implements api.Backend.
+func (d *daemon) Binaries() *binaries.Catalog { return d.binaries }
 
 // releaseFrankenPHP stops the FrankenPHP processes (Windows locks a running build's files, so it
 // can't be replaced). The reload after the install starts them again.

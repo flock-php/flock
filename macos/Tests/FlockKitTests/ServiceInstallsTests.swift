@@ -57,56 +57,6 @@ import Testing
     #expect(try major("soon").support(now: now) == .unknown)
 }
 
-@Test func decodesComponentsWithRunningFailedAndNoJobs() throws {
-    let catalog = try FlockJSON.decoder().decode(ComponentCatalog.self, from: Data("""
-    {"checked_at":null,"check_error":"",
-     "components":[
-      {"id":"valkey","name":"Valkey","description":"","installed":"9.1.2","latest":"9.1.3","update":true,
-       "method":"build","estimate":"about 2 minutes",
-       "job":{"action":"update","state":"running","phase":"building","progress":-1,"error":"",
-              "started_at":"2026-10-14T08:01:00Z"}},
-      {"id":"other","name":"Other tool",
-       "description":"does other things",
-       "installed":"","latest":"18.0","update":false,"method":"download","estimate":"12 MB download",
-       "job":{"action":"install","state":"failed","phase":"downloading","progress":0.42,
-              "error":"download failed: 503","started_at":"2026-10-14T08:01:00.123Z"}},
-      {"id":"future","method":"teleport","job":null},
-      {"id":"odd","job":{"action":"reinstall","state":"paused","phase":"linking","progress":1.5}}
-     ]}
-    """.utf8))
-
-    #expect(catalog.checkedAt == nil)
-    #expect(catalog.components.map(\.id) == ["valkey", "other", "future", "odd"])
-    #expect(catalog.hasRunningJob)
-
-    let redis = try #require(catalog[ServiceComponent.valkey])
-    #expect(redis.isInstalled && redis.update && redis.method == .build && redis.estimate == "about 2 minutes")
-    let running = try #require(redis.job)
-    #expect(running.isRunning && !running.isFailed && running.action == .update && running.phase == .building)
-    #expect(running.progress == nil && running.startedAt != nil)
-
-    let client = try #require(catalog["other"])
-    #expect(!client.isInstalled && client.method == .download && client.description.hasPrefix("does"))
-    let failed = try #require(client.job)
-    #expect(failed.isFailed && !failed.isRunning && failed.error == "download failed: 503" && failed.progress == 0.42)
-
-    let future = try #require(catalog["future"])
-    #expect(future.name == "future" && future.method == .unknown && future.job == nil && !future.isInstalled)
-
-    // Unknown strings fall back safely: not running (no endless polling), not failed.
-    let odd = try #require(catalog["odd"]?.job)
-    #expect(odd.action == .unknown && odd.state == .unknown && odd.phase == .unknown && !odd.isRunning && !odd.isFailed)
-    #expect(odd.progress == 1 && odd.startedAt == nil && odd.error.isEmpty)
-}
-
-@Test func decodesComponentsWithoutAJob() throws {
-    let catalog = try FlockJSON.decoder().decode(ComponentCatalog.self, from: Data("""
-    {"checked_at":"2026-10-14T08:00:00Z","check_error":"GitHub rate limit","components":[{"id":"valkey","job":null}]}
-    """.utf8))
-    #expect(catalog.checkedAt != nil && catalog.checkError == "GitHub rate limit" && !catalog.hasRunningJob)
-    #expect(catalog["valkey"]?.job == nil && catalog["other"] == nil)
-}
-
 @Test func decodesTheServiceCatalog() throws {
     let catalog = try FlockJSON.decoder().decode(ServiceCatalog.self, from: Data("""
     {"checked_at":"2026-10-14T08:00:00Z","check_error":"Typesense: offline",

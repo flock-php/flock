@@ -14,7 +14,6 @@ import (
 
 	"flock/internal/api"
 	"flock/internal/catalog"
-	"flock/internal/components"
 	"flock/internal/php"
 	"flock/internal/phpext"
 )
@@ -52,9 +51,6 @@ func (f *fakeDaemon) Status(context.Context) (api.Status, error)      { return f
 func (f *fakeDaemon) Config(context.Context) (api.ConfigView, error)  { return f.cfg, f.err() }
 func (f *fakeDaemon) Services(context.Context) ([]api.Service, error) { return f.services, f.err() }
 func (f *fakeDaemon) Catalog(context.Context) (api.Catalog, error)    { return f.catalog, f.err() }
-func (f *fakeDaemon) Components(context.Context) (api.Components, error) {
-	return api.Components{}, f.err()
-}
 func (f *fakeDaemon) PostgresVersions(context.Context) (api.PostgresVersions, error) {
 	return api.PostgresVersions{}, f.err()
 }
@@ -102,11 +98,6 @@ func (f *fakeDaemon) SetServiceRunning(_ context.Context, id string, on bool) ([
 func (f *fakeDaemon) InstallService(_ context.Context, id, line string, port int) (api.Catalog, error) {
 	f.record("install service", id, line, port)
 	return f.catalog, nil
-}
-
-func (f *fakeDaemon) InstallComponent(_ context.Context, id string) (api.Components, error) {
-	f.record("install component", id)
-	return api.Components{}, nil
 }
 
 func (f *fakeDaemon) InstallPostgres(_ context.Context, major string) (api.PostgresVersions, error) {
@@ -417,7 +408,7 @@ func TestInstallCatalogService(t *testing.T) {
 		t.Fatalf("message: %s", out.Message)
 	}
 
-	d.catalog.Services[0].Job = &catalog.Job{Job: components.Job{State: "failed", Error: "checksum mismatch"}}
+	d.catalog.Services[0].Job = &catalog.Job{State: "failed", Error: "checksum mismatch"}
 	if e := callTool(t, cs, "service", map[string]any{"action": "install", "service": "mysql"}, nil); !strings.Contains(e, "checksum mismatch") {
 		t.Fatalf("failed install: %q", e)
 	}

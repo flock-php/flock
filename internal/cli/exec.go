@@ -20,7 +20,6 @@ import (
 	"flock/internal/php"
 	"flock/internal/postgres"
 	"flock/internal/project"
-	"flock/internal/valkey"
 )
 
 // tools are the commands Flock puts on PATH as shims.
@@ -165,11 +164,11 @@ func resolveTool(s *state, cwd, tool string, args []string) (path string, argv, 
 	case "redis-cli", "valkey-cli":
 		// redis-cli talks to Redis when it is installed, else to Valkey (whose CLI is the same);
 		// valkey-cli always to Valkey.
-		port := s.cfg.Ports.Valkey
-		if x, ok := s.cfg.Services.Extra("redis"); ok && tool == "redis-cli" && fileExists(catalog.RedisCLI(s.root, x.Version)) {
-			path, port = catalog.RedisCLI(s.root, x.Version), x.Port
-		} else if versions, _ := valkey.Installed(s.root); len(versions) > 0 {
-			path = valkey.CLI(s.root, versions[0])
+		var port int
+		if x, ok := s.cfg.Services.Extra("redis"); ok && tool == "redis-cli" && fileExists(catalog.CLI(s.root, "redis", x.Version)) {
+			path, port = catalog.CLI(s.root, "redis", x.Version), x.Port
+		} else if x, ok := s.cfg.Services.Extra("valkey"); ok && fileExists(catalog.CLI(s.root, "valkey", x.Version)) {
+			path, port = catalog.CLI(s.root, "valkey", x.Version), x.Port
 		} else {
 			return "", nil, nil, errRedisMissing
 		}

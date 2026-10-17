@@ -26,7 +26,6 @@ type Daemon interface {
 	Config(ctx context.Context) (api.ConfigView, error)
 	Services(ctx context.Context) ([]api.Service, error)
 	Catalog(ctx context.Context) (api.Catalog, error)
-	Components(ctx context.Context) (api.Components, error)
 	PostgresVersions(ctx context.Context) (api.PostgresVersions, error)
 	PHPVersions(ctx context.Context) (api.PHPVersions, error)
 	CheckPHP(ctx context.Context) (api.PHPVersions, error)
@@ -35,7 +34,6 @@ type Daemon interface {
 
 	SetServiceRunning(ctx context.Context, id string, on bool) ([]api.Service, error)
 	InstallService(ctx context.Context, id, line string, port int) (api.Catalog, error)
-	InstallComponent(ctx context.Context, id string) (api.Components, error)
 	InstallPostgres(ctx context.Context, major string) (api.PostgresVersions, error)
 	InstallPHP(ctx context.Context, minor string) (api.PHPVersions, error)
 	InstallNode(ctx context.Context, major string) (api.NodeVersions, error)

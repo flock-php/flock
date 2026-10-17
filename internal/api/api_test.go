@@ -13,7 +13,6 @@ import (
 
 	"flock/internal/binaries"
 	"flock/internal/catalog"
-	"flock/internal/components"
 	"flock/internal/config"
 	"flock/internal/dumps"
 	"flock/internal/frankenphp"
@@ -30,16 +29,16 @@ type fakeBackend struct {
 	php     *php.Manager
 
 	pg         *postgres.Manager
-	components *components.Manager
 	frankenphp *frankenphp.Manager
+	binaries   *binaries.Catalog
 }
 
 func (f *fakeBackend) PHP() *php.Manager { return f.php }
 
 func (f *fakeBackend) PostgresVersions() *postgres.Manager { return f.pg }
-func (f *fakeBackend) Components() *components.Manager     { return f.components }
 func (f *fakeBackend) Catalog() *catalog.Manager           { return f.catalog }
 func (f *fakeBackend) FrankenPHP() *frankenphp.Manager     { return f.frankenphp }
+func (f *fakeBackend) Binaries() *binaries.Catalog         { return f.binaries }
 func (f *fakeBackend) RestartSite(string) error            { return nil }
 
 func (f *fakeBackend) Status() Status      { return Status{Sites: f.sites} }
@@ -284,10 +283,10 @@ func TestServiceStartStopAndPorts(t *testing.T) {
 	if resp, _ := call(t, "POST", srv.URL+"/v1/services/web/stop", "", ""); resp.StatusCode != http.StatusBadRequest {
 		t.Fatalf("web must not be stoppable, got %d", resp.StatusCode)
 	}
-	if resp, _ := call(t, "PATCH", srv.URL+"/v1/services/valkey", "", `{"port":6380}`); resp.StatusCode != http.StatusOK || b.config(t).Ports.Valkey != 6380 {
+	if resp, _ := call(t, "PATCH", srv.URL+"/v1/services/postgres", "", `{"port":5433}`); resp.StatusCode != http.StatusOK || b.config(t).Ports.Postgres != 5433 {
 		t.Fatalf("port: %d", resp.StatusCode)
 	}
-	if resp, _ := call(t, "PATCH", srv.URL+"/v1/services/valkey", "", `{"port":80}`); resp.StatusCode != http.StatusBadRequest {
+	if resp, _ := call(t, "PATCH", srv.URL+"/v1/services/postgres", "", `{"port":80}`); resp.StatusCode != http.StatusBadRequest {
 		t.Fatalf("privileged port must be rejected, got %d", resp.StatusCode)
 	}
 }
@@ -297,7 +296,7 @@ func TestConfigView(t *testing.T) {
 	srv := serve(t, b, "")
 
 	_, body := call(t, "GET", srv.URL+"/v1/config", "", "")
-	for _, want := range []string{`"tld":"test"`, `"php":[]`, `"node":[]`, `"parked":[]`, `"valkey":6379`} {
+	for _, want := range []string{`"tld":"test"`, `"php":[]`, `"node":[]`, `"parked":[]`, `"postgres":5432`} {
 		if !strings.Contains(body, want) {
 			t.Fatalf("missing %s in %s", want, body)
 		}

@@ -14,7 +14,6 @@ import (
 	"flock/internal/config"
 	"flock/internal/php"
 	"flock/internal/postgres"
-	"flock/internal/valkey"
 )
 
 // fakePHP creates an "installed" PHP version so php.Installed reports it.
@@ -162,32 +161,34 @@ func TestPostgresToolsDefaultToFlocksServer(t *testing.T) {
 
 func TestRedisCLIUsesTheConfiguredPort(t *testing.T) {
 	root := t.TempDir()
-	cli := valkey.CLI(root, "9.1.2")
-	if err := os.MkdirAll(filepath.Dir(cli), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	for _, f := range []string{cli, valkey.Server(root, "9.1.2")} {
-		if err := os.WriteFile(f, nil, 0o755); err != nil {
-			t.Fatal(err)
+	touchAll := func(files ...string) {
+		for _, f := range files {
+			if err := os.MkdirAll(filepath.Dir(f), 0o755); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(f, nil, 0o755); err != nil {
+				t.Fatal(err)
+			}
 		}
 	}
 	cfg := config.Default()
-	cfg.Ports.Valkey = 6380
 	s := &state{root: root, cfg: cfg}
+	if _, _, _, err := resolveTool(s, "/x", "redis-cli", nil); !errors.Is(err, errRedisMissing) {
+		t.Fatalf("nothing installed: %v", err)
+	}
 
+	// valkey-cli, and redis-cli without Redis, talk to Valkey on its port.
+	cli := catalog.CLI(root, "valkey", "9.1.2")
+	touchAll(cli)
+	cfg.Services.SetExtra("valkey", config.Extra{Version: "9.1.2", Port: 6380})
 	_, argv, _, err := resolveTool(s, "/x", "redis-cli", []string{"ping"})
-	if err != nil || strings.Join(argv[1:], " ") != "-p 6380 ping" {
+	if err != nil || argv[0] != cli || strings.Join(argv[1:], " ") != "-p 6380 ping" {
 		t.Fatalf("got %v %v", argv, err)
 	}
 
 	// With Redis installed, redis-cli talks to it; valkey-cli still to Valkey.
-	redisCLI := catalog.RedisCLI(root, "8.2.2")
-	if err := os.MkdirAll(filepath.Dir(redisCLI), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(redisCLI, nil, 0o755); err != nil {
-		t.Fatal(err)
-	}
+	redisCLI := catalog.CLI(root, "redis", "8.2.2")
+	touchAll(redisCLI)
 	cfg.Services.SetExtra("redis", config.Extra{Version: "8.2.2", Port: 6381})
 	path, argv, _, err := resolveTool(s, "/x", "redis-cli", []string{"ping"})
 	if err != nil || path != redisCLI || strings.Join(argv[1:], " ") != "-p 6381 ping" {

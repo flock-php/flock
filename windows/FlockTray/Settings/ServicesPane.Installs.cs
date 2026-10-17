@@ -15,8 +15,6 @@ internal sealed partial class ServicesPane
 {
     // PostgreSQL majors with a request of this window in flight, and what to show meanwhile.
     private readonly Dictionary<string, string> pendingMajors = [];
-    // Components with a request of this window in flight (the request returns quickly; the job follows).
-    private readonly HashSet<string> pendingComponents = [];
     private bool checking;
     // The poll loop's wait; cancelled to look again right away after starting something.
     private CancellationTokenSource? nap;
@@ -24,7 +22,6 @@ internal sealed partial class ServicesPane
     /// <summary>Some PostgreSQL operation runs: other PostgreSQL actions wait for it.</summary>
     private bool PostgresWorking => pendingMajors.Count > 0 || Store.Postgres?.AnyBusy == true;
 
-    private bool ComponentWorking(string id) => pendingComponents.Contains(id) || Store.Components?[id]?.Job?.IsRunning == true;
 
     private static bool IsInstallable(Service service) => service.Id == "postgres" || service.IsOnRequest;
 
@@ -37,7 +34,7 @@ internal sealed partial class ServicesPane
         while (!hidden.IsCancellationRequested)
         {
             await Store.RefreshServiceVersionsAsync();
-            var fast = PostgresWorking || pendingComponents.Count > 0 || Store.Components?.HasRunningJob == true
+            var fast = PostgresWorking
                 || pendingCatalog.Count > 0 || Store.Catalog?.HasRunningJob == true;
             using var wake = CancellationTokenSource.CreateLinkedTokenSource(hidden);
             nap = wake;
@@ -396,112 +393,6 @@ internal sealed partial class ServicesPane
         }
     }
 
-    // Components
-
-    /// <summary>A component's state: its running job, a failed one, the installed version, or how to install it.</summary>
-    private Border ComponentCard(Component component, string label, string uninstallQuestion, string uninstallDetails)
-    {
-        var id = component.Id;
-        var content = Ui.Column(8);
-        if (component.Description.Length > 0)
-        {
-            content.Children.Add(Ui.Caption(component.Description));
-        }
-        var actions = Ui.Row(8);
-
-        if (component.Job is { IsRunning: true } job)
-        {
-            var verb = job.Action == "update" ? "Updating" : "Installing";
-            var title = $"{verb} {(component.Latest.Length > 0 ? $"{component.Name} {component.Latest}" : label)}";
-            var percent = job.HasProgress ? $"{Math.Round(job.Progress * 100)} %" : "";
-            content.Children.Add(Ui.Spread(Ui.Text(title, "BodyStrongTextBlockStyle"), Ui.Caption(percent, wrap: false)));
-            content.Children.Add(new ProgressBar { Minimum = 0, Maximum = 1, Value = job.HasProgress ? job.Progress : 0, IsIndeterminate = !job.HasProgress });
-            var phase = job.PhaseText + (job.StartedAt is { Year: > 2000 } started ? $" · started {Ui.Relative(started)}" : "");
-            actions.Children.Add(Ui.Link("Show Log", () => _ = ShowLog(component)));
-            actions.Children.Add(Ui.Button("Cancel", () => _ = RunComponent(id, c => c.CancelComponentJobAsync(id))));
-            Ui.SetEnabled(actions, !pendingComponents.Contains(id));
-            content.Children.Add(Ui.Spread(Ui.Caption(phase), actions));
-            return Inner(content);
-        }
-
-        if (component.Job is { IsFailed: true } failed)
-        {
-            content.Children.Add(Ui.Row(6, Ui.Icon(Ui.GlyphWarning, 14, Ui.Critical),
-                Ui.Text(failed.Action == "update" ? "The update failed" : "The installation failed", "BodyStrongTextBlockStyle")));
-            var error = Ui.Caption(failed.Error.Length > 0 ? failed.Error : "Flock reported no details; the log may tell more.", Ui.Critical);
-            error.IsTextSelectionEnabled = true;
-            error.MaxLines = 4;
-            ToolTipService.SetToolTip(error, failed.Error);
-            content.Children.Add(error);
-            actions.Children.Add(Ui.Button("Try Again", () => _ = RunComponent(id, c => c.InstallComponentAsync(id)), accent: true, glyph: Ui.GlyphRefresh));
-            actions.Children.Add(Ui.Button("Dismiss", () => _ = RunComponent(id, c => c.DismissComponentJobAsync(id))));
-            actions.Children.Add(Ui.Link("Show Log", () => _ = ShowLog(component)));
-        }
-        else if (component.IsInstalled)
-        {
-            var status = component.Update ? Ui.Caption($"{component.Latest} available", Ui.Accent) : Ui.Caption("Up to date");
-            var more = new MenuFlyout();
-            more.Items.Add(Item("Show Last Log", () => _ = ShowLog(component)));
-            more.Items.Add(new MenuFlyoutSeparator());
-            more.Items.Add(Item("Uninstall…", async () =>
-            {
-                if (await Window.Confirm(uninstallQuestion, uninstallDetails, "Uninstall", destructive: true))
-                {
-                    await RunComponent(id, c => c.UninstallComponentAsync(id));
-                }
-            }));
-            var moreButton = Ui.IconButton(Ui.GlyphMore, "More", () => { });
-            moreButton.Flyout = more;
-            moreButton.IsEnabled = !pendingComponents.Contains(id);
-            content.Children.Add(Ui.Spread(Ui.Column(1, Ui.Text($"Version {component.Installed}", wrap: false), status), moreButton));
-            if (component.Update)
-            {
-                actions.Children.Add(Ui.Button($"Update to {component.Latest}", () => _ = RunComponent(id, c => c.InstallComponentAsync(id)), glyph: Ui.GlyphDownload,
-                    tooltip: component.Estimate.Length > 0 ? $"{Capitalize(component.Estimate)}; runs in the background" : "Runs in the background"));
-            }
-        }
-        else
-        {
-            actions.Children.Add(Ui.Button("Install", () => _ = RunComponent(id, c => c.InstallComponentAsync(id)), glyph: Ui.GlyphDownload,
-                tooltip: component.Latest.Length > 0 ? $"Downloads {component.Name} {component.Latest}" : null));
-            if (component.Estimate.Length > 0)
-            {
-                actions.Children.Add(Ui.Caption(Capitalize(component.Estimate), wrap: false));
-            }
-        }
-
-        if (actions.Children.Count > 0)
-        {
-            if (pendingComponents.Contains(id))
-            {
-                Ui.SetEnabled(actions, false);
-                actions.Children.Insert(0, new ProgressRing { Width = 16, Height = 16 });
-            }
-            content.Children.Add(actions);
-        }
-        return Inner(content);
-    }
-
-    private async Task RunComponent(string id, Func<FlockClient, Task<ComponentCatalog>> action)
-    {
-        pendingComponents.Add(id);
-        Rerender();
-        try
-        {
-            await Store.PerformOnComponentsAsync(action);
-        }
-        finally
-        {
-            pendingComponents.Remove(id);
-            Rerender();
-            Kick();
-        }
-    }
-
-    /// <summary>The tail of a component job's output, followed while the job runs.</summary>
-    private Task ShowLog(Component component) =>
-        ShowLog($"{component.Name} log", () => Store.ComponentLogAsync(component.Id), () => ComponentWorking(component.Id));
-
     /// <summary>The tail of an install's output, followed while working() holds.</summary>
     private async Task ShowLog(string title, Func<Task<string>> load, Func<bool> working)
     {
@@ -581,7 +472,6 @@ internal sealed partial class ServicesPane
                     if (postgres)
                     {
                         await Store.PerformOnPostgresAsync(c => c.CheckPostgresReleasesAsync());
-                        await Store.PerformOnComponentsAsync(c => c.CheckComponentsAsync());
                     }
                     else
                     {

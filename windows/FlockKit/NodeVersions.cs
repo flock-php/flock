@@ -3,8 +3,8 @@ using System.Text.Json.Serialization;
 namespace Flock.Kit;
 
 /// <summary>
-/// GET /v1/node/versions — every Node.js major line from nodejs.org worth offering (supported
-/// lines, and end-of-life LTS lines back to 16), plus anything installed, with install state.
+/// GET /v1/node/versions — every Node.js major the package manifest offers (16 and newer, one
+/// release each), plus anything installed, with install state.
 /// </summary>
 public sealed class NodeCatalog
 {

@@ -70,44 +70,11 @@ public class ServiceVersionsTests
     }
 
     [Fact]
-    public void DecodesComponentsWithoutJobs()
-    {
-        var catalog = FlockJson.Decode<ComponentCatalog>("""
-            {"checked_at":null,"check_error":"",
-             "components":[
-              {"id":"valkey","name":"Valkey","description":"","installed":"8.1.3","latest":"8.1.4","update":true,"method":"download","estimate":"5 MB download","job":null},
-              {"id":"other","name":"Other tool","description":"does other things",
-               "installed":"","latest":"1.6","update":false,"method":"download","estimate":"330 MB download, 12 MB kept"}]}
-            """);
-
-        Assert.Null(catalog.CheckedAt);
-        Assert.False(catalog.HasRunningJob);
-        var redis = catalog[ComponentId.Valkey]!;
-        Assert.True(redis.IsInstalled);
-        Assert.True(redis.Update);
-        Assert.Equal(ComponentMethod.Download, redis.Method);
-        Assert.Null(redis.Job);
-        var client = catalog["other"]!;
-        Assert.False(client.IsInstalled);
-        Assert.Equal("330 MB download, 12 MB kept", client.Estimate);
-        Assert.Null(client.Job);
-        Assert.Null(catalog["memcached"]);
-    }
-
-    [Fact]
     public void DecodesRunningAndFailedJobs()
     {
-        var catalog = FlockJson.Decode<ComponentCatalog>("""
-            {"checked_at":"2026-10-14T08:00:00.123456789Z","check_error":"",
-             "components":[
-              {"id":"valkey","name":"Valkey","installed":"","latest":"8.1.4","update":false,"method":"download","estimate":"",
-               "job":{"action":"install","state":"running","phase":"downloading","progress":0.42,"error":"","started_at":"2026-10-14T08:01:00Z"}},
-              {"id":"other","name":"Other tool","installed":"1.5","latest":"1.6","update":true,"method":"build","estimate":"about 5 minutes",
-               "job":{"action":"update","state":"failed","phase":"building","progress":-1,"error":"make: *** [all] Error 2","started_at":"2026-10-14T08:01:00Z"}}]}
+        var running = FlockJson.Decode<ComponentJob>("""
+            {"action":"install","state":"running","phase":"downloading","progress":0.42,"error":"","started_at":"2026-10-14T08:01:00Z"}
             """);
-
-        Assert.True(catalog.HasRunningJob);
-        var running = catalog[ComponentId.Valkey]!.Job!;
         Assert.True(running.IsRunning);
         Assert.False(running.IsFailed);
         Assert.True(running.HasProgress);
@@ -115,11 +82,13 @@ public class ServiceVersionsTests
         Assert.Equal("Downloading…", running.PhaseText);
         Assert.NotNull(running.StartedAt);
 
-        var failed = catalog["other"]!.Job!;
+        var failed = FlockJson.Decode<ComponentJob>("""
+            {"action":"update","state":"failed","phase":"installing","progress":-1,"error":"checksum mismatch","started_at":"2026-10-14T08:01:00Z"}
+            """);
         Assert.True(failed.IsFailed);
         Assert.False(failed.IsRunning);
         Assert.False(failed.HasProgress);
-        Assert.Equal("make: *** [all] Error 2", failed.Error);
+        Assert.Equal("checksum mismatch", failed.Error);
     }
 
     [Fact]

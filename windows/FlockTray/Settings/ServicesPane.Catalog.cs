@@ -49,10 +49,6 @@ internal sealed partial class ServicesPane
         {
             panel.Children.Add(CatalogLines(entry));
         }
-        if (entry.Id == "redis")
-        {
-            panel.Children.Add(Ui.Caption("Laravel on Windows talks to Redis through predis (REDIS_CLIENT=predis below), so each project needs `composer require predis/predis`."));
-        }
         panel.Children.Add(CheckFooter(catalog.CheckedAt, catalog.CheckError, postgres: false));
     }
 
@@ -175,6 +171,12 @@ internal sealed partial class ServicesPane
                 moreButton.Flyout = more;
                 moreButton.IsEnabled = !locked;
                 content.Children.Add(Ui.Spread(Ui.Column(1, Ui.Text($"{entry.Name} {line.Label}", "BodyStrongTextBlockStyle", wrap: false), status), moreButton));
+                if (entry.Yanked.Length > 0)
+                {
+                    var withdrawn = Ui.Caption(entry.Update ? $"Withdrawn: {entry.Yanked} — update to replace it" : $"Withdrawn: {entry.Yanked}", Ui.Caution);
+                    ToolTipService.SetToolTip(withdrawn, "This build was withdrawn. Flock replaces it as soon as a fixed build is published.");
+                    content.Children.Add(Ui.Row(6, Ui.Icon(Ui.GlyphWarning, 12, Ui.Caution), withdrawn));
+                }
                 if (entry.Update)
                 {
                     var update = Ui.Button($"Update to {entry.Latest}", () => _ = RunCatalog(id, c => c.InstallCatalogServiceAsync(id, line.Id)), glyph: Ui.GlyphDownload,

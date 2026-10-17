@@ -186,39 +186,6 @@ struct ClientTests {
         #expect(StubProtocol.requests.map(\.timeout) == [5, 60, 600, 600, 120, 120, 120])
     }
 
-    @Test func talksToTheComponentEndpoints() async throws {
-        StubProtocol.reset { request in
-            request.url.hasSuffix("/log")
-                ? (request.url.contains("valkey") ? (200, "make: done\n") : (404, #"{"error":"no job"}"#))
-                : (200, #"{"checked_at":null,"components":[{"id":"valkey","job":{"action":"install","state":"running","phase":"building","progress":-1}}]}"#)
-        }
-        let client = client(try apiJSON(token: "t"))
-
-        _ = try await client.components()
-        _ = try await client.checkComponents()
-        let started = try await client.installComponent("valkey")
-        #expect(started["valkey"]?.job?.isRunning == true)
-        _ = try await client.cancelComponentJob("valkey")
-        _ = try await client.dismissComponentJob("other")
-        _ = try await client.uninstallComponent("valkey")
-        #expect(try await client.componentLog("valkey") == "make: done\n")
-        // No job yet: an empty log rather than an error.
-        #expect(try await client.componentLog("other") == "")
-
-        let base = "http://127.0.0.1:53531/v1/components"
-        #expect(StubProtocol.requests.map { "\($0.method) \($0.url)" } == [
-            "GET \(base)",
-            "POST \(base)/check",
-            "POST \(base)/valkey/install",
-            "POST \(base)/valkey/cancel",
-            "DELETE \(base)/other/job",
-            "DELETE \(base)/valkey",
-            "GET \(base)/valkey/log",
-            "GET \(base)/other/log",
-        ])
-        #expect(StubProtocol.requests.map(\.timeout) == [5, 60, 5, 5, 5, 30, 5, 5])
-    }
-
     @Test func talksToTheCatalogEndpoints() async throws {
         StubProtocol.reset { request in
             request.url.hasSuffix("/log")

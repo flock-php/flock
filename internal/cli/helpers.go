@@ -7,6 +7,7 @@ import (
 	"io"
 
 	"flock/internal/api"
+	"flock/internal/binaries"
 	"flock/internal/config"
 	"flock/internal/paths"
 )
@@ -29,6 +30,17 @@ func load() (*state, error) {
 	}
 
 	return &state{root: root, cfg: cfg}, nil
+}
+
+// binaries reads the package manifest of the configured channel (cached in the data directory).
+func (s *state) binaries() *binaries.Catalog {
+	return binaries.NewCatalog(binaries.DefaultSource(s.root), func() binaries.Channel {
+		ch, err := binaries.ParseChannel(s.cfg.Channel)
+		if err != nil {
+			return binaries.Stable
+		}
+		return ch
+	})
 }
 
 func (s *state) client() *api.Client {

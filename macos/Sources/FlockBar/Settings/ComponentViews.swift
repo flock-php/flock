@@ -2,8 +2,8 @@ import AppKit
 import FlockKit
 import SwiftUI
 
-// Building blocks of the service details: cards, the empty "install" state, a component (Valkey)
-// with its background job, and its log.
+// Building blocks of the service details: cards, the empty "install" state, an install job with
+// its progress, and its log.
 
 extension View {
     /// A grouped box like the ones in System Settings.
@@ -119,41 +119,6 @@ enum Formats {
     }
 }
 
-extension ServiceComponent {
-    /// How installing works and takes, for a footnote.
-    var methodText: String {
-        switch method {
-        case .build:
-            "Builds from source\(estimate.isEmpty ? "" : " — \(estimate)"); needs the Xcode Command Line Tools."
-        case .download:
-            estimate.isEmpty ? "Downloads a ready-made build." : "Downloads a ready-made build (\(estimate))."
-        case .unknown:
-            estimate
-        }
-    }
-
-    /// The tooltip of Install/Update.
-    var installHelp: String {
-        let target = latest.isEmpty ? "" : " \(latest)"
-        let how = method == .build ? "Builds\(target) from source" : "Downloads\(target)"
-        let time = estimate.isEmpty ? "" : " (\(estimate))"
-        return isInstalled ? "\(how)\(time), then replaces \(installed)." : "\(how)\(time), then installs it."
-    }
-}
-
-extension ComponentJob {
-    /// "Building Redis 9.1.3…"
-    func title(_ component: ServiceComponent) -> String {
-        let target = component.latest.isEmpty ? component.name : "\(component.name) \(component.latest)"
-        return switch phase {
-        case .downloading: "Downloading \(target)…"
-        case .building: "Building \(target)…"
-        case .installing: "Installing \(target)…"
-        case .unknown: action == .update ? "Updating \(component.name)…" : "Installing \(component.name)…"
-        }
-    }
-}
-
 /// An install that runs in the background: phase, progress, elapsed time, the log and Cancel.
 struct ComponentJobProgress: View {
     let title: String
@@ -169,11 +134,6 @@ struct ComponentJobProgress: View {
         self.job = job
         self.showLog = showLog
         self.cancel = cancel
-    }
-
-    init(component: ServiceComponent, job: ComponentJob, showLog: @escaping () -> Void, cancel: @escaping () -> Void) {
-        self.init(title: job.title(component), buildEstimate: component.method == .build ? component.estimate : "",
-                  job: job, showLog: showLog, cancel: cancel)
     }
 
     var body: some View {
@@ -226,10 +186,6 @@ struct ComponentJobFailure: View {
         self.dismiss = dismiss
     }
 
-    init(component: ServiceComponent, job: ComponentJob, showLog: @escaping () -> Void, retry: @escaping () -> Void, dismiss: @escaping () -> Void) {
-        self.init(name: component.name, isBuild: component.method == .build, job: job, showLog: showLog, retry: retry, dismiss: dismiss)
-    }
-
     /// The build failed because Apple's Command Line Tools are missing.
     private var needsDeveloperTools: Bool {
         guard isBuild else { return false }
@@ -272,145 +228,6 @@ struct ComponentJobFailure: View {
     }
 }
 
-/// A component in a card: its name, version and state, with every action that fits.
-/// Used for an installed Valkey.
-struct ComponentPanel: View {
-    @Environment(AppModel.self) private var model
-    let component: ServiceComponent
-    let title: String
-    let subtitle: String
-    let symbol: String
-    /// The text of the uninstall confirmation.
-    let uninstallMessage: String
-    /// What an update keeps, for the update strip ("Your data stays.").
-    var updateNote = ""
-
-    private let logState = State<Bool>(initialValue: false)
-    private let confirmUninstallState = State<Bool>(initialValue: false)
-    /// A request of this panel is waiting for the daemon.
-    private let requestingState = State<Bool>(initialValue: false)
-
-    var body: some View {
-        let job = component.job
-        let requesting = requestingState.wrappedValue
-
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(alignment: .center, spacing: 10) {
-                Image(systemName: symbol)
-                    .font(.system(size: 15, weight: .medium))
-                    .foregroundStyle(.secondary)
-                    .frame(width: 22)
-                VStack(alignment: .leading, spacing: 1) {
-                    Text(title).font(.body.weight(.medium))
-                    if !subtitle.isEmpty {
-                        Text(subtitle).font(.caption).foregroundStyle(.secondary)
-                            .lineLimit(2).fixedSize(horizontal: false, vertical: true)
-                    }
-                }
-                Spacer(minLength: 8)
-                if requesting {
-                    ProgressView().controlSize(.small)
-                }
-                if job?.isRunning != true {
-                    trailing(requesting: requesting)
-                }
-            }
-
-            if let job, job.isRunning {
-                ComponentJobProgress(component: component, job: job) {
-                    logState.wrappedValue = true
-                } cancel: {
-                    run { try await $0.cancelComponentJob(component.id) }
-                }
-                .disabled(requesting)
-            } else if let job, job.isFailed {
-                ComponentJobFailure(component: component, job: job) {
-                    logState.wrappedValue = true
-                } retry: {
-                    run { try await $0.installComponent(component.id) }
-                } dismiss: {
-                    run { try await $0.dismissComponentJob(component.id) }
-                }
-                .disabled(requesting)
-            } else if !component.isInstalled {
-                Text(component.methodText)
-                    .font(.caption).foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            } else if component.update, !component.latest.isEmpty {
-                Divider()
-                UpdateStrip(title: "\(component.name) \(component.latest) is available",
-                            note: [component.method == .build ? "Builds from source\(component.estimate.isEmpty ? "" : ", \(component.estimate)")." : "", updateNote]
-                                .filter { !$0.isEmpty }.joined(separator: " "),
-                            help: component.installHelp, disabled: requesting) {
-                    run { try await $0.installComponent(component.id) }
-                }
-            }
-        }
-        .card()
-        .task {
-            if Snapshot.sheet == "log", component.job != nil {
-                logState.wrappedValue = true
-            }
-        }
-        .sheet(isPresented: logState.projectedValue) {
-            ComponentLogSheet(component: component)
-        }
-        .confirmationDialog("Uninstall \(component.name)?", isPresented: confirmUninstallState.projectedValue) {
-            Button("Uninstall", role: .destructive) {
-                run { try await $0.uninstallComponent(component.id) }
-            }
-        } message: {
-            Text(uninstallMessage)
-        }
-    }
-
-    @ViewBuilder
-    private func trailing(requesting: Bool) -> some View {
-        if component.isInstalled {
-            HStack(spacing: 6) {
-                Text(component.installed).font(.callout.monospacedDigit()).foregroundStyle(.secondary)
-                    .help(component.update ? "\(component.latest) is available" : "Up to date")
-                Menu {
-                    if component.update {
-                        Button("Update to \(component.latest)") {
-                            run { try await $0.installComponent(component.id) }
-                        }
-                    } else {
-                        Button("Reinstall \(component.installed)") {
-                            run { try await $0.installComponent(component.id) }
-                        }
-                    }
-                    Button("Show Last Log") { logState.wrappedValue = true }
-                    Divider()
-                    Button("Uninstall…", role: .destructive) { confirmUninstallState.wrappedValue = true }
-                } label: {
-                    Image(systemName: "ellipsis.circle")
-                }
-                .menuStyle(.borderlessButton)
-                .menuIndicator(.hidden)
-                .fixedSize()
-                .help("More")
-                .disabled(requesting)
-            }
-        } else if component.job?.isFailed != true {
-            Button("Install") {
-                run { try await $0.installComponent(component.id) }
-            }
-            .controlSize(.small)
-            .help(component.installHelp)
-            .disabled(requesting)
-        }
-    }
-
-    private func run(_ action: @escaping @Sendable (FlockClient) async throws -> ComponentCatalog) {
-        requestingState.wrappedValue = true
-        Task {
-            await model.settings.performOnComponents(action)
-            requestingState.wrappedValue = false
-        }
-    }
-}
-
 /// "X is available", what updating means, and the Update button.
 struct UpdateStrip: View {
     let title: String
@@ -441,18 +258,6 @@ struct UpdateStrip: View {
                     .help(help)
             }
         }
-    }
-}
-
-/// The tail of a component job's output, refreshed while the sheet is open.
-struct ComponentLogSheet: View {
-    @Environment(AppModel.self) private var model
-    let component: ServiceComponent
-
-    var body: some View {
-        JobLogSheet(title: "\(component.name) \(component.method == .build ? "build" : "install") log",
-                    running: { model.settings.components?[component.id]?.job?.isRunning ?? false },
-                    load: { await model.settings.componentLog(component.id) })
     }
 }
 
@@ -548,131 +353,3 @@ struct InstallInvitation<Actions: View, Footer: View>: View {
     }
 }
 
-/// Valkey: install it (a build), follow the build, update or uninstall it.
-struct ValkeyDetail: View {
-    @Environment(AppModel.self) private var model
-    let service: Service
-    private let logState = State<Bool>(initialValue: false)
-    private let requestingState = State<Bool>(initialValue: false)
-
-    var body: some View {
-        let store = model.settings
-        let component = store.components?[ServiceComponent.valkey]
-        let style = ServiceStyle.of(service.id)
-
-        ScrollView {
-            VStack(alignment: .leading, spacing: 18) {
-                DetailHeader(title: service.name, symbol: style.symbol, color: style.color,
-                             status: status(component), running: service.installed ? service.running : nil)
-
-                if !service.available {
-                    UnavailableNotice(service: service)
-                } else if let component {
-                    if component.isInstalled {
-                        VStack(alignment: .leading, spacing: 8) {
-                            DetailSectionTitle(title: "Version") {
-                                if let catalog = store.components {
-                                    CheckForUpdatesLine(checkedAt: catalog.checkedAt, error: catalog.checkError, disabled: false) {
-                                        await store.checkForUpdates()
-                                    }
-                                }
-                            }
-                            ComponentPanel(component: component, title: "Valkey",
-                                           subtitle: "The open-source Redis; works with every Redis client.",
-                                           symbol: "shippingbox",
-                                           uninstallMessage: "Valkey stops and your sites can't use it until you install it again. Its data stays.",
-                                           updateNote: "Your data stays.")
-                        }
-                        Divider()
-                        ServiceInfo(service: service)
-                    } else {
-                        notInstalled(component)
-                    }
-                } else if store.components == nil {
-                    ProgressView().frame(maxWidth: .infinity).padding(.top, 30)
-                } else {
-                    // A daemon without component installs: the CLI still works.
-                    InstallInvitation(symbol: style.symbol, color: style.color, title: "Valkey isn't installed",
-                                      message: "Run `flock valkey install` in Terminal to install it.") {} footer: {}
-                }
-            }
-            .padding(16)
-        }
-        .sheet(isPresented: logState.projectedValue) {
-            if let component {
-                ComponentLogSheet(component: component)
-            }
-        }
-    }
-
-    private func status(_ component: ServiceComponent?) -> String {
-        if let job = component?.job, job.isRunning {
-            return job.action == .update ? "Updating…" : "Installing…"
-        }
-        guard service.installed else { return service.available ? "Not installed" : "Not available" }
-        var parts = [service.running ? "Running" : "Stopped"]
-        if service.port > 0 {
-            parts.append("Port \(service.port)")
-        }
-        return parts.joined(separator: " · ")
-    }
-
-    @ViewBuilder
-    private func notInstalled(_ component: ServiceComponent) -> some View {
-        let requesting = requestingState.wrappedValue
-        let job = component.job
-        let style = ServiceStyle.of(service.id)
-        InstallInvitation(symbol: style.symbol, color: style.color,
-                          title: job?.isRunning == true ? "Installing Valkey" : "Install Valkey",
-                          message: "The open-source Redis: a fast in-memory store for your cache, queues and sessions, on port \(service.port). Works with every Redis client.") {
-            if let job, job.isRunning {
-                ComponentJobProgress(component: component, job: job) {
-                    logState.wrappedValue = true
-                } cancel: {
-                    run { try await $0.cancelComponentJob(component.id) }
-                }
-                .disabled(requesting)
-                .multilineTextAlignment(.leading)
-                .padding(.top, 6)
-            } else if let job, job.isFailed {
-                ComponentJobFailure(component: component, job: job) {
-                    logState.wrappedValue = true
-                } retry: {
-                    run { try await $0.installComponent(component.id) }
-                } dismiss: {
-                    run { try await $0.dismissComponentJob(component.id) }
-                }
-                .disabled(requesting)
-                .multilineTextAlignment(.leading)
-            } else {
-                HStack(spacing: 8) {
-                    Button {
-                        run { try await $0.installComponent(component.id) }
-                    } label: {
-                        Text(component.latest.isEmpty ? "Install Valkey" : "Install Valkey \(component.latest)")
-                            .padding(.horizontal, 6)
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .controlSize(.large)
-                    .help(component.installHelp)
-                    .disabled(requesting)
-                    if requesting {
-                        ProgressView().controlSize(.small)
-                    }
-                }
-            }
-        } footer: {
-            if job?.isRunning != true {
-                Text(component.methodText)
-            }
-        }
-    }
-
-    private func run(_ action: @escaping @Sendable (FlockClient) async throws -> ComponentCatalog) {
-        requestingState.wrappedValue = true
-        Task {
-            await model.settings.performOnComponents(action)
-            requestingState.wrappedValue = false
-        }
-    }
-}

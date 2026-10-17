@@ -103,59 +103,16 @@ public sealed class PostgresMajor
     };
 }
 
-/// <summary>
-/// GET /v1/components — tools Flock installs on request: Valkey, on macOS only (Windows has none).
-/// Installs run as jobs in the daemon; a finished job disappears, a failed one stays until dismissed.
-/// </summary>
-public sealed class ComponentCatalog
-{
-    public DateTimeOffset? CheckedAt { get; init; }
-    public string CheckError { get; init; } = "";
-    public List<Component> Components { get; init; } = [];
-
-    /// <summary>Some job is running, so the UI polls.</summary>
-    [JsonIgnore]
-    public bool HasRunningJob => Components.Any(c => c.Job?.IsRunning == true);
-
-    public Component? this[string id] => Components.FirstOrDefault(c => c.Id == id);
-}
-
-/// <summary>Values of Component.Id.</summary>
-public static class ComponentId
-{
-    public const string Valkey = "valkey";
-}
-
-/// <summary>Values of Component.Method.</summary>
+/// <summary>Values of CatalogEntry.Method.</summary>
 public static class ComponentMethod
 {
-    /// <summary>Compiled from source (macOS).</summary>
+    /// <summary>Compiled from source (older daemons).</summary>
     public const string Build = "build";
-    /// <summary>A prebuilt download (Windows).</summary>
+    /// <summary>A download from the package manifest.</summary>
     public const string Download = "download";
 }
 
-public sealed class Component
-{
-    public string Id { get; init; } = "";
-    public string Name { get; init; } = "";
-    public string Description { get; init; } = "";
-    /// <summary>The installed version; empty when not installed.</summary>
-    public string Installed { get; init; } = "";
-    /// <summary>Empty when unknown.</summary>
-    public string Latest { get; init; } = "";
-    public bool Update { get; init; }
-    /// <summary>One of ComponentMethod.</summary>
-    public string Method { get; init; } = "";
-    /// <summary>A hint such as "12 MB download" or "about 2 minutes"; may be empty.</summary>
-    public string Estimate { get; init; } = "";
-    public ComponentJob? Job { get; init; }
-
-    [JsonIgnore]
-    public bool IsInstalled => Installed.Length > 0;
-}
-
-/// <summary>An install or update of a component, running or failed.</summary>
+/// <summary>An install or update running in the daemon (PHP, FrankenPHP, a catalog service), or a failed one.</summary>
 public sealed class ComponentJob
 {
     /// <summary>"install" or "update".</summary>
@@ -191,8 +148,8 @@ public sealed class ComponentJob
 
 /// <summary>
 /// GET /v1/catalog — the services Flock installs on request besides PostgreSQL: MySQL, MariaDB,
-/// Redis, MongoDB, Meilisearch, Typesense, RustFS. Each runs one version (of a line the user
-/// picks) on its own port; installs run as jobs like the components'.
+/// MongoDB, Valkey, Redis, Meilisearch, Typesense, RustFS. Each runs one version (of a line the user
+/// picks) on its own port; installs run as jobs in the daemon.
 /// </summary>
 public sealed class ServiceCatalog
 {
@@ -228,6 +185,8 @@ public sealed class CatalogService
     /// <summary>The newest release of Line; empty when unknown.</summary>
     public string Latest { get; init; } = "";
     public bool Update { get; init; }
+    /// <summary>Why the installed build was withdrawn; empty when it wasn't. Flock replaces it by itself.</summary>
+    public string Yanked { get; init; } = "";
     /// <summary>The configured port, or the one Flock suggests when not installed.</summary>
     public int Port { get; init; }
     public int DefaultPort { get; init; }

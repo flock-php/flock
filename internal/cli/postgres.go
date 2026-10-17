@@ -13,7 +13,6 @@ import (
 	"github.com/spf13/cobra"
 
 	"flock/internal/api"
-	"flock/internal/binaries"
 	"flock/internal/postgres"
 )
 
@@ -238,14 +237,7 @@ func postgresOps(ctx context.Context, s *state) (pgOps, error) {
 	if !errors.Is(err, api.ErrDaemonNotRunning) {
 		return nil, err
 	}
-	channel := func() binaries.Channel {
-		ch, err := binaries.ParseChannel(s.cfg.Channel)
-		if err != nil {
-			return binaries.Stable
-		}
-		return ch
-	}
-	return directPG{postgres.NewManager(s.root, binaries.NewCatalog(binaries.DefaultSource(s.root), channel), &cliPGService{s: s})}, nil
+	return directPG{postgres.NewManager(s.root, s.binaries(), &cliPGService{s: s})}, nil
 }
 
 type daemonPG struct{ c *api.Client }

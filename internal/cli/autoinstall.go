@@ -8,7 +8,6 @@ import (
 	"io"
 	"os"
 	"os/signal"
-	"runtime"
 	"strings"
 	"time"
 
@@ -56,7 +55,7 @@ func confirm(question string, defaultYes bool) bool {
 
 // errRedisMissing and errPostgresMissing: a redis-cli or psql/pg_dump/... shim found nothing installed.
 var (
-	errRedisMissing    = errors.New("neither Redis nor Valkey is installed — run `flock services install redis` or `flock valkey install`")
+	errRedisMissing    = errors.New("neither Redis nor Valkey is installed — run `flock services install valkey`")
 	errPostgresMissing = errors.New("PostgreSQL is not installed — run `flock postgres install` (psql, pg_dump and the other client tools come with it)")
 )
 
@@ -88,13 +87,12 @@ func offerInstall(ctx context.Context, s *state, err error) (bool, error) {
 		question = fmt.Sprintf("Node.js %s isn't installed. Download and install it now?", nodeErr.Spec)
 		install = func(ctx context.Context) error { return installNode(ctx, s, nodeErr.Spec, os.Stderr) }
 
-	// Valkey, built from source, on macOS; on Windows Redis is installed through the daemon.
+	// Valkey speaks Redis' protocol, and its valkey-cli is the same as redis-cli.
 	case errors.Is(err, errRedisMissing):
-		if runtime.GOOS != "darwin" {
-			return false, nil
+		question = "Neither Redis nor Valkey is installed. Install Valkey (the open-source Redis) and start it?"
+		install = func(ctx context.Context) error {
+			return installCatalogService(ctx, s, "valkey", "", 0, os.Stderr, os.Stderr)
 		}
-		question = fmt.Sprintf("Redis isn't installed. Build Valkey (the open-source Redis) from source and start it on 127.0.0.1:%d? It takes about a minute.", s.cfg.Ports.Valkey)
-		install = func(ctx context.Context) error { return installValkey(ctx, s, "", os.Stderr, os.Stderr) }
 
 	// The client tools come with PostgreSQL itself; installing it starts the server like any install.
 	case errors.Is(err, errPostgresMissing):
@@ -203,10 +201,11 @@ func installPHP(ctx context.Context, s *state, minor string, out io.Writer) erro
 	}
 }
 
-// installNode downloads a Node.js version matching spec. When ctx ends (Ctrl+C) nothing is installed.
+// installNode downloads the newest Node.js of spec's major. When ctx ends (Ctrl+C) nothing is
+// installed.
 func installNode(ctx context.Context, s *state, spec string, out io.Writer) error {
 	fmt.Fprintf(out, "downloading Node.js %s…\n", spec)
-	v, err := (&node.Installer{Root: s.root}).Install(ctx, spec)
+	v, err := (&node.Installer{Root: s.root, Catalog: s.binaries()}).Install(ctx, spec)
 	if ctx.Err() != nil {
 		return fmt.Errorf("canceled — Node.js %s was not installed", spec)
 	}
@@ -214,6 +213,10 @@ func installNode(ctx context.Context, s *state, spec string, out io.Writer) erro
 		return err
 	}
 	fmt.Fprintf(out, "installed Node.js %s\n", v)
+	// Flock publishes one release per major, so a pinned patch gets the newest of its major.
+	if spec != node.MajorOf(spec) && !strings.HasPrefix(v+".", spec+".") {
+		fmt.Fprintf(out, "%s is pinned, but Flock has only the newest Node.js %s, %s — it is used instead.\n", spec, node.MajorOf(spec), v)
+	}
 	return nil
 }
 

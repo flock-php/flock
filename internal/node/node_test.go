@@ -1,162 +1,88 @@
 package node
 
 import (
-	"archive/tar"
-	"archive/zip"
-	"bytes"
-	"compress/gzip"
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
-	"fmt"
-	"net/http"
-	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
 	"testing"
+
+	"flock/internal/binaries"
+	"flock/internal/binaries/binariestest"
 )
 
-const fakeIndex = `[
-	{"version":"v23.1.0"},
-	{"version":"v22.11.0"},
-	{"version":"v22.9.0"},
-	{"version":"v20.18.0"}
-]`
-
-// fakeArchive builds a tiny Node-shaped archive for the current platform.
-func fakeArchive(t *testing.T, version string) []byte {
-	t.Helper()
-	top := strings.TrimSuffix(strings.TrimSuffix(archiveName(version, runtime.GOOS, runtime.GOARCH), ".tar.gz"), ".zip")
-
-	var buf bytes.Buffer
+// nodePackage is a Node.js archive as nodejs.org publishes it, in one top-level directory.
+func nodePackage(t *testing.T, version string) []byte {
+	top := "node-v" + version
 	if runtime.GOOS == "windows" {
-		zw := zip.NewWriter(&buf)
-		w, _ := zw.Create(top + "/node.exe")
-		_, _ = w.Write([]byte("node"))
-		if err := zw.Close(); err != nil {
-			t.Fatal(err)
-		}
-		return buf.Bytes()
+		return binariestest.Zip(t, map[string]string{top + "/node.exe": version, top + "/npm.cmd": "npm"})
 	}
-
-	gz := gzip.NewWriter(&buf)
-	tw := tar.NewWriter(gz)
-	add := func(hdr *tar.Header, body string) {
-		hdr.Size = int64(len(body))
-		if err := tw.WriteHeader(hdr); err != nil {
-			t.Fatal(err)
-		}
-		_, _ = tw.Write([]byte(body))
-	}
-	add(&tar.Header{Name: top + "/", Typeflag: tar.TypeDir, Mode: 0o755}, "")
-	add(&tar.Header{Name: top + "/bin/node", Typeflag: tar.TypeReg, Mode: 0o755}, "#!/bin/sh\necho "+version)
-	add(&tar.Header{Name: top + "/lib/node_modules/npm/bin/npm-cli.js", Typeflag: tar.TypeReg, Mode: 0o755}, "npm")
-	add(&tar.Header{Name: top + "/bin/npm", Typeflag: tar.TypeSymlink, Linkname: "../lib/node_modules/npm/bin/npm-cli.js"}, "")
-	if err := tw.Close(); err != nil {
-		t.Fatal(err)
-	}
-	if err := gz.Close(); err != nil {
-		t.Fatal(err)
-	}
-	return buf.Bytes()
+	return binariestest.Zip(t, map[string]string{top + "/bin/node": version, top + "/lib/node_modules/npm/bin/npm-cli.js": "npm"})
 }
 
-func fakeDist(t *testing.T, corruptSum bool) *httptest.Server {
+func publishedNode(t *testing.T) *Installer {
 	t.Helper()
-
-	archives := map[string][]byte{}
-	for _, v := range []string{"22.11.0", "20.18.0"} {
-		archives[v] = fakeArchive(t, v)
+	if binaries.Platform() == "" {
+		t.Skip("no packages for this platform")
 	}
-
-	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/index.json" {
-			fmt.Fprint(w, fakeIndex)
-			return
-		}
-		for v, data := range archives {
-			name := archiveName(v, runtime.GOOS, runtime.GOARCH)
-			switch r.URL.Path {
-			case "/v" + v + "/SHASUMS256.txt":
-				sum := sha256.Sum256(data)
-				if corruptSum {
-					sum[0] ^= 0xff
-				}
-				fmt.Fprintf(w, "%s  other-file.tar.gz\n%s  %s\n", strings.Repeat("0", 64), hex.EncodeToString(sum[:]), name)
-				return
-			case "/v" + v + "/" + name:
-				_, _ = w.Write(data)
-				return
-			}
-		}
-		http.NotFound(w, r)
-	}))
+	srv := binariestest.New(t)
+	srv.Publish(Package, "22.11.0", 1, nodePackage(t, "22.11.0"), nil)
+	srv.Publish(Package, "20.18.0", 1, nodePackage(t, "20.18.0"), nil)
+	srv.Publish(Package, "14.21.3", 1, nodePackage(t, "14.21.3"), nil)
+	root := t.TempDir()
+	return &Installer{Root: root, Catalog: srv.Catalog(filepath.Join(root, "cache"))}
 }
 
-func TestInstallResolvesMajorAndVerifiesChecksum(t *testing.T) {
-	srv := fakeDist(t, false)
-	defer srv.Close()
-	root := t.TempDir()
-	inst := &Installer{Root: root, BaseURL: srv.URL}
+func TestInstallInstallsTheNewestOfTheMajor(t *testing.T) {
+	inst := publishedNode(t)
+	root := inst.Root
 
 	version, err := inst.Install(context.Background(), "22")
 	if err != nil || version != "22.11.0" {
 		t.Fatalf("want 22.11.0, got %q, %v", version, err)
 	}
-
 	binDir, resolved, err := Resolve(root, "22")
 	if err != nil || resolved != "22.11.0" {
 		t.Fatalf("resolve: %q, %v", resolved, err)
 	}
-
+	name := "node"
 	if runtime.GOOS == "windows" {
-		if _, err := os.Stat(filepath.Join(binDir, "node.exe")); err != nil {
-			t.Fatal(err)
+		name = "node.exe"
+	}
+	if data, err := os.ReadFile(filepath.Join(binDir, name)); err != nil || string(data) != "22.11.0" {
+		t.Fatalf("node: %q %v", data, err)
+	}
+
+	// A pinned patch gets the newest release of its major, and installing again is a no-op.
+	for _, spec := range []string{"22.9.0", "22.11", "v22"} {
+		if again, err := inst.Install(context.Background(), spec); err != nil || again != "22.11.0" {
+			t.Fatalf("%s: %q, %v", spec, again, err)
 		}
-		return
 	}
-
-	info, err := os.Stat(filepath.Join(binDir, "node"))
-	if err != nil || info.Mode().Perm()&0o100 == 0 {
-		t.Fatalf("node must be executable: %v, %v", info, err)
+	for _, spec := range []string{"99", "lts/*", ""} {
+		if _, err := inst.Install(context.Background(), spec); err == nil {
+			t.Fatalf("%q must not install", spec)
+		}
 	}
-	link, err := os.Readlink(filepath.Join(binDir, "npm"))
-	if err != nil || link != "../lib/node_modules/npm/bin/npm-cli.js" {
-		t.Fatalf("npm symlink not preserved: %q, %v", link, err)
-	}
-	if _, err := os.Stat(filepath.Join(binDir, "npm")); err != nil {
-		t.Fatalf("npm symlink must resolve: %v", err)
-	}
-
-	// Installing again is a no-op.
-	if again, err := inst.Install(context.Background(), "22.11"); err != nil || again != "22.11.0" {
-		t.Fatalf("reinstall: %q, %v", again, err)
+	if versions, _ := Installed(root); strings.Join(versions, ",") != "22.11.0" {
+		t.Fatalf("installed %v", versions)
 	}
 }
 
-func TestInstallFailsOnChecksumMismatchAndLeavesNothingBehind(t *testing.T) {
-	srv := fakeDist(t, true)
-	defer srv.Close()
-	root := t.TempDir()
-
-	_, err := (&Installer{Root: root, BaseURL: srv.URL}).Install(context.Background(), "22")
-	if err == nil || !strings.Contains(err.Error(), "checksum mismatch") {
-		t.Fatalf("want checksum mismatch, got %v", err)
+func TestLinesAreThePublishedMajors(t *testing.T) {
+	inst := publishedNode(t)
+	manifest, err := inst.Catalog.Check(context.Background())
+	if err != nil {
+		t.Fatal(err)
 	}
-
-	if versions, _ := Installed(root); len(versions) != 0 {
-		t.Fatalf("nothing should be installed, got %v", versions)
+	lines := Lines(manifest)
+	// 14 is older than MinimumMajor.
+	if len(lines) != 2 || lines[0] != (Line{Major: "22", Latest: "22.11.0"}) || lines[1].Major != "20" {
+		t.Fatalf("lines %+v", lines)
 	}
-}
-
-func TestInstallRejectsUnknownSpec(t *testing.T) {
-	srv := fakeDist(t, false)
-	defer srv.Close()
-
-	if _, err := (&Installer{Root: t.TempDir(), BaseURL: srv.URL}).Install(context.Background(), "99"); err == nil {
-		t.Fatal("want error for unknown major")
+	if len(Lines(nil)) != 0 {
+		t.Fatal("no manifest, no lines")
 	}
 }
 
@@ -189,6 +115,10 @@ func TestResolvePicksNewestInstalled(t *testing.T) {
 
 	if _, v, err := Resolve(root, "22"); err != nil || v != "22.11.0" {
 		t.Fatalf("want 22.11.0, got %q, %v", v, err)
+	}
+	// A pinned patch that isn't installed resolves to the newest of its major.
+	if _, v, err := Resolve(root, "22.10.3"); err != nil || v != "22.11.0" {
+		t.Fatalf("pinned patch: %q, %v", v, err)
 	}
 	if _, _, err := Resolve(root, "18"); err == nil {
 		t.Fatal("want error when nothing matches")

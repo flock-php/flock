@@ -16,12 +16,10 @@ final class SettingsStore {
     private(set) var php: PHPCatalog?
     /// FrankenPHP builds per PHP minor; loaded by the PHP pane.
     private(set) var frankenPHP: FrankenPHPState?
-    /// Node.js lines from nodejs.org with install state; loaded by the Node pane.
+    /// Node.js majors from the package manifest with install state; loaded by the Node pane.
     private(set) var node: NodeCatalog?
     /// PostgreSQL majors with install state; loaded by the Services pane.
     private(set) var postgres: PostgresVersions?
-    /// Valkey (macOS); loaded by the Services pane.
-    private(set) var components: ComponentCatalog?
     /// MySQL, MariaDB, Redis, MongoDB, Meilisearch, Typesense, RustFS; loaded by the Services pane.
     private(set) var catalog: ServiceCatalog?
     /// The AI clients Flock's MCP server can be registered with; loaded by the AI pane.
@@ -186,22 +184,17 @@ final class SettingsStore {
         await refresh()
     }
 
-    // MARK: PostgreSQL versions and components (Services pane)
+    // MARK: PostgreSQL versions and the catalog (Services pane)
 
-    /// Reloads PostgreSQL versions, components (Valkey) and the catalog; the
-    /// Services pane needs them.
+    /// Reloads PostgreSQL versions and the catalog; the Services pane needs them.
     func refreshInstalls() async {
         if Snapshot.isFixture { return }
         do {
             async let postgres = client.postgresVersions()
-            async let components = client.components()
             async let catalog = client.serviceCatalog()
-            let fresh = try await (postgres, components, catalog)
+            let fresh = try await (postgres, catalog)
             adopt(fresh.0)
-            if fresh.1 != self.components {
-                self.components = fresh.1
-            }
-            adopt(fresh.2)
+            adopt(fresh.1)
         } catch {
             self.error = error.localizedDescription
         }
@@ -209,15 +202,14 @@ final class SettingsStore {
 
     /// Reloads them only when the Services pane has loaded them before.
     func refreshInstallsIfLoaded() async {
-        if isVisible, postgres != nil || components != nil || catalog != nil {
+        if isVisible, postgres != nil || catalog != nil {
             await refreshInstalls()
         }
     }
 
-    /// A PostgreSQL operation, or a component job, runs — so the Services pane polls.
+    /// A PostgreSQL operation, or a catalog install, runs — so the Services pane polls.
     var installsBusy: Bool {
-        !postgresPending.isEmpty || (postgres?.isBusy ?? false) || (components?.hasRunningJob ?? false)
-            || !catalogPending.isEmpty || (catalog?.hasRunningJob ?? false)
+        !postgresPending.isEmpty || (postgres?.isBusy ?? false) || !catalogPending.isEmpty || (catalog?.hasRunningJob ?? false)
     }
 
     /// What a major is doing: the daemon's state, or what this window just asked for while the
@@ -241,17 +233,15 @@ final class SettingsStore {
         await onChange?()
     }
 
-    /// "Check for Updates": asks for new PostgreSQL, component and catalog releases at once.
+    /// "Check for Updates": fetches the package manifest, for PostgreSQL and the catalog at once.
     func checkForUpdates() async {
         if Snapshot.isFixture { return }
         do {
             async let postgres = client.checkPostgres()
-            async let components = client.checkComponents()
             async let catalog = client.checkServiceCatalog()
-            let fresh = try await (postgres, components, catalog)
+            let fresh = try await (postgres, catalog)
             adopt(fresh.0)
-            self.components = fresh.1
-            adopt(fresh.2)
+            adopt(fresh.1)
             error = nil
         } catch {
             self.error = error.localizedDescription
@@ -277,23 +267,6 @@ final class SettingsStore {
         return (try? await client.catalogLog(id)) ?? ""
     }
 
-    /// Runs a component action and adopts the catalog it returns.
-    func performOnComponents(_ change: @escaping @Sendable (FlockClient) async throws -> ComponentCatalog) async {
-        do {
-            components = try await change(client)
-            error = nil
-        } catch {
-            self.error = error.localizedDescription
-        }
-        await refresh()
-        await onChange?()
-    }
-
-    func componentLog(_ id: String) async -> String {
-        if Snapshot.isFixture { return SnapshotFixtures.log }
-        return (try? await client.componentLog(id)) ?? ""
-    }
-
     private func adopt(_ fresh: PostgresVersions) {
         if fresh != postgres {
             postgres = fresh
@@ -307,10 +280,9 @@ final class SettingsStore {
     }
 
     /// Fills the store with fixture data for `--snapshot` renders of the Services pane.
-    func loadFixture(services: [Service], postgres: PostgresVersions?, components: ComponentCatalog?, catalog: ServiceCatalog? = nil) {
+    func loadFixture(services: [Service], postgres: PostgresVersions?, catalog: ServiceCatalog? = nil) {
         self.services = services
         self.postgres = postgres
-        self.components = components
         self.catalog = catalog
     }
 

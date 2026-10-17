@@ -21,7 +21,6 @@ import (
 	"flock/internal/binaries"
 	"flock/internal/catalog"
 	"flock/internal/certs"
-	"flock/internal/components"
 	"flock/internal/config"
 	"flock/internal/dns"
 	"flock/internal/dumps"
@@ -36,7 +35,6 @@ import (
 	"flock/internal/postgres"
 	"flock/internal/project"
 	"flock/internal/supervisor"
-	"flock/internal/valkey"
 	"flock/internal/web"
 	"flock/internal/xdebug"
 )
@@ -72,11 +70,9 @@ type daemon struct {
 	// frankenphp installs FrankenPHP builds; restarts counts RestartSite calls per site (see frankenphp.Site.Restart).
 	frankenphp *frankenphp.Manager
 	restarts   map[string]int
-	// pg manages the PostgreSQL versions, components Valkey and the PostgreSQL client tools,
-	// catalog the other services (MySQL, Redis, Meilisearch, ...).
-	pg         *postgres.Manager
-	components *components.Manager
-	catalog    *catalog.Manager
+	// pg manages the PostgreSQL versions, catalog the other services (MySQL, Valkey, Meilisearch, ...).
+	pg      *postgres.Manager
+	catalog *catalog.Manager
 	// migrateGlobals moves global npm packages out of Node's version directories, once per run.
 	migrateGlobals sync.Once
 
@@ -88,7 +84,7 @@ type daemon struct {
 	mu       sync.Mutex
 	sites    []api.SiteStatus
 	warnings []string
-	problems map[string]string // why an installed catalog service or Valkey isn't running, by id
+	problems map[string]string // why an installed catalog service isn't running, by id
 	// breakpoints finds PhpStorm breakpoints; breakpointSites is what the last reload found, by site path.
 	breakpoints     xdebug.Detector
 	breakpointSites map[string]bool
@@ -252,12 +248,7 @@ func Run(ctx context.Context, cfg Config) error {
 	d.frankenphp.Release = d.releaseFrankenPHP
 	d.frankenphp.Installed = func(string) { _ = d.reload() }
 	go d.frankenphp.Run(ctx)
-	d.components = components.NewManager(cfg.Root, components.Drivers(cfg.Root, d.Mutate))
-	go d.components.Run(ctx)
-	if err := catalog.MigrateLegacy(cfg.Root); err != nil {
-		fmt.Fprintf(os.Stderr, "moving Redis into the catalog: %v\n", err)
-	}
-	d.catalog = catalog.NewManager(cfg.Root, catalog.Kinds(runtime.GOOS, runtime.GOARCH), d.Mutate)
+	d.catalog = catalog.NewManager(cfg.Root, catalog.Kinds(runtime.GOOS), d.binaries, d.Mutate)
 	go d.catalog.Run(ctx)
 
 	// A broken config or a busy port must not kill the daemon: launchd would restart it in a loop
@@ -669,10 +660,6 @@ func (d *daemon) reload() error {
 		warnings = append(warnings, id+": "+problem)
 	}
 
-	if v := cfg.Services.Valkey; v != "" && cfg.Services.Running(components.Valkey) {
-		spec, err := valkey.Spec(d.root, v, cfg.Ports.Valkey)
-		start(components.Valkey, cfg.Ports.Valkey, spec, err)
-	}
 	if d.catalog != nil {
 		for _, k := range d.catalog.Kinds() {
 			if x, ok := cfg.Services.Extra(k.ID); ok && cfg.Services.Running(k.ID) {
@@ -755,7 +742,6 @@ func (d *daemon) postgresSpec(cfg *config.Config, id string) (supervisor.Spec, e
 func (d *daemon) PostgresVersions() *postgres.Manager { return d.pg }
 
 // Components implements api.Backend.
-func (d *daemon) Components() *components.Manager { return d.components }
 
 // Catalog implements api.Backend.
 func (d *daemon) Catalog() *catalog.Manager { return d.catalog }
@@ -773,10 +759,8 @@ func serviceName(id string) string {
 		return "the dump server"
 	case "postgres":
 		return "PostgreSQL"
-	case components.Valkey:
-		return "Valkey"
 	}
-	for _, k := range catalog.Kinds(runtime.GOOS, runtime.GOARCH) {
+	for _, k := range catalog.Kinds(runtime.GOOS) {
 		if k.ID == id {
 			return k.Name
 		}
@@ -848,8 +832,8 @@ func (d *daemon) Status() api.Status {
 		if d.cfg.Services.Postgres != "" {
 			st.Postgres = fmt.Sprintf("%s on 127.0.0.1:%d", postgres.VersionOf(d.cfg.Services.Postgres), d.cfg.Ports.Postgres)
 		}
-		if d.cfg.Services.Valkey != "" {
-			st.Valkey = fmt.Sprintf("%s on 127.0.0.1:%d", d.cfg.Services.Valkey, d.cfg.Ports.Valkey)
+		if x, ok := d.cfg.Services.Extra("valkey"); ok {
+			st.Valkey = fmt.Sprintf("%s on 127.0.0.1:%d", x.Version, x.Port)
 		}
 		if d.catalog != nil {
 			for _, k := range d.catalog.Kinds() {
@@ -934,21 +918,10 @@ func (d *daemon) Services() []api.Service {
 		Log: "postgres", URL: fmt.Sprintf("postgres://postgres@127.0.0.1:%d", p.Postgres),
 	})
 
-	valkeyService := api.Service{
-		ID: components.Valkey, Name: "Valkey", Category: "Cache & Queue", Version: cfg.Services.Valkey, Port: p.Valkey,
-		Description: "The open-source Redis: an in-memory store for cache, queues and sessions.", Available: true,
-		Installed: cfg.Services.Valkey != "", Enabled: cfg.Services.Running(components.Valkey), Running: d.procUp("valkey"), Stoppable: true,
-		Env: catalog.RedisEnv(p.Valkey), Log: "valkey", URL: fmt.Sprintf("redis://127.0.0.1:%d", p.Valkey), Problem: problems[components.Valkey],
-	}
-	if runtime.GOOS == "windows" {
-		valkeyService.Available, valkeyService.Unavailable = false, "Valkey has no Windows build — install Redis instead."
-	}
-	services = append(services, valkeyService)
-
 	if d.catalog != nil {
 		for _, k := range d.catalog.Kinds() {
-			s := api.Service{ID: k.ID, Name: k.Name, Category: k.Category, Description: k.Description,
-				Available: k.Method != "", Unavailable: k.Unavailable, Log: k.ID}
+			s := api.Service{ID: k.ID, Name: k.Name, Category: k.Category, Description: k.Description, Log: k.ID}
+			s.Available, s.Unavailable = d.catalog.Available(k)
 			if x, ok := cfg.Services.Extra(k.ID); ok {
 				s.Version, s.Port, s.Installed, s.Stoppable = x.Version, x.Port, true, true
 				s.Enabled, s.Running, s.Problem = cfg.Services.Running(k.ID), d.procUp(k.ID), problems[k.ID]

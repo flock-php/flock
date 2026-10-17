@@ -14,8 +14,8 @@ import (
 	"net/http"
 	"time"
 
+	"flock/internal/binaries"
 	"flock/internal/catalog"
-	"flock/internal/components"
 	"flock/internal/config"
 	"flock/internal/frankenphp"
 	"flock/internal/php"
@@ -165,12 +165,12 @@ type Backend interface {
 	ReleasePHP(minor string)
 	// PostgresVersions manages the PostgreSQL majors (nil when unavailable).
 	PostgresVersions() *postgres.Manager
-	// Components manages Valkey and the PostgreSQL client tools (nil when unavailable).
-	Components() *components.Manager
 	// Catalog manages MySQL, Redis, Meilisearch and the other catalog services (nil when unavailable).
 	Catalog() *catalog.Manager
 	// FrankenPHP installs FrankenPHP builds (nil when unavailable).
 	FrankenPHP() *frankenphp.Manager
+	// Binaries is the package manifest of the configured channel (nil when there is none).
+	Binaries() *binaries.Catalog
 	// RestartSite restarts a FrankenPHP site's process, e.g. so Octane's workers load changed code.
 	RestartSite(name string) error
 }
@@ -209,7 +209,6 @@ func NewHandler(b Backend, token string) http.Handler {
 	registerExtensions(mux, b)
 	registerNodeVersions(mux, b)
 	registerPostgresVersions(mux, b)
-	registerComponents(mux, b)
 	registerCatalog(mux, b)
 	registerFrankenPHP(mux, b)
 	registerMail(mux, b)

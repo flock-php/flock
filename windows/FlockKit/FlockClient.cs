@@ -128,7 +128,7 @@ public sealed class FlockClient : IDisposable
 
     // Node.js versions
 
-    /// <summary>The Node.js lines; on a cold cache the daemon asks nodejs.org first, which can take ~30 s.</summary>
+    /// <summary>The Node.js majors; the daemon may ask npm's registry first, which can take a while.</summary>
     public Task<NodeCatalog> NodeVersionsAsync() => Send<NodeCatalog>(HttpMethod.Get, "/v1/node/versions", timeout: TimeSpan.FromMinutes(1));
 
     /// <summary>Installs the newest release of a major line, or updates it; a download of about 30 MB.</summary>
@@ -141,7 +141,7 @@ public sealed class FlockClient : IDisposable
 
     public Task<NodeCatalog> UninstallNodeAsync(string major) => Send<NodeCatalog>(HttpMethod.Delete, $"/v1/node/versions/{Escape(major)}");
 
-    /// <summary>Asks the daemon to check nodejs.org for new releases now.</summary>
+    /// <summary>Asks the daemon to fetch the package manifest now.</summary>
     public Task<NodeCatalog> CheckNodeReleasesAsync() => Send<NodeCatalog>(HttpMethod.Post, "/v1/node/check", timeout: TimeSpan.FromMinutes(1));
 
     // PHP versions
@@ -236,28 +236,6 @@ public sealed class FlockClient : IDisposable
     /// <summary>Stops and removes a catalog service; its data goes too only when asked.</summary>
     public Task<ServiceCatalog> UninstallCatalogServiceAsync(string id, bool deleteData = false) =>
         Send<ServiceCatalog>(HttpMethod.Delete, $"/v1/catalog/{Escape(id)}" + (deleteData ? "?delete_data=1" : ""), timeout: TimeSpan.FromMinutes(1));
-
-    // Components (Valkey on macOS; none on Windows)
-
-    public Task<ComponentCatalog> ComponentsAsync() => Get<ComponentCatalog>("/v1/components");
-
-    public Task<ComponentCatalog> CheckComponentsAsync() =>
-        Send<ComponentCatalog>(HttpMethod.Post, "/v1/components/check", timeout: TimeSpan.FromMinutes(1));
-
-    /// <summary>Starts installing (or updating) in the background; poll ComponentsAsync for the job.</summary>
-    public Task<ComponentCatalog> InstallComponentAsync(string id) => Send<ComponentCatalog>(HttpMethod.Post, $"/v1/components/{Escape(id)}/install");
-
-    public Task<ComponentCatalog> CancelComponentJobAsync(string id) => Send<ComponentCatalog>(HttpMethod.Post, $"/v1/components/{Escape(id)}/cancel");
-
-    /// <summary>Forgets a failed job.</summary>
-    public Task<ComponentCatalog> DismissComponentJobAsync(string id) => Send<ComponentCatalog>(HttpMethod.Delete, $"/v1/components/{Escape(id)}/job");
-
-    /// <summary>The end of the current or last job's output; 404 (FlockServerException) when there is none.</summary>
-    public Task<string> ComponentLogAsync(string id) => Text(HttpMethod.Get, $"/v1/components/{Escape(id)}/log");
-
-    /// <summary>Uninstalls (a service stops first; its data stays).</summary>
-    public Task<ComponentCatalog> UninstallComponentAsync(string id) =>
-        Send<ComponentCatalog>(HttpMethod.Delete, $"/v1/components/{Escape(id)}", timeout: TimeSpan.FromSeconds(30));
 
     // Mail
 
