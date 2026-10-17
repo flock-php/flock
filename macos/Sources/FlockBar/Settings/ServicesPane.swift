@@ -277,6 +277,9 @@ extension Service {
     /// The web server and DNS ports are tied to certificates and /etc/resolver; `flock install` changes them.
     var hasConfigurablePort: Bool { installed && port > 0 && id != "web" && id != "dns" }
 
+    /// The web server and DNS ports: shown, but only `flock install` changes them.
+    var hasFixedPort: Bool { installed && port > 0 && (id == "web" || id == "dns") }
+
     /// PostgreSQL and the catalog services are installed from their detail.
     var isInstallable: Bool { id == "postgres" || isOnRequest }
 
@@ -305,7 +308,8 @@ private struct ServiceDetail: View {
     }
 }
 
-/// What every installed service shows: its problem, port, TablePlus, environment, connection and log.
+/// What every installed service shows: its problem, what it does (core services), port, TablePlus,
+/// environment, connection and log.
 struct ServiceInfo: View {
     @Environment(AppModel.self) private var model
     let service: Service
@@ -313,10 +317,17 @@ struct ServiceInfo: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            if !service.problem.isEmpty {
+            // Why it isn't working; the broken DNS server's explanation below already includes it.
+            if !service.problem.isEmpty && !(service.id == "dns" && dnsBroken) {
                 Label(service.problem, systemImage: "exclamationmark.triangle.fill")
                     .font(.callout).foregroundStyle(.orange)
                     .textSelection(.enabled)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            if let explanation {
+                Text(explanation)
+                    .font(.callout).foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
 
@@ -325,6 +336,10 @@ struct ServiceInfo: View {
                     Text(String(service.port)).monospacedDigit().foregroundStyle(.secondary)
                     Button("Change…") { editingState.wrappedValue = true }
                         .controlSize(.small)
+                }
+            } else if service.hasFixedPort {
+                row("Port") {
+                    Text(String(service.port) + " · set by `flock install`").monospacedDigit().foregroundStyle(.secondary)
                 }
             }
 
@@ -367,6 +382,32 @@ struct ServiceInfo: View {
                 let id = service.id
                 Task { await model.settings.performOnServices { try await $0.setServicePort(id, port: port) } }
             }
+        }
+    }
+
+    private var tld: String {
+        let tld = model.status?.dns.tld ?? ""
+        return tld.isEmpty ? "test" : tld
+    }
+
+    /// Flock's DNS server counts as broken when names under the TLD don't reach it.
+    private var dnsBroken: Bool { !service.running || !service.problem.isEmpty }
+
+    /// What the core services do, as on Windows (ServicesPane.Detail): they have nothing else to show.
+    private var explanation: String? {
+        switch service.id {
+        case "web":
+            return service.running
+                ? "Caddy serves every site over HTTPS (https://app.\(tld)) with certificates from Flock's local certificate authority, which `flock install` trusts."
+                : "Sites don't open while the web server is down. Its log may tell why; `flock restart` starts it again."
+        case "dns":
+            if !dnsBroken {
+                return "macOS sends every name under .\(tld) here (/etc/resolver/\(tld), set up by `flock install`), so any subdomain of a site works (tenant1.app.\(tld), a.b.app.\(tld)) without adding it."
+            }
+            let problem = service.problem.isEmpty ? "the DNS server isn't running" : service.problem
+            return "*.\(tld) doesn't resolve: \(problem). macOS has no hosts-file fallback, so sites don't open until it does; `flock install` sets /etc/resolver/\(tld) up again."
+        default:
+            return nil
         }
     }
 
