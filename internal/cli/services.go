@@ -15,7 +15,6 @@ import (
 	"flock/internal/dumps"
 	"flock/internal/envutil"
 	"flock/internal/php"
-	"flock/internal/postgres"
 	"flock/internal/project"
 	"flock/internal/valkey"
 )
@@ -228,59 +227,7 @@ func installValkey(ctx context.Context, s *state, from string, out, errOut io.Wr
 	return nil
 }
 
-func newPostgresClientCommand() *cobra.Command {
-	var from string
-
-	cmd := &cobra.Command{
-		Use:   "install-client [--from <dir>]",
-		Short: "Install psql, pg_dump, pg_restore, ... (Windows: downloads them; macOS: builds them from source)",
-		Args:  cobra.NoArgs,
-		RunE: func(cmd *cobra.Command, _ []string) error {
-			s, err := load()
-			if err != nil {
-				return err
-			}
-			ctx, stop := signal.NotifyContext(cmd.Context(), os.Interrupt)
-			defer stop()
-			return installPostgresClient(ctx, s, from, cmd.OutOrStderr(), cmd.ErrOrStderr())
-		},
-	}
-	cmd.Flags().StringVar(&from, "from", "", "directory with bin/ and lib/ from the client build (skips the build)")
-
-	return cmd
-}
-
-// installPostgresClient installs the PostgreSQL client tools from a build directory (from),
-// downloads the prebuilt ones where Flock has them (Windows) or builds them from source (macOS).
-func installPostgresClient(ctx context.Context, s *state, from string, out, errOut io.Writer) error {
-	var version string
-	var err error
-	if from != "" {
-		version, err = postgres.InstallClientFrom(s.root, from)
-	} else if b, ok := postgres.PrebuiltClient(runtime.GOOS, runtime.GOARCH); ok {
-		p := newProgress(errOut)
-		p.set(fmt.Sprintf("downloading PostgreSQL %s (%d MB; Flock keeps only the client tools)…", b.Version, b.Size>>20))
-		version, err = postgres.DownloadClient(ctx, s.root, b, nil, downloadProgress(p, "PostgreSQL "+b.Version))
-		p.clear()
-	} else {
-		src := components.DefaultSources()
-		latest := func(ctx context.Context) (string, error) { return src.LatestPostgres(ctx, components.ClientMajor) }
-		version, err = buildComponent(ctx, errOut, "the PostgreSQL client tools", latest, components.BuildPostgresClient,
-			func(dir string) (string, error) { return postgres.InstallClientFrom(s.root, dir) })
-	}
-	if err != nil {
-		return err
-	}
-
-	s.cfg.Services.PostgresClient = version
-	if err := s.cfg.Save(s.root); err != nil {
-		return err
-	}
-	fmt.Fprintf(out, "PostgreSQL %s client tools installed (connect to Flock's server by default)\n", version)
-	return nil
-}
-
-// buildFunc builds a component from source (components.BuildValkey, components.BuildPostgresClient).
+// buildFunc builds a component from source (components.BuildValkey).
 type buildFunc func(ctx context.Context, src components.Sources, workspace, version string, r *components.Reporter) (string, func(), error)
 
 // buildComponent builds the newest version of a component from source, streaming the build's

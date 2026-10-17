@@ -5,8 +5,8 @@ using Microsoft.UI.Xaml.Controls;
 namespace Flock.Tray;
 
 /// <summary>
-/// Grouped list of services with a detail column, like Herd's Services pane. Shows the installed
-/// services or every service Flock offers. PostgreSQL (its versions and command-line tools) and
+/// Grouped list of services with a detail column. Shows the installed
+/// services or every service Flock offers. PostgreSQL (its versions) and
 /// the catalog services (MySQL, Redis, Meilisearch, ...) are installed and updated from their
 /// details (see ServicesPane.Installs.cs and ServicesPane.Catalog.cs).
 /// </summary>

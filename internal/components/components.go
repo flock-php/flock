@@ -1,6 +1,6 @@
-// Package components installs and updates the optional tools Flock doesn't ship with: Valkey
-// (macOS only) and the PostgreSQL client tools. On macOS they are built from source, on Windows
-// downloaded. Installs run as background jobs the apps follow by polling.
+// Package components installs and updates the optional tools Flock doesn't ship with: Valkey,
+// built from source on macOS (Windows has none). Installs run as background jobs the apps follow
+// by polling.
 package components
 
 import (
@@ -21,8 +21,7 @@ import (
 
 // Component IDs.
 const (
-	Valkey         = "valkey"
-	PostgresClient = "postgres-client"
+	Valkey = "valkey"
 )
 
 // Install methods.

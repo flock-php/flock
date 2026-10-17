@@ -16,12 +16,8 @@ import (
 	"flock/internal/download"
 )
 
-var (
-	//go:embed valkey.sh
-	valkeyScript []byte
-	//go:embed postgres-client.sh
-	postgresClientScript []byte
-)
+//go:embed valkey.sh
+var valkeyScript []byte
 
 // requireCLT fails unless the Xcode Command Line Tools (clang, make) are installed.
 var requireCLT = func() error {
@@ -41,18 +37,6 @@ func BuildValkey(ctx context.Context, src Sources, workspace, version string, r 
 	}
 	return build(ctx, workspace, "valkey-"+version, fmt.Sprintf(src.ValkeySource, version), "valkey-"+version+".tar.gz",
 		sha, src, valkeyScript, version, r)
-}
-
-// BuildPostgresClient downloads, verifies and compiles the PostgreSQL client tools of version
-// ("18.6") in workspace. It returns the directory with bin/ and lib/, and a cleanup.
-func BuildPostgresClient(ctx context.Context, src Sources, workspace, version string, r *Reporter) (string, func(), error) {
-	r.Phase(PhaseDownloading, -1)
-	sha, err := src.PostgresSHA256(ctx, version)
-	if err != nil {
-		return "", nil, err
-	}
-	return build(ctx, workspace, "postgresql-"+version, src.PostgresSourceURL(version), "postgresql-"+version+".tar.bz2",
-		sha, src, postgresClientScript, version, r)
 }
 
 func build(ctx context.Context, workspace, name, url, file, sha string, src Sources, script []byte, version string, r *Reporter) (string, func(), error) {

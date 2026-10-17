@@ -188,7 +188,7 @@ public sealed class FlockClient : IDisposable
 
     // PostgreSQL versions
 
-    /// <summary>Cached by the daemon (it checks Maven Central in the background), so it answers at once.</summary>
+    /// <summary>From the daemon's cached manifest, so it answers at once.</summary>
     public Task<PostgresVersions> PostgresVersionsAsync() => Get<PostgresVersions>("/v1/postgres/versions");
 
     /// <summary>Asks the daemon to look for new PostgreSQL releases now.</summary>
@@ -237,7 +237,7 @@ public sealed class FlockClient : IDisposable
     public Task<ServiceCatalog> UninstallCatalogServiceAsync(string id, bool deleteData = false) =>
         Send<ServiceCatalog>(HttpMethod.Delete, $"/v1/catalog/{Escape(id)}" + (deleteData ? "?delete_data=1" : ""), timeout: TimeSpan.FromMinutes(1));
 
-    // Components (the PostgreSQL command-line tools; Valkey on macOS)
+    // Components (Valkey on macOS; none on Windows)
 
     public Task<ComponentCatalog> ComponentsAsync() => Get<ComponentCatalog>("/v1/components");
 

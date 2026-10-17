@@ -20,7 +20,7 @@ public class DecodingTests
         var status = FlockJson.Decode<Status>("""
             {"version":"0893ae2","pid":91994,"started_at":"2026-10-13T14:10:01.123456+02:00",
              "dns":{"tld":"test","addr":"127.0.0.1:53535"},"http_port":80,"https_port":443,
-             "mail":"127.0.0.1:2525","postgres":"18.6.0 on 127.0.0.1:5432",
+             "mail":"127.0.0.1:2525","postgres":"18.6 on 127.0.0.1:5432",
              "extras":[{"id":"redis","name":"Redis","version":"7.2.16","port":6379,"enabled":true,"up":true},{"id":"mysql"}],
              "xdebug":true,"xdebug_breakpoints":true,"dumps":false,"mail_count":3,"dump_count":12,
              "sites":[{"name":"watchtower","domain":"watchtower.test","path":"/code/watchtower","php":"8.5","secured":true,"parked":false,"url":"https://watchtower.test","debugging":true},

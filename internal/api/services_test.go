@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -14,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"flock/internal/binaries/binariestest"
 	"flock/internal/catalog"
 	"flock/internal/components"
 	"flock/internal/postgres"
@@ -29,17 +29,12 @@ func (stubPGService) Live() bool               { return false }
 
 func pgBackend(t *testing.T) *fakeBackend {
 	t.Helper()
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		_, _ = w.Write([]byte(`<metadata><versioning><versions><version>17.6.0</version><version>18.6.0</version></versions></versioning></metadata>`))
-	}))
-	t.Cleanup(srv.Close)
+	srv := binariestest.New(t)
+	pkg := binariestest.Zip(t, map[string]string{"bin/postgres": "server"})
+	srv.Publish(postgres.Package, "17.6", 1, pkg, nil)
+	srv.Publish(postgres.Package, "18.6", 1, pkg, nil)
 	root := t.TempDir()
-	m := &postgres.Manager{
-		Installer: &postgres.Installer{Root: root, BaseURL: srv.URL, Platform: "darwin-arm64v8", Client: srv.Client()},
-		Catalog:   &postgres.Catalog{Path: filepath.Join(root, "cache", "pg.json"), URL: srv.URL, Client: srv.Client()},
-		Service:   stubPGService{},
-	}
-	return &fakeBackend{root: root, pg: m}
+	return &fakeBackend{root: root, pg: postgres.NewManager(root, srv.Catalog(filepath.Join(root, "cache")), stubPGService{})}
 }
 
 func TestPostgresVersionsEndpoints(t *testing.T) {
@@ -62,16 +57,16 @@ func TestPostgresVersionsEndpoints(t *testing.T) {
 	if err := json.Unmarshal([]byte(body), &v); err != nil {
 		t.Fatal(err)
 	}
-	if v.Port != 5432 || !v.Enabled || v.CheckedAt == nil || v.CheckError != "" || len(v.Majors) != 5 {
+	if v.Port != 5432 || !v.Enabled || v.CheckedAt == nil || v.CheckError != "" || len(v.Majors) != 2 {
 		t.Fatalf("got %s", body)
 	}
 	first := v.Majors[0]
-	for _, key := range []string{"major", "installed", "latest", "update", "active", "has_data", "data_size", "eol", "busy"} {
+	for _, key := range []string{"major", "installed", "latest", "update", "size", "prerelease", "yanked", "active", "has_data", "data_size", "eol", "busy"} {
 		if _, ok := first[key]; !ok {
 			t.Fatalf("missing %s in %v", key, first)
 		}
 	}
-	if first["major"] != "18" || first["latest"] != "18.6.0" || first["eol"] != "2030-11-14" || v.Majors[4]["major"] != "14" {
+	if first["major"] != "18" || first["latest"] != "18.6" || first["eol"] != "2030-11-14" || v.Majors[1]["major"] != "17" {
 		t.Fatalf("got %v", v.Majors)
 	}
 
@@ -120,7 +115,7 @@ func TestComponentsEndpoints(t *testing.T) {
 		Uninstall: func() error { installed.Store(""); return nil },
 	}
 	broken := &components.Driver{
-		ID: components.PostgresClient, Name: "PostgreSQL command-line tools", Method: components.MethodBuild,
+		ID: "other", Name: "Other tool", Method: components.MethodBuild,
 		Installed: func() string { return "" },
 		Latest:    func(context.Context) (string, error) { return "", errors.New("offline") },
 		Install:   func(context.Context, string, *components.Reporter) error { return nil },
@@ -131,7 +126,7 @@ func TestComponentsEndpoints(t *testing.T) {
 	srv := serve(t, &fakeBackend{root: root, components: m}, "")
 
 	resp, body := call(t, "POST", srv.URL+"/v1/components/check", "", "")
-	if resp.StatusCode != http.StatusOK || !strings.Contains(body, `"check_error":"PostgreSQL command-line tools: offline"`) || !strings.Contains(body, `"latest":"9.1.2"`) {
+	if resp.StatusCode != http.StatusOK || !strings.Contains(body, `"check_error":"Other tool: offline"`) || !strings.Contains(body, `"latest":"9.1.2"`) {
 		t.Fatalf("%d %s", resp.StatusCode, body)
 	}
 	if resp, _ := call(t, "GET", srv.URL+"/v1/components/valkey/log", "", ""); resp.StatusCode != http.StatusNotFound {

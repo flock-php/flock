@@ -44,20 +44,6 @@ func TestParseValkeyHashes(t *testing.T) {
 	}
 }
 
-func TestParsePostgresVersions(t *testing.T) {
-	data := `[{"major": "9.6", "latestMinor": "24"}, {"major": "17", "latestMinor": "11"}, {"major": "18", "latestMinor": "6", "current": true}]`
-	if got, err := ParsePostgresVersions([]byte(data), "18"); err != nil || got != "18.6" {
-		t.Fatalf("got %q %v", got, err)
-	}
-	if _, err := ParsePostgresVersions([]byte(data), "19"); err == nil {
-		t.Fatal("unknown major must fail")
-	}
-	src := DefaultSources()
-	if got := src.PostgresSourceURL("18.6"); got != "https://ftp.postgresql.org/pub/source/v18.6/postgresql-18.6.tar.bz2" {
-		t.Fatal(got)
-	}
-}
-
 func TestNewer(t *testing.T) {
 	for _, c := range []struct {
 		a, b string
@@ -216,7 +202,7 @@ func TestCheckErrorsKeepKnownVersions(t *testing.T) {
 	ok := &fakeDriver{latest: "18.6"}
 	broken := &fakeDriver{latest: "9.1.2"}
 	root := t.TempDir()
-	m := NewManager(root, []*Driver{broken.driver(Valkey), ok.driver(PostgresClient)})
+	m := NewManager(root, []*Driver{broken.driver(Valkey), ok.driver(otherTool)})
 	if err := m.Check(context.Background()); err != nil {
 		t.Fatal(err)
 	}
@@ -228,27 +214,27 @@ func TestCheckErrorsKeepKnownVersions(t *testing.T) {
 	}
 	got := m.Components()
 	redis, _ := got.Find(Valkey)
-	client, _ := got.Find(PostgresClient)
+	client, _ := got.Find(otherTool)
 	if redis.Latest != "9.1.2" || client.Latest != "18.7" || !strings.Contains(got.CheckError, "rate limited") || got.CheckedAt == nil {
 		t.Fatalf("got %+v", got)
 	}
 
 	// The state survives a restart.
-	again := NewManager(root, []*Driver{broken.driver(Valkey), ok.driver(PostgresClient)})
-	if c, _ := again.Components().Find(PostgresClient); c.Latest != "18.7" {
+	again := NewManager(root, []*Driver{broken.driver(Valkey), ok.driver(otherTool)})
+	if c, _ := again.Components().Find(otherTool); c.Latest != "18.7" {
 		t.Fatalf("got %+v", c)
 	}
 }
 
 func TestStartLooksUpUnknownLatest(t *testing.T) {
 	f := &fakeDriver{latest: "18.6", release: make(chan error, 1)}
-	m := NewManager(t.TempDir(), []*Driver{f.driver(PostgresClient)})
+	m := NewManager(t.TempDir(), []*Driver{f.driver(otherTool)})
 	f.release <- nil
-	if err := m.Start(PostgresClient); err != nil {
+	if err := m.Start(otherTool); err != nil {
 		t.Fatal(err)
 	}
 	m.Wait()
-	if c, _ := m.Components().Find(PostgresClient); c.Installed != "18.6" || c.Job != nil {
+	if c, _ := m.Components().Find(otherTool); c.Installed != "18.6" || c.Job != nil {
 		t.Fatalf("got %+v", c)
 	}
 	// Never checked: Components started a background check; let it finish before cleanup.
@@ -266,3 +252,6 @@ func TestLogStripsColours(t *testing.T) {
 		t.Fatalf("got %q", b.String())
 	}
 }
+
+// otherTool is a second component for the manager tests (Valkey is the only real one).
+const otherTool = "other"

@@ -20,7 +20,7 @@ final class SettingsStore {
     private(set) var node: NodeCatalog?
     /// PostgreSQL majors with install state; loaded by the Services pane.
     private(set) var postgres: PostgresVersions?
-    /// Valkey and the PostgreSQL command-line tools; loaded by the Services pane.
+    /// Valkey (macOS); loaded by the Services pane.
     private(set) var components: ComponentCatalog?
     /// MySQL, MariaDB, Redis, MongoDB, Meilisearch, Typesense, RustFS; loaded by the Services pane.
     private(set) var catalog: ServiceCatalog?
@@ -188,7 +188,7 @@ final class SettingsStore {
 
     // MARK: PostgreSQL versions and components (Services pane)
 
-    /// Reloads PostgreSQL versions, components (Valkey, client tools) and the catalog; the
+    /// Reloads PostgreSQL versions, components (Valkey) and the catalog; the
     /// Services pane needs them.
     func refreshInstalls() async {
         if Snapshot.isFixture { return }

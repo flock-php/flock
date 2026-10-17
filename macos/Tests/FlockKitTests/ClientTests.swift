@@ -199,11 +199,11 @@ struct ClientTests {
         let started = try await client.installComponent("valkey")
         #expect(started["valkey"]?.job?.isRunning == true)
         _ = try await client.cancelComponentJob("valkey")
-        _ = try await client.dismissComponentJob("postgres-client")
+        _ = try await client.dismissComponentJob("other")
         _ = try await client.uninstallComponent("valkey")
         #expect(try await client.componentLog("valkey") == "make: done\n")
         // No job yet: an empty log rather than an error.
-        #expect(try await client.componentLog("postgres-client") == "")
+        #expect(try await client.componentLog("other") == "")
 
         let base = "http://127.0.0.1:53531/v1/components"
         #expect(StubProtocol.requests.map { "\($0.method) \($0.url)" } == [
@@ -211,10 +211,10 @@ struct ClientTests {
             "POST \(base)/check",
             "POST \(base)/valkey/install",
             "POST \(base)/valkey/cancel",
-            "DELETE \(base)/postgres-client/job",
+            "DELETE \(base)/other/job",
             "DELETE \(base)/valkey",
             "GET \(base)/valkey/log",
-            "GET \(base)/postgres-client/log",
+            "GET \(base)/other/log",
         ])
         #expect(StubProtocol.requests.map(\.timeout) == [5, 60, 5, 5, 5, 30, 5, 5])
     }

@@ -2,8 +2,8 @@ import AppKit
 import FlockKit
 import SwiftUI
 
-// Building blocks of the service details: cards, the empty "install" state, a component (Valkey,
-// the PostgreSQL command-line tools) with its background job, and its log.
+// Building blocks of the service details: cards, the empty "install" state, a component (Valkey)
+// with its background job, and its log.
 
 extension View {
     /// A grouped box like the ones in System Settings.
@@ -144,22 +144,12 @@ extension ServiceComponent {
 extension ComponentJob {
     /// "Building Redis 9.1.3…"
     func title(_ component: ServiceComponent) -> String {
-        let target = component.latest.isEmpty ? component.name : "\(component.shortName) \(component.latest)"
+        let target = component.latest.isEmpty ? component.name : "\(component.name) \(component.latest)"
         return switch phase {
         case .downloading: "Downloading \(target)…"
         case .building: "Building \(target)…"
         case .installing: "Installing \(target)…"
-        case .unknown: action == .update ? "Updating \(component.shortName)…" : "Installing \(component.shortName)…"
-        }
-    }
-}
-
-extension ServiceComponent {
-    /// "PostgreSQL tools" for the client.
-    var shortName: String {
-        switch id {
-        case ServiceComponent.postgresClient: "PostgreSQL tools"
-        default: name
+        case .unknown: action == .update ? "Updating \(component.name)…" : "Installing \(component.name)…"
         }
     }
 }
@@ -237,7 +227,7 @@ struct ComponentJobFailure: View {
     }
 
     init(component: ServiceComponent, job: ComponentJob, showLog: @escaping () -> Void, retry: @escaping () -> Void, dismiss: @escaping () -> Void) {
-        self.init(name: component.shortName, isBuild: component.method == .build, job: job, showLog: showLog, retry: retry, dismiss: dismiss)
+        self.init(name: component.name, isBuild: component.method == .build, job: job, showLog: showLog, retry: retry, dismiss: dismiss)
     }
 
     /// The build failed because Apple's Command Line Tools are missing.
@@ -283,7 +273,7 @@ struct ComponentJobFailure: View {
 }
 
 /// A component in a card: its name, version and state, with every action that fits.
-/// Used for the PostgreSQL command-line tools and for an installed Valkey.
+/// Used for an installed Valkey.
 struct ComponentPanel: View {
     @Environment(AppModel.self) private var model
     let component: ServiceComponent
@@ -348,7 +338,7 @@ struct ComponentPanel: View {
                     .fixedSize(horizontal: false, vertical: true)
             } else if component.update, !component.latest.isEmpty {
                 Divider()
-                UpdateStrip(title: "\(component.shortName) \(component.latest) is available",
+                UpdateStrip(title: "\(component.name) \(component.latest) is available",
                             note: [component.method == .build ? "Builds from source\(component.estimate.isEmpty ? "" : ", \(component.estimate)")." : "", updateNote]
                                 .filter { !$0.isEmpty }.joined(separator: " "),
                             help: component.installHelp, disabled: requesting) {
@@ -365,7 +355,7 @@ struct ComponentPanel: View {
         .sheet(isPresented: logState.projectedValue) {
             ComponentLogSheet(component: component)
         }
-        .confirmationDialog("Uninstall \(component.shortName)?", isPresented: confirmUninstallState.projectedValue) {
+        .confirmationDialog("Uninstall \(component.name)?", isPresented: confirmUninstallState.projectedValue) {
             Button("Uninstall", role: .destructive) {
                 run { try await $0.uninstallComponent(component.id) }
             }
@@ -460,7 +450,7 @@ struct ComponentLogSheet: View {
     let component: ServiceComponent
 
     var body: some View {
-        JobLogSheet(title: "\(component.shortName) \(component.method == .build ? "build" : "install") log",
+        JobLogSheet(title: "\(component.name) \(component.method == .build ? "build" : "install") log",
                     running: { model.settings.components?[component.id]?.job?.isRunning ?? false },
                     load: { await model.settings.componentLog(component.id) })
     }

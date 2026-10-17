@@ -156,17 +156,17 @@ public class ClientTests : IDisposable
 
         await client.ComponentsAsync();
         await client.CheckComponentsAsync();
-        await client.InstallComponentAsync("postgres-client");
-        await client.CancelComponentJobAsync("postgres-client");
-        await client.DismissComponentJobAsync("postgres-client");
-        Assert.Equal("downloading…\n", await client.ComponentLogAsync("postgres-client"));
-        await client.UninstallComponentAsync("postgres-client");
+        await client.InstallComponentAsync("other");
+        await client.CancelComponentJobAsync("other");
+        await client.DismissComponentJobAsync("other");
+        Assert.Equal("downloading…\n", await client.ComponentLogAsync("other"));
+        await client.UninstallComponentAsync("other");
 
         Assert.Equal(
             [
-                "GET /v1/components", "POST /v1/components/check", "POST /v1/components/postgres-client/install",
-                "POST /v1/components/postgres-client/cancel", "DELETE /v1/components/postgres-client/job", "GET /v1/components/postgres-client/log",
-                "DELETE /v1/components/postgres-client",
+                "GET /v1/components", "POST /v1/components/check", "POST /v1/components/other/install",
+                "POST /v1/components/other/cancel", "DELETE /v1/components/other/job", "GET /v1/components/other/log",
+                "DELETE /v1/components/other",
             ],
             handler.Requests.Select(r => $"{r.Method} {r.RequestUri!.PathAndQuery}"));
         // Installs return at once (the job runs in the daemon); uninstalling may stop a service first.

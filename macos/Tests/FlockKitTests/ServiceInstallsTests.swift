@@ -7,9 +7,9 @@ import Testing
     {"active":"18","running":true,"enabled":true,"port":5432,
      "checked_at":"2026-10-14T08:00:00Z","check_error":"",
      "majors":[
-      {"major":"18","installed":"18.6.0","latest":"18.7.0","update":true,"active":true,
+      {"major":"18","installed":"18.6","latest":"18.7","update":true,"yanked":"crashes on start","active":true,
        "has_data":true,"data_size":48234496,"eol":"2030-11-14","busy":""},
-      {"major":"17","installed":"17.4.0","latest":"17.4.0","update":false,"active":false,
+      {"major":"17","installed":"17.4","latest":"17.4","update":false,"prerelease":true,"active":false,
        "has_data":true,"data_size":1024,"eol":"2029-11-08","busy":"switching"},
       {"major":"16","installed":"","latest":"16.10.0","update":false,"active":false,
        "has_data":true,"data_size":2048,"eol":"2028-11-09","busy":"defragmenting"},
@@ -22,11 +22,12 @@ import Testing
     #expect(versions.active == "18" && versions.running && versions.enabled && versions.port == 5432)
     #expect(versions.checkedAt == FlockJSON.parseDate("2026-10-14T08:00:00Z"))
     #expect(versions.majors.map(\.major) == ["18", "17", "16", "15", "14"])
-    #expect(versions.activeMajor?.installed == "18.6.0")
+    #expect(versions.activeMajor?.installed == "18.6")
     #expect(versions.hasInstalled && versions.hasUpdate && versions.isBusy)
 
     let pg18 = versions.majors[0]
     #expect(pg18.update && pg18.active && pg18.hasData && pg18.dataSize == 48_234_496 && pg18.busy == .idle && !pg18.isBusy)
+    #expect(pg18.yanked == "crashes on start" && !pg18.prerelease && versions.majors[1].prerelease && versions.majors[1].yanked.isEmpty)
     #expect(versions.majors[1].busy == .switching)
     // A state this app doesn't know yet is still busy.
     #expect(versions.majors[2].busy == .other("defragmenting") && versions.majors[2].isBusy)
@@ -64,8 +65,8 @@ import Testing
        "method":"build","estimate":"about 2 minutes",
        "job":{"action":"update","state":"running","phase":"building","progress":-1,"error":"",
               "started_at":"2026-10-14T08:01:00Z"}},
-      {"id":"postgres-client","name":"PostgreSQL command-line tools",
-       "description":"psql, pg_dump, pg_restore, pg_dumpall, createdb, dropdb",
+      {"id":"other","name":"Other tool",
+       "description":"does other things",
        "installed":"","latest":"18.0","update":false,"method":"download","estimate":"12 MB download",
        "job":{"action":"install","state":"failed","phase":"downloading","progress":0.42,
               "error":"download failed: 503","started_at":"2026-10-14T08:01:00.123Z"}},
@@ -75,7 +76,7 @@ import Testing
     """.utf8))
 
     #expect(catalog.checkedAt == nil)
-    #expect(catalog.components.map(\.id) == ["valkey", "postgres-client", "future", "odd"])
+    #expect(catalog.components.map(\.id) == ["valkey", "other", "future", "odd"])
     #expect(catalog.hasRunningJob)
 
     let redis = try #require(catalog[ServiceComponent.valkey])
@@ -84,8 +85,8 @@ import Testing
     #expect(running.isRunning && !running.isFailed && running.action == .update && running.phase == .building)
     #expect(running.progress == nil && running.startedAt != nil)
 
-    let client = try #require(catalog[ServiceComponent.postgresClient])
-    #expect(!client.isInstalled && client.method == .download && client.description.hasPrefix("psql"))
+    let client = try #require(catalog["other"])
+    #expect(!client.isInstalled && client.method == .download && client.description.hasPrefix("does"))
     let failed = try #require(client.job)
     #expect(failed.isFailed && !failed.isRunning && failed.error == "download failed: 503" && failed.progress == 0.42)
 
@@ -103,7 +104,7 @@ import Testing
     {"checked_at":"2026-10-14T08:00:00Z","check_error":"GitHub rate limit","components":[{"id":"valkey","job":null}]}
     """.utf8))
     #expect(catalog.checkedAt != nil && catalog.checkError == "GitHub rate limit" && !catalog.hasRunningJob)
-    #expect(catalog["valkey"]?.job == nil && catalog["postgres-client"] == nil)
+    #expect(catalog["valkey"]?.job == nil && catalog["other"] == nil)
 }
 
 @Test func decodesTheServiceCatalog() throws {

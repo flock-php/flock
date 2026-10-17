@@ -44,7 +44,7 @@ public class SettingsTests
     public void DecodesServices()
     {
         var services = FlockJson.Decode<List<Service>>("""
-            [{"id":"postgres","name":"PostgreSQL","category":"Database","version":"18.6.0","port":5432,"installed":true,
+            [{"id":"postgres","name":"PostgreSQL","category":"Database","version":"18.6","port":5432,"installed":true,
               "enabled":true,"running":true,"stoppable":true,
               "env":"DB_CONNECTION=pgsql\nDB_HOST=127.0.0.1","log":"postgres","url":"postgres://postgres@127.0.0.1:5432"},
              {"id":"web","name":"Web Server","category":"Core","version":"","port":443,"installed":true,

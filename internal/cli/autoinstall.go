@@ -54,10 +54,10 @@ func confirm(question string, defaultYes bool) bool {
 	return false
 }
 
-// errRedisMissing and errPostgresClientMissing: a redis-cli or psql/pg_dump/... shim found nothing installed.
+// errRedisMissing and errPostgresMissing: a redis-cli or psql/pg_dump/... shim found nothing installed.
 var (
-	errRedisMissing          = errors.New("neither Redis nor Valkey is installed — run `flock services install redis` or `flock valkey install`")
-	errPostgresClientMissing = errors.New("PostgreSQL client tools are not installed — run `flock postgres install-client`")
+	errRedisMissing    = errors.New("neither Redis nor Valkey is installed — run `flock services install redis` or `flock valkey install`")
+	errPostgresMissing = errors.New("PostgreSQL is not installed — run `flock postgres install` (psql, pg_dump and the other client tools come with it)")
 )
 
 // offerInstall asks whether to install the version a shim found missing (err) and installs it.
@@ -96,15 +96,15 @@ func offerInstall(ctx context.Context, s *state, err error) (bool, error) {
 		question = fmt.Sprintf("Redis isn't installed. Build Valkey (the open-source Redis) from source and start it on 127.0.0.1:%d? It takes about a minute.", s.cfg.Ports.Valkey)
 		install = func(ctx context.Context) error { return installValkey(ctx, s, "", os.Stderr, os.Stderr) }
 
-	case errors.Is(err, errPostgresClientMissing):
-		if b, ok := postgres.PrebuiltClient(runtime.GOOS, runtime.GOARCH); ok {
-			question = fmt.Sprintf("The PostgreSQL client tools aren't installed. Download PostgreSQL %s (%d MB, Flock keeps only the client tools)?", b.Version, b.Size>>20)
-		} else if runtime.GOOS == "darwin" {
-			question = "The PostgreSQL client tools aren't installed. Build them from source now? It takes about two minutes."
-		} else {
-			return false, nil
+	// The client tools come with PostgreSQL itself; installing it starts the server like any install.
+	case errors.Is(err, errPostgresMissing):
+		question = fmt.Sprintf("PostgreSQL isn't installed. Install PostgreSQL %s (with psql, pg_dump and the other client tools) and start it on 127.0.0.1:%d?",
+			postgres.DefaultMajor, s.cfg.Ports.Postgres)
+		install = func(ctx context.Context) error {
+			return runPostgres(ctx, s, os.Stderr, os.Stderr, postgres.DefaultMajor, "installing", func(ctx context.Context, ops pgOps) error {
+				return ops.Install(ctx, postgres.DefaultMajor)
+			})
 		}
-		install = func(ctx context.Context) error { return installPostgresClient(ctx, s, "", os.Stderr, os.Stderr) }
 
 	default:
 		return false, nil

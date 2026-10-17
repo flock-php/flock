@@ -3,7 +3,6 @@
 package postgres
 
 import (
-	"errors"
 	"os/exec"
 	"syscall"
 )
@@ -20,9 +19,3 @@ func socketArgs(runDir string) []string {
 func stopFunc(_, _ string) func() error { return nil }
 
 func hideWindow(*exec.Cmd) {}
-
-// processAlive reports whether a process with pid exists.
-func processAlive(pid int) bool {
-	err := syscall.Kill(pid, 0)
-	return err == nil || errors.Is(err, syscall.EPERM)
-}

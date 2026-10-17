@@ -52,11 +52,16 @@ public enum EndOfLife { Unknown, Supported, Soon, Past }
 public sealed class PostgresMajor
 {
     public string Major { get; init; } = "";
-    /// <summary>The installed minor, e.g. "18.6.0"; empty when not installed.</summary>
+    /// <summary>The installed release, e.g. "18.6"; empty when not installed.</summary>
     public string Installed { get; init; } = "";
     /// <summary>The newest release for this platform; empty when unknown (never checked, offline).</summary>
     public string Latest { get; init; } = "";
+    /// <summary>A newer release (or a newer build of the installed one) can be installed.</summary>
     public bool Update { get; init; }
+    /// <summary>Latest is a pre-release (beta channel).</summary>
+    public bool Prerelease { get; init; }
+    /// <summary>Why the installed build was withdrawn; empty when it wasn't. Flock replaces it by itself.</summary>
+    public string Yanked { get; init; } = "";
     public bool Active { get; init; }
     /// <summary>A data directory (cluster) of this major exists — also after uninstalling it.</summary>
     public bool HasData { get; init; }
@@ -99,7 +104,7 @@ public sealed class PostgresMajor
 }
 
 /// <summary>
-/// GET /v1/components — tools Flock installs on request: the PostgreSQL command-line tools (and Valkey on macOS).
+/// GET /v1/components — tools Flock installs on request: Valkey, on macOS only (Windows has none).
 /// Installs run as jobs in the daemon; a finished job disappears, a failed one stays until dismissed.
 /// </summary>
 public sealed class ComponentCatalog
@@ -119,7 +124,6 @@ public sealed class ComponentCatalog
 public static class ComponentId
 {
     public const string Valkey = "valkey";
-    public const string PostgresClient = "postgres-client";
 }
 
 /// <summary>Values of Component.Method.</summary>

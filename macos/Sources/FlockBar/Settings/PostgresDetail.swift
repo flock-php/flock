@@ -3,7 +3,7 @@ import FlockKit
 import SwiftUI
 
 /// PostgreSQL: install a major, see the one that runs, switch between installed majors (each
-/// keeps its own databases), update, uninstall, and the command-line tools.
+/// keeps its own databases), update and uninstall. The command-line tools come with every major.
 struct PostgresDetail: View {
     @Environment(AppModel.self) private var model
     let service: Service
@@ -132,20 +132,11 @@ struct PostgresDetail: View {
 
     // MARK: Command-line tools
 
-    @ViewBuilder
     private var commandLineTools: some View {
-        if let tools = model.settings.components?[ServiceComponent.postgresClient] {
-            VStack(alignment: .leading, spacing: 8) {
-                ComponentPanel(component: tools, title: "Command-line tools",
-                               subtitle: tools.description.isEmpty ? "psql, pg_dump and more" : tools.description,
-                               symbol: "terminal",
-                               uninstallMessage: "psql, pg_dump and the other tools are removed. The servers and their databases stay.",
-                               updateNote: "Takes effect in new Terminal windows.")
-                Text("One set of tools from the newest PostgreSQL works with every version above, and with remote servers.")
-                    .font(.caption).foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-        }
+        Label("psql, pg_dump and the other command-line tools come with PostgreSQL. In Terminal, Flock uses those of the newest installed version, which work with every version above and with remote servers.",
+              systemImage: "terminal")
+            .font(.caption).foregroundStyle(.secondary)
+            .fixedSize(horizontal: false, vertical: true)
     }
 }
 
@@ -224,9 +215,16 @@ private struct ActiveServerCard: View {
                 }
             }
 
+            if !major.yanked.isEmpty {
+                Label(major.update ? "This build was withdrawn: \(major.yanked) — update to replace it" : "This build was withdrawn: \(major.yanked)",
+                      systemImage: "exclamationmark.triangle.fill")
+                    .font(.callout).foregroundStyle(.orange)
+                    .help("Flock replaces it as soon as a fixed build is published.")
+            }
+
             if major.update, !major.latest.isEmpty {
                 Divider()
-                UpdateStrip(title: "PostgreSQL \(major.latest) is available",
+                UpdateStrip(title: major.latest == major.installed ? "A new build of PostgreSQL \(major.latest) is available" : "PostgreSQL \(major.latest) is available",
                             note: "Your databases stay; PostgreSQL restarts briefly.",
                             help: "Installs \(major.latest) and restarts PostgreSQL \(major.major). Your databases stay.",
                             busy: busy == .updating, disabled: locked) {
@@ -283,11 +281,19 @@ private struct PostgresMajorRow: View {
                     if major.isInstalled {
                         Text(major.installed).monospacedDigit()
                         if major.update, !major.latest.isEmpty {
-                            Text("→ \(major.latest)").monospacedDigit().foregroundStyle(Color.accentColor)
-                                .help("PostgreSQL \(major.latest) is available")
+                            Text(major.latest == major.installed ? "→ new build" : "→ \(major.latest)").monospacedDigit().foregroundStyle(Color.accentColor)
+                                .help(major.latest == major.installed ? "A new build of PostgreSQL \(major.latest) is available" : "PostgreSQL \(major.latest) is available")
+                        }
+                        if !major.yanked.isEmpty {
+                            Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.orange)
+                                .help("This build was withdrawn: \(major.yanked). Flock replaces it as soon as a fixed build is published.")
                         }
                     } else {
                         Text("Not installed").foregroundStyle(.secondary)
+                    }
+                    if major.prerelease {
+                        Badge(text: "Pre-release", color: .orange)
+                            .help("PostgreSQL \(major.latest) isn’t released yet — it may not work. Offered on the beta channel.")
                     }
                     if major.active, major.isInstalled {
                         Badge(text: "Active")

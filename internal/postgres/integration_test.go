@@ -10,10 +10,11 @@ import (
 	"testing"
 	"time"
 
+	"flock/internal/binaries"
 	"flock/internal/supervisor"
 )
 
-// TestIntegrationInstallRunCreate downloads real binaries (~70MB). Run with:
+// TestIntegrationInstallRunCreate downloads the published PostgreSQL 18 (~50 MB). Run with:
 // FLOCK_PG_INTEGRATION=1 go test ./internal/postgres -run Integration -v
 func TestIntegrationInstallRunCreate(t *testing.T) {
 	if testing.Short() || os.Getenv("FLOCK_PG_INTEGRATION") != "1" {
@@ -30,19 +31,25 @@ func TestIntegrationInstallRunCreate(t *testing.T) {
 	}
 	defer os.RemoveAll(root)
 
-	inst, err := NewInstaller(root)
+	inst := NewInstaller(root)
+	catalog := binaries.NewCatalog(binaries.DefaultSource(root), func() binaries.Channel { return binaries.Stable })
+	manifest, err := catalog.Check(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := inst.Install(ctx, DefaultVersion); err != nil {
+	id, err := inst.Install(ctx, offers(manifest, binaries.Platform())[DefaultMajor])
+	if err != nil {
 		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(inst.BinDir(id), exe("psql"))); err != nil {
+		t.Fatal("the package has no psql")
 	}
 
 	data := filepath.Join(root, "data")
-	if err := InitDB(inst.BinDir(DefaultVersion), data); err != nil {
+	if err := InitDB(inst.BinDir(id), data); err != nil {
 		t.Fatal(err)
 	}
-	if err := InitDB(inst.BinDir(DefaultVersion), data); err != nil {
+	if err := InitDB(inst.BinDir(id), data); err != nil {
 		t.Fatalf("second InitDB must be a no-op: %v", err)
 	}
 
@@ -54,7 +61,7 @@ func TestIntegrationInstallRunCreate(t *testing.T) {
 
 	sup := supervisor.New()
 	defer sup.StopAll()
-	sup.Ensure(Spec(inst.BinDir(DefaultVersion), data, runDir, filepath.Join(root, "pg.log"), port))
+	sup.Ensure(Spec(inst.BinDir(id), data, runDir, filepath.Join(root, "pg.log"), port))
 
 	deadline := time.Now().Add(30 * time.Second)
 	for Exec(ctx, port, "postgres", "SELECT 1") != nil {
@@ -93,7 +100,7 @@ func freePort(t *testing.T) int {
 }
 
 // TestStopFastShutsDownCleanly runs against installed binaries:
-// FLOCK_PG_BIN=~/Library/Application\ Support/Flock/services/postgres/18.6.0/bin go test ./internal/postgres -run StopFast -v
+// FLOCK_PG_BIN=~/Library/Application\ Support/Flock/services/postgres/18.6-build1/bin go test ./internal/postgres -run StopFast -v
 func TestStopFastShutsDownCleanly(t *testing.T) {
 	bin := os.Getenv("FLOCK_PG_BIN")
 	if bin == "" {

@@ -20,7 +20,7 @@ func fakeRoot(t *testing.T) (root, cache string) {
 		"bin/flock.exe", "php/8.4/bin/php.exe", "node/22.11.0/node.exe", "certs/ca.key", "log/daemon.log",
 		"mail/1.eml", "tools/composer.phar",
 		"services/postgres/18.6/bin/postgres.exe", "services/postgres/data/PG_VERSION",
-		"services/valkey/8.1/valkey-server", "services/postgres-client/18.6/bin/psql.exe",
+		"services/valkey/8.1/valkey-server", "services/postgres/18.6-build1/bin/psql.exe",
 	} {
 		path := filepath.Join(root, f)
 		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {

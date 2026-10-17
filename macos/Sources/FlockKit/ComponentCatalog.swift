@@ -1,7 +1,7 @@
 import Foundation
 
-/// GET /v1/components — software Flock installs on request: Valkey and the PostgreSQL
-/// command-line tools. On macOS they are built from source in a background job.
+/// GET /v1/components — software Flock installs on request: Valkey, built from source in a
+/// background job (macOS only).
 public struct ComponentCatalog: Decodable, Sendable, Equatable {
     public var checkedAt: Date?
     public var checkError: String
@@ -26,10 +26,9 @@ public struct ComponentCatalog: Decodable, Sendable, Equatable {
     }
 }
 
-/// One installable component ("valkey", "postgres-client").
+/// One installable component ("valkey").
 public struct ServiceComponent: Decodable, Sendable, Equatable, Identifiable {
     public static let valkey = "valkey"
-    public static let postgresClient = "postgres-client"
 
     public var id: String
     public var name: String

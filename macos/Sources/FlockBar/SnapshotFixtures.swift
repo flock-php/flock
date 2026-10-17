@@ -43,7 +43,7 @@ enum SnapshotFixtures {
         decode("""
         [{"id":"web","name":"Web server (Caddy)","category":"Core","port":443,"installed":true,"enabled":true,"running":true,"log":"web"},
          {"id":"dns","name":"DNS (*.test)","category":"Core","port":53535,"installed":true,"enabled":true,"running":true},
-         {"id":"postgres","name":"PostgreSQL","category":"Database","version":"\(postgres ? "18.6.0" : "")","port":5432,
+         {"id":"postgres","name":"PostgreSQL","category":"Database","version":"\(postgres ? "18.6" : "")","port":5432,
           "installed":\(postgres),"enabled":true,"running":\(postgres),"stoppable":true,"log":"postgres",
           "env":"DB_CONNECTION=pgsql\\nDB_HOST=127.0.0.1\\nDB_PORT=5432\\nDB_DATABASE=laravel\\nDB_USERNAME=postgres\\nDB_PASSWORD=",
           "url":"postgres://postgres@127.0.0.1:5432"},
@@ -82,40 +82,29 @@ enum SnapshotFixtures {
         let majors: [String]
         if empty {
             majors = [
-                major("18", latest: "18.7.0", eol: "2030-11-14", busy: name == "pg-first-install" ? "installing" : ""),
-                major("17", latest: "17.9.0", eol: "2029-11-08"),
-                major("16", latest: "16.13.0", data: 12_400_000, eol: "2028-11-09"),
-                major("15", latest: "15.17.0", eol: "2027-11-11"),
-                major("14", latest: "14.22.0", eol: "2026-11-12"),
+                major("18", latest: "18.7", eol: "2030-11-14", busy: name == "pg-first-install" ? "installing" : ""),
+                major("17", latest: "17.9", eol: "2029-11-08"),
+                major("16", latest: "16.13", data: 12_400_000, eol: "2028-11-09"),
+                major("15", latest: "15.17", eol: "2027-11-11"),
+                major("14", latest: "14.22", eol: "2026-11-12"),
             ]
         } else {
             majors = [
-                major("18", installed: "18.6.0", latest: "18.7.0", update: true, active: true, data: 48_234_496, eol: "2030-11-14"),
-                major("17", installed: "17.9.0", latest: "17.9.0", data: 210_000_000, eol: "2029-11-08", busy: name == "pg-busy" ? "switching" : ""),
-                major("16", latest: "16.13.0", data: 12_400_000, eol: "2028-11-09"),
-                major("15", latest: "15.17.0", eol: "2027-11-11"),
-                major("14", installed: "14.21.0", latest: "14.22.0", update: true, data: 9_100_000, eol: "2026-11-12"),
+                major("18", installed: "18.6", latest: "18.7", update: true, active: true, data: 48_234_496, eol: "2030-11-14"),
+                major("17", installed: "17.9", latest: "17.9", data: 210_000_000, eol: "2029-11-08", busy: name == "pg-busy" ? "switching" : ""),
+                major("16", latest: "16.13", data: 12_400_000, eol: "2028-11-09"),
+                major("15", latest: "15.17", eol: "2027-11-11"),
+                major("14", installed: "14.21", latest: "14.22", update: true, data: 9_100_000, eol: "2026-11-12"),
             ]
         }
         return """
         {"active":"\(empty ? "" : "18")","running":\(!empty && name != "pg-busy"),"enabled":true,"port":5432,
-         "checked_at":"\(time(3 * 3600))","check_error":"\(name == "pg-failed" ? "maven.org: connection timed out" : "")",
+         "checked_at":"\(time(3 * 3600))","check_error":"\(name == "pg-failed" ? "the package manifest could not be fetched: connection timed out" : "")",
          "majors":[\(majors.joined(separator: ","))]}
         """
     }
 
     private static func components(_ name: String) -> String {
-        let clientJob: String
-        switch name {
-        case "pg-building", "pg-busy":
-            clientJob = #"{"action":"install","state":"running","phase":"building","progress":-1,"error":"","started_at":"\#(time(194))"}"#
-        case "pg-failed":
-            clientJob = #"{"action":"install","state":"failed","phase":"building","progress":-1,"error":"configure: error: readline library not found. Use --without-readline to disable it.","started_at":"\#(time(400))"}"#
-        default:
-            clientJob = "null"
-        }
-        let clientInstalled = name == "pg-installed" || name == "valkey-installed" ? "18.0" : ""
-
         let redisJob: String
         switch name {
         case "valkey-building":
@@ -131,10 +120,7 @@ enum SnapshotFixtures {
         {"checked_at":"\(time(3 * 3600))","check_error":"",
          "components":[
           {"id":"valkey","name":"Valkey","description":"","installed":"\(redisInstalled ? "9.1.2" : "")","latest":"9.1.3",
-           "update":\(redisInstalled),"method":"build","estimate":"about 2 minutes","job":\(redisJob)},
-          {"id":"postgres-client","name":"PostgreSQL command-line tools",
-           "description":"psql, pg_dump, pg_restore, pg_dumpall, createdb, dropdb",
-           "installed":"\(clientInstalled)","latest":"18.0","update":false,"method":"build","estimate":"about 5 minutes","job":\(clientJob)}
+           "update":\(redisInstalled),"method":"build","estimate":"about 2 minutes","job":\(redisJob)}
          ]}
         """
     }

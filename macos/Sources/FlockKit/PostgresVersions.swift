@@ -1,7 +1,8 @@
 import Foundation
 
-/// GET /v1/postgres/versions — the PostgreSQL majors Flock offers (18 down to 14), which are
-/// installed, and the one that runs. Only one major runs at a time; each keeps its own databases.
+/// GET /v1/postgres/versions — the PostgreSQL majors the channel offers (plus any installed or with
+/// databases), which are installed, and the one that runs. Only one major runs at a time; each keeps
+/// its own databases. psql, pg_dump and the other client tools come with every installed major.
 public struct PostgresVersions: Decodable, Sendable, Equatable {
     /// The major selected to run ("18"); empty when none is installed.
     public var active: String
@@ -12,7 +13,7 @@ public struct PostgresVersions: Decodable, Sendable, Equatable {
     public var port: Int
     public var checkedAt: Date?
     public var checkError: String
-    /// Always 18, 17, 16, 15, 14, newest first.
+    /// Newest first.
     public var majors: [PostgresMajor]
 
     enum CodingKeys: String, CodingKey { case active, running, enabled, port, checkedAt, checkError, majors }
@@ -45,12 +46,17 @@ public struct PostgresVersions: Decodable, Sendable, Equatable {
 /// One PostgreSQL major line (e.g. "18") and what is installed of it.
 public struct PostgresMajor: Decodable, Sendable, Equatable, Identifiable {
     public var major: String
-    /// The installed release, e.g. "18.6.0"; empty when not installed.
+    /// The installed release, e.g. "18.6"; empty when not installed.
     public var installed: String
     /// The newest release for this platform; empty when unknown.
     public var latest: String
-    /// A newer minor than the installed one exists.
+    /// A newer release (or a newer build of the installed one) can be installed.
     public var update: Bool
+    /// `latest` is a pre-release (beta channel).
+    public var prerelease: Bool
+    /// Why the installed build was withdrawn; empty when it wasn't. Flock replaces it by itself as
+    /// soon as a good build is published.
+    public var yanked: String
     public var active: Bool
     /// A data directory (cluster) exists for this major, even when it isn't installed (any more).
     public var hasData: Bool
@@ -82,7 +88,7 @@ public struct PostgresMajor: Decodable, Sendable, Equatable, Identifiable {
         }
     }
 
-    enum CodingKeys: String, CodingKey { case major, installed, latest, update, active, hasData, dataSize, eol, busy }
+    enum CodingKeys: String, CodingKey { case major, installed, latest, update, prerelease, yanked, active, hasData, dataSize, eol, busy }
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -90,6 +96,8 @@ public struct PostgresMajor: Decodable, Sendable, Equatable, Identifiable {
         installed = try c.decodeIfPresent(String.self, forKey: .installed) ?? ""
         latest = try c.decodeIfPresent(String.self, forKey: .latest) ?? ""
         update = try c.decodeIfPresent(Bool.self, forKey: .update) ?? false
+        prerelease = try c.decodeIfPresent(Bool.self, forKey: .prerelease) ?? false
+        yanked = try c.decodeIfPresent(String.self, forKey: .yanked) ?? ""
         active = try c.decodeIfPresent(Bool.self, forKey: .active) ?? false
         hasData = try c.decodeIfPresent(Bool.self, forKey: .hasData) ?? false
         dataSize = try c.decodeIfPresent(Int64.self, forKey: .dataSize) ?? 0

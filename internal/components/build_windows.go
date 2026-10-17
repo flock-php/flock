@@ -13,8 +13,3 @@ var errNoBuilds = errors.New("building from source is not supported on Windows; 
 func BuildValkey(context.Context, Sources, string, string, *Reporter) (string, func(), error) {
 	return "", nil, errNoBuilds
 }
-
-// BuildPostgresClient is not available on Windows, where the client tools are downloaded.
-func BuildPostgresClient(context.Context, Sources, string, string, *Reporter) (string, func(), error) {
-	return "", nil, errNoBuilds
-}

@@ -180,11 +180,10 @@ func resolveTool(s *state, cwd, tool string, args []string) (path string, argv, 
 	}
 
 	if slices.Contains(postgres.ClientTools, tool) {
-		versions, _ := postgres.InstalledClients(s.root)
-		if len(versions) == 0 {
-			return "", nil, nil, errPostgresClientMissing
+		var ok bool
+		if path, ok = postgres.ClientTool(s.root, tool); !ok {
+			return "", nil, nil, errPostgresMissing
 		}
-		path = postgres.ClientTool(s.root, versions[0], tool)
 
 		// Default to Flock's server; explicit flags or PG* variables still win.
 		for key, value := range map[string]string{"PGHOST": "127.0.0.1", "PGPORT": strconv.Itoa(s.cfg.Ports.Postgres), "PGUSER": "postgres"} {

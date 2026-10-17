@@ -7,8 +7,8 @@ using Microsoft.UI.Xaml.Documents;
 namespace Flock.Tray;
 
 /// <summary>
-/// Installing, updating and switching PostgreSQL versions, and installing the PostgreSQL
-/// command-line tools (downloads; the daemon runs them as jobs). State that other windows or the
+/// Installing, updating and switching PostgreSQL versions, and installing catalog services
+/// (downloads; the daemon runs them as jobs). State that other windows or the
 /// CLI start shows up too: the daemon reports PostgreSQL's busy majors and the component jobs.
 /// </summary>
 internal sealed partial class ServicesPane
@@ -64,11 +64,7 @@ internal sealed partial class ServicesPane
         {
             if (Store.Postgres?.Majors.FirstOrDefault(m => m.Update) is { } major)
             {
-                return $"PostgreSQL {major.Latest} is available";
-            }
-            if (Store.Components?[ComponentId.PostgresClient] is { Update: true } tools)
-            {
-                return $"Command-line tools {tools.Latest} are available";
+                return major.Latest == major.Installed ? $"A new build of PostgreSQL {major.Latest} is available" : $"PostgreSQL {major.Latest} is available";
             }
         }
         if (Store.Catalog?[service.Id] is { Update: true } entry)
@@ -90,10 +86,6 @@ internal sealed partial class ServicesPane
             if (Store.Postgres?.Majors.FirstOrDefault(m => m.IsBusy) is { } busy)
             {
                 return busy.BusyText;
-            }
-            if (ComponentWorking(ComponentId.PostgresClient))
-            {
-                return "Installing tools…";
             }
         }
         if (CatalogWorking(service.Id))
@@ -122,13 +114,7 @@ internal sealed partial class ServicesPane
             panel.Children.Add(VersionList(versions));
         }
         panel.Children.Add(CheckFooter(versions.CheckedAt, versions.CheckError, postgres: true));
-
-        if (Store.Components?[ComponentId.PostgresClient] is { } tools)
-        {
-            panel.Children.Add(Ui.Column(6, Ui.Text("Command-line tools", "BodyStrongTextBlockStyle"), ComponentCard(tools, "the command-line tools",
-                "Uninstall the PostgreSQL command-line tools?",
-                "psql, pg_dump and the other tools are removed from your PATH. Your databases aren't affected.")));
-        }
+        panel.Children.Add(Ui.Caption("psql, pg_dump and the other command-line tools come with PostgreSQL. In a terminal, Flock uses those of the newest installed version, which work with every version above and with remote servers."));
     }
 
     /// <summary>Nothing installed yet: the newest version one click away, the others in a menu.</summary>
@@ -201,7 +187,14 @@ internal sealed partial class ServicesPane
         }
         else if (active.Update)
         {
-            text.Children.Add(Ui.Caption($"{active.Latest} is available — update it below; your databases stay.", Ui.Accent));
+            var what = active.Latest == active.Installed ? $"A new build of {active.Latest}" : active.Latest;
+            text.Children.Add(Ui.Caption($"{what} is available — update it below; your databases stay.", Ui.Accent));
+        }
+        if (active.Yanked.Length > 0)
+        {
+            var withdrawn = Ui.Caption($"This build was withdrawn: {active.Yanked}", Ui.Caution);
+            ToolTipService.SetToolTip(withdrawn, "Flock replaces it as soon as a fixed build is published.");
+            text.Children.Add(Ui.Row(6, Ui.Icon(Ui.GlyphWarning, 12, Ui.Caution), withdrawn));
         }
         var icon = Ui.Icon(Ui.GlyphServer, 26, up ? Ui.Accent : Ui.TertiaryText);
         icon.VerticalAlignment = VerticalAlignment.Top;
@@ -295,7 +288,15 @@ internal sealed partial class ServicesPane
         Add(major.IsInstalled ? major.Installed : "Not installed");
         if (major.Update)
         {
-            Add($"{major.Latest} available", Ui.Accent);
+            Add(major.Latest == major.Installed ? "new build available" : $"{major.Latest} available", Ui.Accent);
+        }
+        if (major.Yanked.Length > 0)
+        {
+            Add($"withdrawn: {major.Yanked}", Ui.Caution);
+        }
+        if (major.Prerelease)
+        {
+            Add($"{major.Latest} is a pre-release", Ui.Caution);
         }
         if (major.HasData)
         {

@@ -641,7 +641,7 @@ public sealed class SettingsStore(FlockClient client) : Store
 
     /// <summary>PostgreSQL majors with install state; loaded by the Services pane.</summary>
     public PostgresVersions? Postgres { get; private set; }
-    /// <summary>The PostgreSQL command-line tools with their install job; loaded by the Services pane.</summary>
+    /// <summary>The components (none on Windows today) with their install jobs; loaded by the Services pane.</summary>
     public ComponentCatalog? Components { get; private set; }
     /// <summary>MySQL, MariaDB, Redis, MongoDB, Meilisearch, Typesense, RustFS; loaded by the Services pane.</summary>
     public ServiceCatalog? Catalog { get; private set; }

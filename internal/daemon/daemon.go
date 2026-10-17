@@ -241,12 +241,9 @@ func Run(ctx context.Context, cfg Config) error {
 	d := &daemon{root: cfg.Root, version: cfg.Version, startedAt: time.Now(), procs: supervisor.New(), leaves: certs.NewLeaves(), restarts: map[string]int{}}
 	defer d.shutdown()
 
-	if pg, err := postgres.NewManager(cfg.Root, pgService{d}); err == nil {
-		d.pg = pg
-		go pg.Catalog.Run(ctx)
-	}
 	d.binaries = binaries.NewCatalog(binaries.DefaultSource(cfg.Root), d.channel)
 	go d.binaries.Run(ctx)
+	d.pg = postgres.NewManager(cfg.Root, d.binaries, pgService{d})
 	d.php = php.NewManager(cfg.Root, d.binaries)
 	d.php.Release = d.ReleasePHP
 	d.php.Finished = func(string) { _ = d.reload() }
@@ -743,26 +740,15 @@ func (d *daemon) procUp(name string) bool {
 	return false
 }
 
-func (d *daemon) postgresSpec(cfg *config.Config, version string) (supervisor.Spec, error) {
-	inst, err := postgres.NewInstaller(d.root)
-	if err != nil {
+func (d *daemon) postgresSpec(cfg *config.Config, id string) (supervisor.Spec, error) {
+	if !postgres.Installed(d.root, id) {
+		return supervisor.Spec{}, fmt.Errorf("version %s is not installed — reinstall it with `flock postgres install`", id)
+	}
+	bin, data := postgres.BinDir(d.root, id), postgres.DataDir(d.root, postgres.MajorOf(id))
+	if err := postgres.InitDB(bin, data); err != nil {
 		return supervisor.Spec{}, err
 	}
-	if !inst.Installed(version) {
-		return supervisor.Spec{}, fmt.Errorf("version %s is not installed", version)
-	}
-
-	// Older versions kept one cluster for every version; each major has its own now.
-	if err := postgres.MigrateLegacyDataDir(d.root); err != nil {
-		return supervisor.Spec{}, err
-	}
-	data := postgres.DataDir(d.root, postgres.MajorOf(version))
-	if err := postgres.InitDB(inst.BinDir(version), data); err != nil {
-		return supervisor.Spec{}, err
-	}
-
-	return postgres.Spec(inst.BinDir(version), data, filepath.Join(d.root, "run"),
-		filepath.Join(d.root, "log", "postgres.log"), cfg.Ports.Postgres), nil
+	return postgres.Spec(bin, data, filepath.Join(d.root, "run"), filepath.Join(d.root, "log", "postgres.log"), cfg.Ports.Postgres), nil
 }
 
 // PostgresVersions implements api.Backend.
@@ -860,7 +846,7 @@ func (d *daemon) Status() api.Status {
 	if d.cfg != nil {
 		st.HTTPPort, st.HTTPSPort = d.cfg.Ports.HTTP, d.cfg.Ports.HTTPS
 		if d.cfg.Services.Postgres != "" {
-			st.Postgres = fmt.Sprintf("%s on 127.0.0.1:%d", d.cfg.Services.Postgres, d.cfg.Ports.Postgres)
+			st.Postgres = fmt.Sprintf("%s on 127.0.0.1:%d", postgres.VersionOf(d.cfg.Services.Postgres), d.cfg.Ports.Postgres)
 		}
 		if d.cfg.Services.Valkey != "" {
 			st.Valkey = fmt.Sprintf("%s on 127.0.0.1:%d", d.cfg.Services.Valkey, d.cfg.Ports.Valkey)
@@ -942,7 +928,7 @@ func (d *daemon) Services() []api.Service {
 	}
 
 	services = append(services, api.Service{
-		ID: "postgres", Name: "PostgreSQL", Category: "Database", Version: cfg.Services.Postgres, Port: p.Postgres, Available: true,
+		ID: "postgres", Name: "PostgreSQL", Category: "Database", Version: postgres.VersionOf(cfg.Services.Postgres), Port: p.Postgres, Available: true,
 		Installed: cfg.Services.Postgres != "", Enabled: cfg.Services.Running("postgres"), Running: d.procUp("postgres"), Stoppable: true,
 		Env: fmt.Sprintf("DB_CONNECTION=pgsql\nDB_HOST=127.0.0.1\nDB_PORT=%d\nDB_DATABASE=laravel\nDB_USERNAME=postgres\nDB_PASSWORD=", p.Postgres),
 		Log: "postgres", URL: fmt.Sprintf("postgres://postgres@127.0.0.1:%d", p.Postgres),

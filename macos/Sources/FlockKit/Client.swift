@@ -372,7 +372,7 @@ public actor FlockClient {
         var port: Int
     }
 
-    // MARK: Components (Valkey, PostgreSQL command-line tools)
+    // MARK: Components (Valkey)
 
     public func components() async throws -> ComponentCatalog {
         try await decode(ComponentCatalog.self, "GET", "/v1/components")

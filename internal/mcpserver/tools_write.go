@@ -270,17 +270,17 @@ func (s *server) installService(ctx context.Context, req *mcp.CallToolRequest, i
 	switch id {
 	case "postgres", "postgresql", "pgsql":
 		id, name = "postgres", "PostgreSQL"
-		major, full := postgres.DefaultMajor, ""
+		major := postgres.DefaultMajor
 		if version != "" {
 			major = version
 			if m := postgres.MajorOf(version); m != "" {
-				major, full = m, version
+				major = m // a version like "18.6": Flock installs the newest build of its major
 			}
 		}
 		name += " " + major
 		key := "postgres " + major
 		s.bg.start(key, func(ctx context.Context) error {
-			_, err := s.Daemon.InstallPostgres(ctx, major, full)
+			_, err := s.Daemon.InstallPostgres(ctx, major)
 			return err
 		})
 		check = func(ctx context.Context) (step, error) {

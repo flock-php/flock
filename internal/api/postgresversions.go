@@ -42,7 +42,7 @@ func registerPostgresVersions(mux *http.ServeMux, b Backend) {
 		}
 		ctx, cancel := context.WithTimeout(r.Context(), 50*time.Second)
 		defer cancel()
-		_ = m.Catalog.Check(ctx) // a failed check is reported in check_error
+		_ = m.Check(ctx) // a failed check is reported in check_error
 		respond(w, m, nil)
 	})
 
@@ -60,9 +60,9 @@ func registerPostgresVersions(mux *http.ServeMux, b Backend) {
 		}
 	}
 
-	// ?version=18.6.0 installs that release instead of the newest (used by `flock postgres install 18.6.0`).
+	// Installs the newest build of a major (or updates to it).
 	mux.HandleFunc("POST /v1/postgres/versions/{major}/install", operation(10*time.Minute, func(ctx context.Context, m *postgres.Manager, r *http.Request) error {
-		return m.Install(ctx, r.PathValue("major"), r.URL.Query().Get("version"))
+		return m.Install(ctx, r.PathValue("major"))
 	}))
 	mux.HandleFunc("POST /v1/postgres/versions/{major}/update", operation(10*time.Minute, func(ctx context.Context, m *postgres.Manager, r *http.Request) error {
 		return m.Update(ctx, r.PathValue("major"))
@@ -100,14 +100,10 @@ func (c *Client) CheckPostgres(ctx context.Context) (PostgresVersions, error) {
 	return out, err
 }
 
-// InstallPostgres installs a major (its newest release, or version when given).
-func (c *Client) InstallPostgres(ctx context.Context, major, version string) (PostgresVersions, error) {
-	path := "/v1/postgres/versions/" + url.PathEscape(major) + "/install"
-	if version != "" {
-		path += "?version=" + url.QueryEscape(version)
-	}
+// InstallPostgres installs the newest build of a major.
+func (c *Client) InstallPostgres(ctx context.Context, major string) (PostgresVersions, error) {
 	var out PostgresVersions
-	err := c.timeout(10*time.Minute).do(ctx, http.MethodPost, path, &out)
+	err := c.timeout(10*time.Minute).do(ctx, http.MethodPost, "/v1/postgres/versions/"+url.PathEscape(major)+"/install", &out)
 	return out, err
 }
 

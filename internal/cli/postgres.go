@@ -13,6 +13,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"flock/internal/api"
+	"flock/internal/binaries"
 	"flock/internal/postgres"
 )
 
@@ -20,20 +21,18 @@ func newPostgresCommand() *cobra.Command {
 	cmd := &cobra.Command{Use: "postgres", Short: "Manage the PostgreSQL service"}
 
 	install := &cobra.Command{
-		Use:   "install [major|version]",
-		Short: "Install a PostgreSQL version (default 18) and start it when none runs yet (user postgres, no password, port 5432)",
+		Use:   "install [major]",
+		Short: "Install a PostgreSQL version (default 18) with psql, pg_dump and the other client tools, and start it when none runs yet (user postgres, no password, port 5432)",
 		Args:  cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			major, version := postgres.DefaultMajor, ""
+			major := postgres.DefaultMajor
 			if len(args) > 0 {
 				major = args[0]
 				if m := postgres.MajorOf(args[0]); m != "" {
-					major, version = m, args[0]
+					major = m // "18.6": Flock installs the newest build of the major
 				}
 			}
-			return postgresOperation(cmd, major, "installing", func(ctx context.Context, ops pgOps) error {
-				return ops.Install(ctx, major, version)
-			})
+			return installPostgres(cmd, major)
 		},
 	}
 
@@ -125,7 +124,7 @@ func newPostgresCommand() *cobra.Command {
 		},
 	}
 
-	cmd.AddCommand(install, use, update, list, uninstall, createDB, newPostgresClientCommand())
+	cmd.AddCommand(install, use, update, list, uninstall, createDB)
 	return cmd
 }
 
@@ -138,11 +137,24 @@ func postgresOperation(cmd *cobra.Command, major, what string, do func(ctx conte
 	// The daemon finishes an operation it started even when the CLI is interrupted.
 	ctx, stop := signal.NotifyContext(cmd.Context(), os.Interrupt)
 	defer stop()
+	return runPostgres(ctx, s, cmd.OutOrStdout(), cmd.ErrOrStderr(), major, what, do)
+}
+
+// installPostgres installs the newest build of major (for `flock postgres install`).
+func installPostgres(cmd *cobra.Command, major string) error {
+	return postgresOperation(cmd, major, "installing", func(ctx context.Context, ops pgOps) error {
+		return ops.Install(ctx, major)
+	})
+}
+
+// runPostgres runs a PostgreSQL operation through the daemon (or directly when it doesn't run)
+// and prints the versions afterwards.
+func runPostgres(ctx context.Context, s *state, out, errOut io.Writer, major, what string, do func(ctx context.Context, ops pgOps) error) error {
 	ops, err := postgresOps(ctx, s)
 	if err != nil {
 		return err
 	}
-	cmd.PrintErrf("%s PostgreSQL %s…\n", what, major)
+	fmt.Fprintf(errOut, "%s PostgreSQL %s…\n", what, major)
 	if err := do(ctx, ops); err != nil {
 		return err
 	}
@@ -150,7 +162,7 @@ func postgresOperation(cmd *cobra.Command, major, what string, do func(ctx conte
 	if err != nil {
 		return err
 	}
-	printPostgresVersions(cmd.OutOrStdout(), v)
+	printPostgresVersions(out, v)
 	if m, ok := v.Find(major); ok && m.Active {
 		state := "starts with the daemon"
 		switch {
@@ -159,7 +171,7 @@ func postgresOperation(cmd *cobra.Command, major, what string, do func(ctx conte
 		case v.Running:
 			state = "running"
 		}
-		cmd.Printf("\nPostgreSQL %s on 127.0.0.1:%d (user postgres, no password): %s\n", m.Installed, v.Port, state)
+		fmt.Fprintf(out, "\nPostgreSQL %s on 127.0.0.1:%d (user postgres, no password): %s\n", m.Installed, v.Port, state)
 	}
 	return nil
 }
@@ -211,7 +223,7 @@ func humanSize(n int64) string {
 // pgOps changes PostgreSQL through the daemon, or directly when it doesn't run.
 type pgOps interface {
 	Versions(ctx context.Context) (postgres.Versions, error)
-	Install(ctx context.Context, major, version string) error
+	Install(ctx context.Context, major string) error
 	Update(ctx context.Context, major string) error
 	Activate(ctx context.Context, major string) error
 	Uninstall(ctx context.Context, major string, deleteData bool) error
@@ -226,11 +238,14 @@ func postgresOps(ctx context.Context, s *state) (pgOps, error) {
 	if !errors.Is(err, api.ErrDaemonNotRunning) {
 		return nil, err
 	}
-	m, err := postgres.NewManager(s.root, &cliPGService{s: s})
-	if err != nil {
-		return nil, err
+	channel := func() binaries.Channel {
+		ch, err := binaries.ParseChannel(s.cfg.Channel)
+		if err != nil {
+			return binaries.Stable
+		}
+		return ch
 	}
-	return directPG{m}, nil
+	return directPG{postgres.NewManager(s.root, binaries.NewCatalog(binaries.DefaultSource(s.root), channel), &cliPGService{s: s})}, nil
 }
 
 type daemonPG struct{ c *api.Client }
@@ -238,8 +253,8 @@ type daemonPG struct{ c *api.Client }
 func (d daemonPG) Versions(ctx context.Context) (postgres.Versions, error) {
 	return d.c.PostgresVersions(ctx)
 }
-func (d daemonPG) Install(ctx context.Context, major, version string) error {
-	_, err := d.c.InstallPostgres(ctx, major, version)
+func (d daemonPG) Install(ctx context.Context, major string) error {
+	_, err := d.c.InstallPostgres(ctx, major)
 	return err
 }
 func (d daemonPG) Update(ctx context.Context, major string) error {
@@ -258,17 +273,13 @@ func (d daemonPG) Uninstall(ctx context.Context, major string, deleteData bool) 
 type directPG struct{ m *postgres.Manager }
 
 func (d directPG) Versions(ctx context.Context) (postgres.Versions, error) {
-	if d.m.Catalog.Stale() {
-		ctx, cancel := context.WithTimeout(ctx, 20*time.Second)
-		defer cancel()
-		_ = d.m.Catalog.Check(ctx) // reported in check_error
-	}
+	ctx, cancel := context.WithTimeout(ctx, 20*time.Second)
+	defer cancel()
+	_ = d.m.Check(ctx) // reported in check_error
 	return d.m.Versions(), nil
 }
-func (d directPG) Install(ctx context.Context, major, version string) error {
-	return d.m.Install(ctx, major, version)
-}
-func (d directPG) Update(ctx context.Context, major string) error { return d.m.Update(ctx, major) }
+func (d directPG) Install(ctx context.Context, major string) error { return d.m.Install(ctx, major) }
+func (d directPG) Update(ctx context.Context, major string) error  { return d.m.Update(ctx, major) }
 func (d directPG) Activate(ctx context.Context, major string) error {
 	return d.m.Activate(ctx, major)
 }

@@ -1,245 +1,106 @@
 // Package postgres installs, initialises and runs PostgreSQL for Flock.
 //
-// Binaries come from zonky's embedded-postgres builds on Maven Central: a jar (zip)
-// holding a single .txz with bin/, lib/ and share/. The macOS binaries are universal
-// (x86_64 + arm64) and relocatable (rpath @loader_path/../lib), so they run from any
-// directory. They only ship initdb, pg_ctl and postgres — no psql/createdb/pg_dump —
-// which is why databases are created through the small wire-protocol client in client.go.
+// Binaries come from the binaries manifest (package "postgres"): bin/ (the server and the client
+// tools: psql, pg_dump, ...), lib/ and share/, relocatable so they run from any directory. Each
+// build is installed under services/postgres/<version>-build<N>, next to the others of its major
+// until an update has started; databases live in services/postgres/data/<major>.
 package postgres
 
 import (
-	"archive/tar"
-	"archive/zip"
-	"bytes"
 	"context"
-	"crypto/sha1"
-	"encoding/hex"
 	"errors"
 	"fmt"
-	"io"
 	"net/http"
 	"os"
 	"path/filepath"
+	"regexp"
 	"runtime"
-	"strings"
+	"strconv"
 
-	"github.com/ulikunitz/xz"
+	"flock/internal/binaries"
 )
 
-// DefaultVersion is a known-good release (the integration test installs it); Flock itself
-// installs the newest release of a major, see Catalog.
-const DefaultVersion = "18.6.0"
+// Package is PostgreSQL's name in the binaries manifest.
+const Package = "postgres"
 
-// DefaultBaseURL is the Maven Central directory holding zonky's postgres binaries.
-const DefaultBaseURL = "https://repo1.maven.org/maven2/io/zonky/test/postgres"
-
-// Installer downloads PostgreSQL into <Root>/services/postgres/<version>.
+// Installer downloads PostgreSQL builds into <Root>/services/postgres/<id>.
 type Installer struct {
-	Root     string
-	BaseURL  string
-	Platform string // zonky platform, see Platform
-	Client   *http.Client
+	Root string
+	HTTP *http.Client
 }
 
-// NewInstaller creates an installer for the current OS/arch.
-func NewInstaller(root string) (*Installer, error) {
-	platform, err := Platform(runtime.GOOS, runtime.GOARCH)
-	if err != nil {
-		return nil, err
+// NewInstaller creates an installer under root.
+func NewInstaller(root string) *Installer {
+	return &Installer{Root: root, HTTP: &http.Client{}}
+}
+
+var idPattern = regexp.MustCompile(`^((\d+)\.\d+)-build(\d+)$`)
+
+// ID names an installed build: "18.6-build1". It is what config.json keeps as the active server.
+func ID(version string, build int) string { return version + "-build" + strconv.Itoa(build) }
+
+// ParseID splits an install ID into its version and build; ok is false for anything else.
+func ParseID(id string) (version string, build int, ok bool) {
+	m := idPattern.FindStringSubmatch(id)
+	if m == nil {
+		return "", 0, false
 	}
-
-	return &Installer{Root: root, BaseURL: DefaultBaseURL, Platform: platform, Client: http.DefaultClient}, nil
+	build, _ = strconv.Atoi(m[3])
+	return m[1], build, true
 }
 
-// Platform maps GOOS/GOARCH to zonky's artifact platform name.
-func Platform(goos, goarch string) (string, error) {
-	switch goos + "/" + goarch {
-	case "darwin/arm64":
-		return "darwin-arm64v8", nil
-	case "darwin/amd64":
-		return "darwin-amd64", nil
-	case "windows/amd64":
-		return "windows-amd64", nil
-	}
-
-	return "", fmt.Errorf("postgres: unsupported platform %s/%s", goos, goarch)
+// VersionOf is the PostgreSQL version of an install ID ("18.6-build1" → "18.6"), "" if it isn't one.
+func VersionOf(id string) string {
+	v, _, _ := ParseID(id)
+	return v
 }
 
-// JarURL is the download URL of a zonky binaries jar.
-func JarURL(baseURL, platform, version string) string {
-	artifact := "embedded-postgres-binaries-" + platform
-	return fmt.Sprintf("%s/%s/%s/%s-%s.jar", strings.TrimRight(baseURL, "/"), artifact, version, artifact, version)
-}
+// Dir is the install directory of an ID.
+func Dir(root, id string) string { return filepath.Join(root, "services", "postgres", id) }
 
-// Dir is the install directory of version.
-func (i *Installer) Dir(version string) string {
-	return filepath.Join(i.Root, "services", "postgres", version)
-}
+// BinDir holds the executables of an ID.
+func BinDir(root, id string) string { return filepath.Join(Dir(root, id), "bin") }
 
-// BinDir holds the postgres executables of version.
-func (i *Installer) BinDir(version string) string {
-	return filepath.Join(i.Dir(version), "bin")
-}
-
-// Installed reports whether version is already installed.
-func (i *Installer) Installed(version string) bool {
-	_, err := os.Stat(filepath.Join(i.BinDir(version), exe("postgres")))
+// Installed reports whether an ID is installed.
+func Installed(root, id string) bool {
+	_, err := os.Stat(filepath.Join(BinDir(root, id), exe("postgres")))
 	return err == nil
 }
 
-// Install downloads, verifies and extracts version. It is a no-op when already installed.
-func (i *Installer) Install(ctx context.Context, version string) error {
-	if i.Installed(version) {
-		return nil
-	}
+// Dir is the install directory of an ID.
+func (i *Installer) Dir(id string) string { return Dir(i.Root, id) }
 
-	url := JarURL(i.BaseURL, i.Platform, version)
-	jar, err := i.fetch(ctx, url)
-	if err != nil {
-		return err
-	}
+// BinDir holds the executables of an ID.
+func (i *Installer) BinDir(id string) string { return BinDir(i.Root, id) }
 
-	sum, err := i.fetch(ctx, url+".sha1")
-	if err != nil {
-		return err
-	}
-	if err := verifySHA1(jar, string(sum)); err != nil {
-		return fmt.Errorf("postgres %s: %w", version, err)
-	}
+// Installed reports whether an ID is installed.
+func (i *Installer) Installed(id string) bool { return Installed(i.Root, id) }
 
-	parent := filepath.Dir(i.Dir(version))
+// Install downloads, verifies and unpacks a build from the manifest and returns its ID. It is a
+// no-op when that build is installed already.
+func (i *Installer) Install(ctx context.Context, v binaries.Version) (string, error) {
+	id := ID(v.Version, v.Build)
+	if i.Installed(id) {
+		return id, nil
+	}
+	parent := filepath.Dir(i.Dir(id))
 	if err := os.MkdirAll(parent, 0o755); err != nil {
-		return err
+		return "", err
 	}
-
-	tmp, err := os.MkdirTemp(parent, "."+version+"-")
+	staging, err := os.MkdirTemp(parent, "."+id+"-")
 	if err != nil {
-		return err
+		return "", err
 	}
-	defer os.RemoveAll(tmp)
+	defer os.RemoveAll(staging)
 
-	if err := extractJar(jar, tmp); err != nil {
-		return fmt.Errorf("postgres %s: %w", version, err)
+	dir := filepath.Join(staging, "package")
+	if err := binaries.Install(ctx, i.HTTP, v.Entry, dir, nil); err != nil {
+		return "", fmt.Errorf("PostgreSQL %s: %w", v.Version, err)
 	}
-
-	return os.Rename(tmp, i.Dir(version))
-}
-
-func (i *Installer) fetch(ctx context.Context, url string) ([]byte, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
-	if err != nil {
-		return nil, err
+	if _, err := os.Stat(filepath.Join(dir, "bin", exe("postgres"))); err != nil {
+		return "", errors.New("the PostgreSQL package has no bin/" + exe("postgres"))
 	}
-
-	resp, err := i.Client.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("GET %s: %s", url, resp.Status)
-	}
-
-	return io.ReadAll(resp.Body)
-}
-
-func verifySHA1(data []byte, published string) error {
-	fields := strings.Fields(published)
-	if len(fields) == 0 {
-		return errors.New("empty checksum file")
-	}
-
-	got := sha1.Sum(data)
-	if !strings.EqualFold(hex.EncodeToString(got[:]), fields[0]) {
-		return fmt.Errorf("checksum mismatch: got %x, want %s", got, fields[0])
-	}
-
-	return nil
-}
-
-// extractJar unpacks the .txz inside the jar into dest.
-func extractJar(jar []byte, dest string) error {
-	zr, err := zip.NewReader(bytes.NewReader(jar), int64(len(jar)))
-	if err != nil {
-		return fmt.Errorf("open jar: %w", err)
-	}
-
-	for _, f := range zr.File {
-		if !strings.HasSuffix(f.Name, ".txz") {
-			continue
-		}
-
-		rc, err := f.Open()
-		if err != nil {
-			return err
-		}
-		defer rc.Close()
-
-		xr, err := xz.NewReader(rc)
-		if err != nil {
-			return fmt.Errorf("open %s: %w", f.Name, err)
-		}
-
-		return extractTar(tar.NewReader(xr), dest)
-	}
-
-	return errors.New("jar contains no .txz archive")
-}
-
-func extractTar(tr *tar.Reader, dest string) error {
-	for {
-		hdr, err := tr.Next()
-		if errors.Is(err, io.EOF) {
-			return nil
-		}
-		if err != nil {
-			return err
-		}
-
-		target := filepath.Join(dest, filepath.FromSlash(hdr.Name))
-		if !strings.HasPrefix(target, filepath.Clean(dest)+string(filepath.Separator)) {
-			return fmt.Errorf("illegal path in archive: %s", hdr.Name)
-		}
-
-		switch hdr.Typeflag {
-		case tar.TypeDir:
-			if err := os.MkdirAll(target, 0o755); err != nil {
-				return err
-			}
-		case tar.TypeReg:
-			if err := writeFile(target, tr, os.FileMode(hdr.Mode).Perm()); err != nil {
-				return err
-			}
-		case tar.TypeSymlink:
-			if filepath.IsAbs(hdr.Linkname) || strings.Contains(hdr.Linkname, "..") {
-				return fmt.Errorf("illegal symlink in archive: %s -> %s", hdr.Name, hdr.Linkname)
-			}
-			if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
-				return err
-			}
-			if err := os.Symlink(hdr.Linkname, target); err != nil {
-				return err
-			}
-		}
-	}
-}
-
-func writeFile(path string, r io.Reader, mode os.FileMode) error {
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return err
-	}
-
-	f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, mode|0o200)
-	if err != nil {
-		return err
-	}
-	if _, err := io.Copy(f, r); err != nil {
-		_ = f.Close()
-		return err
-	}
-
-	return f.Close()
+	return id, os.Rename(dir, i.Dir(id))
 }
 
 func exe(name string) string {

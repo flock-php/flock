@@ -49,9 +49,8 @@ type Ports struct {
 
 // Services are optional background services; an empty version means not installed.
 type Services struct {
-	Postgres       string `json:"postgres,omitempty"`        // e.g. "18.6.0"
-	PostgresClient string `json:"postgres_client,omitempty"` // psql, pg_dump, ... e.g. "18.6"
-	Valkey         string `json:"valkey,omitempty"`          // e.g. "9.1.2"
+	Postgres string `json:"postgres,omitempty"` // the active build, e.g. "18.6-build1"
+	Valkey   string `json:"valkey,omitempty"`   // e.g. "9.1.2"
 
 	// Extras are the services of the catalog (MySQL, Redis, Meilisearch, ...) that are installed,
 	// by id. Each runs one version on its own port.

@@ -7,7 +7,6 @@ import (
 	"testing"
 
 	"flock/internal/config"
-	"flock/internal/postgres"
 	"flock/internal/valkey"
 )
 
@@ -65,43 +64,18 @@ func TestValkeyApplyAndUninstallKeepData(t *testing.T) {
 	}
 }
 
-func TestClientApplyAndUninstall(t *testing.T) {
-	root := t.TempDir()
-	mutate := configMutate(root)
-	touch(t, postgres.ClientTool(root, "18.9", "psql"))
-	touch(t, postgres.ClientTool(root, "18.10", "psql"))
-
-	if InstalledClient(root) != "18.10" {
-		t.Fatalf("newest must win numerically, got %s", InstalledClient(root))
-	}
-	if err := ApplyClient(root, mutate, "18.10"); err != nil {
-		t.Fatal(err)
-	}
-	if versions, _ := postgres.InstalledClients(root); len(versions) != 1 {
-		t.Fatalf("got %v", versions)
-	}
-	if cfg, _ := config.Load(root); cfg.Services.PostgresClient != "18.10" {
-		t.Fatal("config not updated")
-	}
-	if err := UninstallClient(root, mutate); err != nil || InstalledClient(root) != "" {
-		t.Fatalf("uninstall: %v", err)
-	}
-}
-
 func TestDriversDescribeThePlatform(t *testing.T) {
 	drivers := Drivers(t.TempDir(), configMutate(t.TempDir()))
-	want := MethodBuild
 	if runtime.GOOS == "windows" {
-		want = MethodDownload
-		if len(drivers) != 1 || drivers[0].ID != PostgresClient {
+		if len(drivers) != 0 {
 			t.Fatalf("got %v", drivers)
 		}
-	} else if len(drivers) != 2 || drivers[0].ID != Valkey || drivers[1].ID != PostgresClient {
+		return
+	}
+	if len(drivers) != 1 || drivers[0].ID != Valkey {
 		t.Fatalf("got %v", drivers)
 	}
-	for _, d := range drivers {
-		if d.Method != want || d.Estimate == "" || d.Name == "" || d.Latest == nil || d.Install == nil {
-			t.Fatalf("got %+v", d)
-		}
+	if d := drivers[0]; d.Method != MethodBuild || d.Estimate == "" || d.Name == "" || d.Latest == nil || d.Install == nil {
+		t.Fatalf("got %+v", d)
 	}
 }

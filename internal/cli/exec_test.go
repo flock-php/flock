@@ -128,14 +128,25 @@ func TestNodeGetsTheSiteCertificateForViteWhenSecured(t *testing.T) {
 
 func TestPostgresToolsDefaultToFlocksServer(t *testing.T) {
 	root := t.TempDir()
-	psql := postgres.ClientTool(root, "18.6", "psql") // psql.exe on Windows
-	if err := os.MkdirAll(filepath.Dir(psql), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(psql, nil, 0o755); err != nil {
-		t.Fatal(err)
-	}
 	s := &state{root: root, cfg: config.Default()}
+	if _, _, _, err := resolveTool(s, "/x", "psql", nil); !errors.Is(err, errPostgresMissing) {
+		t.Fatalf("no PostgreSQL installed: %v", err)
+	}
+
+	// The client tools are those of the installed server (psql.exe on Windows).
+	bin := postgres.BinDir(root, "18.6-build1")
+	if err := os.MkdirAll(bin, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"postgres", "psql"} {
+		if runtime.GOOS == "windows" {
+			name += ".exe"
+		}
+		if err := os.WriteFile(filepath.Join(bin, name), nil, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	psql, _ := postgres.ClientTool(root, "psql")
 	t.Setenv("PGHOST", "")
 	t.Setenv("PGUSER", "me")
 
@@ -205,7 +216,7 @@ func TestShimToolRecognisesShimNames(t *testing.T) {
 
 func TestMissingRedisAndPostgresClientAreOfferedOnlyWhereFlockCanDownloadThem(t *testing.T) {
 	s := &state{root: t.TempDir(), cfg: config.Default()}
-	for tool, want := range map[string]error{"redis-cli": errRedisMissing, "pg_dump": errPostgresClientMissing} {
+	for tool, want := range map[string]error{"redis-cli": errRedisMissing, "pg_dump": errPostgresMissing} {
 		if _, _, _, err := resolveTool(s, "/x", tool, nil); !errors.Is(err, want) {
 			t.Fatalf("%s: got %v, want %v", tool, err, want)
 		}
@@ -213,7 +224,7 @@ func TestMissingRedisAndPostgresClientAreOfferedOnlyWhereFlockCanDownloadThem(t 
 	if runtime.GOOS == "windows" {
 		return // offerInstall would prompt
 	}
-	for _, err := range []error{errRedisMissing, errPostgresClientMissing} {
+	for _, err := range []error{errRedisMissing, errPostgresMissing} {
 		if installed, installErr := offerInstall(context.Background(), s, err); installed || installErr != nil {
 			t.Fatalf("macOS has no prebuilt build to offer: %v %v", installed, installErr)
 		}

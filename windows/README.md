@@ -41,8 +41,7 @@ Everything downloads on Windows, verified by the vendors' published checksums �
 
 | Service | macOS | Windows |
 | --- | --- | --- |
-| PostgreSQL server | zonky builds (Maven Central) | zonky builds (Maven Central) |
-| PostgreSQL client tools (`flock postgres install-client`) | built with `build/postgres-client/build.sh`, `--from` | EDB's official [binaries zip](https://www.enterprisedb.com/download-postgresql-binaries) (PostgreSQL 18.6, ~330 MB download); Flock keeps only `psql`, `pg_dump`, `pg_dumpall`, `pg_restore`, `createdb`, `dropdb`, their DLLs and the license files (~12 MB) |
+| PostgreSQL (`flock postgres install`), with `psql`, `pg_dump` and the other client tools | the binaries manifest (built by Flock) | the binaries manifest (built by Flock) |
 | Valkey (`flock valkey install`) | built from source | not available (no established Windows build) — use Redis |
 | Redis (`flock services install redis [8.10\|8.4\|7.4\|7.2]`) | built from source | built from the upstream tags with MSYS2 by the public CI of [redis-windows/redis-windows](https://github.com/redis-windows/redis-windows) (~10 MB). A Redis that an older Flock installed moves over (line 7.2, with its data). |
 | MySQL, MariaDB, MongoDB (`flock services install <id> [version]`) | MySQL, MongoDB: official builds; MariaDB: built from source | the official zips (MySQL ~330 MB, MariaDB ~100 MB, MongoDB ~800 MB — Flock drops the debug symbols) |
@@ -90,7 +89,7 @@ fails, or a service hasn't exited after 10 seconds, it is killed. php-cgi worker
 - [ ] A PhpStorm breakpoint hits on reload with no browser extension, and the site goes back to the fast pool once it is removed
 - [ ] `?XDEBUG_TRIGGER=1` and the Xdebug browser extension hit a breakpoint; requests without them never load Xdebug
 - [ ] `flock debug artisan …` hits a breakpoint; plain `php` does not load Xdebug
-- [ ] `flock services install redis` downloads Redis and starts it; `redis-cli ping` → PONG; `flock postgres install-client` → `psql -c "select 1"`
+- [ ] `flock services install redis` downloads Redis and starts it; `redis-cli ping` → PONG; `flock postgres install` → `psql -c "select 1"`
 - [ ] Upgrading from a Flock that had Redis: it keeps running from `services\redis\7.2.16` with its data
 - [ ] Settings → Services → All: install MySQL, MariaDB (port suggested as 3307 next to MySQL), MongoDB, Meilisearch, RustFS; each starts and its connection works; Typesense and Valkey show as not available
 - [ ] Stopping Redis/MySQL/MariaDB/PostgreSQL in Services (or `flock restart`) logs a clean shutdown (redis.log: "Redis is now ready to exit"; mysql.log: "Shutdown complete"; postgres.log: "database system is shut down"), not a kill

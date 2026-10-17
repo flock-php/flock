@@ -109,8 +109,8 @@ func (f *fakeDaemon) InstallComponent(_ context.Context, id string) (api.Compone
 	return api.Components{}, nil
 }
 
-func (f *fakeDaemon) InstallPostgres(_ context.Context, major, version string) (api.PostgresVersions, error) {
-	f.record("install postgres", major, version)
+func (f *fakeDaemon) InstallPostgres(_ context.Context, major string) (api.PostgresVersions, error) {
+	f.record("install postgres", major)
 	return api.PostgresVersions{}, nil
 }
 

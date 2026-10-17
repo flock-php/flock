@@ -17,8 +17,6 @@ type Sources struct {
 	ValkeyReleases string // GitHub API: releases of valkey-io/valkey
 	ValkeyHashes   string // valkey-io/valkey-hashes README: "hash <file> sha256 <hex> <url>" lines
 	ValkeySource   string // tarball URL, %s = version
-	PostgresIndex  string // postgresql.org versions.json
-	PostgresSource string // tarball URL, %s = version (twice: directory and file)
 	Client         *http.Client
 }
 
@@ -28,15 +26,9 @@ func DefaultSources() Sources {
 		ValkeyReleases: "https://api.github.com/repos/valkey-io/valkey/releases?per_page=100",
 		ValkeyHashes:   "https://raw.githubusercontent.com/valkey-io/valkey-hashes/main/README",
 		ValkeySource:   "https://github.com/valkey-io/valkey/archive/refs/tags/%s.tar.gz",
-		PostgresIndex:  "https://www.postgresql.org/versions.json",
-		PostgresSource: "https://ftp.postgresql.org/pub/source/v%[1]s/postgresql-%[1]s.tar.bz2",
 		Client:         http.DefaultClient,
 	}
 }
-
-// ClientMajor is the PostgreSQL major of the client tools: the newest, which work with every
-// server version Flock offers.
-const ClientMajor = "18"
 
 var stableVersion = regexp.MustCompile(`^\d+\.\d+\.\d+$`)
 
@@ -96,50 +88,6 @@ func ParseValkeyHashes(data []byte, version string) (string, error) {
 		}
 	}
 	return "", fmt.Errorf("valkey-hashes has no checksum for Valkey %s yet — try again later", version)
-}
-
-// LatestPostgres returns the newest release of the PostgreSQL major ("18.6").
-func (s Sources) LatestPostgres(ctx context.Context, major string) (string, error) {
-	data, err := s.get(ctx, s.PostgresIndex)
-	if err != nil {
-		return "", err
-	}
-	return ParsePostgresVersions(data, major)
-}
-
-// ParsePostgresVersions finds the newest release of major in postgresql.org's versions.json.
-func ParsePostgresVersions(data []byte, major string) (string, error) {
-	var versions []struct {
-		Major       string `json:"major"`
-		LatestMinor string `json:"latestMinor"`
-	}
-	if err := json.Unmarshal(data, &versions); err != nil {
-		return "", fmt.Errorf("parse versions.json: %w", err)
-	}
-	for _, v := range versions {
-		if v.Major == major && v.LatestMinor != "" {
-			return v.Major + "." + v.LatestMinor, nil
-		}
-	}
-	return "", fmt.Errorf("postgresql.org lists no PostgreSQL %s release", major)
-}
-
-// PostgresSourceURL is the source tarball of a PostgreSQL release.
-func (s Sources) PostgresSourceURL(version string) string {
-	return fmt.Sprintf(s.PostgresSource, version)
-}
-
-// PostgresSHA256 reads the .sha256 file published next to the tarball.
-func (s Sources) PostgresSHA256(ctx context.Context, version string) (string, error) {
-	data, err := s.get(ctx, s.PostgresSourceURL(version)+".sha256")
-	if err != nil {
-		return "", err
-	}
-	f := strings.Fields(string(data))
-	if len(f) == 0 || len(f[0]) != 64 {
-		return "", fmt.Errorf("unexpected checksum file for PostgreSQL %s: %q", version, strings.TrimSpace(string(data)))
-	}
-	return strings.ToLower(f[0]), nil
 }
 
 func (s Sources) get(ctx context.Context, url string) ([]byte, error) {

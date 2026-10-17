@@ -23,9 +23,7 @@ func fakeUpstream(t *testing.T, tarball []byte, hash string) Sources {
 		switch {
 		case r.URL.Path == "/hashes":
 			fmt.Fprintf(w, "hash valkey-9.1.2.tar.gz sha256 %s https://example/9.1.2.tar.gz\n", hash)
-		case strings.HasSuffix(r.URL.Path, ".tar.bz2.sha256"):
-			fmt.Fprintf(w, "%s  postgresql-18.6.tar.bz2\n", hash)
-		case strings.HasSuffix(r.URL.Path, ".tar.gz"), strings.HasSuffix(r.URL.Path, ".tar.bz2"):
+		case strings.HasSuffix(r.URL.Path, ".tar.gz"):
 			_, _ = w.Write(tarball)
 		default:
 			http.NotFound(w, r)
@@ -33,17 +31,16 @@ func fakeUpstream(t *testing.T, tarball []byte, hash string) Sources {
 	}))
 	t.Cleanup(srv.Close)
 	return Sources{
-		ValkeyHashes:   srv.URL + "/hashes",
-		ValkeySource:   srv.URL + "/valkey/%s.tar.gz",
-		PostgresSource: srv.URL + "/pg/v%[1]s/postgresql-%[1]s.tar.bz2",
-		Client:         srv.Client(),
+		ValkeyHashes: srv.URL + "/hashes",
+		ValkeySource: srv.URL + "/valkey/%s.tar.gz",
+		Client:       srv.Client(),
 	}
 }
 
 func fakeBuildScripts(t *testing.T) {
 	t.Helper()
-	oldValkey, oldPG, oldCLT := valkeyScript, postgresClientScript, requireCLT
-	t.Cleanup(func() { valkeyScript, postgresClientScript, requireCLT = oldValkey, oldPG, oldCLT })
+	oldValkey, oldCLT := valkeyScript, requireCLT
+	t.Cleanup(func() { valkeyScript, requireCLT = oldValkey, oldCLT })
 	requireCLT = func() error { return nil }
 	// Pretend to build: check the arguments, "compile" the tarball's contents into the output.
 	script := []byte(`set -eu
@@ -52,7 +49,7 @@ test -f "$1"
 mkdir -p "$3/bin"
 cp "$1" "$3/bin/tool"
 `)
-	valkeyScript, postgresClientScript = script, script
+	valkeyScript = script
 }
 
 func TestBuildVerifiesSourceAndRunsScript(t *testing.T) {
@@ -78,10 +75,6 @@ func TestBuildVerifiesSourceAndRunsScript(t *testing.T) {
 	cleanup()
 	if _, err := os.Stat(dir); !os.IsNotExist(err) {
 		t.Fatal("cleanup left the work dir")
-	}
-
-	if _, _, err := BuildPostgresClient(context.Background(), src, ws, "18.6", NewReporter(nil, nil)); err != nil {
-		t.Fatal(err)
 	}
 }
 

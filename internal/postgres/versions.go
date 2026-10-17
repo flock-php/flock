@@ -6,10 +6,11 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"slices"
 	"sort"
 	"sync"
 	"time"
+
+	"flock/internal/binaries"
 )
 
 // Errors of Manager operations; the API maps them to HTTP status codes.
@@ -22,11 +23,11 @@ var (
 // Service is how the Manager changes and observes the PostgreSQL service: the daemon (through
 // config.json and a reload) or, without a daemon, the CLI (config.json only).
 type Service interface {
-	// Active returns the configured server version ("" when none) and whether it should run.
-	Active() (version string, enabled bool)
-	// Apply makes version the configured server ("" for none), switches the service on when
-	// enable is set, and applies the change (stopping the old process, starting the new one).
-	Apply(version string, enable bool) error
+	// Active returns the configured server (an install ID, "" when none) and whether it should run.
+	Active() (id string, enabled bool)
+	// Apply makes id the configured server ("" for none), switches the service on when enable is
+	// set, and applies the change (stopping the old process, starting the new one).
+	Apply(id string, enable bool) error
 	// Running reports whether Flock's postgres process is up.
 	Running() bool
 	// Port is the PostgreSQL port.
@@ -35,7 +36,7 @@ type Service interface {
 	Live() bool
 }
 
-// Versions is the state of every offered major (GET /v1/postgres/versions).
+// Versions is the state of every offered or installed major (GET /v1/postgres/versions).
 type Versions struct {
 	Active     string         `json:"active"`
 	Running    bool           `json:"running"`
@@ -48,15 +49,18 @@ type Versions struct {
 
 // MajorVersion is one major line with what is installed of it.
 type MajorVersion struct {
-	Major     string `json:"major"`
-	Installed string `json:"installed"`
-	Latest    string `json:"latest"`
-	Update    bool   `json:"update"`
-	Active    bool   `json:"active"`
-	HasData   bool   `json:"has_data"`
-	DataSize  int64  `json:"data_size"`
-	EOL       string `json:"eol"`
-	Busy      string `json:"busy"` // "" | "installing" | "updating" | "switching" | "uninstalling"
+	Major      string `json:"major"`
+	Installed  string `json:"installed"` // version, e.g. "18.6"
+	Latest     string `json:"latest"`    // newest version in the channel
+	Update     bool   `json:"update"`    // Latest (or a newer build of it) can be installed
+	Size       int64  `json:"size"`      // download size of Latest
+	Prerelease bool   `json:"prerelease"`
+	Yanked     string `json:"yanked"` // why the installed build was withdrawn, "" when it wasn't
+	Active     bool   `json:"active"`
+	HasData    bool   `json:"has_data"`
+	DataSize   int64  `json:"data_size"`
+	EOL        string `json:"eol"`
+	Busy       string `json:"busy"` // "" | "installing" | "updating" | "switching" | "uninstalling"
 }
 
 // Find returns the state of major.
@@ -72,12 +76,13 @@ func (v Versions) Find(major string) (MajorVersion, bool) {
 // ReadyTimeout is how long an operation waits for a (re)started postgres to accept connections.
 var ReadyTimeout = 45 * time.Second
 
-// Manager installs, updates, switches and removes PostgreSQL majors. One operation runs at a time:
-// they all touch the single running server.
+// Manager installs, updates, switches and removes PostgreSQL majors from the binaries manifest.
+// One operation runs at a time: they all touch the single running server.
 type Manager struct {
 	Installer *Installer
-	Catalog   *Catalog
+	Catalog   *binaries.Catalog
 	Service   Service
+	platform  string
 
 	op    sync.Mutex // held for the duration of an operation
 	mu    sync.Mutex
@@ -90,23 +95,20 @@ type sizeEntry struct {
 	at   time.Time
 }
 
-// NewManager creates a manager for the PostgreSQL installs under root.
-func NewManager(root string, service Service) (*Manager, error) {
-	inst, err := NewInstaller(root)
-	if err != nil {
-		return nil, err
+// NewManager creates a manager for the PostgreSQL installs under root. A withdrawn (yanked) build
+// is replaced by the next good one as soon as the manifest has it.
+func NewManager(root string, catalog *binaries.Catalog, service Service) *Manager {
+	m := &Manager{Installer: NewInstaller(root), Catalog: catalog, Service: service, platform: binaries.Platform()}
+	if catalog != nil {
+		catalog.OnChange(m.replaceYanked)
 	}
-	catalog, err := NewCatalog(root)
-	if err != nil {
-		return nil, err
-	}
-	return &Manager{Installer: inst, Catalog: catalog, Service: service}, nil
+	return m
 }
 
 func (m *Manager) root() string { return m.Installer.Root }
 
-// InstalledVersions lists the installed server versions ("18.6.0"), newest first.
-func InstalledVersions(root string) ([]string, error) {
+// InstalledIDs lists the installed builds ("18.6-build1"), newest first.
+func InstalledIDs(root string) ([]string, error) {
 	entries, err := os.ReadDir(filepath.Join(root, "services", "postgres"))
 	if errors.Is(err, os.ErrNotExist) {
 		return nil, nil
@@ -114,27 +116,23 @@ func InstalledVersions(root string) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	var versions []string
+	var ids []string
 	for _, e := range entries {
-		if MajorOf(e.Name()) == "" {
-			continue
-		}
-		if _, err := os.Stat(filepath.Join(root, "services", "postgres", e.Name(), "bin", exe("postgres"))); err == nil {
-			versions = append(versions, e.Name())
+		if _, _, ok := ParseID(e.Name()); ok && Installed(root, e.Name()) {
+			ids = append(ids, e.Name())
 		}
 	}
-	sort.Slice(versions, func(i, j int) bool { return Newer(versions[i], versions[j]) })
-	return versions, nil
+	sort.Slice(ids, func(i, j int) bool { return Newer(ids[i], ids[j]) })
+	return ids, nil
 }
 
-// installedByMajor maps each installed major to its version: the active one, else the newest.
+// installedByMajor maps each installed major to its build: the active one, else the newest.
 func (m *Manager) installedByMajor(active string) map[string]string {
-	versions, _ := InstalledVersions(m.root())
+	ids, _ := InstalledIDs(m.root())
 	out := map[string]string{}
-	for _, v := range versions {
-		major := MajorOf(v)
-		if _, ok := out[major]; !ok {
-			out[major] = v
+	for _, id := range ids {
+		if major := MajorOf(id); out[major] == "" {
+			out[major] = id
 		}
 	}
 	if active != "" && m.Installer.Installed(active) {
@@ -143,55 +141,111 @@ func (m *Manager) installedByMajor(active string) map[string]string {
 	return out
 }
 
-// Versions returns the state of every major. It never waits on the network: when the catalog is
-// stale it is refreshed in the background.
-func (m *Manager) Versions() Versions {
-	if m.Catalog.Stale() {
-		m.Catalog.CheckInBackground()
+func (m *Manager) manifest() *binaries.Manifest {
+	if m.Catalog == nil {
+		return nil
 	}
-	return m.versions()
+	return m.Catalog.Manifest()
 }
 
-func (m *Manager) versions() Versions {
-	latest, checkedAt, checkErr := m.Catalog.Latest()
+// Check fetches the manifest now.
+func (m *Manager) Check(ctx context.Context) error {
+	if m.Catalog == nil {
+		return errors.New("PostgreSQL isn't published for this platform")
+	}
+	_, err := m.Catalog.Check(ctx)
+	return err
+}
+
+// Versions returns the state of every major the channel offers or that is installed or has
+// data. It never waits on the network.
+func (m *Manager) Versions() Versions {
+	manifest := m.manifest()
+	available := offers(manifest, m.platform)
 	active, enabled := m.Service.Active()
 	installed := m.installedByMajor(active)
 
 	out := Versions{
-		Active:     MajorOf(active),
-		Running:    m.Service.Running(),
-		Enabled:    enabled,
-		Port:       m.Service.Port(),
-		CheckError: checkErr,
-		Majors:     []MajorVersion{},
+		Active:  MajorOf(active),
+		Running: m.Service.Running(),
+		Enabled: enabled,
+		Port:    m.Service.Port(),
+		Majors:  []MajorVersion{},
 	}
 	if active != "" && !m.Installer.Installed(active) {
 		out.Active = ""
 	}
-	if !checkedAt.IsZero() {
-		out.CheckedAt = &checkedAt
+	if m.Catalog != nil {
+		cs := m.Catalog.Status()
+		out.CheckedAt, out.CheckError = cs.CheckedAt, cs.CheckError
 	}
+
+	majors := map[string]bool{}
+	for major := range available {
+		majors[major] = true
+	}
+	for major := range installed {
+		majors[major] = true
+	}
+	if entries, err := os.ReadDir(DataRoot(m.root())); err == nil {
+		for _, e := range entries {
+			if majorPattern.MatchString(e.Name()) && HasCluster(DataDir(m.root(), e.Name())) {
+				majors[e.Name()] = true
+			}
+		}
+	}
+	list := make([]string, 0, len(majors))
+	for major := range majors {
+		list = append(list, major)
+	}
+	sortMajors(list)
 
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	for _, major := range Majors {
+	for _, major := range list {
 		dir := DataDir(m.root(), major)
 		v := MajorVersion{
 			Major:     major,
-			Installed: installed[major],
-			Latest:    latest[major],
+			Installed: VersionOf(installed[major]),
 			Active:    major == out.Active,
 			HasData:   HasCluster(dir),
 			EOL:       EndOfLife[major],
 			Busy:      m.busy[major],
 		}
-		v.Update = v.Installed != "" && v.Latest != "" && Newer(v.Latest, v.Installed)
+		offer, ok := available[major]
+		if ok {
+			v.Latest, v.Size, v.Prerelease = offer.Version, offer.Size, offer.Prerelease
+		}
+		if id := installed[major]; id != "" {
+			v.Yanked = m.yanked(manifest, id)
+			v.Update = ok && offer.Installable() && Newer(ID(offer.Version, offer.Build), id)
+		}
 		if v.HasData {
 			v.DataSize = m.dataSize(major, dir)
 		}
 		out.Majors = append(out.Majors, v)
 	}
 	return out
+}
+
+// yanked is why an installed build was withdrawn, or "".
+func (m *Manager) yanked(manifest *binaries.Manifest, id string) string {
+	version, build, _ := ParseID(id)
+	for _, v := range manifest.Versions(Package, m.platform) {
+		if v.Version == version {
+			return v.YankReason(build)
+		}
+	}
+	return ""
+}
+
+// replaceYanked updates every installed major whose build was withdrawn, when a good one exists.
+func (m *Manager) replaceYanked() {
+	for _, v := range m.Versions().Majors {
+		if v.Yanked != "" && v.Update && v.Busy == "" {
+			go func(major string) { _ = m.Update(context.Background(), major) }(v.Major)
+		}
+	}
 }
 
 // dataSize caches directory sizes for a while: UIs poll, and a big cluster has many files.
@@ -210,8 +264,8 @@ func (m *Manager) dataSize(major, dir string) int64 {
 
 // begin claims the operation lock for major, or fails with ErrBusy.
 func (m *Manager) begin(major, what string) (func(), error) {
-	if !slices.Contains(Majors, major) {
-		return nil, fmt.Errorf("%w %q (Flock offers %v)", ErrInvalidMajor, major, Majors)
+	if !majorPattern.MatchString(major) {
+		return nil, fmt.Errorf("%w %q: give a major version like %s", ErrInvalidMajor, major, DefaultMajor)
 	}
 	if !m.op.TryLock() {
 		return nil, ErrBusy
@@ -232,61 +286,61 @@ func (m *Manager) begin(major, what string) (func(), error) {
 	}, nil
 }
 
-// latest returns the newest version of major, fetching the catalog when it doesn't know one.
-func (m *Manager) latest(ctx context.Context, major string) (string, error) {
-	latest, _, _ := m.Catalog.Latest()
-	if v := latest[major]; v != "" {
-		return v, nil
+// latest returns the channel's newest build of major, fetching the manifest first.
+func (m *Manager) latest(ctx context.Context, major string) (binaries.Version, error) {
+	if m.Catalog == nil {
+		return binaries.Version{}, errors.New("PostgreSQL isn't published for this platform")
 	}
-	if err := m.Catalog.Check(ctx); err != nil {
-		return "", fmt.Errorf("look up PostgreSQL versions: %w", err)
+	manifest, err := m.Catalog.Check(ctx)
+	if err != nil {
+		return binaries.Version{}, fmt.Errorf("look up PostgreSQL versions: %w", err)
 	}
-	latest, _, _ = m.Catalog.Latest()
-	if v := latest[major]; v != "" {
-		return v, nil
+	v, ok := offers(manifest, m.platform)[major]
+	if !ok {
+		return binaries.Version{}, fmt.Errorf("%w %s: no build of it is published for this platform", ErrInvalidMajor, major)
 	}
-	return "", fmt.Errorf("there is no PostgreSQL %s build for this platform", major)
+	if !v.Installable() {
+		return binaries.Version{}, fmt.Errorf("PostgreSQL %s build %d was withdrawn: %s", v.Version, v.Build, v.YankReason(v.Build))
+	}
+	return v, nil
 }
 
-// Install installs version (the newest release of major when "") and, when no major is active
-// yet, makes it the active one and starts it. Installing a major that is installed already
-// updates it when version is newer, and does nothing otherwise.
-func (m *Manager) Install(ctx context.Context, major, version string) error {
-	if version != "" && MajorOf(version) != major {
-		return fmt.Errorf("%w %q: expected a %s.x.y version", ErrInvalidMajor, version, major)
-	}
+// Install installs the newest build of major and, when no major is active yet, makes it the
+// active one and starts it. Installing a major that is installed already updates it when the
+// channel has a newer build, and does nothing otherwise.
+func (m *Manager) Install(ctx context.Context, major string) error {
 	done, err := m.begin(major, "installing")
 	if err != nil {
 		return err
 	}
 	defer done()
 
-	if version == "" {
-		if version, err = m.latest(ctx, major); err != nil {
-			return err
-		}
+	latest, err := m.latest(ctx, major)
+	if err != nil {
+		return err
 	}
 
 	active, _ := m.Service.Active()
 	if current := m.installedByMajor(active)[major]; current != "" {
-		if !Newer(version, current) {
+		if !Newer(ID(latest.Version, latest.Build), current) {
 			return nil
 		}
 		m.setBusy(major, "updating")
-		return m.update(ctx, major, current, version)
+		return m.update(ctx, major, current, latest)
 	}
 
-	if err := m.Installer.Install(ctx, version); err != nil {
+	id, err := m.Installer.Install(ctx, latest)
+	if err != nil {
 		return err
 	}
 	if active == "" || !m.Installer.Installed(active) {
-		return m.activate(ctx, version, "")
+		return m.activate(ctx, id, "")
 	}
 	return nil
 }
 
-// Update installs the newest release of an installed major, restarts it when it is the active
-// one, and then removes the older releases of that major. The data is kept.
+// Update installs the newest build of an installed major, restarts it when it is the active one,
+// and then removes the older builds of that major. The data is kept.
 func (m *Manager) Update(ctx context.Context, major string) error {
 	done, err := m.begin(major, "updating")
 	if err != nil {
@@ -303,35 +357,36 @@ func (m *Manager) Update(ctx context.Context, major string) error {
 	if err != nil {
 		return err
 	}
-	if !Newer(latest, current) {
+	if !Newer(ID(latest.Version, latest.Build), current) {
 		return nil
 	}
 	return m.update(ctx, major, current, latest)
 }
 
-func (m *Manager) update(ctx context.Context, major, current, latest string) error {
-	if err := m.Installer.Install(ctx, latest); err != nil {
+func (m *Manager) update(ctx context.Context, major, current string, latest binaries.Version) error {
+	id, err := m.Installer.Install(ctx, latest)
+	if err != nil {
 		return err
 	}
 
 	active, enabled := m.Service.Active()
 	if active == current {
-		if err := m.prepare(latest); err != nil {
+		if err := m.prepare(id); err != nil {
 			return err
 		}
-		if err := m.Service.Apply(latest, false); err != nil {
+		if err := m.Service.Apply(id, false); err != nil {
 			return err
 		}
 		if enabled {
 			if err := m.waitReady(ctx); err != nil {
-				// Go back to the release that worked; the new one is not kept.
+				// Go back to the build that worked; the new one is not kept.
 				_ = m.Service.Apply(current, false)
-				_ = os.RemoveAll(m.Installer.Dir(latest))
-				return fmt.Errorf("PostgreSQL %s did not start, so Flock kept %s: %w", latest, current, err)
+				_ = os.RemoveAll(m.Installer.Dir(id))
+				return fmt.Errorf("PostgreSQL %s did not start, so Flock kept %s: %w", VersionOf(id), VersionOf(current), err)
 			}
 		}
 	}
-	m.removeOthers(major, latest)
+	m.removeOthers(major, id)
 	return nil
 }
 
@@ -341,12 +396,12 @@ func (m *Manager) setBusy(major, what string) {
 	m.mu.Unlock()
 }
 
-// removeOthers deletes every installed release of major except keep.
+// removeOthers deletes every installed build of major except keep.
 func (m *Manager) removeOthers(major, keep string) {
-	versions, _ := InstalledVersions(m.root())
-	for _, v := range versions {
-		if MajorOf(v) == major && v != keep {
-			_ = os.RemoveAll(m.Installer.Dir(v))
+	ids, _ := InstalledIDs(m.root())
+	for _, id := range ids {
+		if MajorOf(id) == major && id != keep {
+			_ = os.RemoveAll(m.Installer.Dir(id))
 		}
 	}
 }
@@ -361,31 +416,31 @@ func (m *Manager) Activate(ctx context.Context, major string) error {
 	defer done()
 
 	active, _ := m.Service.Active()
-	version := m.installedByMajor(active)[major]
-	if version == "" {
+	id := m.installedByMajor(active)[major]
+	if id == "" {
 		return fmt.Errorf("PostgreSQL %s is %w", major, ErrNotInstalled)
 	}
 	previous := ""
-	if active != version && m.Installer.Installed(active) {
+	if active != id && m.Installer.Installed(active) {
 		previous = active
 	}
-	return m.activate(ctx, version, previous)
+	return m.activate(ctx, id, previous)
 }
 
-// activate starts version; when it doesn't come up, previous (if any) is started again.
-func (m *Manager) activate(ctx context.Context, version, previous string) error {
-	if err := m.prepare(version); err != nil {
+// activate starts id; when it doesn't come up, previous (if any) is started again.
+func (m *Manager) activate(ctx context.Context, id, previous string) error {
+	if err := m.prepare(id); err != nil {
 		return err
 	}
-	if err := m.Service.Apply(version, true); err != nil {
+	if err := m.Service.Apply(id, true); err != nil {
 		return err
 	}
 	if err := m.waitReady(ctx); err != nil {
 		if previous != "" {
 			_ = m.Service.Apply(previous, true)
-			return fmt.Errorf("PostgreSQL %s did not start, so Flock switched back to %s: %w", version, MajorOf(previous), err)
+			return fmt.Errorf("PostgreSQL %s did not start, so Flock switched back to %s: %w", MajorOf(id), MajorOf(previous), err)
 		}
-		return fmt.Errorf("PostgreSQL %s did not start: %w", version, err)
+		return fmt.Errorf("PostgreSQL %s did not start: %w", MajorOf(id), err)
 	}
 	return nil
 }
@@ -406,14 +461,16 @@ func (m *Manager) Uninstall(ctx context.Context, major string, deleteData bool) 
 	}
 
 	if active != "" && MajorOf(active) == major {
-		next := ""
-		for _, other := range Majors {
-			if other != major && installed[other] != "" {
-				next = installed[other]
-				break
+		var others []string
+		for other := range installed {
+			if other != major {
+				others = append(others, other)
 			}
 		}
-		if next != "" {
+		sortMajors(others)
+		next := ""
+		if len(others) > 0 {
+			next = installed[others[0]]
 			if err := m.prepare(next); err != nil {
 				return err
 			}
@@ -437,13 +494,10 @@ func (m *Manager) Uninstall(ctx context.Context, major string, deleteData bool) 
 	return nil
 }
 
-// prepare makes sure version's major has a cluster (moving the legacy one into place first), so
-// a failing initdb is reported to the caller instead of only as a daemon warning.
-func (m *Manager) prepare(version string) error {
-	if err := MigrateLegacyDataDir(m.root()); err != nil {
-		return err
-	}
-	return InitDB(m.Installer.BinDir(version), DataDir(m.root(), MajorOf(version)))
+// prepare makes sure id's major has a cluster, so a failing initdb is reported to the caller
+// instead of only as a daemon warning.
+func (m *Manager) prepare(id string) error {
+	return InitDB(m.Installer.BinDir(id), DataDir(m.root(), MajorOf(id)))
 }
 
 // waitReady waits until the service's postgres runs and accepts connections.

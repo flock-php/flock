@@ -8,8 +8,8 @@ public class ServiceVersionsTests
         var versions = FlockJson.Decode<PostgresVersions>("""
             {"active":"18","running":true,"enabled":true,"port":5432,"checked_at":"2026-10-14T08:00:00Z","check_error":"",
              "majors":[
-              {"major":"18","installed":"18.6.0","latest":"18.7.0","update":true,"active":true,"has_data":true,"data_size":48234496,"eol":"2030-11-14","busy":""},
-              {"major":"17","installed":"","latest":"17.6.0","update":false,"active":false,"has_data":true,"data_size":1024,"eol":"2029-11-08","busy":"installing"},
+              {"major":"18","installed":"18.6","latest":"18.7","update":true,"prerelease":false,"yanked":"crashes on start","active":true,"has_data":true,"data_size":48234496,"eol":"2030-11-14","busy":""},
+              {"major":"17","installed":"","latest":"17.6","update":false,"prerelease":true,"active":false,"has_data":true,"data_size":1024,"eol":"2029-11-08","busy":"installing"},
               {"major":"16","installed":"","latest":"","update":false,"active":false,"has_data":false,"data_size":0,"eol":"","busy":""}]}
             """);
 
@@ -24,6 +24,9 @@ public class ServiceVersionsTests
         var current = versions.Majors[0];
         Assert.True(current.IsInstalled);
         Assert.Equal(48234496, current.DataSize);
+        Assert.Equal("crashes on start", current.Yanked);
+        Assert.False(current.Prerelease);
+        Assert.True(versions.Majors[1].Prerelease);
         Assert.Equal(new DateOnly(2030, 11, 14), current.EolDate);
         Assert.False(current.IsBusy);
         Assert.Equal("", current.BusyText);
@@ -40,7 +43,7 @@ public class ServiceVersionsTests
     public void DecodesPostgresVersionsBeforeTheFirstCheck()
     {
         var versions = FlockJson.Decode<PostgresVersions>("""
-            {"active":"","running":false,"enabled":true,"port":5432,"checked_at":null,"check_error":"Get \"https://repo1.maven.org\": dial tcp: timeout",
+            {"active":"","running":false,"enabled":true,"port":5432,"checked_at":null,"check_error":"Get \"https://flockphp.com/binaries/manifest.json\": dial tcp: timeout",
              "majors":[{"major":"18","installed":"","latest":"","update":false,"active":false,"has_data":false,"data_size":0,"eol":"2030-11-14","busy":"vacuuming"}]}
             """);
 
@@ -73,8 +76,8 @@ public class ServiceVersionsTests
             {"checked_at":null,"check_error":"",
              "components":[
               {"id":"valkey","name":"Valkey","description":"","installed":"8.1.3","latest":"8.1.4","update":true,"method":"download","estimate":"5 MB download","job":null},
-              {"id":"postgres-client","name":"PostgreSQL command-line tools","description":"psql, pg_dump, pg_restore, pg_dumpall, createdb, dropdb",
-               "installed":"","latest":"18.6.0","update":false,"method":"download","estimate":"330 MB download, 12 MB kept"}]}
+              {"id":"other","name":"Other tool","description":"does other things",
+               "installed":"","latest":"1.6","update":false,"method":"download","estimate":"330 MB download, 12 MB kept"}]}
             """);
 
         Assert.Null(catalog.CheckedAt);
@@ -84,7 +87,7 @@ public class ServiceVersionsTests
         Assert.True(redis.Update);
         Assert.Equal(ComponentMethod.Download, redis.Method);
         Assert.Null(redis.Job);
-        var client = catalog[ComponentId.PostgresClient]!;
+        var client = catalog["other"]!;
         Assert.False(client.IsInstalled);
         Assert.Equal("330 MB download, 12 MB kept", client.Estimate);
         Assert.Null(client.Job);
@@ -99,7 +102,7 @@ public class ServiceVersionsTests
              "components":[
               {"id":"valkey","name":"Valkey","installed":"","latest":"8.1.4","update":false,"method":"download","estimate":"",
                "job":{"action":"install","state":"running","phase":"downloading","progress":0.42,"error":"","started_at":"2026-10-14T08:01:00Z"}},
-              {"id":"postgres-client","name":"PostgreSQL command-line tools","installed":"18.5.0","latest":"18.6.0","update":true,"method":"build","estimate":"about 5 minutes",
+              {"id":"other","name":"Other tool","installed":"1.5","latest":"1.6","update":true,"method":"build","estimate":"about 5 minutes",
                "job":{"action":"update","state":"failed","phase":"building","progress":-1,"error":"make: *** [all] Error 2","started_at":"2026-10-14T08:01:00Z"}}]}
             """);
 
@@ -112,7 +115,7 @@ public class ServiceVersionsTests
         Assert.Equal("Downloading…", running.PhaseText);
         Assert.NotNull(running.StartedAt);
 
-        var failed = catalog[ComponentId.PostgresClient]!.Job!;
+        var failed = catalog["other"]!.Job!;
         Assert.True(failed.IsFailed);
         Assert.False(failed.IsRunning);
         Assert.False(failed.HasProgress);

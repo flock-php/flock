@@ -172,17 +172,10 @@ struct ServicesPane: View {
         let components = store.components
         switch service.id {
         case "postgres":
-            let client = components?[ServiceComponent.postgresClient]
             if store.postgres?.isBusy == true || !store.postgresPending.isEmpty {
                 return .working
             }
-            if client?.job?.isRunning == true {
-                return .background
-            }
-            if client?.job?.isFailed == true {
-                return .failed
-            }
-            return store.postgres?.hasUpdate == true || client?.update == true ? .update : .none
+            return store.postgres?.hasUpdate == true ? .update : .none
         case ServiceComponent.valkey:
             let valkey = components?[ServiceComponent.valkey]
             if valkey?.job?.isRunning == true { return .working }
@@ -215,9 +208,8 @@ enum ServiceFilter: String {
 }
 
 private struct ServiceRow: View {
-    /// `working`: the service itself is being installed or switched; `background`: something
-    /// around it builds (the PostgreSQL command-line tools) while the service keeps running.
-    enum Activity { case none, update, working, background, failed }
+    /// `working`: the service is being installed, updated or switched.
+    enum Activity { case none, update, working, failed }
 
     let service: Service
     let activity: Activity
@@ -238,9 +230,6 @@ private struct ServiceRow: View {
                     case .failed:
                         Image(systemName: "exclamationmark.circle.fill").font(.caption).foregroundStyle(.red)
                             .help("The last install failed")
-                    case .background:
-                        ProgressView().controlSize(.mini)
-                            .help("Building the command-line tools")
                     case .none, .working:
                         EmptyView()
                     }
