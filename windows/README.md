@@ -9,7 +9,10 @@ windows/
   FlockKit/         models + API client (net10.0, no UI — the macOS app's FlockKit)
   FlockKit.Tests/   xUnit tests, run anywhere: dotnet test windows/FlockKit.Tests
   FlockTray/        the WinUI 3 app (unpackaged, self-contained Windows App SDK)
+  installer/        the Inno Setup script for Flock-Setup-x64.exe
   build.ps1         tests + publishes FlockTray to windows\dist\FlockTray-x64\
+  build-installer.ps1  the CLI, the hosts helper, build.ps1 and the installer around them
+  sign.ps1          Artifact Signing for the above, when CI sets it up (local builds stay unsigned)
 ```
 
 The UI is written in C# instead of XAML markup, the way the macOS app is written in SwiftUI. It
