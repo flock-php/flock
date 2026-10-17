@@ -15,6 +15,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
 	"testing"
@@ -370,6 +371,7 @@ func writeTarGz(t *testing.T, path string, files map[string]string) {
 }
 
 func TestUnpackDropsTheTopDirectory(t *testing.T) {
+	requireSymlinks(t)
 	dir := t.TempDir()
 	archive := filepath.Join(dir, "mysql.tar.gz")
 	writeTarGz(t, archive, map[string]string{
@@ -385,7 +387,8 @@ func TestUnpackDropsTheTopDirectory(t *testing.T) {
 	if data, _ := os.ReadFile(filepath.Join(out, "bin", "mysqld")); string(data) != "server" {
 		t.Fatalf("bin/mysqld holds %q", data)
 	}
-	if info, err := os.Stat(filepath.Join(out, "bin", "mysqld")); err != nil || info.Mode().Perm()&0o100 == 0 {
+	// Windows has no execute bit.
+	if info, err := os.Stat(filepath.Join(out, "bin", "mysqld")); err != nil || (runtime.GOOS != "windows" && info.Mode().Perm()&0o100 == 0) {
 		t.Fatalf("mysqld isn't executable: %v %v", info, err)
 	}
 	if target, _ := os.Readlink(filepath.Join(out, "lib", "libssl.3.link")); target != "libssl.dylib" {
@@ -418,7 +421,7 @@ func TestUnpackZipWithFilesAtTheRootAndBareBinaries(t *testing.T) {
 	if err := unpack(binary, out, "meilisearch"); err != nil {
 		t.Fatal(err)
 	}
-	if info, err := os.Stat(filepath.Join(out, "meilisearch")); err != nil || info.Mode().Perm()&0o100 == 0 {
+	if info, err := os.Stat(filepath.Join(out, "meilisearch")); err != nil || (runtime.GOOS != "windows" && info.Mode().Perm()&0o100 == 0) {
 		t.Fatalf("binary: %v %v", info, err)
 	}
 }
@@ -592,4 +595,14 @@ func (r rewrite) RoundTrip(req *http.Request) (*http.Response, error) {
 	u := *req.URL
 	target, _ := http.NewRequestWithContext(req.Context(), req.Method, r.base+u.Path, req.Body)
 	return http.DefaultTransport.RoundTrip(target)
+}
+
+// requireSymlinks skips a test where symbolic links can't be made: Windows allows them only in
+// Developer Mode or for administrators (GitHub's runners are).
+func requireSymlinks(t *testing.T) {
+	t.Helper()
+	dir := t.TempDir()
+	if err := os.Symlink("target", filepath.Join(dir, "link")); err != nil {
+		t.Skipf("symbolic links aren't allowed here: %v", err)
+	}
 }

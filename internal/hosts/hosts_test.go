@@ -74,7 +74,7 @@ func TestWriteSourceSortsAndSkipsUnchangedWrites(t *testing.T) {
 
 func TestBlockedRemembersTheRefusedExecutableOnly(t *testing.T) {
 	root := t.TempDir()
-	exe := filepath.Join(root, HelperName)
+	exe := filepath.Join(root, "flock-helper.exe")
 	if err := os.WriteFile(exe, []byte("build 1"), 0o644); err != nil {
 		t.Fatal(err)
 	}

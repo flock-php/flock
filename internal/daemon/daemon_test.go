@@ -186,7 +186,8 @@ func TestBusyPortsBecomeWarningsAndRecover(t *testing.T) {
 	deadline := time.Now().Add(5 * time.Second)
 	for {
 		status, _ = client.Status(context.Background())
-		if len(status.Warnings) == 0 {
+		// Only the web server's warning matters: on Windows there is also one about the hosts helper.
+		if !containsText(status.Warnings, "web:") {
 			break
 		}
 		if time.Now().After(deadline) {

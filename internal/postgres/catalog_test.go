@@ -113,6 +113,7 @@ func TestCatalogCachesAndKeepsVersionsOnFailure(t *testing.T) {
 	old := CheckInterval
 	CheckInterval = time.Nanosecond
 	defer func() { CheckInterval = old }()
+	time.Sleep(20 * time.Millisecond) // Windows' clock may not have moved on yet
 	if !again.Stale() {
 		t.Fatal("an old catalog is stale")
 	}

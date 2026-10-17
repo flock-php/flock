@@ -109,6 +109,7 @@ func TestJarURLAndPlatform(t *testing.T) {
 }
 
 func TestInstallVerifiesAndExtractsAtomically(t *testing.T) {
+	requireSymlinks(t)
 	jar := fakeJar(t, []entry{
 		{name: "bin/" + exe("postgres"), body: "#!/bin/sh\n"},
 		{name: "lib/libpq.5.dylib", body: "lib"},
@@ -160,5 +161,15 @@ func TestExtractRejectsPathTraversal(t *testing.T) {
 		if err := extractJar(jar, t.TempDir()); err == nil {
 			t.Fatalf("expected %q to be rejected", e.name)
 		}
+	}
+}
+
+// requireSymlinks skips a test where symbolic links can't be made: Windows allows them only in
+// Developer Mode or for administrators (GitHub's runners are).
+func requireSymlinks(t *testing.T) {
+	t.Helper()
+	dir := t.TempDir()
+	if err := os.Symlink("target", filepath.Join(dir, "link")); err != nil {
+		t.Skipf("symbolic links aren't allowed here: %v", err)
 	}
 }

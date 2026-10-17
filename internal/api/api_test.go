@@ -234,7 +234,7 @@ func TestSiteAndParkedEndpoints(t *testing.T) {
 	srv := serve(t, b, "")
 	project := t.TempDir()
 
-	if resp, body := call(t, "POST", srv.URL+"/v1/sites", "", `{"path":"`+project+`","name":"My App"}`); resp.StatusCode != http.StatusOK {
+	if resp, body := call(t, "POST", srv.URL+"/v1/sites", "", `{"path":`+jsonString(project)+`,"name":"My App"}`); resp.StatusCode != http.StatusOK {
 		t.Fatalf("link: %d %s", resp.StatusCode, body)
 	}
 	if site, ok := b.config(t).FindSite("my-app"); !ok || site.Path != project {
@@ -255,7 +255,7 @@ func TestSiteAndParkedEndpoints(t *testing.T) {
 	}
 
 	parent := filepath.Dir(project)
-	if resp, body := call(t, "POST", srv.URL+"/v1/parked", "", `{"path":"`+parent+`"}`); resp.StatusCode != http.StatusOK {
+	if resp, body := call(t, "POST", srv.URL+"/v1/parked", "", `{"path":`+jsonString(parent)+`}`); resp.StatusCode != http.StatusOK {
 		t.Fatalf("park: %d %s", resp.StatusCode, body)
 	}
 	if resp, _ := call(t, "DELETE", srv.URL+"/v1/sites/"+filepath.Base(t.TempDir()), "", ""); resp.StatusCode != http.StatusConflict {
@@ -264,7 +264,7 @@ func TestSiteAndParkedEndpoints(t *testing.T) {
 	if resp, _ := call(t, "DELETE", srv.URL+"/v1/sites/my-app", "", ""); resp.StatusCode != http.StatusOK {
 		t.Fatalf("unlink: %d", resp.StatusCode)
 	}
-	if resp, _ := call(t, "DELETE", srv.URL+"/v1/parked", "", `{"path":"`+parent+`"}`); resp.StatusCode != http.StatusOK || len(b.config(t).Parked) != 0 {
+	if resp, _ := call(t, "DELETE", srv.URL+"/v1/parked", "", `{"path":`+jsonString(parent)+`}`); resp.StatusCode != http.StatusOK || len(b.config(t).Parked) != 0 {
 		t.Fatalf("unpark: %d %v", resp.StatusCode, b.config(t).Parked)
 	}
 }
@@ -377,4 +377,10 @@ func TestSitesSwitchToFrankenPHPAndBack(t *testing.T) {
 	if resp, body := call(t, "PATCH", srv.URL+"/v1/sites/app", "", `{"server":"swoole"}`); resp.StatusCode != http.StatusBadRequest {
 		t.Fatalf("unknown server: %d %s", resp.StatusCode, body)
 	}
+}
+
+// jsonString quotes s for a JSON body (Windows paths have backslashes).
+func jsonString(s string) string {
+	b, _ := json.Marshal(s)
+	return string(b)
 }

@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"runtime"
 	"testing"
 )
 
@@ -38,6 +39,9 @@ func TestReleasesPicksLatestPatchPerMinorFrom74(t *testing.T) {
 }
 
 func TestStaticPHPMinors(t *testing.T) {
+	if runtime.GOOS != "darwin" || runtime.GOARCH != "arm64" {
+		t.Skip("static-php-cli's macOS builds are only looked for on Apple Silicon")
+	}
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		_, _ = w.Write([]byte(`<a href="php-8.5.8-fpm-macos-aarch64.tar.gz">x</a> <a href="php-8.4.23-fpm-macos-aarch64.tar.gz">
 			<a href="php-8.6.0-cli-macos-aarch64.tar.gz"> <a href="php-8.3.1-fpm-linux-x86_64.tar.gz">`))
