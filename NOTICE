@@ -9,5 +9,15 @@ This program is distributed in the hope that it will be useful, but WITHOUT ANY
 WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A
 PARTICULAR PURPOSE. See the GNU Affero General Public License for more details.
 
+Additional permission under GNU AGPL version 3 section 7:
+
+If you modify this program, or any covered work, by linking or combining it
+with the Microsoft Windows App SDK (or a modified version of it), containing
+parts covered by the terms of the Microsoft Software License Terms for the
+Windows App SDK, Guava s.r.o. grants you additional permission to convey the
+resulting work. Corresponding Source for a non-source form of such a
+combination does not need to include the source code of the Windows App SDK,
+only that of the covered work.
+
 The Flock name and logo are trademarks of Guava s.r.o. and are not covered by
 this license. Forks and modified versions must use a different name and logo.
