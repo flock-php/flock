@@ -1,6 +1,5 @@
 using System.Globalization;
 using System.Text;
-using System.Text.RegularExpressions;
 
 namespace Flock.Kit;
 
@@ -120,7 +119,7 @@ public static partial class DumpTimeline
             {
                 body.Append("<article class=\"dump\">\n<div class=\"meta\">").Append(Source(dump, editor))
                     .Append($"<time>{Time(dump.Time)}</time></div>\n")
-                    .Append(CleanedHtml(dump)).Append("\n</article>\n");
+                    .Append(dump.Html).Append("\n</article>\n");
             }
             body.Append("</section>\n");
         }
@@ -198,15 +197,6 @@ public static partial class DumpTimeline
         pre.sf-dump a.sf-dump-toggle:hover { background: var(--hover); }
         .sf-dump-hover:hover { background-color: var(--hover) !important; color: inherit !important; }
         """;
-
-    /// <summary>
-    /// Dumps captured by older Flock versions embed Symfony's whole header; its stylesheet would
-    /// override the theme for every dump on the page, so drop inline styles from bodies.
-    /// </summary>
-    public static string CleanedHtml(Dump dump) => InlineStyle().Replace(dump.Html, "");
-
-    [GeneratedRegex(@"<style[^>]*>[\s\S]*?</style>")]
-    private static partial Regex InlineStyle();
 
     /// <summary>"GET" pill + URL for requests, "CLI" pill + command for artisan and scripts.</summary>
     private static string OriginHtml(Dump dump)

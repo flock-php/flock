@@ -111,7 +111,6 @@ private struct NodeReleaseRow: View {
                     Text("Node \(release.major)").font(.body.weight(.semibold))
                     Text(versionText).font(.callout.monospacedDigit()).foregroundStyle(.secondary)
                     if release.isDefault { Badge(text: "Default") }
-                    supportBadge
                 }
                 detail
             }
@@ -132,23 +131,6 @@ private struct NodeReleaseRow: View {
 
     private var versionText: String {
         release.update ? "\(release.installed) → \(release.latest)" : (release.isInstalled ? release.installed : release.latest)
-    }
-
-    @ViewBuilder
-    private var supportBadge: some View {
-        let until = release.endOfLife.isEmpty ? "" : " until \(release.endOfLife)"
-        switch release.support {
-        case .lts:
-            Badge(text: release.codename.isEmpty ? "LTS" : "LTS · \(release.codename)").help("Long-term support\(until)")
-        case .maintenance:
-            Badge(text: "Maintenance", color: .secondary).help("Security fixes only\(until)")
-        case .current:
-            Badge(text: "Current", color: .secondary).help("The newest line, without long-term support\(until)")
-        case .eol:
-            Badge(text: "End of life", color: .orange).help(release.endOfLife.isEmpty ? "No more updates" : "No more updates since \(release.endOfLife)")
-        case .unknown:
-            EmptyView()
-        }
     }
 
     /// The status line under the name.

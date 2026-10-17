@@ -77,7 +77,7 @@ struct CatalogDetail: View {
             .padding(16)
         }
         .sheet(isPresented: logState.projectedValue) {
-            JobLogSheet(title: "\(service.name) \(entry?.method == .build ? "build" : "install") log",
+            JobLogSheet(title: "\(service.name) install log",
                         running: { store.catalog?[service.id]?.job?.isRunning ?? false },
                         load: { await store.catalogLog(service.id) })
         }
@@ -154,14 +154,14 @@ struct CatalogDetail: View {
     @ViewBuilder
     private func jobView(_ entry: CatalogService, _ job: CatalogJob) -> some View {
         if job.isRunning {
-            ComponentJobProgress(title: job.title(entry), buildEstimate: entry.method == .build ? entry.estimate : "", job: job.job) {
+            ComponentJobProgress(title: job.title(entry), job: job.job) {
                 logState.wrappedValue = true
             } cancel: {
                 let id = entry.id
                 Task { await model.settings.performOnCatalog(id) { try await $0.cancelCatalogJob(id) } }
             }
         } else if job.isFailed {
-            ComponentJobFailure(name: entry.name, isBuild: entry.method == .build, job: job.job) {
+            ComponentJobFailure(name: entry.name, job: job.job) {
                 logState.wrappedValue = true
             } retry: {
                 install(line: job.line.isEmpty ? nil : job.line)
@@ -204,7 +204,6 @@ extension CatalogJob {
         let target = version.isEmpty ? entry.name : "\(entry.name) \(version)"
         return switch job.phase {
         case .downloading: "Downloading \(target)…"
-        case .building: "Building \(target)…"
         case .installing: "Installing \(target)…"
         case .unknown: job.action == .update ? "Updating \(entry.name)…" : "Installing \(entry.name)…"
         }
@@ -212,16 +211,9 @@ extension CatalogJob {
 }
 
 extension CatalogService {
-    /// How installing works and takes, for a footnote.
+    /// What installing takes, for a footnote.
     var methodText: String {
-        switch method {
-        case .build:
-            "Builds from source\(estimate.isEmpty ? "" : " — \(estimate)"); needs the Xcode Command Line Tools."
-        case .download:
-            estimate.isEmpty ? "Downloads a ready-made build." : "Downloads a ready-made build (\(estimate))."
-        case .unknown:
-            estimate
-        }
+        estimate.isEmpty ? "Downloads a ready-made build." : "Downloads a ready-made build (\(estimate))."
     }
 }
 
@@ -259,7 +251,7 @@ private struct CatalogLineRow: View {
                         .buttonStyle(.borderedProminent)
                         .controlSize(.small)
                         .disabled(locked)
-                        .help("\(entry.method == .build ? "Builds" : "Downloads") \(entry.latest) and replaces \(entry.installed); your data stays.")
+                        .help("Downloads \(entry.latest) and replaces \(entry.installed); your data stays.")
                 }
                 Menu {
                     Button(entry.update ? "Update to \(entry.latest)" : "Reinstall \(entry.installed)", action: update)
@@ -316,13 +308,13 @@ private struct CatalogInstallCard: View {
                           title: job?.isRunning == true ? "Installing \(entry.name)" : "Install \(entry.name)",
                           message: entry.description.isEmpty ? "Runs on 127.0.0.1 for your sites." : entry.description) {
             if let job, job.isRunning {
-                ComponentJobProgress(title: job.title(entry), buildEstimate: entry.method == .build ? entry.estimate : "", job: job.job, showLog: showLog) {
+                ComponentJobProgress(title: job.title(entry), job: job.job, showLog: showLog) {
                     perform { try await $0.cancelCatalogJob(entry.id) }
                 }
                 .multilineTextAlignment(.leading)
                 .padding(.top, 6)
             } else if let job, job.isFailed {
-                ComponentJobFailure(name: entry.name, isBuild: entry.method == .build, job: job.job, showLog: showLog) {
+                ComponentJobFailure(name: entry.name, job: job.job, showLog: showLog) {
                     let line = job.line.isEmpty ? selectedLine : job.line
                     let port = self.port
                     perform { try await $0.installCatalogService(entry.id, line: line, port: port) }

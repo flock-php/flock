@@ -105,8 +105,7 @@ func TestCatalogEndpoints(t *testing.T) {
 	srv := serve(t, b, "")
 
 	resp, body := call(t, "POST", srv.URL+"/v1/catalog/check", "", "")
-	if resp.StatusCode != http.StatusOK || !strings.Contains(body, `"latest":"11.8.9"`) || !strings.Contains(body, `"default_port":3306`) ||
-		!strings.Contains(body, `"method":"download"`) {
+	if resp.StatusCode != http.StatusOK || !strings.Contains(body, `"latest":"11.8.9"`) || !strings.Contains(body, `"default_port":3306`) {
 		t.Fatalf("%d %s", resp.StatusCode, body)
 	}
 	if resp, _ := call(t, "POST", srv.URL+"/v1/catalog/mariadb/install", "", `{"line":"10.6"}`); resp.StatusCode != http.StatusBadRequest {

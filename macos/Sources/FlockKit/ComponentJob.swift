@@ -31,7 +31,7 @@ public struct ComponentJob: Decodable, Sendable, Equatable {
     }
 
     public enum Phase: String, Decodable, Sendable {
-        case downloading, building, installing, unknown
+        case downloading, installing, unknown
 
         public init(from decoder: Decoder) throws {
             self = Phase(rawValue: try decoder.singleValueContainer().decode(String.self)) ?? .unknown

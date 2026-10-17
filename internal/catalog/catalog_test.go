@@ -92,7 +92,7 @@ func TestInstallUpdateSwitchAndUninstall(t *testing.T) {
 	port := freePort(t)
 
 	e, _ := m.Catalog().Find("mysql")
-	if e.Installed != "" || !e.Available || e.Method != MethodDownload || len(e.Lines) != 3 || e.Lines[0].ID != "9.7" ||
+	if e.Installed != "" || !e.Available || len(e.Lines) != 3 || e.Lines[0].ID != "9.7" ||
 		e.Lines[0].Latest != "9.7.2" || e.DefaultPort != 3306 || !strings.HasSuffix(e.Estimate, "MB download") {
 		t.Fatalf("before install: %+v", e)
 	}
@@ -259,7 +259,7 @@ func TestStartRejectsBadRequests(t *testing.T) {
 			t.Errorf("Start(%q, %q, %d) = %v, want %v", c.id, c.line, c.port, err, c.want)
 		}
 	}
-	if e, _ := m.Catalog().Find("typesense"); e.Available || e.Unavailable != "no Windows build" || e.Method != "" {
+	if e, _ := m.Catalog().Find("typesense"); e.Available || e.Unavailable != "no Windows build" {
 		t.Fatalf("unavailable entry: %+v", e)
 	}
 	if ok, why := m.Available(off); ok || why != "no Windows build" {

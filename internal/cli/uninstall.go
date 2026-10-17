@@ -101,14 +101,8 @@ func cleanUp(root string, purge bool) ([]string, error) {
 	return kept, errors.Join(errs...)
 }
 
-// outsideDirs are Flock's caches and the app's own files, outside the data dir.
-var outsideDirs = func() []string {
-	dirs := appDirs()
-	if cache, err := os.UserCacheDir(); err == nil { // build caches (dev.flock/components-build)
-		dirs = append(dirs, filepath.Join(cache, "dev.flock"))
-	}
-	return dirs
-}
+// outsideDirs are the app's own files, outside the data dir.
+var outsideDirs = appDirs
 
 // cleanServices deletes the installed service binaries and keeps each service's data/.
 func cleanServices(dir string) ([]string, error) {
@@ -127,8 +121,7 @@ func cleanServices(dir string) ([]string, error) {
 		}
 		hasData := false
 		for _, e := range entries {
-			// data.migrating is a PostgreSQL cluster halfway through its move into data/<major>.
-			if (e.Name() == "data" || e.Name() == "data.migrating") && e.IsDir() {
+			if e.Name() == "data" && e.IsDir() {
 				hasData = true
 				kept = append(kept, filepath.Join(serviceDir, e.Name()))
 				continue

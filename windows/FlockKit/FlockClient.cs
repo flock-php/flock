@@ -21,7 +21,7 @@ public sealed class FlockServerException(int status, string message)
 public sealed class FlockClient : IDisposable
 {
     private readonly string configPath;
-    // Installing, building or uninstalling PHP waits for the daemon's work (the Go CLI allows 2 min too).
+    // Installing or uninstalling PHP waits for the daemon's work (the Go CLI allows 2 min too).
     private static readonly TimeSpan PhpChangeTimeout = TimeSpan.FromMinutes(2);
     // Installing or updating PostgreSQL downloads a server build and waits for it (and initdb).
     private static readonly TimeSpan PostgresDownloadTimeout = TimeSpan.FromMinutes(10);

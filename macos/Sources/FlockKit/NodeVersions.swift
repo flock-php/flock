@@ -22,11 +22,6 @@ public struct NodeRelease: Decodable, Sendable, Equatable, Identifiable {
     public var major: String
     /// The newest published release of the line, e.g. "22.21.0".
     public var latest: String
-    /// LTS name such as "Jod"; empty for lines that aren't LTS.
-    public var codename: String
-    public var support: Support
-    /// End-of-life date, e.g. "2027-04-30"; empty when unknown.
-    public var endOfLife: String
     /// The newest installed release of the line; empty when none is.
     public var installed: String
     public var isDefault: Bool
@@ -40,16 +35,8 @@ public struct NodeRelease: Decodable, Sendable, Equatable, Identifiable {
     public var id: String { major }
     public var isInstalled: Bool { !installed.isEmpty }
 
-    public enum Support: String, Decodable, Sendable {
-        case current, lts, maintenance, eol, unknown
-
-        public init(from decoder: Decoder) throws {
-            self = Support(rawValue: try decoder.singleValueContainer().decode(String.self)) ?? .unknown
-        }
-    }
-
     enum CodingKeys: String, CodingKey {
-        case major, latest, codename, support, endOfLife, installed, update, npm, npmLatest
+        case major, latest, installed, update, npm, npmLatest
         case isDefault = "default"
     }
 
@@ -57,9 +44,6 @@ public struct NodeRelease: Decodable, Sendable, Equatable, Identifiable {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         major = try c.decode(String.self, forKey: .major)
         latest = try c.decodeIfPresent(String.self, forKey: .latest) ?? ""
-        codename = try c.decodeIfPresent(String.self, forKey: .codename) ?? ""
-        support = try c.decodeIfPresent(Support.self, forKey: .support) ?? .unknown
-        endOfLife = try c.decodeIfPresent(String.self, forKey: .endOfLife) ?? ""
         installed = try c.decodeIfPresent(String.self, forKey: .installed) ?? ""
         isDefault = try c.decodeIfPresent(Bool.self, forKey: .isDefault) ?? false
         update = try c.decodeIfPresent(Bool.self, forKey: .update) ?? false

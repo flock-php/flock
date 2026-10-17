@@ -157,8 +157,6 @@ func jobText(e catalog.Entry) string {
 			return fmt.Sprintf("downloading %s (%d%%)…", target, int(e.Job.Progress*100))
 		}
 		return fmt.Sprintf("downloading %s…", target)
-	case "building":
-		return fmt.Sprintf("building %s from source (%s)…", target, e.Estimate)
 	}
 	return fmt.Sprintf("installing %s…", target)
 }

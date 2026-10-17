@@ -60,14 +60,4 @@ public class DumpTimelineTests
         Assert.Equal("phpstorm://open?file=C:/code/x.php&line=9", Editor.PhpStorm.Url(@"C:\code\x.php", 9));
         Assert.Equal("app/Models/Cart.php", DumpTimeline.ShortPath(@"C:\code\shop\app\Models\Cart.php"));
     }
-
-    [Fact]
-    public void LegacyBodiesLoseTheirStylesheet()
-    {
-        var dump = Dumps()[0];
-        dump.Html = "<style>pre.sf-dump{color:red}</style><script>Sfdump=1</script><pre class=sf-dump>x</pre>";
-        var body = DumpTimeline.CleanedHtml(dump);
-        Assert.DoesNotContain("<style", body);
-        Assert.Contains("<pre class=sf-dump>x</pre>", body);
-    }
 }

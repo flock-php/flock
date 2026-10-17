@@ -44,8 +44,7 @@ func writeShims(root, bin string) error {
 }
 
 // addToShellPath prepends dirs, in this order, in ~/.zshrc (and ~/.bash_profile if present): a
-// marked export line, appended once and rewritten when the directories change (an older Flock
-// only added the shims).
+// marked export line, appended once and rewritten when the directories change.
 func addToShellPath(dirs ...string) error {
 	home, err := os.UserHomeDir()
 	if err != nil {

@@ -62,17 +62,17 @@ import Testing
     {"checked_at":"2026-10-14T08:00:00Z","check_error":"Typesense: offline",
      "services":[
       {"id":"mysql","name":"MySQL","category":"Database","description":"The most popular database","available":true,"unavailable":"",
-       "method":"download","estimate":"200 MB download","installed":"8.4.6","line":"8.4","latest":"8.4.7","update":true,
+       "estimate":"200 MB download","installed":"8.4.6","line":"8.4","latest":"8.4.7","update":true,
        "port":3306,"default_port":3306,
        "lines":[{"id":"9.4","label":"9.4 Innovation","latest":"9.4.0","installed":false,"has_data":false},
                 {"id":"8.4","label":"8.4 LTS","latest":"8.4.7","installed":true,"has_data":true}],
        "job":null},
-      {"id":"mariadb","name":"MariaDB","category":"Database","available":true,"method":"build","estimate":"about 10 minutes",
+      {"id":"mariadb","name":"MariaDB","category":"Database","available":true,"estimate":"about 90 MB download",
        "installed":"","port":3307,"default_port":3306,"lines":[{"id":"11.8","label":"11.8 LTS"}],
-       "job":{"action":"install","state":"running","phase":"building","progress":-1,"error":"","started_at":"2026-10-14T08:01:00Z",
+       "job":{"action":"install","state":"running","phase":"downloading","progress":-1,"error":"","started_at":"2026-10-14T08:01:00Z",
               "version":"11.8.3","line":"11.8"}},
       {"id":"typesense","name":"Typesense","category":"Search","available":false,"unavailable":"Typesense has no Windows build.",
-       "method":"","lines":null},
+       "lines":null},
       {"id":"future"}
      ]}
     """.utf8))
@@ -82,18 +82,18 @@ import Testing
     #expect(catalog.hasRunningJob)
 
     let mysql = try #require(catalog["mysql"])
-    #expect(mysql.isInstalled && mysql.update && mysql.line == "8.4" && mysql.latest == "8.4.7" && mysql.method == .download)
+    #expect(mysql.isInstalled && mysql.update && mysql.line == "8.4" && mysql.latest == "8.4.7")
     #expect(mysql.lines.map(\.label) == ["9.4 Innovation", "8.4 LTS"] && mysql.preferredLine?.id == "8.4")
     #expect(mysql.lines[1].hasData && mysql.lines[1].installed && !mysql.lines[0].hasData)
 
     let mariadb = try #require(catalog["mariadb"])
     #expect(!mariadb.isInstalled && mariadb.port == 3307 && mariadb.defaultPort == 3306 && mariadb.preferredLine?.id == "11.8")
     let job = try #require(mariadb.job)
-    #expect(job.isRunning && job.version == "11.8.3" && job.line == "11.8" && job.job.phase == .building && job.job.startedAt != nil)
+    #expect(job.isRunning && job.version == "11.8.3" && job.line == "11.8" && job.job.phase == .downloading && job.job.startedAt != nil)
     #expect(mariadb.lines[0].latest.isEmpty && !mariadb.lines[0].installed)
 
     let typesense = try #require(catalog["typesense"])
-    #expect(!typesense.available && typesense.unavailable.hasPrefix("Typesense") && typesense.lines.isEmpty && typesense.method == .unknown)
+    #expect(!typesense.available && typesense.unavailable.hasPrefix("Typesense") && typesense.lines.isEmpty)
 
     let future = try #require(catalog["future"])
     #expect(future.name == "future" && future.available && future.category == "Other" && future.preferredLine == nil)

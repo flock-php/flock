@@ -54,11 +54,3 @@ private let sample = """
     #expect(Editor.phpstorm.url(file: "/x.blade.php", line: 0)?.absoluteString == "phpstorm://open?file=/x.blade.php")
     #expect(Editor.none.url(file: "/x.php", line: 1) == nil)
 }
-
-@Test func legacyBodiesLoseTheirStylesheet() throws {
-    var dump = try dumps(sample)[0]
-    dump.html = "<style>pre.sf-dump{color:red}</style><script>Sfdump=1</script><pre class=sf-dump>x</pre>"
-    let body = DumpTimeline.cleanedHTML(of: dump)
-    #expect(!body.contains("<style"))
-    #expect(body.contains("<pre class=sf-dump>x</pre>"))
-}

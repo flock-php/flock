@@ -122,15 +122,12 @@ enum Formats {
 /// An install that runs in the background: phase, progress, elapsed time, the log and Cancel.
 struct ComponentJobProgress: View {
     let title: String
-    /// What a build usually takes ("about 1 minute"); empty for downloads.
-    let buildEstimate: String
     let job: ComponentJob
     let showLog: () -> Void
     let cancel: () -> Void
 
-    init(title: String, buildEstimate: String, job: ComponentJob, showLog: @escaping () -> Void, cancel: @escaping () -> Void) {
+    init(title: String, job: ComponentJob, showLog: @escaping () -> Void, cancel: @escaping () -> Void) {
         self.title = title
-        self.buildEstimate = buildEstimate
         self.job = job
         self.showLog = showLog
         self.cancel = cancel
@@ -154,9 +151,7 @@ struct ComponentJobProgress: View {
                 ProgressView().progressViewStyle(.linear)
             }
             HStack(spacing: 10) {
-                Text(!buildEstimate.isEmpty
-                     ? "Usually \(buildEstimate). It keeps going when you close this window."
-                     : "It keeps going when you close this window.")
+                Text("It keeps going when you close this window.")
                     .font(.caption).foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
                 Spacer(minLength: 4)
@@ -169,28 +164,19 @@ struct ComponentJobProgress: View {
 
 /// A failed install: what went wrong, the log, Try Again and Dismiss.
 struct ComponentJobFailure: View {
-    /// "Redis", "PostgreSQL tools".
+    /// "MySQL", "Valkey".
     let name: String
-    let isBuild: Bool
     let job: ComponentJob
     let showLog: () -> Void
     let retry: () -> Void
     let dismiss: () -> Void
 
-    init(name: String, isBuild: Bool, job: ComponentJob, showLog: @escaping () -> Void, retry: @escaping () -> Void, dismiss: @escaping () -> Void) {
+    init(name: String, job: ComponentJob, showLog: @escaping () -> Void, retry: @escaping () -> Void, dismiss: @escaping () -> Void) {
         self.name = name
-        self.isBuild = isBuild
         self.job = job
         self.showLog = showLog
         self.retry = retry
         self.dismiss = dismiss
-    }
-
-    /// The build failed because Apple's Command Line Tools are missing.
-    private var needsDeveloperTools: Bool {
-        guard isBuild else { return false }
-        let error = job.error.lowercased()
-        return ["xcrun", "xcode-select", "commandlinetools", "command line tools"].contains { error.contains($0) }
     }
 
     var body: some View {
@@ -200,7 +186,7 @@ struct ComponentJobFailure: View {
                 VStack(alignment: .leading, spacing: 3) {
                     Text(job.action == .update ? "Couldn't update \(name)" : "Couldn't install \(name)")
                         .font(.callout.weight(.semibold))
-                    Text(job.error.isEmpty ? "The \(isBuild ? "build" : "install") stopped with an error. The log has the details." : job.error)
+                    Text(job.error.isEmpty ? "The install stopped with an error. The log has the details." : job.error)
                         .font(.caption).foregroundStyle(.secondary)
                         .textSelection(.enabled)
                         .lineLimit(4)
@@ -211,14 +197,6 @@ struct ComponentJobFailure: View {
             HStack(spacing: 8) {
                 Button("Show Log", action: showLog).buttonStyle(.link).font(.caption)
                 Spacer()
-                if needsDeveloperTools {
-                    Button("Install Xcode Tools…") {
-                        // Opens Apple's installer for the Command Line Tools.
-                        _ = try? Process.run(URL(fileURLWithPath: "/usr/bin/xcode-select"), arguments: ["--install"])
-                    }
-                    .controlSize(.small)
-                    .help("Builds need Apple's Command Line Tools. Install them, then try again.")
-                }
                 Button("Dismiss", action: dismiss).controlSize(.small)
                 Button("Try Again", action: retry).controlSize(.small).buttonStyle(.borderedProminent)
             }

@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
-	"slices"
 	"testing"
 )
 
@@ -73,20 +72,6 @@ func TestNpmPrefersTheUpdatedOne(t *testing.T) {
 	writePackage(t, filepath.Join(modulesDir(GlobalDir(root, "26")), "npm"), "12.2.0")
 	if v, cli := Npm(root, "26.1.0"); v != "12.2.0" || filepath.Base(cli) != "npm-cli.js" {
 		t.Fatalf("updated npm: %q %q", v, cli)
-	}
-}
-
-func TestGlobalPackagesSkipsWhatNodeBrings(t *testing.T) {
-	dir := t.TempDir()
-	modules := modulesDir(dir)
-	writePackage(t, filepath.Join(modules, "npm"), "11.20.0")
-	writePackage(t, filepath.Join(modules, "corepack"), "0.34.0")
-	writePackage(t, filepath.Join(modules, "vercel"), "48.1.0")
-	writePackage(t, filepath.Join(modules, "@vue", "cli"), "5.0.8")
-	got := globalPackages(dir)
-	slices.Sort(got)
-	if want := []string{"@vue/cli@5.0.8", "vercel@48.1.0"}; !slices.Equal(got, want) {
-		t.Fatalf("got %v, want %v", got, want)
 	}
 }
 

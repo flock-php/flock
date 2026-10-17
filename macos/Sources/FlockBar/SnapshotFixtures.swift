@@ -58,7 +58,7 @@ enum SnapshotFixtures {
          {"id":"redis","name":"Redis","category":"Cache & Queue","available":true,"port":6379,"installed":false},
          {"id":"meilisearch","name":"Meilisearch","category":"Search","available":true,"port":7700,"installed":false},
          {"id":"typesense","name":"Typesense","category":"Search","available":true,"port":8108,"installed":false},
-         {"id":"rustfs","name":"RustFS","category":"Storage","available":false,"unavailable":"RustFS has no build for Intel Macs.","port":9000,"installed":false},
+         {"id":"rustfs","name":"RustFS","category":"Storage","available":false,"unavailable":"Flock publishes no RustFS build for this computer.","port":9000,"installed":false},
          {"id":"mail","name":"Mail (SMTP)","category":"Mail","port":2525,"installed":true,"enabled":true,"running":true},
          {"id":"dumps","name":"Dump server","category":"Debugging","port":9912,"installed":true,"enabled":false,"running":false,"stoppable":true}]
         """) ?? []
@@ -108,34 +108,34 @@ enum SnapshotFixtures {
             ? #"{"action":"install","state":"running","phase":"downloading","progress":0.42,"error":"","started_at":"\#(time(38))","version":"9.7.2","line":"9.7"}"#
             : "null"
         let mariadbJob = name == "catalog-failed"
-            ? #"{"action":"install","state":"failed","phase":"building","progress":-1,"error":"the build failed (exit status 2) — see the build log","started_at":"\#(time(400))","version":"11.8.9","line":"11.8"}"#
+            ? #"{"action":"install","state":"failed","phase":"downloading","progress":-1,"error":"checksum mismatch for mariadb-11.8.9-build1-macos-arm64.tar.gz","started_at":"\#(time(400))","version":"11.8.9","line":"11.8"}"#
             : "null"
         let update = name == "catalog-installed"
         return """
         {"checked_at":"\(time(2 * 3600))","check_error":"",
          "services":[
           {"id":"mysql","name":"MySQL","category":"Database","description":"The world's most popular open-source database. User root, no password.",
-           "available":true,"method":"download","estimate":"about 170 MB download","installed":"\(mysql ? "8.4.11" : "")","line":"\(mysql ? "8.4" : "")",
+           "available":true,"estimate":"about 170 MB download","installed":"\(mysql ? "8.4.11" : "")","line":"\(mysql ? "8.4" : "")",
            "latest":"\(mysql ? (update ? "8.4.12" : "8.4.11") : "")","update":\(mysql && update),"port":3306,"default_port":3306,
            "lines":[{"id":"9.7","label":"9.7 LTS","latest":"9.7.2","installed":false,"has_data":\(update)},
                     {"id":"8.4","label":"8.4 LTS","latest":"\(update ? "8.4.12" : "8.4.11")","installed":\(mysql),"has_data":\(mysql)},
                     {"id":"8.0","label":"8.0 (end of life)","latest":"8.0.46","installed":false,"has_data":false}],
            "job":\(mysqlJob)},
           {"id":"mariadb","name":"MariaDB","category":"Database","description":"The community fork of MySQL, compatible with its clients. User root, no password.",
-           "available":true,"method":"build","estimate":"about 5 minutes","installed":"","port":\(mysql ? 3307 : 3306),"default_port":3306,
+           "available":true,"estimate":"about 90 MB download","installed":"","port":\(mysql ? 3307 : 3306),"default_port":3306,
            "lines":[{"id":"12.3","label":"12.3 LTS","latest":"12.3.3"},{"id":"11.8","label":"11.8 LTS","latest":"11.8.9"},
                     {"id":"11.4","label":"11.4 LTS","latest":"11.4.13"},{"id":"10.11","label":"10.11 LTS","latest":"10.11.19"}],
            "job":\(mariadbJob)},
-          {"id":"mongodb","name":"MongoDB","category":"Database","available":true,"method":"download","estimate":"about 80 MB download",
+          {"id":"mongodb","name":"MongoDB","category":"Database","available":true,"estimate":"about 80 MB download",
            "port":27017,"default_port":27017,"lines":[{"id":"9.0","label":"9.0","latest":"9.0.4"}],"job":null},
           {"id":"redis","name":"Redis","category":"Cache & Queue","description":"The in-memory store for your cache, queues and sessions, from Redis Ltd.",
-           "available":true,"method":"build","estimate":"about 1 minute","port":6380,"default_port":6379,
+           "available":true,"estimate":"about 5 MB download","port":6380,"default_port":6379,
            "lines":[{"id":"8.10","label":"8.10","latest":"8.10.2"},{"id":"7.4","label":"7.4","latest":"7.4.11"}],"job":null},
-          {"id":"meilisearch","name":"Meilisearch","category":"Search","available":true,"method":"download","estimate":"about 350 MB download",
+          {"id":"meilisearch","name":"Meilisearch","category":"Search","available":true,"estimate":"about 350 MB download",
            "port":7700,"default_port":7700,"lines":[{"id":"1","label":"1.x","latest":"1.55.0"}],"job":null},
-          {"id":"typesense","name":"Typesense","category":"Search","available":true,"method":"download","estimate":"about 40 MB download",
+          {"id":"typesense","name":"Typesense","category":"Search","available":true,"estimate":"about 40 MB download",
            "port":8108,"default_port":8108,"lines":[{"id":"30","label":"30","latest":"30.2"}],"job":null},
-          {"id":"rustfs","name":"RustFS","category":"Storage","available":false,"unavailable":"RustFS has no build for Intel Macs.","lines":[],"job":null}
+          {"id":"rustfs","name":"RustFS","category":"Storage","available":false,"unavailable":"Flock publishes no RustFS build for this computer.","lines":[],"job":null}
          ]}
         """
     }

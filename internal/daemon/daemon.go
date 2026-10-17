@@ -73,8 +73,6 @@ type daemon struct {
 	// pg manages the PostgreSQL versions, catalog the other services (MySQL, Valkey, Meilisearch, ...).
 	pg      *postgres.Manager
 	catalog *catalog.Manager
-	// migrateGlobals moves global npm packages out of Node's version directories, once per run.
-	migrateGlobals sync.Once
 
 	// leaves issues certificates for deep subdomains, aliases and unknown names during handshakes.
 	leaves *certs.Leaves
@@ -454,15 +452,6 @@ func (d *daemon) reload() error {
 	if err := node.LinkCurrent(d.root, cfg.DefaultNode); err != nil {
 		warnings = append(warnings, "node: "+err.Error())
 	}
-	d.migrateGlobals.Do(func() {
-		go func() {
-			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
-			defer cancel()
-			if err := node.MigrateGlobals(ctx, d.root); err != nil {
-				fmt.Fprintf(os.Stderr, "moving global npm packages into node-global: %v\n", err)
-			}
-		}()
-	})
 
 	var (
 		statuses    []api.SiteStatus

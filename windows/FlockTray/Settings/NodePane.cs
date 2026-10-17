@@ -66,10 +66,6 @@ internal sealed class NodePane(SettingsWindow window, AppModel model) : Pane(win
         {
             title.Children.Add(Ui.Badge("Default"));
         }
-        if (SupportBadge(release) is { } badge)
-        {
-            title.Children.Add(badge);
-        }
 
         var icon = Ui.Icon(Ui.GlyphTerminal, 20, release.IsInstalled ? Ui.Accent : Ui.TertiaryText);
         var info = Ui.Row(14, icon, Ui.Column(2, title, Detail(release)));
@@ -78,26 +74,6 @@ internal sealed class NodePane(SettingsWindow window, AppModel model) : Pane(win
 
     private static string VersionText(NodeRelease release) =>
         release.Update ? $"{release.Installed} → {release.Latest}" : release.IsInstalled ? release.Installed : release.Latest;
-
-    private static Border? SupportBadge(NodeRelease release)
-    {
-        var until = release.EndOfLife.Length > 0 ? $" until {release.EndOfLife}" : "";
-        var (text, tone, tip) = release.Support switch
-        {
-            NodeSupport.Lts => (release.Codename.Length > 0 ? $"LTS · {release.Codename}" : "LTS", Ui.Tone.Accent, $"Long-term support{until}"),
-            NodeSupport.Maintenance => ("Maintenance", Ui.Tone.Neutral, $"Security fixes only{until}"),
-            NodeSupport.Current => ("Current", Ui.Tone.Neutral, $"The newest line, without long-term support{until}"),
-            NodeSupport.EndOfLife => ("End of life", Ui.Tone.Caution, release.EndOfLife.Length > 0 ? $"No more updates since {release.EndOfLife}" : "No more updates"),
-            _ => (null, Ui.Tone.Neutral, ""),
-        };
-        if (text is null)
-        {
-            return null;
-        }
-        var badge = Ui.Badge(text, tone);
-        ToolTipService.SetToolTip(badge, tip);
-        return badge;
-    }
 
     /// <summary>The status line under the name.</summary>
     private UIElement Detail(NodeRelease release)

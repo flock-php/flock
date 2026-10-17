@@ -36,19 +36,6 @@ public struct CatalogService: Decodable, Sendable, Equatable, Identifiable {
     public var available: Bool
     /// Why it isn't available on this platform.
     public var unavailable: String
-    public var method: Method
-
-    /// How Flock gets it: a download from the package manifest.
-    public enum Method: String, Decodable, Sendable {
-        /// Compiled from source (older daemons).
-        case build
-        case download
-        case unknown
-
-        public init(from decoder: Decoder) throws {
-            self = Method(rawValue: try decoder.singleValueContainer().decode(String.self)) ?? .unknown
-        }
-    }
 
     /// How long installing takes, e.g. "about 180 MB download".
     public var estimate: String
@@ -76,7 +63,7 @@ public struct CatalogService: Decodable, Sendable, Equatable, Identifiable {
     }
 
     enum CodingKeys: String, CodingKey {
-        case id, name, category, description, available, unavailable, method, estimate, installed, line, latest, update, yanked, port, defaultPort, lines, job
+        case id, name, category, description, available, unavailable, estimate, installed, line, latest, update, yanked, port, defaultPort, lines, job
     }
 
     public init(from decoder: Decoder) throws {
@@ -87,7 +74,6 @@ public struct CatalogService: Decodable, Sendable, Equatable, Identifiable {
         description = try c.decodeIfPresent(String.self, forKey: .description) ?? ""
         available = try c.decodeIfPresent(Bool.self, forKey: .available) ?? true
         unavailable = try c.decodeIfPresent(String.self, forKey: .unavailable) ?? ""
-        method = try c.decodeIfPresent(Method.self, forKey: .method) ?? .unknown
         estimate = try c.decodeIfPresent(String.self, forKey: .estimate) ?? ""
         installed = try c.decodeIfPresent(String.self, forKey: .installed) ?? ""
         line = try c.decodeIfPresent(String.self, forKey: .line) ?? ""

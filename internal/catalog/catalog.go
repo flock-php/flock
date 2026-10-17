@@ -36,9 +36,6 @@ var (
 // Mutate edits config.json and applies it (the daemon's Mutate, or a CLI equivalent).
 type Mutate func(change func(*config.Config) error) error
 
-// Install methods (only downloads are left: every service comes from the manifest).
-const MethodDownload = "download"
-
 // Job phases.
 const (
 	PhaseDownloading = "downloading"
@@ -151,13 +148,12 @@ type Entry struct {
 	Description string `json:"description"`
 	Available   bool   `json:"available"`
 	Unavailable string `json:"unavailable"` // why it isn't available here
-	Method      string `json:"method"`
-	Estimate    string `json:"estimate"`  // download size of the newest line, e.g. "about 170 MB download"
-	Installed   string `json:"installed"` // version, "" when not installed
-	Line        string `json:"line"`      // of the installed version
-	Latest      string `json:"latest"`    // newest release of Line
-	Update      bool   `json:"update"`    // Latest (or a newer build of it) can be installed
-	Yanked      string `json:"yanked"`    // why the installed build was withdrawn, "" when it wasn't
+	Estimate    string `json:"estimate"`    // download size of the newest line, e.g. "about 170 MB download"
+	Installed   string `json:"installed"`   // version, "" when not installed
+	Line        string `json:"line"`        // of the installed version
+	Latest      string `json:"latest"`      // newest release of Line
+	Update      bool   `json:"update"`      // Latest (or a newer build of it) can be installed
+	Yanked      string `json:"yanked"`      // why the installed build was withdrawn, "" when it wasn't
 	// Port is the configured port, or for a service that isn't installed the one Flock suggests:
 	// the default unless another service has it.
 	Port        int         `json:"port"`
@@ -296,9 +292,7 @@ func (m *Manager) entry(manifest *binaries.Manifest, k *Kind, cfg *config.Config
 		ID: k.ID, Name: k.Name, Category: k.Category, Description: k.Description,
 		Available: len(offers) > 0, DefaultPort: k.DefaultPort, Lines: []LineState{},
 	}
-	if e.Available {
-		e.Method = MethodDownload
-	} else {
+	if !e.Available {
 		_, e.Unavailable = m.Available(k)
 	}
 

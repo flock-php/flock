@@ -390,10 +390,6 @@ func XdebugAvailable(root, minor string) bool {
 // writeXdebugIni (re)writes conf.d-xdebug/xdebug.ini when the build ships Xdebug. Whatever
 // reaches the debug pool asked to be debugged, so a session starts with every request.
 func writeXdebugIni(root, minor string) error {
-	// Older versions loaded Xdebug for everything from conf.d.
-	if err := os.Remove(filepath.Join(Dir(root, minor), "conf.d", "xdebug.ini")); err != nil && !errors.Is(err, os.ErrNotExist) {
-		return err
-	}
 	if !XdebugAvailable(root, minor) {
 		return nil
 	}

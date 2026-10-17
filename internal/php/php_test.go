@@ -21,10 +21,6 @@ func TestXdebugLoadsOnlyInTheDebugPool(t *testing.T) {
 	so := ExtensionPath(root, "8.5", "xdebug")
 	_ = os.MkdirAll(filepath.Dir(so), 0o755)
 	_ = os.WriteFile(so, nil, 0o755)
-	// Older versions loaded Xdebug for every request from conf.d.
-	legacy := filepath.Join(Dir(root, "8.5"), "conf.d", "xdebug.ini")
-	_ = os.MkdirAll(filepath.Dir(legacy), 0o755)
-	_ = os.WriteFile(legacy, nil, 0o644)
 
 	normal, err := PoolFor(root, "8.5")
 	if err != nil {
@@ -35,9 +31,6 @@ func TestXdebugLoadsOnlyInTheDebugPool(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if _, err := os.Stat(legacy); !os.IsNotExist(err) {
-		t.Fatal("conf.d/xdebug.ini must be removed")
-	}
 	data, _ := os.ReadFile(filepath.Join(XdebugDir(root, "8.5"), "xdebug.ini"))
 	if !strings.Contains(string(data), `zend_extension = "`+so+`"`) || !strings.Contains(string(data), "start_with_request = yes") {
 		t.Fatalf("unexpected ini:\n%s", data)

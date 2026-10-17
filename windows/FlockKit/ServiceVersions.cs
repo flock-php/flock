@@ -103,15 +103,6 @@ public sealed class PostgresMajor
     };
 }
 
-/// <summary>Values of CatalogEntry.Method.</summary>
-public static class ComponentMethod
-{
-    /// <summary>Compiled from source (older daemons).</summary>
-    public const string Build = "build";
-    /// <summary>A download from the package manifest.</summary>
-    public const string Download = "download";
-}
-
 /// <summary>An install or update running in the daemon (PHP, FrankenPHP, a catalog service), or a failed one.</summary>
 public sealed class ComponentJob
 {
@@ -119,9 +110,9 @@ public sealed class ComponentJob
     public string Action { get; init; } = "";
     /// <summary>"running" or "failed"; anything else counts as neither.</summary>
     public string State { get; init; } = "";
-    /// <summary>"downloading", "building" or "installing"; see PhaseText.</summary>
+    /// <summary>"downloading" or "installing"; see PhaseText.</summary>
     public string Phase { get; init; } = "";
-    /// <summary>0…1, or -1 when the job can't tell (builds).</summary>
+    /// <summary>0…1, or -1 when the job can't tell.</summary>
     public double Progress { get; init; } = -1;
     public string Error { get; init; } = "";
     public DateTimeOffset? StartedAt { get; init; }
@@ -135,12 +126,11 @@ public sealed class ComponentJob
     [JsonIgnore]
     public bool HasProgress => Progress is >= 0 and <= 1;
 
-    /// <summary>"Downloading…", "Building…", "Installing…"; a generic text for phases this app doesn't know.</summary>
+    /// <summary>"Downloading…", "Installing…"; a generic text for phases this app doesn't know.</summary>
     [JsonIgnore]
     public string PhaseText => Phase switch
     {
         "downloading" => "Downloading…",
-        "building" => "Building…",
         "installing" => "Installing…",
         _ => Action == "update" ? "Updating…" : "Working…",
     };
@@ -175,8 +165,6 @@ public sealed class CatalogService
     public bool Available { get; init; } = true;
     /// <summary>Why it isn't available on this platform.</summary>
     public string Unavailable { get; init; } = "";
-    /// <summary>One of ComponentMethod; empty when unavailable.</summary>
-    public string Method { get; init; } = "";
     public string Estimate { get; init; } = "";
     /// <summary>The installed version; empty when not installed.</summary>
     public string Installed { get; init; } = "";
@@ -240,7 +228,6 @@ public sealed class CatalogJob
     public string PhaseText => Phase switch
     {
         "downloading" => "Downloading…",
-        "building" => "Building…",
         "installing" => "Installing…",
         _ => Action == "update" ? "Updating…" : "Working…",
     };

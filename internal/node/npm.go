@@ -9,7 +9,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
-	"slices"
 	"strings"
 	"time"
 )
@@ -133,72 +132,6 @@ func LinkCurrent(root, major string) error {
 		return err
 	}
 	return symlinkDir(target, link)
-}
-
-// MigrateGlobals reinstalls the global packages that versions installed before Flock had global
-// prefixes (in the version directory) into their major's prefix, once per major. It skips majors
-// whose prefix already exists, and npm and corepack, which come with Node.
-func MigrateGlobals(ctx context.Context, root string) error {
-	versions, err := Installed(root) // newest first
-	if err != nil {
-		return err
-	}
-	var errs []error
-	done := map[string]bool{}
-	for _, v := range versions {
-		major := MajorOf(v)
-		if done[major] {
-			continue
-		}
-		done[major] = true
-		if _, err := os.Stat(GlobalDir(root, major)); err == nil {
-			continue
-		}
-		var packages []string
-		for _, v := range versions {
-			if MajorOf(v) == major {
-				packages = append(packages, globalPackages(VersionDir(root, v))...)
-			}
-		}
-		slices.Sort(packages)
-		packages = slices.Compact(packages)
-		if err := os.MkdirAll(GlobalDir(root, major), 0o755); err != nil {
-			errs = append(errs, err)
-			continue
-		}
-		if len(packages) > 0 {
-			args := append([]string{"install", "--global", "--no-fund", "--no-audit"}, packages...)
-			if _, err := runNpm(ctx, root, v, args...); err != nil {
-				errs = append(errs, err)
-			}
-		}
-	}
-	return errors.Join(errs...)
-}
-
-// globalPackages lists name@version of the packages installed globally into a version directory.
-func globalPackages(versionDir string) []string {
-	dir := modulesDir(versionDir)
-	entries, _ := os.ReadDir(dir)
-	var out []string
-	add := func(path, name string) {
-		if v := packageVersion(path); v != "" {
-			out = append(out, name+"@"+v)
-		}
-	}
-	for _, e := range entries {
-		switch {
-		case !e.IsDir() || e.Name() == "npm" || e.Name() == "corepack" || strings.HasPrefix(e.Name(), "."):
-		case strings.HasPrefix(e.Name(), "@"):
-			scoped, _ := os.ReadDir(filepath.Join(dir, e.Name()))
-			for _, s := range scoped {
-				add(filepath.Join(dir, e.Name(), s.Name()), e.Name()+"/"+s.Name())
-			}
-		default:
-			add(filepath.Join(dir, e.Name()), e.Name())
-		}
-	}
-	return out
 }
 
 // npmRegistry is npm's own package document (abbreviated: versions with their engines).

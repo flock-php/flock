@@ -110,14 +110,14 @@ public class ServiceVersionsTests
             {"checked_at":"2026-10-14T08:00:00Z","check_error":"",
              "services":[
               {"id":"mysql","name":"MySQL","category":"Database","description":"The most popular database","available":true,
-               "method":"download","estimate":"250 MB download","installed":"8.4.6","line":"8.4","latest":"8.4.7","update":true,
+               "estimate":"250 MB download","installed":"8.4.6","line":"8.4","latest":"8.4.7","update":true,
                "port":3306,"default_port":3306,
                "lines":[{"id":"9.4","label":"9.4 Innovation","latest":"9.4.0","installed":false,"has_data":false},
                         {"id":"8.4","label":"8.4 LTS","latest":"8.4.7","installed":true,"has_data":true}],"job":null},
-              {"id":"redis","name":"Redis","category":"Cache & Queue","available":true,"method":"download","installed":"","port":6380,"default_port":6379,
+              {"id":"redis","name":"Redis","category":"Cache & Queue","available":true,"installed":"","port":6380,"default_port":6379,
                "lines":[{"id":"8.2"}],
                "job":{"action":"install","state":"failed","phase":"downloading","progress":0.3,"error":"503","started_at":"2026-10-14T08:01:00Z","version":"8.2.1","line":"8.2"}},
-              {"id":"typesense","name":"Typesense","category":"Search","available":false,"unavailable":"Typesense has no Windows build.","method":"","lines":null}]}
+              {"id":"typesense","name":"Typesense","category":"Search","available":false,"unavailable":"Typesense has no Windows build.","lines":null}]}
             """);
 
         Assert.NotNull(catalog.CheckedAt);

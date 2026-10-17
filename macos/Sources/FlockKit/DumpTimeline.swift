@@ -78,7 +78,7 @@ public enum DumpTimeline {
                 <article class="dump">
                 <div class="meta">\(source(dump, editor: editor))\
                 <time>\(time(dump.time))</time></div>
-                \(cleanedHTML(of: dump))
+                \(dump.html)
                 </article>
                 """
             }
@@ -156,12 +156,6 @@ public enum DumpTimeline {
     pre.sf-dump a.sf-dump-toggle:hover { background: var(--hover); }
     .sf-dump-hover:hover { background-color: var(--hover) !important; color: inherit !important; }
     """
-
-    /// Dumps captured by older Flock versions embed Symfony's whole header; its stylesheet would
-    /// override the theme for every dump on the page, so drop inline styles from bodies.
-    static func cleanedHTML(of dump: Dump) -> String {
-        dump.html.replacingOccurrences(of: #"<style[^>]*>[\s\S]*?</style>"#, with: "", options: .regularExpression)
-    }
 
     /// "GET" pill + URL for requests, "CLI" pill + command for artisan and scripts.
     private static func originHTML(_ dump: Dump) -> String {
