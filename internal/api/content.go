@@ -8,6 +8,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 
@@ -128,7 +129,7 @@ func registerDumps(mux *http.ServeMux, b Backend) {
 func siteForDump(sites []SiteStatus, e dumps.Entry) string {
 	if e.Source != nil {
 		for _, s := range sites {
-			if strings.HasPrefix(e.Source.File, s.Path+string(filepath.Separator)) {
+			if inDir(e.Source.File, s.Path) {
 				return s.Domain
 			}
 		}
@@ -259,4 +260,14 @@ func tailLines(path string, n int) (string, error) {
 func fileExists(path string) bool {
 	_, err := os.Stat(path)
 	return err == nil
+}
+
+// inDir reports whether file lies inside dir. On Windows either slash may separate the parts
+// (PHP reports both) and case doesn't matter (C:\ and c:\ are the same drive).
+func inDir(file, dir string) bool {
+	f, d := filepath.ToSlash(file), strings.TrimSuffix(filepath.ToSlash(dir), "/")+"/"
+	if runtime.GOOS == "windows" {
+		return len(f) > len(d) && strings.EqualFold(f[:len(d)], d)
+	}
+	return strings.HasPrefix(f, d)
 }
