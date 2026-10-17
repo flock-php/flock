@@ -16,9 +16,14 @@ internal sealed partial class ServicesPane(SettingsWindow window, AppModel model
     // Show every service, or only the installed ones (and those installing). Kept while the app runs.
     private static bool showAll = true;
     private string? selection;
+    // The list and the details scroll separately, like on macOS. Kept across re-renders, which
+    // only swap their content, so they keep their place.
+    private readonly ScrollViewer listScroller = new() { VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
+    private readonly ScrollViewer detailScroller = new() { VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
 
     public override string Title => "Services";
     public override string Subtitle => "Databases, caches, search and the tools around your sites. Everything listens on 127.0.0.1 only.";
+    public override bool ScrollsItself => true;
 
     public override void Shown(CancellationToken hidden)
     {
@@ -30,6 +35,10 @@ internal sealed partial class ServicesPane(SettingsWindow window, AppModel model
     /// <summary>Shows a service's details, e.g. to install it.</summary>
     public void Select(string id)
     {
+        if (id != selection)
+        {
+            detailOffset = 0; // another service's details start at the top
+        }
         selection = id;
         Rerender();
     }
@@ -99,7 +108,6 @@ internal sealed partial class ServicesPane(SettingsWindow window, AppModel model
         };
         ToolTipService.SetToolTip(filter, "Show only installed services, or every service Flock offers");
         filter.Margin = new Thickness(-4, -8, 0, 4);
-        list.Children.Add(filter);
         var present = services.Select(s => s.Category).Distinct().ToList();
         var categories = CategoryOrder.Where(present.Contains).Concat(present.Except(CategoryOrder).Order()).ToList();
         foreach (var category in categories)
@@ -124,15 +132,84 @@ internal sealed partial class ServicesPane(SettingsWindow window, AppModel model
             list.Children.Add(more);
         }
 
-        // The details get the wider share: PostgreSQL's versions and the install progress live there.
+        // A fixed list and the details in the rest, as on macOS: neither moves when another
+        // service is selected.
         var grid = new Grid { ColumnSpacing = 16 };
-        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star), MinWidth = 220 });
-        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1.15, GridUnitType.Star), MinWidth = 300, MaxWidth = 460 });
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(320) });
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star), MinWidth = 300 });
+        if (!tracking)
+        {
+            tracking = true;
+            Track(listScroller);
+            Track(detailScroller);
+        }
+        // The filter stays put above the list. Room on the right keeps the scroll bars off the cards.
+        list.Margin = new Thickness(0, 0, 14, 8);
+        listScroller.Content = list;
+        var left = new Grid();
+        left.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        left.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
+        left.Children.Add(filter);
+        Grid.SetRow(listScroller, 1);
+        Place(left, listScroller, ref listHost);
+
         var detail = Detail(selected);
-        Grid.SetColumn(detail, 1);
-        grid.Children.Add(list);
-        grid.Children.Add(detail);
+        detail.Margin = new Thickness(0, 0, 14, 8);
+        detailScroller.Content = detail;
+        Grid.SetColumn(detailScroller, 1);
+        grid.Children.Add(left);
+        Place(grid, detailScroller, ref detailHost);
         return grid;
+    }
+
+    // The panels of the previous render that hold the kept scrollers, and where each was scrolled to.
+    private Panel? listHost, detailHost;
+    private double listOffset, detailOffset;
+
+    /// <summary>
+    /// Moves a kept scroller from the previous render into this one, scrolled where it was. The
+    /// previous panel is remembered rather than asked for (Parent): once that render left the
+    /// window, Parent is null although the panel still holds the scroller, and adding it elsewhere
+    /// would fail. Moving it resets its offset, so that is put back once it is laid out again.
+    /// </summary>
+    private void Place(Panel host, ScrollViewer scroller, ref Panel? previous)
+    {
+        var offset = scroller == listScroller ? listOffset : detailOffset;
+        previous?.Children.Remove(scroller);
+        host.Children.Add(scroller);
+        previous = host;
+        if (offset > 0)
+        {
+            restoring.Add(scroller);
+            Window.DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () =>
+            {
+                restoring.Remove(scroller);
+                scroller.ChangeView(null, offset, null, disableAnimation: true);
+            });
+        }
+    }
+
+    // Scrollers whose offset is about to be put back: their reset to the top isn't the user's.
+    private readonly HashSet<ScrollViewer> restoring = [];
+    private bool tracking;
+
+    /// <summary>Remembers where the user scrolled to (once a scroll has settled).</summary>
+    private void Track(ScrollViewer scroller)
+    {
+        scroller.ViewChanged += (_, e) =>
+        {
+            if (!e.IsIntermediate && !restoring.Contains(scroller))
+            {
+                if (scroller == listScroller)
+                {
+                    listOffset = scroller.VerticalOffset;
+                }
+                else
+                {
+                    detailOffset = scroller.VerticalOffset;
+                }
+            }
+        };
     }
 
     private Button Row(Service service, bool isSelected)
@@ -194,7 +271,7 @@ internal sealed partial class ServicesPane(SettingsWindow window, AppModel model
         }
         else if (IsInstallable(service))
         {
-            // Opens the details, where it is installed (with a version choice for PostgreSQL).
+            // Opens the details, where the version and port are picked.
             actions.Children.Add(Ui.Button("Install…", () => Select(service.Id), glyph: Ui.GlyphDownload));
         }
         else

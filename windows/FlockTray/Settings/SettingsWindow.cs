@@ -22,6 +22,12 @@ internal abstract class Pane(SettingsWindow window, AppModel model)
 
     public abstract UIElement Build();
 
+    /// <summary>
+    /// The pane fills the window's height and scrolls its parts itself (Services: the list and the
+    /// details each), instead of the window scrolling it as a whole.
+    /// </summary>
+    public virtual bool ScrollsItself => false;
+
     /// <summary>Called when the pane is shown; the token is cancelled when it is hidden.</summary>
     public virtual void Shown(CancellationToken hidden)
     {
@@ -160,7 +166,13 @@ internal sealed partial class SettingsWindow : FlockWindow
     public Panel Rerender()
     {
         Ui.ShowError(error, model.Settings.Error ?? model.ActionError);
-        var container = new StackPanel { Padding = new Thickness(36, 0, 36, 24), MaxWidth = PageWidth };
+        // A pane that scrolls itself gets the viewport's height: a Grid passes it on, a StackPanel doesn't.
+        var fills = panes[current].ScrollsItself && model.Status is not null;
+        scroller.VerticalScrollMode = fills ? ScrollMode.Disabled : ScrollMode.Auto;
+        scroller.VerticalScrollBarVisibility = fills ? ScrollBarVisibility.Disabled : ScrollBarVisibility.Auto;
+        Panel container = fills
+            ? new Grid { Padding = new Thickness(36, 0, 36, 16), MaxWidth = PageWidth }
+            : new StackPanel { Padding = new Thickness(36, 0, 36, 24), MaxWidth = PageWidth };
         if (model.Status is null && current != SettingsPane.About)
         {
             container.Children.Add(Ui.EmptyState(Ui.GlyphWarning, "Flock is not running", model.Error ?? "Start the daemon to change its settings.",

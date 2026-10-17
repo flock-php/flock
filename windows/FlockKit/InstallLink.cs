@@ -90,12 +90,6 @@ public sealed record InstallLink(string Service, string? Line = null)
         {
             return InstallLinkResolution.AlreadyInstalled($"{entry.Name} {target.Label}");
         }
-        if (entry.IsInstalled)
-        {
-            // Another line runs; switching replaces it, which the Services pane explains better.
-            var current = entry.Lines.FirstOrDefault(l => l.Installed)?.Label ?? entry.Line;
-            return InstallLinkResolution.OtherInstalled(entry.Name, current, target.Label);
-        }
         return InstallLinkResolution.Install(new InstallLinkTarget(entry.Id, entry.Name, target.Id, target.Label, target.Latest));
     }
 }
@@ -117,9 +111,6 @@ public sealed record InstallLinkResolution(string Title, string Message, Install
 
     public static InstallLinkResolution AlreadyInstalled(string name) =>
         new($"{name} is already installed", "You'll find it in Settings → Services.");
-
-    public static InstallLinkResolution OtherInstalled(string name, string installed, string requested) =>
-        new($"{name} {installed} is installed", $"To use {name} {requested} instead, switch versions in Settings → Services. Each version keeps its own data.");
 
     public static InstallLinkResolution Unavailable(string name, string reason) =>
         new($"{name} isn't available on this computer", reason.Length > 0 ? reason : "Flock can't run it on this platform.");

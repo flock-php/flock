@@ -64,9 +64,9 @@ internal sealed partial class ServicesPane
                 return major.Latest == major.Installed ? $"A new build of PostgreSQL {major.Latest} is available" : $"PostgreSQL {major.Latest} is available";
             }
         }
-        if (Store.Catalog?[service.Id] is { Update: true } entry)
+        if (Store.Catalog?[service.Id] is { } entry && entry.Lines.FirstOrDefault(l => l.Update) is { } line)
         {
-            return $"{entry.Name} {entry.Latest} is available";
+            return $"{entry.Name} {line.Latest} is available";
         }
         return null;
     }
@@ -114,35 +114,17 @@ internal sealed partial class ServicesPane
         panel.Children.Add(Ui.Caption("psql, pg_dump and the other command-line tools come with PostgreSQL. In a terminal, Flock uses those of the newest installed version, which work with every version above and with remote servers."));
     }
 
-    /// <summary>Nothing installed yet: the newest version one click away, the others in a menu.</summary>
+    /// <summary>Nothing installed yet: the version and port, and Install, as for the catalog services.</summary>
     private Border PostgresEmpty(PostgresVersions versions)
     {
         if (versions.Majors.Count == 0)
         {
             return Inner(Ui.Caption("Flock offers no PostgreSQL versions for this computer."));
         }
-        var newest = versions.Majors[0];
-        var install = Ui.Button($"Install PostgreSQL {newest.Major}", () => _ = Install(versions, newest), accent: true, glyph: Ui.GlyphDownload,
-            tooltip: newest.Latest.Length > 0 ? $"Downloads PostgreSQL {newest.Latest} and starts it" : "Downloads the newest release and starts it");
-
-        var others = new MenuFlyout { Placement = Microsoft.UI.Xaml.Controls.Primitives.FlyoutPlacementMode.Bottom };
-        foreach (var major in versions.Majors.Skip(1))
-        {
-            var label = $"PostgreSQL {major.Major}" + (major.Latest.Length > 0 ? $" ({major.Latest})" : "");
-            if (major.HasData)
-            {
-                label += " · your databases";
-            }
-            else if (major.EndOfLifeState(Today) is EndOfLife.Soon or EndOfLife.Past)
-            {
-                label += $" · end of life {Month(major.EolDate!.Value)}";
-            }
-            others.Items.Add(Item(label, () => _ = Install(versions, major)));
-        }
-        UIElement[] actions = others.Items.Count > 0 ? [install, new DropDownButton { Content = "Another version", Flyout = others }] : [install];
-        var hero = Hero(Ui.GlyphServer, "PostgreSQL isn't installed",
-            "Install the newest version to give your apps a database. You can add other versions later; each one keeps its own databases.",
-            actions);
+        var options = versions.Majors.Select(m => (m.Major, MajorLabel(m), m.Latest)).ToList();
+        var hero = InstallCard("postgres", "PostgreSQL",
+            "The database for your apps. You can add other versions later; one runs at a time, and each keeps its own databases.",
+            options, versions.Majors[0].Major, versions.Port, null, "", (major, port) => InstallFirst(versions, major, port));
         var kept = versions.Majors.Where(m => m.HasData).Select(m => m.Major).ToList();
         if (kept.Count > 0)
         {
@@ -151,6 +133,35 @@ internal sealed partial class ServicesPane
             ((Panel)hero.Child).Children.Add(note);
         }
         return hero;
+    }
+
+    /// <summary>"17 (17.6)", with the kept databases or a near end of life.</summary>
+    private static string MajorLabel(PostgresMajor major)
+    {
+        var label = major.Latest.Length > 0 ? $"{major.Major} ({major.Latest})" : major.Major;
+        if (major.HasData)
+        {
+            label += " — your databases";
+        }
+        else if (major.EndOfLifeState(Today) is EndOfLife.Soon or EndOfLife.Past)
+        {
+            label += $" — end of life {Month(major.EolDate!.Value)}";
+        }
+        return label;
+    }
+
+    /// <summary>The first install: the port belongs to PostgreSQL, not to a version, so it is set first.</summary>
+    private async Task InstallFirst(PostgresVersions versions, string? major, int? port)
+    {
+        if (port is { } chosen && chosen != versions.Port)
+        {
+            await Store.PerformOnServicesAsync(c => c.SetServicePortAsync("postgres", chosen));
+            if (Store.Error is not null)
+            {
+                return;
+            }
+        }
+        await Install(versions, versions.Majors.FirstOrDefault(m => m.Major == major) ?? versions.Majors[0]);
     }
 
     /// <summary>The very first install: it downloads, creates the cluster and starts it.</summary>
@@ -199,42 +210,29 @@ internal sealed partial class ServicesPane
         return Inner(Ui.Row(14, icon, text), new Thickness(16, 14, 16, 14));
     }
 
-    private StackPanel VersionList(PostgresVersions versions)
-    {
-        var rows = new StackPanel();
-        foreach (var major in versions.Majors)
-        {
-            if (rows.Children.Count > 0)
-            {
-                rows.Children.Add(new Border { Height = 1, Background = Ui.Brush("DividerStrokeColorDefaultBrush") });
-            }
-            rows.Children.Add(MajorRow(versions, major));
-        }
-        return Ui.Column(6, Ui.Text("Versions", "BodyStrongTextBlockStyle"), Inner(rows, new Thickness(14, 2, 8, 2)));
-    }
+    private StackPanel VersionList(PostgresVersions versions) =>
+        Ui.Column(6, Ui.Text("Versions", "BodyStrongTextBlockStyle"), VersionRows(versions.Majors.Select(m => MajorRow(versions, m))),
+            Ui.Caption("Installed versions stay side by side. One runs at a time; each keeps its own databases, and updates within a version keep them."));
 
     private string? BusyText(PostgresMajor major) =>
         pendingMajors.TryGetValue(major.Major, out var pending) ? (major.IsBusy ? major.BusyText : pending) : major.IsBusy ? major.BusyText : null;
 
-    private StackPanel MajorRow(PostgresVersions versions, PostgresMajor major)
+    /// <summary>A major with its actions on the right, laid out like a catalog service's line.</summary>
+    private Grid MajorRow(PostgresVersions versions, PostgresMajor major)
     {
-        var title = Ui.Row(8, Ui.Text($"PostgreSQL {major.Major}", "BodyStrongTextBlockStyle", wrap: false));
+        var title = Ui.Row(8, Ui.Text($"PostgreSQL {major.Major}", major.IsInstalled ? "BodyStrongTextBlockStyle" : "BodyTextBlockStyle", wrap: false));
         if (major.Active)
         {
             title.Children.Add(Ui.Badge("Active"));
         }
-        var busy = BusyText(major);
-        var top = busy is null && major.IsInstalled ? Ui.Spread(title, More(versions, major)) : Ui.Spread(title);
-        var row = Ui.Column(4, top, Facts(major));
-        row.Padding = new Thickness(0, 10, 0, 10);
-        if (busy is not null)
-        {
-            row.Children.Add(Ui.Row(6, new ProgressRing { Width = 12, Height = 12 }, Ui.Caption(busy, wrap: false)));
-            return row;
-        }
-
+        var info = Ui.Column(2, title, Facts(major));
         var actions = Ui.Row(8);
-        if (!major.IsInstalled)
+        if (BusyText(major) is { } busy)
+        {
+            actions.Children.Add(new ProgressRing { Width = 14, Height = 14 });
+            actions.Children.Add(Ui.Caption(busy, wrap: false));
+        }
+        else if (!major.IsInstalled)
         {
             var tip = (major.Latest.Length > 0 ? $"Downloads PostgreSQL {major.Latest}." : "Downloads the newest release.")
                 + (versions.Active.Length > 0 ? $" PostgreSQL {versions.Active} stays active until you switch." : "")
@@ -251,23 +249,22 @@ internal sealed partial class ServicesPane
             }
             if (!major.Active)
             {
-                actions.Children.Add(Ui.Button($"Switch to {major.Major}", () => _ = Switch(versions, major),
+                actions.Children.Add(Ui.Button("Switch…", () => _ = Switch(versions, major),
                     tooltip: versions.Active.Length > 0 ? $"Stops PostgreSQL {versions.Active} and starts {major.Major} with its own databases" : $"Starts PostgreSQL {major.Major}"));
             }
+            actions.Children.Add(More(versions, major));
         }
-        if (actions.Children.Count > 0)
-        {
-            // One PostgreSQL operation at a time.
-            Ui.SetEnabled(actions, !PostgresWorking);
-            row.Children.Add(actions);
-        }
-        return row;
+        // One PostgreSQL operation at a time.
+        Ui.SetEnabled(actions, !PostgresWorking);
+        return VersionRow(info, actions);
     }
 
     /// <summary>"18.6.0 · 18.7.0 available · 46 MB of data · supported until Nov 2030", end of life tinted when near.</summary>
     private static TextBlock Facts(PostgresMajor major)
     {
-        var text = Ui.Caption("");
+        // Built from runs; not Ui.Caption(""), whose empty run made the text start with " · ".
+        var text = Ui.Caption("x");
+        text.Inlines.Clear();
         void Add(string part, Microsoft.UI.Xaml.Media.Brush? color = null)
         {
             if (text.Inlines.Count > 0)
@@ -493,6 +490,98 @@ internal sealed partial class ServicesPane
             footer.Children.Add(Ui.Row(6, Ui.Icon(Ui.GlyphWarning, 12, Ui.Caution), error));
         }
         return footer;
+    }
+
+    /// <summary>
+    /// Installing a service that isn't installed yet, the same for PostgreSQL and the catalog
+    /// services: the version (when there is a choice) and the port, then Install.
+    /// </summary>
+    private Border InstallCard(string id, string name, string description, List<(string Id, string Label, string Latest)> versions, string? preferred,
+        int port, string? portNote, string estimate, Func<string?, int?, Task> install)
+    {
+        var form = Ui.Column(10);
+        var picker = new ComboBox { Header = "Version", MinWidth = 220 };
+        foreach (var (version, label, _) in versions)
+        {
+            picker.Items.Add(new ComboBoxItem { Content = label, Tag = version });
+        }
+        var picked = pickedLine.GetValueOrDefault(id) ?? preferred;
+        picker.SelectedItem = picker.Items.OfType<ComboBoxItem>().FirstOrDefault(i => (string)i.Tag == picked) ?? picker.Items.FirstOrDefault();
+        picker.SelectionChanged += (_, _) =>
+        {
+            if (picker.SelectedItem is ComboBoxItem { Tag: string version })
+            {
+                pickedLine[id] = version;
+            }
+        };
+        if (versions.Count > 1)
+        {
+            form.Children.Add(picker);
+        }
+
+        var portBox = new NumberBox
+        {
+            Header = "Port",
+            Value = pickedPort.GetValueOrDefault(id, port),
+            Minimum = 1024,
+            Maximum = 65535,
+            SpinButtonPlacementMode = NumberBoxSpinButtonPlacementMode.Compact,
+            MinWidth = 140,
+            HorizontalAlignment = HorizontalAlignment.Left,
+        };
+        portBox.ValueChanged += (_, _) => pickedPort[id] = portBox.Value;
+        form.Children.Add(portBox);
+        if (portNote is not null)
+        {
+            form.Children.Add(Ui.Caption(portNote));
+        }
+
+        var button = Ui.Button($"Install {name}", () =>
+        {
+            var version = (picker.SelectedItem as ComboBoxItem)?.Tag as string;
+            int? chosen = double.IsNaN(portBox.Value) ? null : (int)portBox.Value;
+            _ = install(version, chosen);
+        }, accent: true, glyph: Ui.GlyphDownload);
+        // "Install MySQL 8.4.7": the release the picked version downloads.
+        var buttonText = ((Panel)button.Content).Children.OfType<TextBlock>().Last();
+        void Label()
+        {
+            var latest = versions.FirstOrDefault(v => v.Id == (picker.SelectedItem as ComboBoxItem)?.Tag as string).Latest;
+            buttonText.Text = string.IsNullOrEmpty(latest) ? $"Install {name}" : $"Install {name} {latest}";
+        }
+        Label();
+        picker.SelectionChanged += (_, _) => Label();
+        UIElement[] actions = estimate.Length > 0 ? [form, button, Ui.Caption(Capitalize(estimate), wrap: false)] : [form, button];
+        return Hero(Ui.GlyphServer, $"Install {name}", description, actions);
+    }
+
+    /// <summary>Version rows in one surface, divided like the macOS list.</summary>
+    private static Border VersionRows(IEnumerable<UIElement> rows)
+    {
+        var list = new StackPanel();
+        foreach (var row in rows)
+        {
+            if (list.Children.Count > 0)
+            {
+                list.Children.Add(new Border { Height = 1, Background = Ui.Brush("DividerStrokeColorDefaultBrush") });
+            }
+            list.Children.Add(row);
+        }
+        return Inner(list, new Thickness(14, 2, 8, 2));
+    }
+
+    /// <summary>One version: what it is on the left, its buttons on the right.</summary>
+    private static Grid VersionRow(FrameworkElement info, FrameworkElement actions)
+    {
+        var row = new Grid { ColumnSpacing = 8, Padding = new Thickness(0, 10, 0, 10) };
+        row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        info.VerticalAlignment = VerticalAlignment.Center;
+        actions.VerticalAlignment = VerticalAlignment.Center;
+        Grid.SetColumn(actions, 1);
+        row.Children.Add(info);
+        row.Children.Add(actions);
+        return row;
     }
 
     /// <summary>A surface inside the detail card.</summary>

@@ -53,7 +53,8 @@ private func fixtures() throws -> ([Service], ServiceCatalog, PostgresVersions) 
 
     #expect(resolve(InstallLink(service: "postgres", line: "17")) == .installed(name: "PostgreSQL 17"))
     #expect(resolve(InstallLink(service: "redis", line: "8.4")) == .installed(name: "Redis 8.4"))
-    #expect(resolve(InstallLink(service: "redis", line: "8.10")) == .otherInstalled(name: "Redis", installed: "8.4", requested: "8.10"))
+    // Another line installs next to the installed one.
+    #expect(resolve(InstallLink(service: "redis", line: "8.10"))?.confirmation?.line == "8.10")
     #expect(resolve(InstallLink(service: "typesense")) == .unavailable(name: "Typesense", reason: "Typesense has no Windows build."))
     #expect(resolve(InstallLink(service: "mysql", line: "5.7")) == .unknownVersion(name: "MySQL", line: "5.7"))
     #expect(resolve(InstallLink(service: "postgres", line: "9")) == .unknownVersion(name: "PostgreSQL", line: "9"))

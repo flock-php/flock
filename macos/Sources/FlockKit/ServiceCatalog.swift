@@ -1,8 +1,8 @@
 import Foundation
 
 /// GET /v1/catalog — the services Flock installs on request besides PostgreSQL and Valkey:
-/// MySQL, MariaDB, Redis, MongoDB, Meilisearch, Typesense and RustFS. Each runs one version
-/// (of a line the user picks) on its own port.
+/// MySQL, MariaDB, Redis, MongoDB, Meilisearch, Typesense and RustFS. Their lines install side by
+/// side, and one of them (the active one) runs on the service's port.
 public struct ServiceCatalog: Decodable, Sendable, Equatable {
     public var checkedAt: Date?
     public var checkError: String
@@ -39,9 +39,9 @@ public struct CatalogService: Decodable, Sendable, Equatable, Identifiable {
 
     /// How long installing takes, e.g. "about 180 MB download".
     public var estimate: String
-    /// The installed version; empty when not installed.
+    /// The active version; empty when none.
     public var installed: String
-    /// The line of the installed version ("8.4").
+    /// The line of the active version ("8.4").
     public var line: String
     /// The newest release of `line`; empty when unknown.
     public var latest: String
@@ -57,9 +57,9 @@ public struct CatalogService: Decodable, Sendable, Equatable, Identifiable {
 
     public var isInstalled: Bool { !installed.isEmpty }
 
-    /// The line installed now, else the newest.
+    /// The active line, else the newest.
     public var preferredLine: CatalogLine? {
-        lines.first { $0.installed } ?? lines.first
+        lines.first { $0.active } ?? lines.first
     }
 
     enum CodingKeys: String, CodingKey {
@@ -93,11 +93,20 @@ public struct CatalogLine: Decodable, Sendable, Equatable, Identifiable, Hashabl
     public var label: String
     /// The newest release; empty when unknown.
     public var latest: String
+    /// Installed (lines install side by side; one of them is active).
     public var installed: Bool
+    /// The installed version; empty when not installed.
+    public var version: String
+    /// The installed version is the one that runs.
+    public var active: Bool
+    /// `latest` (or a newer build of it) can replace `version`.
+    public var update: Bool
+    /// Why the installed build was withdrawn; empty when it wasn't. Flock replaces it by itself.
+    public var yanked: String
     /// The line has data (each line keeps its own).
     public var hasData: Bool
 
-    enum CodingKeys: String, CodingKey { case id, label, latest, installed, hasData }
+    enum CodingKeys: String, CodingKey { case id, label, latest, installed, version, active, update, yanked, hasData }
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -105,6 +114,10 @@ public struct CatalogLine: Decodable, Sendable, Equatable, Identifiable, Hashabl
         label = try c.decodeIfPresent(String.self, forKey: .label) ?? id
         latest = try c.decodeIfPresent(String.self, forKey: .latest) ?? ""
         installed = try c.decodeIfPresent(Bool.self, forKey: .installed) ?? false
+        version = try c.decodeIfPresent(String.self, forKey: .version) ?? ""
+        active = try c.decodeIfPresent(Bool.self, forKey: .active) ?? false
+        update = try c.decodeIfPresent(Bool.self, forKey: .update) ?? false
+        yanked = try c.decodeIfPresent(String.self, forKey: .yanked) ?? ""
         hasData = try c.decodeIfPresent(Bool.self, forKey: .hasData) ?? false
     }
 }

@@ -56,7 +56,7 @@ func confirm(question string, defaultYes bool) bool {
 // errRedisMissing and errPostgresMissing: a redis-cli or psql/pg_dump/... shim found nothing installed.
 var (
 	errRedisMissing    = errors.New("neither Redis nor Valkey is installed — run `flock services install valkey`")
-	errPostgresMissing = errors.New("PostgreSQL is not installed — run `flock postgres install` (psql, pg_dump and the other client tools come with it)")
+	errPostgresMissing = errors.New("PostgreSQL is not installed — run `flock services install postgres` (psql, pg_dump and the other client tools come with it)")
 )
 
 // offerInstall asks whether to install the version a shim found missing (err) and installs it.

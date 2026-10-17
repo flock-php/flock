@@ -175,27 +175,68 @@ func TestInstallUpdateSwitchAndUninstall(t *testing.T) {
 		t.Fatalf("config after the new build: %+v", cfg.Services)
 	}
 
-	// Switching lines replaces the binaries; each line keeps its data.
+	// Another line installs next to the active one, which keeps running; a port for it is refused
+	// (the port belongs to the service).
+	if err := m.Start("mysql", "9.7", port+1); !errors.Is(err, ErrInvalid) {
+		t.Fatalf("another port for another line: %v", err)
+	}
 	if err := m.Start("mysql", "9.7", 0); err != nil {
 		t.Fatal(err)
 	}
 	m.Wait()
 	e, _ = m.Catalog().Find("mysql")
-	if e.Installed != "9.7.2" || e.Line != "9.7" || !e.Lines[1].HasData || e.Lines[0].HasData {
-		t.Fatalf("switched: %+v", e)
+	if e.Installed != "8.4.12" || !e.Lines[0].Installed || e.Lines[0].Active || e.Lines[0].Version != "9.7.2" || !e.Lines[1].Active {
+		t.Fatalf("installed next to it: %+v", e)
+	}
+	if data, _ := os.ReadFile(filepath.Join(Dir(root, "mysql", "9.7.2"), buildFile)); string(data) != "1" {
+		t.Fatalf("build file: %q", data)
 	}
 
-	// Uninstalling keeps the data unless asked; a line with data stays listed.
-	if err := m.Uninstall("mysql", false); err != nil {
+	// Switching runs the other line on the same port; each line keeps its data. The build of a
+	// version installed before builds were recorded on disk (only the config knows it) is kept.
+	if err := os.Remove(filepath.Join(Dir(root, "mysql", "8.4.12"), buildFile)); err != nil {
 		t.Fatal(err)
 	}
-	if e, _ = m.Catalog().Find("mysql"); e.Installed != "" || !e.Lines[1].HasData {
+	if err := m.Activate("mysql", "5.1"); !errors.Is(err, ErrInvalid) {
+		t.Fatalf("activated a line that isn't installed: %v", err)
+	}
+	if err := m.Activate("mysql", "9.7"); err != nil {
+		t.Fatal(err)
+	}
+	e, _ = m.Catalog().Find("mysql")
+	if e.Installed != "9.7.2" || e.Line != "9.7" || e.Port != port || !e.Lines[0].Active || !e.Lines[1].Installed || !e.Lines[1].HasData || e.Lines[0].HasData {
+		t.Fatalf("switched: %+v", e)
+	}
+	if cfg, _ := config.Load(root); cfg.Services.Extras["mysql"].Build != 1 || !cfg.Services.Running("mysql") {
+		t.Fatalf("config after switching: %+v", cfg.Services)
+	}
+
+	// Uninstalling the active line hands over to the other one; the data stays unless asked.
+	if err := m.Uninstall("mysql", "9.7", false); err != nil {
+		t.Fatal(err)
+	}
+	e, _ = m.Catalog().Find("mysql")
+	if e.Installed != "8.4.12" || e.Port != port || e.Lines[0].Installed {
+		t.Fatalf("uninstalled 9.7: %+v", e)
+	}
+	if cfg, _ := config.Load(root); cfg.Services.Extras["mysql"].Build != 2 {
+		t.Fatalf("the remaining line's build: %+v", cfg.Services)
+	}
+	if err := m.Uninstall("mysql", "9.7", false); !errors.Is(err, ErrInvalid) {
+		t.Fatalf("uninstalled it twice: %v", err)
+	}
+
+	// The last line goes too; a line with data stays listed.
+	if err := m.Uninstall("mysql", "8.4", false); err != nil {
+		t.Fatal(err)
+	}
+	if e, _ = m.Catalog().Find("mysql"); e.Installed != "" || !e.Lines[1].HasData || e.Lines[1].Installed {
 		t.Fatalf("uninstalled: %+v", e)
 	}
 	if cfg, _ := config.Load(root); len(cfg.Services.Extras) != 0 {
 		t.Fatalf("config keeps %+v", cfg.Services.Extras)
 	}
-	if err := m.Uninstall("mysql", true); err != nil {
+	if err := m.Uninstall("mysql", "", true); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := os.Stat(filepath.Join(root, "services", "mysql")); !os.IsNotExist(err) {

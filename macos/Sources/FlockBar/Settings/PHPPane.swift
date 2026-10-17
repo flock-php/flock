@@ -29,7 +29,7 @@ struct PHPPane: View {
                         }
                     } header: {
                         HStack {
-                            Text("Versions")
+                            Text("PHP-FPM")
                             Spacer()
                             checkedLine(catalog)
                         }

@@ -66,12 +66,27 @@ func registerCatalog(mux *http.ServeMux, b Backend) {
 		}
 		respond(w, m, m.Start(r.PathValue("id"), body.Line, body.Port))
 	})
+	// Body: {"line": "8.4"}, an installed line to run instead of the active one.
+	mux.HandleFunc("POST /v1/catalog/{id}/activate", func(w http.ResponseWriter, r *http.Request) {
+		m := manager(w)
+		if m == nil {
+			return
+		}
+		var body struct {
+			Line string `json:"line"`
+		}
+		if err := decodeBody(r, &body); err != nil {
+			writeError(w, http.StatusBadRequest, err)
+			return
+		}
+		respond(w, m, m.Activate(r.PathValue("id"), body.Line))
+	})
 	mux.HandleFunc("POST /v1/catalog/{id}/cancel", action(func(m *catalog.Manager, r *http.Request) error { return m.Cancel(r.PathValue("id")) }))
 	mux.HandleFunc("DELETE /v1/catalog/{id}/job", action(func(m *catalog.Manager, r *http.Request) error { return m.Dismiss(r.PathValue("id")) }))
-	// ?delete_data=1 also deletes the data of every line.
+	// ?line=8.4 removes one line (else every line); ?delete_data=1 also deletes its data.
 	mux.HandleFunc("DELETE /v1/catalog/{id}", action(func(m *catalog.Manager, r *http.Request) error {
 		deleteData, _ := strconv.ParseBool(r.URL.Query().Get("delete_data"))
-		return m.Uninstall(r.PathValue("id"), deleteData)
+		return m.Uninstall(r.PathValue("id"), r.URL.Query().Get("line"), deleteData)
 	}))
 
 	mux.HandleFunc("GET /v1/catalog/{id}/log", func(w http.ResponseWriter, r *http.Request) {
@@ -119,11 +134,26 @@ func (c *Client) InstallService(ctx context.Context, id, line string, port int) 
 	return out, err
 }
 
-// UninstallService removes a catalog service, and its data when deleteData is set.
-func (c *Client) UninstallService(ctx context.Context, id string, deleteData bool) (Catalog, error) {
-	path := "/v1/catalog/" + url.PathEscape(id)
+// ActivateService runs an installed line of a catalog service instead of the active one.
+func (c *Client) ActivateService(ctx context.Context, id, line string) (Catalog, error) {
+	var out Catalog
+	err := c.slow().send(ctx, http.MethodPost, "/v1/catalog/"+url.PathEscape(id)+"/activate", map[string]any{"line": line}, &out)
+	return out, err
+}
+
+// UninstallService removes a line of a catalog service ("" for every line), and its data when
+// deleteData is set.
+func (c *Client) UninstallService(ctx context.Context, id, line string, deleteData bool) (Catalog, error) {
+	query := url.Values{}
+	if line != "" {
+		query.Set("line", line)
+	}
 	if deleteData {
-		path += "?delete_data=1"
+		query.Set("delete_data", "1")
+	}
+	path := "/v1/catalog/" + url.PathEscape(id)
+	if len(query) > 0 {
+		path += "?" + query.Encode()
 	}
 	var out Catalog
 	err := c.slow().do(ctx, http.MethodDelete, path, &out)

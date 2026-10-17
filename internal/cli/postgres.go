@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"os/signal"
+	"strings"
 	"text/tabwriter"
 	"time"
 
@@ -17,22 +18,9 @@ import (
 )
 
 func newPostgresCommand() *cobra.Command {
-	cmd := &cobra.Command{Use: "postgres", Short: "Manage the PostgreSQL service"}
-
-	install := &cobra.Command{
-		Use:   "install [major]",
-		Short: "Install a PostgreSQL version (default 18) with psql, pg_dump and the other client tools, and start it when none runs yet (user postgres, no password, port 5432)",
-		Args:  cobra.MaximumNArgs(1),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			major := postgres.DefaultMajor
-			if len(args) > 0 {
-				major = args[0]
-				if m := postgres.MajorOf(args[0]); m != "" {
-					major = m // "18.6": Flock installs the newest build of the major
-				}
-			}
-			return installPostgres(cmd, major)
-		},
+	cmd := &cobra.Command{
+		Use:   "postgres",
+		Short: "Switch, update and list the PostgreSQL versions, and create databases (`flock services install postgres` installs it)",
 	}
 
 	use := &cobra.Command{
@@ -68,19 +56,6 @@ func newPostgresCommand() *cobra.Command {
 			})
 		},
 	}
-
-	var deleteData bool
-	uninstall := &cobra.Command{
-		Use:   "uninstall <major> [--delete-data]",
-		Short: "Remove a PostgreSQL version; its databases stay unless --delete-data is given",
-		Args:  cobra.ExactArgs(1),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			return postgresOperation(cmd, args[0], "uninstalling", func(ctx context.Context, ops pgOps) error {
-				return ops.Uninstall(ctx, args[0], deleteData)
-			})
-		},
-	}
-	uninstall.Flags().BoolVar(&deleteData, "delete-data", false, "also delete that version's databases")
 
 	list := &cobra.Command{
 		Use:   "list",
@@ -123,7 +98,7 @@ func newPostgresCommand() *cobra.Command {
 		},
 	}
 
-	cmd.AddCommand(install, use, update, list, uninstall, createDB)
+	cmd.AddCommand(use, update, list, createDB)
 	return cmd
 }
 
@@ -139,10 +114,40 @@ func postgresOperation(cmd *cobra.Command, major, what string, do func(ctx conte
 	return runPostgres(ctx, s, cmd.OutOrStdout(), cmd.ErrOrStderr(), major, what, do)
 }
 
-// installPostgres installs the newest build of major (for `flock postgres install`).
-func installPostgres(cmd *cobra.Command, major string) error {
-	return postgresOperation(cmd, major, "installing", func(ctx context.Context, ops pgOps) error {
+// isPostgres reports whether a service id names PostgreSQL, which `flock services` installs and
+// removes through its own manager (several majors side by side) instead of the catalog.
+func isPostgres(id string) bool {
+	switch strings.ToLower(id) {
+	case "postgres", "postgresql", "pgsql":
+		return true
+	}
+	return false
+}
+
+// installPostgres installs the newest build of a major (for `flock services install postgres`).
+// A version like "18.6" names its major; "" is the default one.
+func installPostgres(ctx context.Context, s *state, version string, out, errOut io.Writer) error {
+	major := postgres.DefaultMajor
+	if version != "" {
+		major = version
+		if m := postgres.MajorOf(version); m != "" {
+			major = m
+		}
+	}
+	return runPostgres(ctx, s, out, errOut, major, "installing", func(ctx context.Context, ops pgOps) error {
 		return ops.Install(ctx, major)
+	})
+}
+
+// uninstallPostgres removes a major (for `flock services uninstall postgres`); "" is the active one.
+func uninstallPostgres(ctx context.Context, s *state, major string, deleteData bool, out, errOut io.Writer) error {
+	if major == "" {
+		if major = postgres.MajorOf(s.cfg.Services.Postgres); major == "" {
+			return errors.New("which version? e.g. `flock services uninstall postgres 18`")
+		}
+	}
+	return runPostgres(ctx, s, out, errOut, major, "uninstalling", func(ctx context.Context, ops pgOps) error {
+		return ops.Uninstall(ctx, major, deleteData)
 	})
 }
 

@@ -1,8 +1,8 @@
 // Package catalog installs and runs the services Flock offers on request besides PostgreSQL:
 // MySQL, MariaDB, MongoDB, Redis, Valkey, Meilisearch, Typesense and RustFS. Their builds come
-// from the binaries manifest of the configured channel. Each service runs a single version (of a
-// line the user picks, like MySQL 8.4) on its own port; installs run as background jobs the apps
-// follow by polling.
+// from the binaries manifest of the configured channel. Like PostgreSQL's majors, the lines of a
+// service (MySQL 8.4, 9.7) install side by side, each with its own data; one of them, the active
+// one, runs on the service's port. Installs run as background jobs the apps follow by polling.
 package catalog
 
 import (
@@ -149,11 +149,11 @@ type Entry struct {
 	Available   bool   `json:"available"`
 	Unavailable string `json:"unavailable"` // why it isn't available here
 	Estimate    string `json:"estimate"`    // download size of the newest line, e.g. "about 170 MB download"
-	Installed   string `json:"installed"`   // version, "" when not installed
-	Line        string `json:"line"`        // of the installed version
+	Installed   string `json:"installed"`   // the active version, "" when none
+	Line        string `json:"line"`        // of the active version
 	Latest      string `json:"latest"`      // newest release of Line
 	Update      bool   `json:"update"`      // Latest (or a newer build of it) can be installed
-	Yanked      string `json:"yanked"`      // why the installed build was withdrawn, "" when it wasn't
+	Yanked      string `json:"yanked"`      // why the active build was withdrawn, "" when it wasn't
 	// Port is the configured port, or for a service that isn't installed the one Flock suggests:
 	// the default unless another service has it.
 	Port        int         `json:"port"`
@@ -169,6 +169,10 @@ type LineState struct {
 	Latest     string `json:"latest"`
 	Prerelease bool   `json:"prerelease"`
 	Installed  bool   `json:"installed"`
+	Version    string `json:"version"` // the installed version, "" when not installed
+	Active     bool   `json:"active"`  // the installed version is the one that runs
+	Update     bool   `json:"update"`  // Latest (or a newer build of it) can replace Version
+	Yanked     string `json:"yanked"`  // why the installed build was withdrawn, "" when it wasn't
 	HasData    bool   `json:"has_data"`
 }
 
@@ -300,14 +304,20 @@ func (m *Manager) entry(manifest *binaries.Manifest, k *Kind, cfg *config.Config
 	for line := range offers {
 		lines[line] = true
 	}
+	versions := installedLines(m.root, k)
+	for line := range versions {
+		lines[line] = true
+	}
 	if x, ok := cfg.Services.Extra(k.ID); ok && installed(m.root, k.ID, x.Version) {
 		e.Installed, e.Line, e.Port = x.Version, k.LineOf(x.Version), x.Port
+		versions[e.Line] = x.Version
 		lines[e.Line] = true
+		build := buildOf(m.root, k.ID, x.Version, cfg)
 		if offer, ok := offers[e.Line]; ok {
 			e.Latest = offer.Version
-			e.Update = offer.Installable() && newer(offer.Version, offer.Build, x.Version, x.Build)
+			e.Update = offer.Installable() && newer(offer.Version, offer.Build, x.Version, build)
 		}
-		e.Yanked = yankReason(manifest, m.platform, k, x)
+		e.Yanked = yankReason(manifest, m.platform, k, x.Version, build)
 	} else {
 		e.Port = SuggestPort(cfg, k.ID, k.DefaultPort)
 	}
@@ -326,10 +336,17 @@ func (m *Manager) entry(manifest *binaries.Manifest, k *Kind, cfg *config.Config
 	sort.Slice(ids, func(i, j int) bool { return binaries.CompareVersions(ids[i], ids[j]) > 0 })
 	for _, line := range ids {
 		offer := offers[line]
-		e.Lines = append(e.Lines, LineState{
-			ID: line, Label: line, Latest: offer.Version, Prerelease: offer.Prerelease, Installed: e.Line == line,
-			HasData: hasData(DataDir(m.root, k.ID, line)),
-		})
+		version := versions[line]
+		state := LineState{
+			ID: line, Label: line, Latest: offer.Version, Prerelease: offer.Prerelease, Installed: version != "", Version: version,
+			Active: e.Installed != "" && e.Line == line, HasData: hasData(DataDir(m.root, k.ID, line)),
+		}
+		if version != "" {
+			build := buildOf(m.root, k.ID, version, cfg)
+			state.Update = offer.Version != "" && offer.Installable() && newer(offer.Version, offer.Build, version, build)
+			state.Yanked = yankReason(manifest, m.platform, k, version, build)
+		}
+		e.Lines = append(e.Lines, state)
 	}
 	if newest, ok := offers[firstOffered(ids, offers)]; ok {
 		e.Estimate = fmt.Sprintf("about %d MB download", max(1, newest.Size/1_000_000))
@@ -360,14 +377,14 @@ func newer(version string, build int, installed string, installedBuild int) bool
 	return build > installedBuild
 }
 
-// yankReason is why the installed build of k was withdrawn, or "".
-func yankReason(manifest *binaries.Manifest, platform string, k *Kind, x config.Extra) string {
-	if x.Build == 0 {
+// yankReason is why an installed build of k was withdrawn, or "".
+func yankReason(manifest *binaries.Manifest, platform string, k *Kind, version string, build int) string {
+	if build == 0 {
 		return ""
 	}
 	for _, v := range manifest.Versions(k.pkg(), platform) {
-		if v.Version == x.Version {
-			return v.YankReason(x.Build)
+		if v.Version == version {
+			return v.YankReason(build)
 		}
 	}
 	return ""
@@ -377,6 +394,49 @@ func yankReason(manifest *binaries.Manifest, platform string, k *Kind, x config.
 func installed(root, id, version string) bool {
 	_, err := os.Stat(Dir(root, id, version))
 	return err == nil
+}
+
+func exists(path string) bool {
+	_, err := os.Stat(path)
+	return err == nil
+}
+
+// installedLines returns the installed version of each line of k (the newest, should a line have
+// more than one).
+func installedLines(root string, k *Kind) map[string]string {
+	out := map[string]string{}
+	entries, _ := os.ReadDir(filepath.Join(root, "services", k.ID))
+	for _, e := range entries {
+		version := e.Name()
+		if !e.IsDir() || version == "data" || strings.HasPrefix(version, ".") {
+			continue
+		}
+		line := k.LineOf(version)
+		if line == "" {
+			continue
+		}
+		if current, ok := out[line]; !ok || binaries.CompareVersions(version, current) > 0 {
+			out[line] = version
+		}
+	}
+	return out
+}
+
+// buildFile records the manifest build of an installed version, in its directory.
+const buildFile = ".flock-build"
+
+// buildOf is the manifest build of an installed version of service id, 0 when unknown. Versions
+// installed before builds were recorded there are known from the config when they are active.
+func buildOf(root, id, version string, cfg *config.Config) int {
+	if data, err := os.ReadFile(filepath.Join(Dir(root, id, version), buildFile)); err == nil {
+		if build, err := strconv.Atoi(strings.TrimSpace(string(data))); err == nil {
+			return build
+		}
+	}
+	if x, ok := cfg.Services.Extra(id); ok && x.Version == version {
+		return x.Build
+	}
+	return 0
 }
 
 func hasData(dir string) bool {
@@ -405,11 +465,15 @@ func (m *Manager) Check(ctx context.Context) error {
 	return err
 }
 
-// replaceYanked reinstalls every installed service whose build was withdrawn, when a good one exists.
+// replaceYanked reinstalls every installed version whose build was withdrawn, when a good one
+// exists (one per service at a time; the next manifest check takes the rest).
 func (m *Manager) replaceYanked() {
 	for _, e := range m.Catalog().Services {
-		if e.Yanked != "" && e.Update && e.Job == nil {
-			_ = m.Start(e.ID, e.Line, 0)
+		for _, l := range e.Lines {
+			if l.Yanked != "" && l.Update && e.Job == nil {
+				_ = m.Start(e.ID, l.ID, 0)
+				break
+			}
 		}
 	}
 }
@@ -429,9 +493,10 @@ func (m *Manager) Run(ctx context.Context) {
 	m.mu.Unlock()
 }
 
-// Start begins installing the newest build of line (the installed line, else the newest, when
-// "") in the background, on port (the configured or suggested one when 0). Installing replaces
-// the installed version; each line keeps its own data.
+// Start begins installing the newest build of line (the active line, else the newest, when "") in
+// the background. It installs next to the other lines; the first one installed becomes the active
+// one and runs on port (the suggested one when 0). Installing an installed line updates it (and
+// restarts it when it is the active one). Each line keeps its own data.
 func (m *Manager) Start(id, line string, port int) error {
 	k, err := m.Kind(id)
 	if err != nil {
@@ -469,11 +534,14 @@ func (m *Manager) Start(id, line string, port int) error {
 	if !offer.Installable() {
 		return fmt.Errorf("%s %s build %d was withdrawn: %s", k.Name, offer.Version, offer.Build, offer.YankReason(offer.Build))
 	}
-	if port == 0 {
-		port = current.Port
-		if !isInstalled || port == 0 {
-			port = SuggestPort(cfg, id, k.DefaultPort)
+	// The port belongs to the service, not to a line: it is chosen with the first install.
+	if isInstalled && current.Port != 0 {
+		if port != 0 && port != current.Port {
+			return fmt.Errorf("%w: %s runs on port %d; change the port of the service itself (Settings → Services)", ErrInvalid, k.Name, current.Port)
 		}
+		port = current.Port
+	} else if port == 0 {
+		port = SuggestPort(cfg, id, k.DefaultPort)
 	}
 	if err := CheckPort(cfg, id, port); err != nil {
 		return err
@@ -485,7 +553,7 @@ func (m *Manager) Start(id, line string, port int) error {
 		return fmt.Errorf("%w for %s", ErrBusy, k.Name)
 	}
 	action := "install"
-	if isInstalled && k.LineOf(current.Version) == line {
+	if installedLines(m.root, k)[line] != "" {
 		action = "update"
 	}
 	ctx, cancel := context.WithCancel(m.base)
@@ -544,7 +612,8 @@ func (m *Manager) run(ctx context.Context, k *Kind, j *job, offer binaries.Versi
 	}
 }
 
-// install downloads a build next to the installed ones, makes it the service and removes the others.
+// install downloads a build next to the installed ones and removes the older builds of its line.
+// It becomes the active version when there is none yet, or when it updates the active line.
 func (m *Manager) install(ctx context.Context, k *Kind, offer binaries.Version, port int, log io.Writer, set func(string, float64)) error {
 	parent := filepath.Join(m.root, "services", k.ID)
 	if err := os.MkdirAll(parent, 0o755); err != nil {
@@ -577,13 +646,23 @@ func (m *Manager) install(ctx context.Context, k *Kind, offer binaries.Version, 
 		}
 	}
 
-	// A reinstall (a new build of the same version) replaces the running one: stop it first
-	// (Windows locks its files).
-	version := offer.Version
+	version, line := offer.Version, k.LineOf(offer.Version)
+	cfg, err := config.Load(m.root)
+	if err != nil {
+		return err
+	}
+	active, hasActive := cfg.Services.Extra(k.ID)
+	hasActive = hasActive && installed(m.root, k.ID, active.Version)
+	activate := !hasActive || k.LineOf(active.Version) == line
+
+	// A reinstall (a new build of the same version) replaces it: when it is the one running, stop
+	// it first (Windows locks its files).
 	dir := Dir(m.root, k.ID, version)
 	if _, err := os.Stat(dir); err == nil {
-		if err := m.mutate(func(cfg *config.Config) error { cfg.Services.RemoveExtra(k.ID); return nil }); err != nil {
-			return err
+		if hasActive && active.Version == version {
+			if err := m.mutate(func(cfg *config.Config) error { cfg.Services.RemoveExtra(k.ID); return nil }); err != nil {
+				return err
+			}
 		}
 		if err := os.RemoveAll(dir); err != nil {
 			return err
@@ -592,25 +671,30 @@ func (m *Manager) install(ctx context.Context, k *Kind, offer binaries.Version, 
 	if err := os.Rename(staged, dir); err != nil {
 		return err
 	}
-
-	err = m.mutate(func(cfg *config.Config) error {
-		if err := CheckPort(cfg, k.ID, port); err != nil {
-			return err
-		}
-		cfg.Services.SetExtra(k.ID, config.Extra{Version: version, Build: offer.Build, Port: port})
-		cfg.Services.SetRunning(k.ID, true)
-		return nil
-	})
-	if err != nil {
+	if err := os.WriteFile(filepath.Join(dir, buildFile), []byte(strconv.Itoa(offer.Build)), 0o644); err != nil {
 		return err
 	}
-	return removeVersions(m.root, k.ID, version)
+
+	if activate {
+		err = m.mutate(func(cfg *config.Config) error {
+			if err := CheckPort(cfg, k.ID, port); err != nil {
+				return err
+			}
+			cfg.Services.SetExtra(k.ID, config.Extra{Version: version, Build: offer.Build, Port: port})
+			cfg.Services.SetRunning(k.ID, true)
+			return nil
+		})
+		if err != nil {
+			return err
+		}
+	}
+	return removeVersions(m.root, k, func(v string) bool { return k.LineOf(v) == line && v != version })
 }
 
-// removeVersions deletes the installed versions of service id except keep ("" for all).
-// Data and work directories stay.
-func removeVersions(root, id, keep string) error {
-	entries, err := os.ReadDir(filepath.Join(root, "services", id))
+// removeVersions deletes the installed versions of k that remove selects. Data and work
+// directories stay.
+func removeVersions(root string, k *Kind, remove func(version string) bool) error {
+	entries, err := os.ReadDir(filepath.Join(root, "services", k.ID))
 	if errors.Is(err, os.ErrNotExist) {
 		return nil
 	}
@@ -619,10 +703,10 @@ func removeVersions(root, id, keep string) error {
 	}
 	var errs []error
 	for _, e := range entries {
-		if !e.IsDir() || e.Name() == "data" || e.Name() == keep || strings.HasPrefix(e.Name(), ".") {
+		if !e.IsDir() || e.Name() == "data" || strings.HasPrefix(e.Name(), ".") || k.LineOf(e.Name()) == "" || !remove(e.Name()) {
 			continue
 		}
-		errs = append(errs, os.RemoveAll(filepath.Join(root, "services", id, e.Name())))
+		errs = append(errs, os.RemoveAll(filepath.Join(root, "services", k.ID, e.Name())))
 	}
 	return errors.Join(errs...)
 }
@@ -653,27 +737,111 @@ func (m *Manager) Dismiss(id string) error {
 	return nil
 }
 
-// Uninstall stops and removes a service, and with deleteData the data of every line too.
-func (m *Manager) Uninstall(id string, deleteData bool) error {
+// idle returns k unless an install of it runs.
+func (m *Manager) idle(id string) (*Kind, error) {
 	k, err := m.Kind(id)
+	if err != nil {
+		return nil, err
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if j := m.jobs[id]; j != nil && j.State == "running" {
+		return nil, fmt.Errorf("%w for %s", ErrBusy, k.Name)
+	}
+	return k, nil
+}
+
+// Activate makes an installed line the one that runs, on the service's port, and switches the
+// service on. The other lines stay installed with their data.
+func (m *Manager) Activate(id, line string) error {
+	k, err := m.idle(id)
+	if err != nil {
+		return err
+	}
+	version := installedLines(m.root, k)[line]
+	if version == "" {
+		return fmt.Errorf("%w: %s %s is not installed", ErrInvalid, k.Name, line)
+	}
+	return m.mutate(func(cfg *config.Config) error {
+		m.use(cfg, k, version)
+		return nil
+	})
+}
+
+// use makes version the active one of k (keeping the service's port) and switches it on.
+func (m *Manager) use(cfg *config.Config, k *Kind, version string) {
+	port := 0
+	if x, ok := cfg.Services.Extra(k.ID); ok {
+		port = x.Port
+		// The config is all that knows the build of a version installed before builds were
+		// recorded in its directory: record it before the config forgets.
+		if x.Version != version && x.Build != 0 {
+			if path := filepath.Join(Dir(m.root, k.ID, x.Version), buildFile); !exists(path) {
+				_ = os.WriteFile(path, []byte(strconv.Itoa(x.Build)), 0o644)
+			}
+		}
+	}
+	if port == 0 {
+		port = SuggestPort(cfg, k.ID, k.DefaultPort)
+	}
+	cfg.Services.SetExtra(k.ID, config.Extra{Version: version, Build: buildOf(m.root, k.ID, version, cfg), Port: port})
+	cfg.Services.SetRunning(k.ID, true)
+}
+
+// Uninstall removes line of a service ("" for every line), and with deleteData its data too. When
+// the active line goes, the newest other installed line takes over and is started.
+func (m *Manager) Uninstall(id, line string, deleteData bool) error {
+	k, err := m.idle(id)
 	if err != nil {
 		return err
 	}
 	m.mu.Lock()
-	if j := m.jobs[id]; j != nil && j.State == "running" {
-		m.mu.Unlock()
-		return fmt.Errorf("%w for %s", ErrBusy, k.Name)
-	}
 	delete(m.jobs, id)
 	m.mu.Unlock()
 
-	if err := m.mutate(func(cfg *config.Config) error { cfg.Services.RemoveExtra(id); return nil }); err != nil {
+	if line == "" {
+		if err := m.mutate(func(cfg *config.Config) error { cfg.Services.RemoveExtra(id); return nil }); err != nil {
+			return err
+		}
+		if deleteData {
+			return os.RemoveAll(filepath.Join(m.root, "services", id))
+		}
+		return removeVersions(m.root, k, func(string) bool { return true })
+	}
+
+	versions := installedLines(m.root, k)
+	if versions[line] == "" && !(deleteData && hasData(DataDir(m.root, id, line))) {
+		return fmt.Errorf("%w: %s %s is not installed", ErrInvalid, k.Name, line)
+	}
+	// Stop it first (Windows locks the files of a running server).
+	err = m.mutate(func(cfg *config.Config) error {
+		x, ok := cfg.Services.Extra(id)
+		if !ok || k.LineOf(x.Version) != line {
+			return nil
+		}
+		next := ""
+		for other, version := range versions {
+			if other != line && (next == "" || binaries.CompareVersions(other, k.LineOf(next)) > 0) {
+				next = version
+			}
+		}
+		if next == "" {
+			cfg.Services.RemoveExtra(id)
+		} else {
+			m.use(cfg, k, next)
+		}
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+	if err := removeVersions(m.root, k, func(v string) bool { return k.LineOf(v) == line }); err != nil {
 		return err
 	}
 	if deleteData {
-		return os.RemoveAll(filepath.Join(m.root, "services", id))
+		return os.RemoveAll(DataDir(m.root, id, line))
 	}
-	return removeVersions(m.root, id, "")
+	return nil
 }
 
 // Wait blocks until every job has finished (for tests and shutdown).

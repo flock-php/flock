@@ -64,8 +64,8 @@ import Testing
       {"id":"mysql","name":"MySQL","category":"Database","description":"The most popular database","available":true,"unavailable":"",
        "estimate":"200 MB download","installed":"8.4.6","line":"8.4","latest":"8.4.7","update":true,
        "port":3306,"default_port":3306,
-       "lines":[{"id":"9.4","label":"9.4 Innovation","latest":"9.4.0","installed":false,"has_data":false},
-                {"id":"8.4","label":"8.4 LTS","latest":"8.4.7","installed":true,"has_data":true}],
+       "lines":[{"id":"9.4","label":"9.4 Innovation","latest":"9.4.1","installed":true,"version":"9.4.0","update":true,"yanked":"crashes","has_data":false},
+                {"id":"8.4","label":"8.4 LTS","latest":"8.4.7","installed":true,"version":"8.4.6","active":true,"update":true,"has_data":true}],
        "job":null},
       {"id":"mariadb","name":"MariaDB","category":"Database","available":true,"estimate":"about 90 MB download",
        "installed":"","port":3307,"default_port":3306,"lines":[{"id":"11.8","label":"11.8 LTS"}],
@@ -85,6 +85,9 @@ import Testing
     #expect(mysql.isInstalled && mysql.update && mysql.line == "8.4" && mysql.latest == "8.4.7")
     #expect(mysql.lines.map(\.label) == ["9.4 Innovation", "8.4 LTS"] && mysql.preferredLine?.id == "8.4")
     #expect(mysql.lines[1].hasData && mysql.lines[1].installed && !mysql.lines[0].hasData)
+    // Lines install side by side; the active one runs.
+    #expect(mysql.lines.map(\.installed) == [true, true] && mysql.lines.map(\.active) == [false, true])
+    #expect(mysql.lines[0].version == "9.4.0" && mysql.lines[0].update && mysql.lines[0].yanked == "crashes")
 
     let mariadb = try #require(catalog["mariadb"])
     #expect(!mariadb.isInstalled && mariadb.port == 3307 && mariadb.defaultPort == 3306 && mariadb.preferredLine?.id == "11.8")

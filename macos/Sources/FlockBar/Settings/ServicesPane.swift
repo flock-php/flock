@@ -178,7 +178,7 @@ struct ServicesPane: View {
             guard let entry = store.catalog?[service.id] else { return .none }
             if entry.job?.isRunning == true || store.catalogPending.contains(service.id) { return .working }
             if entry.job?.isFailed == true { return .failed }
-            return entry.update ? .update : .none
+            return entry.lines.contains(where: \.update) ? .update : .none
         }
     }
 

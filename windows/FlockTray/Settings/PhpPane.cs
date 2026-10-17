@@ -60,7 +60,8 @@ internal sealed class PhpPane(SettingsWindow window, AppModel model) : Pane(wind
                 checking = false;
                 Rerender();
             });
-        var header = Ui.Spread(Ui.Text("Versions", "BodyStrongTextBlockStyle"), Ui.Row(6, Ui.Caption(checkedText, wrap: false), check));
+        // Named after the server, like the FrankenPHP section below and a site's server picker.
+        var header = Ui.Spread(Ui.Text("PHP-CGI", "BodyStrongTextBlockStyle"), Ui.Row(6, Ui.Caption(checkedText, wrap: false), check));
         header.Margin = new Thickness(1, 0, 0, 6);
         var versions = new StackPanel { Spacing = 4, Margin = new Thickness(0, 0, 0, 24) };
         versions.Children.Add(header);

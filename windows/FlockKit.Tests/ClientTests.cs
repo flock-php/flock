@@ -162,19 +162,23 @@ public class ClientTests : IDisposable
         await client.CancelCatalogJobAsync("mysql");
         await client.DismissCatalogJobAsync("mysql");
         Assert.Equal("==> Downloading\n", await client.CatalogLogAsync("mysql"));
+        await client.ActivateCatalogServiceAsync("mysql", "9.7");
         await client.UninstallCatalogServiceAsync("mysql");
-        await client.UninstallCatalogServiceAsync("mongodb", deleteData: true);
+        await client.UninstallCatalogServiceAsync("mysql", "8.4");
+        await client.UninstallCatalogServiceAsync("mongodb", "7.0", deleteData: true);
 
         Assert.Equal(
             [
                 "GET /v1/catalog", "POST /v1/catalog/check", "POST /v1/catalog/mysql/install", "POST /v1/catalog/redis/install",
                 "POST /v1/catalog/mysql/cancel", "DELETE /v1/catalog/mysql/job", "GET /v1/catalog/mysql/log",
-                "DELETE /v1/catalog/mysql", "DELETE /v1/catalog/mongodb?delete_data=1",
+                "POST /v1/catalog/mysql/activate", "DELETE /v1/catalog/mysql", "DELETE /v1/catalog/mysql?line=8.4",
+                "DELETE /v1/catalog/mongodb?line=7.0&delete_data=1",
             ],
             handler.Requests.Select(r => $"{r.Method} {r.RequestUri!.PathAndQuery}"));
         Assert.Contains("\"line\":\"8.4\"", handler.Bodies[2]);
         Assert.Contains("\"port\":3307", handler.Bodies[2]);
         Assert.Contains("\"port\":0", handler.Bodies[3]);
+        Assert.Contains("\"line\":\"9.7\"", handler.Bodies[7]);
         Assert.Equal(TimeSpan.FromMinutes(1), handler.Timeouts[^1]);
     }
 

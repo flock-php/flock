@@ -112,8 +112,8 @@ public class ServiceVersionsTests
               {"id":"mysql","name":"MySQL","category":"Database","description":"The most popular database","available":true,
                "estimate":"250 MB download","installed":"8.4.6","line":"8.4","latest":"8.4.7","update":true,
                "port":3306,"default_port":3306,
-               "lines":[{"id":"9.4","label":"9.4 Innovation","latest":"9.4.0","installed":false,"has_data":false},
-                        {"id":"8.4","label":"8.4 LTS","latest":"8.4.7","installed":true,"has_data":true}],"job":null},
+               "lines":[{"id":"9.4","label":"9.4 Innovation","latest":"9.4.1","installed":true,"version":"9.4.0","update":true,"yanked":"crashes","has_data":false},
+                        {"id":"8.4","label":"8.4 LTS","latest":"8.4.7","installed":true,"version":"8.4.6","active":true,"update":true,"has_data":true}],"job":null},
               {"id":"redis","name":"Redis","category":"Cache & Queue","available":true,"installed":"","port":6380,"default_port":6379,
                "lines":[{"id":"8.2"}],
                "job":{"action":"install","state":"failed","phase":"downloading","progress":0.3,"error":"503","started_at":"2026-10-14T08:01:00Z","version":"8.2.1","line":"8.2"}},
@@ -128,6 +128,12 @@ public class ServiceVersionsTests
         Assert.Equal("8.4", mysql.PreferredLine!.Id);
         Assert.Equal(["9.4 Innovation", "8.4 LTS"], mysql.Lines.Select(l => l.Label));
         Assert.True(mysql.Lines[1].HasData);
+        // Lines install side by side; the active one runs.
+        Assert.Equal([true, true], mysql.Lines.Select(l => l.Installed));
+        Assert.Equal([false, true], mysql.Lines.Select(l => l.Active));
+        Assert.Equal("9.4.0", mysql.Lines[0].Version);
+        Assert.True(mysql.Lines[0].Update);
+        Assert.Equal("crashes", mysql.Lines[0].Yanked);
 
         var redis = catalog["redis"]!;
         Assert.False(redis.IsInstalled);

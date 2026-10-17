@@ -45,7 +45,7 @@ SHA-256 against a signed list — nothing is built on the machine:
 
 | Service | macOS | Windows |
 | --- | --- | --- |
-| PostgreSQL (`flock postgres install`), with `psql`, `pg_dump` and the other client tools | built by Flock | built by Flock |
+| PostgreSQL (`flock services install postgres`), with `psql`, `pg_dump` and the other client tools | built by Flock | built by Flock |
 | Valkey (`flock services install valkey`) | built by Flock | built by Flock with MSYS2 (`fork()` for snapshots) |
 | Redis (`flock services install redis`) | built by Flock | not offered — use Valkey, which speaks the same protocol |
 | MySQL, MongoDB (`flock services install <id> [line]`) | the official builds | the official zips (Flock drops the debug symbols) |
@@ -94,9 +94,10 @@ fails, or a service hasn't exited after 10 seconds, it is killed. php-cgi worker
 - [ ] A PhpStorm breakpoint hits on reload with no browser extension, and the site goes back to the fast pool once it is removed
 - [ ] `?XDEBUG_TRIGGER=1` and the Xdebug browser extension hit a breakpoint; requests without them never load Xdebug
 - [ ] `flock debug artisan …` hits a breakpoint; plain `php` does not load Xdebug
-- [ ] `flock services install valkey` downloads Valkey and starts it; `redis-cli ping` → PONG; `flock postgres install` → `psql -c "select 1"`
+- [ ] `flock services install valkey` downloads Valkey and starts it; `redis-cli ping` → PONG; `flock services install postgres` → `psql -c "select 1"`
 - [ ] Upgrading from a Flock that had Redis: it keeps running from `services\redis\7.2.16` with its data
 - [ ] Settings → Services → All: install MySQL, MariaDB (port suggested as 3307 next to MySQL), MongoDB, Valkey, Meilisearch, RustFS; each starts and its connection works; Typesense and Redis show as not available
+- [ ] MySQL 8.4 installs next to 9.7 (9.7 keeps running); Switch… runs 8.4 on the same port with its own data; uninstalling the active one hands over to the other; `flock services use mysql 9.7` switches back
 - [ ] Stopping Redis/MySQL/MariaDB/PostgreSQL in Services (or `flock restart`) logs a clean shutdown (redis.log: "Redis is now ready to exit"; mysql.log: "Shutdown complete"; postgres.log: "database system is shut down"), not a kill
 - [ ] Mail: send from tinker → appears in Mail, HTML view, attachments save
 - [ ] Dumps: `dump()` in a route → Dumps window, the file link opens the editor
