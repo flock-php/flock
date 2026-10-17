@@ -316,8 +316,8 @@ func ExtensionPath(root, minor, name string) string {
 // compile most of these in and ship only the larger ones (imagick, mongodb, memcached) shared.
 // Xdebug and pcov aren't here: Xdebug loads only for debugging, pcov only for the CLI.
 var extensions = []string{
-	"bz2", "curl", "exif", "fileinfo", "ftp", "gd", "gettext", "gmp", "intl", "mbstring", "mysqli",
-	"openssl", "pdo_mysql", "pdo_pgsql", "pdo_sqlite", "pgsql", "sockets", "sodium", "sqlite3", "xsl", "zip",
+	"bz2", "curl", "exif", "fileinfo", "ftp", "gd", "gettext", "gmp", "intl", "ldap", "mbstring", "mysqli",
+	"openssl", "pdo_mysql", "pdo_pgsql", "pdo_sqlite", "pgsql", "shmop", "soap", "sockets", "sodium", "sqlite3", "xsl", "zip",
 	"apcu", "igbinary", "redis", "imagick", "mongodb", "memcached",
 }
 
