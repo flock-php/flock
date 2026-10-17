@@ -2,9 +2,10 @@ import AppKit
 import FlockKit
 import SwiftUI
 
-/// Sites with their PHP and Node.js versions. Each picker offers the project's pinned version (or
-/// the default) first, then the installed versions, which isolate the site on this machine; the
-/// "…" menu pins a version into the project or removes it again.
+/// The sites in a list, and the selected one's details beside it, as in Services: its address and
+/// domains, its PHP and Node.js versions and what serves it. Each version picker offers the
+/// project's pinned version (or the default) first, then the installed versions, which isolate the
+/// site on this machine; the pin menu pins a version into the project or removes it again.
 struct SitesPane: View {
     @Environment(AppModel.self) private var model
     @Environment(\.openWindow) private var openWindow
@@ -48,124 +49,38 @@ struct SitesPane: View {
                 .padding(.bottom, 6)
             }
 
-            if let dns = model.status?.dns, !dns.wildcard, !dns.wildcardProblem.isEmpty, !sites.isEmpty {
-                Label("Subdomains only work when you add them to a site (\(Image(systemName: "network")) → Add Domain…): \(dns.wildcardProblem).",
-                      systemImage: "info.circle.fill")
-                    .font(.caption).foregroundStyle(.orange)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .padding(.horizontal, 24)
-                    .padding(.top, 8)
-            }
-
-            Table(sites, selection: selectionState.projectedValue) {
-                TableColumn("Site") { site in
-                    VStack(alignment: .leading, spacing: 1) {
-                        HStack(spacing: 4) {
-                            Text(site.name).fontWeight(.medium)
-                            if site.parked {
-                                Badge(text: "Project folder", color: .secondary)
-                            }
-                        }
-                        if let problem = site.problem {
-                            Label(problem, systemImage: "exclamationmark.triangle.fill")
-                                .font(.caption).foregroundStyle(.orange)
-                        } else {
-                            Text(site.url ?? site.domain).font(.caption).foregroundStyle(.secondary)
-                                .lineLimit(1).truncationMode(.middle)
-                            Text(site.path).font(.caption).foregroundStyle(.tertiary)
-                                .lineLimit(1).truncationMode(.middle)
-                                .help(site.path)
-                        }
-                        ForEach(site.domains) { domain in
-                            if let problem = domain.problem {
-                                Label("\(domain.host): \(problem)", systemImage: "exclamationmark.triangle.fill")
-                                    .font(.caption).foregroundStyle(.orange)
-                            } else if let url = domain.url.flatMap(URL.init(string:)) {
-                                Link(domain.alias ? "\(domain.host) (alias)" : domain.host, destination: url)
-                                    .font(.caption)
-                            }
-                        }
-                        hints(site)
-                    }
-                    .padding(.vertical, 2)
-                }
-                .width(min: 200, ideal: 280)
-
-                TableColumn("PHP") { site in
-                    versionPicker(label: "PHP", current: site.php, source: site.phpSource, pinned: site.phpPinned, file: site.phpFile,
-                                  defaultVersion: store.config?.defaultPHP ?? "", installed: phpVersions) { version in
-                        Task { await store.perform { _ = try await $0.updateSite(site.name, SiteChange(php: version)) } }
-                    }
-                }
-                .width(min: 150, ideal: 180)
-
-                TableColumn("Server") { site in
-                    serverCell(site)
-                }
-                .width(min: 160, ideal: 200)
-
-                TableColumn("Node") { site in
-                    versionPicker(label: "Node", current: major(site.node ?? ""), source: site.nodeSource, pinned: major(site.nodePinned), file: site.nodeFile,
-                                  defaultVersion: store.config?.defaultNode ?? "", installed: nodeMajors) { version in
-                        Task { await store.perform { _ = try await $0.updateSite(site.name, SiteChange(node: version)) } }
-                    }
-                }
-                .width(min: 150, ideal: 180)
-
-                TableColumn("HTTPS") { site in
-                    Toggle("HTTPS", isOn: Binding(
-                        get: { site.secured },
-                        set: { on in Task { await store.perform { _ = try await $0.updateSite(site.name, SiteChange(secured: on)) } } }
-                    ))
-                    .labelsHidden()
-                    .toggleStyle(.switch)
-                    .controlSize(.small)
-                }
-                .width(60)
-
-                TableColumn("") { site in
-                    HStack(spacing: 8) {
-                        Button { model.open(site) } label: { Image(systemName: "safari") }
-                            .help("Open \(site.url ?? site.domain)")
-                            .disabled(site.url == nil)
-                        Button { reveal(site.path) } label: { Image(systemName: "folder") }
-                            .help("Show in Finder")
-                        Button { extensionsState.wrappedValue = site } label: { Image(systemName: "puzzlepiece.extension") }
-                            .help("PHP extensions")
-                        domainMenu(site)
-                        pinMenu(site)
-                        if !site.parked {
-                            Button {
-                                confirm = ConfirmAction(
-                                    title: "Remove \(site.name)?", button: "Remove", destructive: true,
-                                    message: "Flock stops serving \(site.domain). The project in \(site.path) is not touched.",
-                                    run: { [name = site.name] client in try await client.unlinkSite(name) })
-                            } label: { Image(systemName: "minus.circle") }
-                                .help("Remove site")
+            if sites.isEmpty {
+                ContentUnavailableView("No sites", systemImage: "globe",
+                                       description: Text("Add a single site here, or add a project folder in General."))
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                // The sites in a list, the selected one's details beside it, as in Services.
+                let selected = sites.first { $0.id == selectionState.wrappedValue } ?? sites[0]
+                HStack(spacing: 0) {
+                    List(selection: Binding<Status.Site.ID?>(get: { selected.id }, set: { selectionState.wrappedValue = $0 })) {
+                        ForEach(sites) { site in
+                            siteRow(site).tag(site.id)
                         }
                     }
-                    .buttonStyle(.borderless)
-                }
-                .width(176)
-            }
-            .tableStyle(.inset)
-            .padding(.horizontal, 20)
-            .padding(.top, 12)
-            .overlay {
-                if sites.isEmpty {
-                    ContentUnavailableView("No sites", systemImage: "globe",
-                                           description: Text("Add a single site here, or add a project folder in General."))
-                }
-            }
+                    .listStyle(.inset)
+                    .frame(width: 230)
 
-            VStack(alignment: .leading, spacing: 4) {
-                Text("A version picked here applies on this machine only. To set it for everyone working on a project, pin it (…): PHP goes into .flockrc, Node.js into .nvmrc. Projects that pin a version use it automatically.")
-                Text("FrankenPHP needs PHP 8.2 or newer. Requests that ask for Xdebug still go to PHP-FPM.")
+                    Divider()
+
+                    ScrollView {
+                        detail(selected, phpVersions: phpVersions, nodeMajors: nodeMajors)
+                            .padding(16)
+                    }
+                    // Another site's details start at the top.
+                    .id(selected.id)
+                    .frame(minWidth: 340, maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                    .background(Color(nsColor: .controlBackgroundColor).opacity(0.5))
+                }
+                .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(.separator))
+                .clipShape(RoundedRectangle(cornerRadius: 8))
+                .padding(.horizontal, 20)
+                .padding(.vertical, 12)
             }
-            .font(.caption).foregroundStyle(.secondary)
-            .fixedSize(horizontal: false, vertical: true)
-            .padding(.horizontal, 24)
-            .padding(.vertical, 10)
         }
         .sheet(item: extensionsState.projectedValue) { site in
             SiteExtensionsSheet(site: site)
@@ -223,27 +138,184 @@ struct SitesPane: View {
         return "Wildcard subdomains don't work here (\(dns?.wildcardProblem ?? "")), so add each subdomain you use (tenant1, a.b). A full name adds an alias."
     }
 
-    private func domainMenu(_ site: Status.Site) -> some View {
-        Menu {
-            Button("Add Domain…") { adding = site.name }
-            if !site.domains.isEmpty {
-                Divider()
-                ForEach(site.domains) { domain in
-                    Button("Remove \(domain.host)…") {
-                        confirm = ConfirmAction(
-                            title: "Remove \(domain.host)?", button: "Remove", destructive: true,
-                            message: "\(domain.host) is no longer served by \(site.name).",
-                            run: { [name = site.name, entry = domain.entry] client in try await client.removeDomain(site: name, domain: entry) })
+    /// A site in the list: its name and address, a lock when it is secured, a warning when something is wrong.
+    private func siteRow(_ site: Status.Site) -> some View {
+        HStack(spacing: 6) {
+            VStack(alignment: .leading, spacing: 1) {
+                Text(site.name).fontWeight(.medium).lineLimit(1)
+                Text(site.domain).font(.caption).foregroundStyle(.secondary)
+                    .lineLimit(1).truncationMode(.middle)
+            }
+            Spacer(minLength: 4)
+            if let problem = problem(site) {
+                Image(systemName: "exclamationmark.triangle.fill").font(.caption).foregroundStyle(.orange)
+                    .help(problem)
+            }
+            if site.secured {
+                Image(systemName: "lock.fill").font(.caption).foregroundStyle(.secondary)
+                    .help("Served over HTTPS")
+            }
+        }
+        .padding(.vertical, 2)
+        .help(site.path)
+    }
+
+    /// What a site's list row warns about: the site, one of its domains, or its FrankenPHP.
+    private func problem(_ site: Status.Site) -> String? {
+        if let problem = site.problem {
+            return problem
+        }
+        if let domain = site.domains.first(where: { $0.problem != nil }) {
+            return "\(domain.host): \(domain.problem ?? "")"
+        }
+        if site.server == .frankenphp, let franken = site.frankenPHP, franken.state == .failed || franken.state == .unavailable,
+           !franken.problem.isEmpty {
+            return franken.problem
+        }
+        return nil
+    }
+
+    /// The selected site: its address and actions, then Site, Versions and Server sections of labelled settings.
+    private func detail(_ site: Status.Site, phpVersions: [String], nodeMajors: [String]) -> some View {
+        let store = model.settings
+        return VStack(alignment: .leading, spacing: 20) {
+            HStack(alignment: .top, spacing: 10) {
+                VStack(alignment: .leading, spacing: 2) {
+                    HStack(spacing: 6) {
+                        Text(site.name).font(.title3.weight(.semibold))
+                        if site.parked {
+                            Badge(text: "Project folder", color: .secondary)
+                        }
+                    }
+                    if let text = site.url, let url = URL(string: text) {
+                        Link(text, destination: url).font(.callout)
+                    }
+                    Text(site.path).font(.caption).foregroundStyle(.tertiary)
+                        .lineLimit(1).truncationMode(.middle)
+                        .help(site.path)
+                }
+                Spacer(minLength: 8)
+                HStack(spacing: 8) {
+                    Button { model.open(site) } label: { Image(systemName: "safari") }
+                        .help("Open \(site.url ?? site.domain)")
+                        .disabled(site.url == nil)
+                    Button { reveal(site.path) } label: { Image(systemName: "folder") }
+                        .help("Show in Finder")
+                    Button { extensionsState.wrappedValue = site } label: { Image(systemName: "puzzlepiece.extension") }
+                        .help("PHP extensions")
+                    pinMenu(site)
+                    if !site.parked {
+                        Button {
+                            confirm = ConfirmAction(
+                                title: "Remove \(site.name)?", button: "Remove", destructive: true,
+                                message: "Flock stops serving \(site.domain). The project in \(site.path) is not touched.",
+                                run: { [name = site.name] client in try await client.unlinkSite(name) })
+                        } label: { Image(systemName: "minus.circle") }
+                            .help("Remove site")
                     }
                 }
+                .buttonStyle(.borderless)
             }
-        } label: {
-            Image(systemName: "network")
+            if let problem = site.problem {
+                Label(problem, systemImage: "exclamationmark.triangle.fill")
+                    .font(.callout).foregroundStyle(.orange)
+                    .textSelection(.enabled)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            section("Site") {
+                field("HTTPS") {
+                    Toggle("HTTPS", isOn: Binding(
+                        get: { site.secured },
+                        set: { on in Task { await store.perform { _ = try await $0.updateSite(site.name, SiteChange(secured: on)) } } }
+                    ))
+                    .labelsHidden()
+                    .toggleStyle(.switch)
+                    .controlSize(.small)
+                }
+                field("Domains") {
+                    VStack(alignment: .leading, spacing: 3) {
+                        ForEach(site.domains) { domain in
+                            HStack(spacing: 4) {
+                                if let problem = domain.problem {
+                                    Label("\(domain.host): \(problem)", systemImage: "exclamationmark.triangle.fill")
+                                        .foregroundStyle(.orange)
+                                        .fixedSize(horizontal: false, vertical: true)
+                                } else if let url = domain.url.flatMap(URL.init(string:)) {
+                                    Link(domain.alias ? "\(domain.host) (alias)" : domain.host, destination: url)
+                                } else {
+                                    Text(domain.host)
+                                }
+                                Button {
+                                    confirm = ConfirmAction(
+                                        title: "Remove \(domain.host)?", button: "Remove", destructive: true,
+                                        message: "\(domain.host) is no longer served by \(site.name).",
+                                        run: { [name = site.name, entry = domain.entry] client in try await client.removeDomain(site: name, domain: entry) })
+                                } label: { Image(systemName: "minus.circle") }
+                                    .buttonStyle(.borderless)
+                                    .help("Remove \(domain.host)")
+                            }
+                        }
+                        Button("Add Domain…") { adding = site.name }
+                            .buttonStyle(.link)
+                            .help("Extra domains: subdomains and aliases")
+                    }
+                    .font(.callout)
+                }
+                if let dns = model.status?.dns, !dns.wildcard, !dns.wildcardProblem.isEmpty {
+                    Text("Subdomains only work when you add them here: \(dns.wildcardProblem).")
+                        .font(.caption).foregroundStyle(.orange)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+
+            section("Versions") {
+                field("PHP") {
+                    versionPicker(label: "PHP", current: site.php, source: site.phpSource, pinned: site.phpPinned, file: site.phpFile,
+                                  defaultVersion: store.config?.defaultPHP ?? "", installed: phpVersions) { version in
+                        Task { await store.perform { _ = try await $0.updateSite(site.name, SiteChange(php: version)) } }
+                    }
+                }
+                field("Node.js") {
+                    versionPicker(label: "Node", current: major(site.node ?? ""), source: site.nodeSource, pinned: major(site.nodePinned), file: site.nodeFile,
+                                  defaultVersion: store.config?.defaultNode ?? "", installed: nodeMajors) { version in
+                        Task { await store.perform { _ = try await $0.updateSite(site.name, SiteChange(node: version)) } }
+                    }
+                }
+                hints(site)
+                Text("A version picked here applies on this machine only. To set it for everyone working on the project, pin it (\(Image(systemName: "pin"))): PHP goes into .flockrc, Node.js into .nvmrc.")
+                    .font(.caption).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            section("Server") {
+                serverFields(site)
+            }
+
+            if site.boost == .missing || site.boost == .outdated {
+                section("Laravel Boost") {
+                    boost(site)
+                }
+            }
         }
-        .menuStyle(.borderlessButton)
-        .menuIndicator(.hidden)
-        .fixedSize()
-        .help("Extra domains: subdomains and aliases")
+    }
+
+    /// A section of the details: a heading and its settings.
+    private func section<Content: View>(_ title: String, @ViewBuilder content: () -> Content) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text(title).font(.subheadline.weight(.semibold))
+            content()
+        }
+    }
+
+    /// A labelled setting: the label in a fixed column, so the controls line up.
+    private func field<Content: View>(_ label: String, @ViewBuilder content: () -> Content) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 12) {
+            Text(label).foregroundStyle(.secondary)
+                .frame(width: 80, alignment: .leading)
+            content()
+            Spacer(minLength: 0)
+        }
     }
 
     /// The project's pinned version ("Use .nvmrc (Node 20)") or the default first, which follow the
@@ -274,9 +346,10 @@ struct SitesPane: View {
 
     /// What runs the site's PHP (PHP-FPM or FrankenPHP); on FrankenPHP also its mode (classic or
     /// Laravel Octane), its state, Restart and its log.
-    private func serverCell(_ site: Status.Site) -> some View {
+    @ViewBuilder
+    private func serverFields(_ site: Status.Site) -> some View {
         let store = model.settings
-        return VStack(alignment: .leading, spacing: 4) {
+        field("Runs on") {
             Picker("Server", selection: Binding(
                 get: { site.server },
                 set: { server in Task { await store.perform { _ = try await $0.updateSite(site.name, SiteChange(server: server.rawValue)) } } }
@@ -287,9 +360,10 @@ struct SitesPane: View {
             }
             .labelsHidden()
             .fixedSize()
-            .help("FrankenPHP needs PHP 8.2 or newer. Requests that ask for Xdebug still go to PHP-FPM.")
+        }
 
-            if site.server == .frankenphp {
+        if site.server == .frankenphp {
+            field("Mode") {
                 Picker("Mode", selection: Binding(
                     get: { site.worker },
                     set: { worker in Task { await store.perform { _ = try await $0.updateSite(site.name, SiteChange(worker: worker.rawValue)) } } }
@@ -300,37 +374,37 @@ struct SitesPane: View {
                 }
                 .labelsHidden()
                 .fixedSize()
-
-                if !site.octaneAvailable {
-                    Text("Install Laravel Octane in the project (composer require laravel/octane) to use worker mode.")
-                        .font(.caption).foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-
-                frankenPHPState(site)
-
-                HStack(spacing: 8) {
-                    Button("Restart") {
-                        restarting = site.name
-                        Task {
-                            await store.perform { _ = try await $0.restartSite(site.name) }
-                            restarting = nil
-                        }
-                    }
-                    .disabled(site.frankenPHP?.state != .running || restarting == site.name)
-                    .help("Restart FrankenPHP, e.g. so Octane's workers load changed code")
-                    Button("Show Log") {
-                        model.logs.requested = .service(frankenPHPLog(site))
-                        openWindow.activating(WindowID.logs)
-                    }
-                    if restarting == site.name {
-                        ProgressView().controlSize(.mini)
-                    }
-                }
-                .controlSize(.small)
+                .help(site.octaneAvailable ? "" : "Install Laravel Octane in the project (composer require laravel/octane) to use worker mode.")
             }
+
+            frankenPHPState(site)
+
+            HStack(spacing: 8) {
+                Button("Restart") {
+                    restarting = site.name
+                    Task {
+                        await store.perform { _ = try await $0.restartSite(site.name) }
+                        restarting = nil
+                    }
+                }
+                .disabled(site.frankenPHP?.state != .running || restarting == site.name)
+                .help("Restart FrankenPHP, e.g. so Octane's workers load changed code")
+                Button("Show Log") {
+                    model.logs.requested = .service(frankenPHPLog(site))
+                    openWindow.activating(WindowID.logs)
+                }
+                if restarting == site.name {
+                    ProgressView().controlSize(.mini)
+                }
+            }
+            .controlSize(.small)
         }
-        .padding(.vertical, 2)
+
+        Text(site.server == .frankenphp && !site.octaneAvailable
+             ? "FrankenPHP needs PHP 8.2 or newer. Requests that ask for Xdebug still go to PHP-FPM. For worker mode, install Laravel Octane in the project (composer require laravel/octane)."
+             : "FrankenPHP needs PHP 8.2 or newer. Requests that ask for Xdebug still go to PHP-FPM.")
+            .font(.caption).foregroundStyle(.secondary)
+            .fixedSize(horizontal: false, vertical: true)
     }
 
     /// The FrankenPHP process: running, downloading its build, or why PHP-FPM serves the site.
@@ -424,20 +498,26 @@ struct SitesPane: View {
             Text(".flockrc's Node \(site.nodePinned) wins over \(site.nodeShadowed).")
                 .font(.caption).foregroundStyle(.orange)
         }
-        if site.boost == .missing || site.boost == .outdated {
-            HStack(spacing: 4) {
-                Text(site.boost == .missing ? "Uses Laravel Boost." : "Flock's Boost guideline is outdated.")
-                Button(site.boost == .missing ? "Add Flock to its guidelines…" : "Update it…") {
-                    confirm = ConfirmAction(
-                        title: site.boost == .missing ? "Add Flock to \(site.name)'s Boost guidelines?" : "Update Flock's guideline in \(site.name)?",
-                        button: site.boost == .missing ? "Add" : "Update",
-                        message: "Writes .ai/guidelines/flock.md in \(site.path) and runs php artisan boost:update, so AI agents know Flock serves the app and picks its PHP version. Commit it with the rest of .ai/guidelines. This changes files in your project.",
-                        run: { [name = site.name] client in try await client.addBoostGuideline(site: name) })
-                }
-                .buttonStyle(.link)
+    }
+
+    /// The project uses Laravel Boost, and Flock's guideline is missing from it or outdated.
+    private func boost(_ site: Status.Site) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(site.boost == .missing
+                 ? "The project uses Laravel Boost. Adding Flock to its guidelines tells AI agents that Flock serves the app and picks its PHP version."
+                 : "Flock's guideline in the project's Boost guidelines is outdated.")
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            Button(site.boost == .missing ? "Add Flock to its guidelines…" : "Update it…") {
+                confirm = ConfirmAction(
+                    title: site.boost == .missing ? "Add Flock to \(site.name)'s Boost guidelines?" : "Update Flock's guideline in \(site.name)?",
+                    button: site.boost == .missing ? "Add" : "Update",
+                    message: "Writes .ai/guidelines/flock.md in \(site.path) and runs php artisan boost:update, so AI agents know Flock serves the app and picks its PHP version. Commit it with the rest of .ai/guidelines. This changes files in your project.",
+                    run: { [name = site.name] client in try await client.addBoostGuideline(site: name) })
             }
-            .font(.caption).foregroundStyle(.secondary)
+            .buttonStyle(.link)
         }
+        .font(.caption)
     }
 
     private func pinMenu(_ site: Status.Site) -> some View {

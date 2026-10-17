@@ -18,8 +18,8 @@ internal sealed partial class ServicesPane(SettingsWindow window, AppModel model
     private string? selection;
     // The list and the details scroll separately, like on macOS. Kept across re-renders, which
     // only swap their content, so they keep their place.
-    private readonly ScrollViewer listScroller = new() { VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
-    private readonly ScrollViewer detailScroller = new() { VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
+    private readonly KeptScroller listScroller = new(window.DispatcherQueue);
+    private readonly KeptScroller detailScroller = new(window.DispatcherQueue);
 
     public override string Title => "Services";
     public override string Subtitle => "Databases, caches, search and the tools around your sites. Everything listens on 127.0.0.1 only.";
@@ -37,7 +37,7 @@ internal sealed partial class ServicesPane(SettingsWindow window, AppModel model
     {
         if (id != selection)
         {
-            detailOffset = 0; // another service's details start at the top
+            detailScroller.ToTop(); // another service's details start at the top
         }
         selection = id;
         Rerender();
@@ -137,79 +137,19 @@ internal sealed partial class ServicesPane(SettingsWindow window, AppModel model
         var grid = new Grid { ColumnSpacing = 16 };
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(320) });
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star), MinWidth = 300 });
-        if (!tracking)
-        {
-            tracking = true;
-            Track(listScroller);
-            Track(detailScroller);
-        }
         // The filter stays put above the list. Room on the right keeps the scroll bars off the cards.
         list.Margin = new Thickness(0, 0, 14, 8);
-        listScroller.Content = list;
         var left = new Grid();
         left.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         left.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
         left.Children.Add(filter);
-        Grid.SetRow(listScroller, 1);
-        Place(left, listScroller, ref listHost);
+        Grid.SetRow(listScroller.Place(left, list), 1);
 
         var detail = Detail(selected);
         detail.Margin = new Thickness(0, 0, 14, 8);
-        detailScroller.Content = detail;
-        Grid.SetColumn(detailScroller, 1);
         grid.Children.Add(left);
-        Place(grid, detailScroller, ref detailHost);
+        Grid.SetColumn(detailScroller.Place(grid, detail), 1);
         return grid;
-    }
-
-    // The panels of the previous render that hold the kept scrollers, and where each was scrolled to.
-    private Panel? listHost, detailHost;
-    private double listOffset, detailOffset;
-
-    /// <summary>
-    /// Moves a kept scroller from the previous render into this one, scrolled where it was. The
-    /// previous panel is remembered rather than asked for (Parent): once that render left the
-    /// window, Parent is null although the panel still holds the scroller, and adding it elsewhere
-    /// would fail. Moving it resets its offset, so that is put back once it is laid out again.
-    /// </summary>
-    private void Place(Panel host, ScrollViewer scroller, ref Panel? previous)
-    {
-        var offset = scroller == listScroller ? listOffset : detailOffset;
-        previous?.Children.Remove(scroller);
-        host.Children.Add(scroller);
-        previous = host;
-        if (offset > 0)
-        {
-            restoring.Add(scroller);
-            Window.DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () =>
-            {
-                restoring.Remove(scroller);
-                scroller.ChangeView(null, offset, null, disableAnimation: true);
-            });
-        }
-    }
-
-    // Scrollers whose offset is about to be put back: their reset to the top isn't the user's.
-    private readonly HashSet<ScrollViewer> restoring = [];
-    private bool tracking;
-
-    /// <summary>Remembers where the user scrolled to (once a scroll has settled).</summary>
-    private void Track(ScrollViewer scroller)
-    {
-        scroller.ViewChanged += (_, e) =>
-        {
-            if (!e.IsIntermediate && !restoring.Contains(scroller))
-            {
-                if (scroller == listScroller)
-                {
-                    listOffset = scroller.VerticalOffset;
-                }
-                else
-                {
-                    detailOffset = scroller.VerticalOffset;
-                }
-            }
-        };
     }
 
     private Button Row(Service service, bool isSelected)
@@ -360,7 +300,7 @@ internal sealed partial class ServicesPane(SettingsWindow window, AppModel model
         {
             panel.Children.Add(Ui.Caption(service.Running
                 ? $"Windows sends every name under .{tld} here (a DNS rule set up by `flock install`), so any subdomain of a site works (tenant1.app.{tld}, a.b.app.{tld}) without adding it."
-                : $"Wildcard subdomains don't resolve: {(service.Problem.Length > 0 ? service.Problem : "the DNS server isn't running")}. Site domains still work through the hosts file; add the subdomains you use to their site (Sites → … → Add Domain…)."));
+                : $"Wildcard subdomains don't resolve: {(service.Problem.Length > 0 ? service.Problem : "the DNS server isn't running")}. Site domains still work through the hosts file; add the subdomains you use to their site (Sites → the site → Add Domain…)."));
         }
         // The web server and DNS ports: shown, but only `flock install` changes them.
         if (service.Installed && service.Port > 0 && service.Id is "web" or "dns")
