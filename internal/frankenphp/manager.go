@@ -106,8 +106,12 @@ func (m *Manager) manifest() *binaries.Manifest {
 	return m.catalog.Manifest()
 }
 
-// latest is the newest PHP release of minor with a build for this platform.
+// latest is the newest PHP release of minor with a build for this platform (on Windows, also
+// with the extension pack of the minor).
 func latest(manifest *binaries.Manifest, platform, minor string) (binaries.Version, bool) {
+	if _, ok := extensionPack(manifest, platform, minor); !ok && php.NeedsExtensionPack(platform) {
+		return binaries.Version{}, false
+	}
 	for _, v := range manifest.Versions(Package, platform) {
 		if minorOf(v.Version) == minor {
 			return v, true
@@ -143,6 +147,9 @@ func minors(manifest *binaries.Manifest, platform string) []string {
 	var out []string
 	for _, v := range manifest.Versions(Package, platform) {
 		if minor := minorOf(v.Version); Supports(minor) && !seen[minor] {
+			if _, ok := latest(manifest, platform, minor); !ok {
+				continue
+			}
 			seen[minor] = true
 			out = append(out, minor)
 		}

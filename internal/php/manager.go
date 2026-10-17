@@ -151,6 +151,11 @@ func (o offer) installable() bool {
 	return o.version.Installable() && (o.extensions == nil || o.extensions.Installable())
 }
 
+// NeedsExtensionPack: on Windows, PHP comes with the extension pack of its minor (the official
+// build lacks extensions Flock loads), so a minor without one isn't offered (yet). That happens
+// for a release candidate the extensions don't build against yet.
+func NeedsExtensionPack(platform string) bool { return platform == "windows-x64" }
+
 func latest(manifest *binaries.Manifest, platform, minor string) (offer, bool) {
 	for _, v := range manifest.Versions(Package, platform) {
 		if MinorOf(v.Version) != minor {
@@ -162,6 +167,9 @@ func latest(manifest *binaries.Manifest, platform, minor string) (offer, bool) {
 				entry := e.Entry
 				o.extensions = &entry
 			}
+		}
+		if o.extensions == nil && NeedsExtensionPack(platform) {
+			return offer{}, false
 		}
 		return o, true
 	}
@@ -231,7 +239,9 @@ func (m *Manager) Releases() []Release {
 	}
 	for _, v := range manifest.Versions(Package, m.platform) {
 		if minor := MinorOf(v.Version); minor != "" {
-			all[minor] = true
+			if _, ok := latest(manifest, m.platform, minor); ok {
+				all[minor] = true
+			}
 		}
 	}
 	m.mu.Lock()

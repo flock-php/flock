@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"flock/internal/binaries"
+	"flock/internal/php"
 )
 
 // fakeProbe makes every package look like FrankenPHP 1.13.0 with the PHP version in its "binary".
@@ -43,6 +44,21 @@ func binaryName() string {
 		return "frankenphp.exe"
 	}
 	return "bin/frankenphp"
+}
+
+// extensionPackZip is a Windows extension pack, as php-exts-<minor> publishes it.
+func extensionPackZip(t *testing.T) []byte {
+	t.Helper()
+	var buf bytes.Buffer
+	zw := zip.NewWriter(&buf)
+	w, _ := zw.Create("ext/php_imagick.dll")
+	_, _ = w.Write([]byte("dll"))
+	w, _ = zw.Create("LICENSES/imagick.txt")
+	_, _ = w.Write([]byte("license"))
+	if err := zw.Close(); err != nil {
+		t.Fatal(err)
+	}
+	return buf.Bytes()
 }
 
 // packageZip is a package as the release workflow publishes it, with a top-level directory.
@@ -132,6 +148,8 @@ func TestManagerInstallsAndUpdatesFromTheManifest(t *testing.T) {
 	pub, priv, _ := ed25519.GenerateKey(rand.Reader)
 	pkg := packageZip(t, "8.4.14")
 	sum := sha256.Sum256(pkg)
+	pack := extensionPackZip(t)
+	packSum := sha256.Sum256(pack)
 	var mu sync.Mutex
 	build, serial, yanked := 1, int64(1), map[string]string(nil)
 	expires := time.Now().Add(time.Hour).Truncate(time.Second)
@@ -145,6 +163,11 @@ func TestManagerInstallsAndUpdatesFromTheManifest(t *testing.T) {
 			Package: {"8.4.14": {platform: {Build: build, URL: fmt.Sprintf("%s/frankenphp-8.4.14-build%d-%s.zip", srv.URL, build, platform),
 				SHA256: hex.EncodeToString(sum[:]), Size: int64(len(pkg)), Yanked: yanked}}},
 		}}
+		// On Windows FrankenPHP is offered only with the extension pack of its PHP minor.
+		if runtime.GOOS == "windows" {
+			m.Packages[php.ExtensionsPackage] = map[string]map[string]binaries.Entry{"8.4": {platform: {Build: 1,
+				URL: srv.URL + "/php-exts-8.4-build1.zip", SHA256: hex.EncodeToString(packSum[:]), Size: int64(len(pack))}}}
+		}
 		data, _ := json.Marshal(m)
 		return data
 	}
@@ -154,6 +177,8 @@ func TestManagerInstallsAndUpdatesFromTheManifest(t *testing.T) {
 			_, _ = w.Write(manifest())
 		case r.URL.Path == "/manifest.json.sig":
 			fmt.Fprintln(w, base64.StdEncoding.EncodeToString(ed25519.Sign(priv, manifest())))
+		case strings.HasPrefix(r.URL.Path, "/php-exts-"):
+			_, _ = w.Write(pack)
 		case strings.HasSuffix(r.URL.Path, ".zip"):
 			_, _ = w.Write(pkg)
 		default:

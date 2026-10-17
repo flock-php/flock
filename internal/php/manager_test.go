@@ -134,7 +134,9 @@ func TestManagerInstallsUpdatesAndReplacesWithdrawnBuilds(t *testing.T) {
 	if err := m.Check(context.Background()); err != nil {
 		t.Fatal(err)
 	}
-	if rs := m.Releases(); len(rs) != 2 || rs[0].Minor != "8.4" || rs[0].Latest != "8.4.25" || rs[0].Status != "available" || rs[1].Minor != "8.3" {
+	// On Windows 8.3 has no extension pack, so it isn't offered.
+	if rs := m.Releases(); rs[0].Minor != "8.4" || rs[0].Latest != "8.4.25" || rs[0].Status != "available" ||
+		(windows && len(rs) != 1) || (!windows && (len(rs) != 2 || rs[1].Minor != "8.3")) {
 		t.Fatalf("releases before installing: %+v", rs)
 	}
 
@@ -274,5 +276,25 @@ func TestJobText(t *testing.T) {
 	}
 	if MinorOf("8.6.0RC1") != "8.6" || MinorOf("garbage") != "" || MinorOf("8") != "" {
 		t.Error("MinorOf")
+	}
+}
+
+func TestWindowsOffersPHPOnlyWithItsExtensionPack(t *testing.T) {
+	entry := binaries.Entry{Build: 1, URL: "u", SHA256: "s"}
+	m := &binaries.Manifest{Packages: map[string]map[string]map[string]binaries.Entry{
+		Package: {
+			"8.6.0RC3": {"windows-x64": entry, "macos-arm64": entry},
+			"8.5.12":   {"windows-x64": entry},
+		},
+		ExtensionsPackage: {"8.5": {"windows-x64": entry}},
+	}}
+	if _, ok := latest(m, "windows-x64", "8.6"); ok {
+		t.Error("PHP 8.6 is offered on Windows without its extension pack")
+	}
+	if o, ok := latest(m, "windows-x64", "8.5"); !ok || o.extensions == nil {
+		t.Errorf("PHP 8.5 on Windows: %+v %v", o, ok)
+	}
+	if o, ok := latest(m, "macos-arm64", "8.6"); !ok || o.version.Version != "8.6.0RC3" {
+		t.Errorf("PHP 8.6 on macOS: %+v %v", o, ok)
 	}
 }
