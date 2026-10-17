@@ -1,7 +1,12 @@
 #!/usr/bin/env bash
-# Builds the Flock menu bar app into build/macos/Flock.app (ad-hoc signed), with the flock CLI
-# inside it (the app sets Flock up from it on first start), and build/macos/Flock.dmg to install it.
+# Builds the Flock menu bar app into build/macos/Flock.app, with the flock CLI inside it (the app
+# sets Flock up from it on first start), and build/macos/Flock.dmg to install it.
 # SKIP_DMG=1 builds the app only.
+#
+# Ad-hoc signed by default. SIGN_IDENTITY="Developer ID Application: ..." (in the keychain) signs
+# the app and disk image with it and the hardened runtime. With NOTARY_KEY_PATH (an App Store
+# Connect API key, .p8), NOTARY_KEY_ID and NOTARY_ISSUER_ID set too, the disk image is notarized
+# and stapled.
 set -euo pipefail
 
 cd "$(dirname "$0")"
@@ -53,16 +58,23 @@ cat > "$APP/Contents/Info.plist" <<PLIST
 </plist>
 PLIST
 
+SIGN_IDENTITY="${SIGN_IDENTITY:--}"
+SIGN=(codesign --force --sign "$SIGN_IDENTITY")
+if [[ "$SIGN_IDENTITY" != - ]]; then
+	SIGN+=(--options runtime --timestamp)
+fi
+
 # Nested code first: the app's signature covers the CLI's.
-codesign --force --sign - "$APP/Contents/MacOS/flock"
-codesign --force --sign - "$APP"
+"${SIGN[@]}" "$APP/Contents/MacOS/flock"
+"${SIGN[@]}" "$APP"
+codesign --verify --strict --deep "$APP"
 echo "built $(cd "$OUT" && pwd)/Flock.app"
 
 if [[ "${SKIP_DMG:-}" == 1 ]]; then
 	exit 0
 fi
 
-# Unsigned disk image: the app next to a link to /Applications, to drag it there.
+# The disk image: the app next to a link to /Applications, to drag it there.
 STAGE="$OUT/dmg"
 DMG="$OUT/Flock.dmg"
 rm -rf "$STAGE" "$DMG"
@@ -71,4 +83,22 @@ cp -R "$APP" "$STAGE/"
 ln -s /Applications "$STAGE/Applications"
 hdiutil create -quiet -volname "Flock" -srcfolder "$STAGE" -fs HFS+ -format UDZO -ov "$DMG"
 rm -rf "$STAGE"
+
+if [[ "$SIGN_IDENTITY" != - ]]; then
+	codesign --force --sign "$SIGN_IDENTITY" --timestamp "$DMG"
+fi
+
+if [[ -n "${NOTARY_KEY_PATH:-}" ]]; then
+	result=$(xcrun notarytool submit "$DMG" --key "$NOTARY_KEY_PATH" --key-id "$NOTARY_KEY_ID" \
+		--issuer "$NOTARY_ISSUER_ID" --wait --output-format json)
+	echo "$result"
+	if [[ "$(plutil -extract status raw - <<<"$result")" != Accepted ]]; then
+		xcrun notarytool log "$(plutil -extract id raw - <<<"$result")" --key "$NOTARY_KEY_PATH" \
+			--key-id "$NOTARY_KEY_ID" --issuer "$NOTARY_ISSUER_ID" || true
+		echo "notarization failed" >&2
+		exit 1
+	fi
+	xcrun stapler staple "$DMG"
+	spctl --assess --type open --context context:primary-signature --verbose "$DMG"
+fi
 echo "built $(cd "$OUT" && pwd)/Flock.dmg"
