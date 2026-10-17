@@ -18,7 +18,7 @@
 AppId={{BD44E167-D13B-4AD9-8DA7-E976DEFCFB50}
 AppName=Flock
 AppVersion={#AppVersion}
-AppPublisher=Flock
+AppPublisher=Guava s.r.o.
 DefaultDirName={localappdata}\Programs\Flock
 DisableDirPage=yes
 DisableProgramGroupPage=yes
