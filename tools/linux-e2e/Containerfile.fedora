@@ -1,0 +1,9 @@
+FROM registry.fedoraproject.org/fedora:latest
+RUN dnf install -y systemd systemd-resolved sudo curl tar nss-tools libcap iproute procps-ng && dnf clean all
+RUN systemd-sysusers && systemctl mask systemd-firstboot.service systemd-homed.service \
+ && mkdir -p /etc/systemd/resolved.conf.d && printf "[Resolve]\nDNS=9.9.9.9 1.1.1.1\n" > /etc/systemd/resolved.conf.d/upstream.conf \
+ && systemctl enable systemd-resolved \
+ && useradd -m -s /bin/bash dev && echo "dev ALL=(ALL) NOPASSWD: ALL" > /etc/sudoers.d/dev \
+ && mkdir -p /var/lib/systemd/linger && touch /var/lib/systemd/linger/dev
+STOPSIGNAL SIGRTMIN+3
+CMD ["/sbin/init"]

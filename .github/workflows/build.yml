@@ -1,5 +1,5 @@
-# Runs the Go tests, and builds the macOS disk image (signed and notarized) and the Windows installer
-# (signed with Artifact Signing) and keeps them as run artifacts. Signing takes the secrets and
+# Runs the Go tests, and builds the macOS disk image (signed and notarized), the Windows installer
+# (signed with Artifact Signing) and the Linux CLI archives, and keeps them as run artifacts. Signing takes the secrets and
 # variables of the "release" environment, and is required in the merge queue and for releases.
 #
 #   - on every pull request: the Go tests only; the builds are skipped (which counts as passed)
@@ -64,7 +64,7 @@ jobs:
           fi
           echo "version=$version" >> "$GITHUB_OUTPUT"
 
-  # The Go tests on both platforms Flock supports (the race detector needs cgo, so macOS only).
+  # The Go tests on the platforms Flock supports (the race detector needs cgo, so not on Windows).
   go-test:
     name: Go tests (${{ matrix.name }})
     needs: version
@@ -74,6 +74,8 @@ jobs:
         include:
           - { name: macOS, os: macos-26, flags: -race }
           - { name: Windows, os: windows-2025, flags: "" }
+          - { name: Linux, os: ubuntu-24.04, flags: -race }
+          - { name: Linux arm64, os: ubuntu-24.04-arm, flags: -race }
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v7
@@ -271,4 +273,29 @@ jobs:
         with:
           name: flock-windows
           path: windows/dist/Flock-Setup-*-x64.exe
+          if-no-files-found: error
+
+  linux:
+    name: Linux (x64, arm64)
+    needs: version
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref || github.event.pull_request.head.sha }}
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+
+      - name: Build archives
+        run: make linux VERSION=${{ needs.version.outputs.version }}
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: flock-linux
+          path: |
+            dist/flock-*-linux-*.tar.gz
+            dist/flock-*-linux-*.tar.gz.sha256
           if-no-files-found: error

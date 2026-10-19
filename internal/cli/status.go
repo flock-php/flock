@@ -32,6 +32,9 @@ func newStatusCommand() *cobra.Command {
 			switch {
 			case st.DNS.Wildcard:
 				fmt.Fprintf(out, "dns       *.%s → 127.0.0.1, any subdomain (server on %s)\n", st.DNS.TLD, st.DNS.Addr)
+				if st.DNS.WildcardProblem != "" {
+					fmt.Fprintf(out, "          ! %s\n", st.DNS.WildcardProblem)
+				}
 			case st.DNS.TLD != "" && runtime.GOOS == "windows":
 				fmt.Fprintf(out, "dns       site domains and extra domains → 127.0.0.1 (hosts file); other *.%s subdomains don't resolve: %s\n",
 					st.DNS.TLD, st.DNS.WildcardProblem)

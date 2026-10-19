@@ -100,7 +100,8 @@ jobs:
       - name: Release
         run: |
           go run ./tools/release notes > "$RUNNER_TEMP/notes.md"
-          for f in "dist/Flock-$VERSION-macOS.dmg" "dist/Flock-Setup-$VERSION-x64.exe"; do
+          for f in "dist/Flock-$VERSION-macOS.dmg" "dist/Flock-Setup-$VERSION-x64.exe" \
+            "dist/flock-$VERSION-linux-x64.tar.gz" "dist/flock-$VERSION-linux-arm64.tar.gz"; do
             [ -f "$f" ] || { echo "::error::$f missing"; exit 1; }
           done
           gh release create "v$VERSION" --repo "$GITHUB_REPOSITORY" --target "$SHA" --prerelease --latest=false \

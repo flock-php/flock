@@ -2,20 +2,24 @@
 package ports
 
 import (
+	"errors"
 	"fmt"
 	"net"
 	"runtime"
 	"slices"
 	"strconv"
 	"strings"
+	"syscall"
 	"unicode"
 )
 
-// Free reports whether a TCP listener can be opened on host:port right now.
+// Free reports whether a TCP listener can be opened on host:port right now. On Linux, permission
+// denied counts as free: it is a port below 1024 without CAP_NET_BIND_SERVICE (which `flock
+// install` gives the daemon), and says nothing about another program holding it.
 func Free(host string, port int) bool {
 	ln, err := net.Listen("tcp", net.JoinHostPort(host, strconv.Itoa(port)))
 	if err != nil {
-		return false
+		return runtime.GOOS == "linux" && errors.Is(err, syscall.EACCES)
 	}
 	_ = ln.Close()
 	return true
@@ -141,7 +145,7 @@ func Own(h Holder, root string) bool {
 	if h.Path != "" {
 		name = strings.TrimSuffix(strings.ToLower(baseName(h.Path)), ".exe")
 	}
-	return name == "flock" || name == "flockd"
+	return name == "flock" || name == "flock-php" || name == "flockd"
 }
 
 // within reports whether path is inside dir, comparing case-insensitively (macOS' and Windows'

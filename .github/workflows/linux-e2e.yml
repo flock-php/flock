@@ -1,0 +1,53 @@
+# The Linux end-to-end test (tools/linux-e2e/run.sh): Flock installed with install.sh, checked
+# (DNS through flock0, NetworkManager, drift, HTTPS, a reboot) and uninstalled, in Arch, Ubuntu and
+# Fedora containers booting systemd. Runs when the Linux setup changes, and by hand.
+name: Linux e2e
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - internal/cli/**
+      - internal/dns/**
+      - internal/certs/**
+      - internal/ports/**
+      - internal/daemon/**
+      - cmd/flock/**
+      - go.mod
+      - go.sum
+      - install.sh
+      - Makefile
+      - tools/linux-e2e/**
+      - .github/workflows/linux-e2e.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: linux-e2e-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: true
+
+jobs:
+  e2e:
+    name: ${{ matrix.distro }}
+    strategy:
+      fail-fast: false
+      matrix:
+        distro: [arch, ubuntu, fedora]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+
+      # flock0 is a dummy link; a rootless container can't load the module itself.
+      - name: Load the dummy module
+        run: sudo modprobe dummy numdummies=0
+
+      - name: Run
+        run: tools/linux-e2e/run.sh ${{ matrix.distro }}

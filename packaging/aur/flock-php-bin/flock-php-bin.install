@@ -1,0 +1,11 @@
+post_install() {
+  echo '==> Set Flock up for your user (not as root): flock-php install'
+}
+
+post_upgrade() {
+  echo '==> Update your Flock to this version (not as root): flock-php install'
+}
+
+pre_remove() {
+  echo '==> Undo Flock'"'"'s setup first if you haven'"'"'t (not as root): flock-php uninstall'
+}
