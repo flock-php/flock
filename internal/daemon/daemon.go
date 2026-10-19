@@ -12,6 +12,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -172,7 +173,8 @@ func (d *daemon) ensureDNS(cfg *config.Config) error {
 	}
 
 	addr := fmt.Sprintf("127.0.0.1:%d", port)
-	if d.dns != nil && d.dns.Addr() == addr && d.dns.TLD() == cfg.TLD {
+	also, _ := listenAddresses(cfg)
+	if d.dns != nil && d.dns.Addr() == addr && d.dns.TLD() == cfg.TLD && slices.Equal(d.dns.Also(), also) {
 		return nil
 	}
 	if d.dns != nil {
@@ -180,7 +182,7 @@ func (d *daemon) ensureDNS(cfg *config.Config) error {
 		d.setDNS(nil, nil)
 	}
 
-	srv := dns.New(addr, cfg.TLD)
+	srv := dns.New(addr, cfg.TLD, also...)
 	if err := srv.Start(); err != nil {
 		err = fmt.Errorf("dns: %s", busy(port, err))
 		d.setDNS(nil, err)
@@ -710,7 +712,9 @@ func (d *daemon) reload() error {
 		bind = ""
 	}
 
-	if err := d.applyWeb(cfg, bind, webSites, waiting, ca); err != nil {
+	listen, listenProblems := listenAddresses(cfg)
+	warnings = append(warnings, listenProblems...)
+	if err := d.applyWeb(cfg, bind, listen, webSites, waiting, ca); err != nil {
 		warnings = append(warnings, "web: "+err.Error())
 	}
 
@@ -728,14 +732,20 @@ func (d *daemon) reload() error {
 
 // applyWeb (re)configures Caddy. Before the first successful start it checks the ports itself,
 // because Caddy's own error does not say who holds them.
-func (d *daemon) applyWeb(cfg *config.Config, bind string, sites []web.Site, waiting []web.Waiting, ca *certs.CA) error {
+func (d *daemon) applyWeb(cfg *config.Config, bind string, listen []string, sites []web.Site, waiting []web.Waiting, ca *certs.CA) error {
 	owned := map[int]bool{}
 	if d.webUp && d.cfg != nil {
 		owned[d.cfg.Ports.HTTP], owned[d.cfg.Ports.HTTPS] = true, true
 	}
+	hosts := []string{bind}
+	if bind != "" {
+		hosts = append(hosts, listen...)
+	}
 	for _, port := range []int{cfg.Ports.HTTP, cfg.Ports.HTTPS} {
-		if !owned[port] && !ports.Free(bind, port) {
-			return errors.New(ports.Describe(port))
+		for _, host := range hosts {
+			if !owned[port] && !ports.Free(host, port) {
+				return errors.New(ports.Describe(port))
+			}
 		}
 	}
 
@@ -745,6 +755,7 @@ func (d *daemon) applyWeb(cfg *config.Config, bind string, sites []web.Site, wai
 		HTTPPort:   cfg.Ports.HTTP,
 		HTTPSPort:  cfg.Ports.HTTPS,
 		Bind:       bind,
+		Listen:     listen,
 		Sites:      sites,
 		Waiting:    waiting,
 		TLD:        cfg.TLD,
@@ -879,6 +890,7 @@ func (d *daemon) Status() api.Status {
 	}
 	if d.cfg != nil {
 		st.HTTPPort, st.HTTPSPort = d.cfg.Ports.HTTP, d.cfg.Ports.HTTPS
+		st.Listen, _ = listenAddresses(d.cfg)
 		if d.cfg.Services.Postgres != "" {
 			st.Postgres = fmt.Sprintf("%s on 127.0.0.1:%d", postgres.VersionOf(d.cfg.Services.Postgres), d.cfg.Ports.Postgres)
 		}

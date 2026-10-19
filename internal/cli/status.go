@@ -39,6 +39,9 @@ func newStatusCommand() *cobra.Command {
 				fmt.Fprintf(out, "dns       *.%s doesn't resolve to Flock: %s\n", st.DNS.TLD, st.DNS.WildcardProblem)
 			}
 			fmt.Fprintf(out, "web       http :%d, https :%d\n", st.HTTPPort, st.HTTPSPort)
+			if len(st.Listen) > 0 {
+				fmt.Fprintf(out, "listen    %s (sites and DNS, for other machines)\n", strings.Join(st.Listen, ", "))
+			}
 			fmt.Fprintf(out, "mail      smtp://%s\n", st.Mail)
 			if st.Postgres != "" {
 				fmt.Fprintf(out, "postgres  %s\n", st.Postgres)
