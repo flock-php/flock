@@ -1,0 +1,28 @@
+# Flock's Linux CLI from the release archives, as /usr/bin/flock-php (util-linux owns flock).
+# `flock-php install` sets Flock up for the user and copies it to ~/.config/Flock/bin.
+#
+# For a new release: set _tag, then `updpkgsums && makepkg --printsrcinfo > .SRCINFO`, and push this
+# directory to ssh://aur@aur.archlinux.org/flock-php-bin.git.
+
+pkgname=flock-php-bin
+_tag=1.0.0-beta.10
+pkgver=${_tag/-/}
+pkgrel=1
+pkgdesc='Local PHP development: sites on .test with HTTPS, PHP versions, databases, mail and dumps'
+arch=(x86_64 aarch64)
+url='https://github.com/flock-php/flock'
+license=(AGPL-3.0-only)
+optdepends=('nss: trust Flock'"'"'s certificate authority in Chrome and Firefox (certutil)')
+provides=(flock-php)
+conflicts=(flock-php)
+install=flock-php-bin.install
+options=(!strip !debug)
+source_x86_64=("$url/releases/download/v$_tag/flock-$_tag-linux-x64.tar.gz")
+source_aarch64=("$url/releases/download/v$_tag/flock-$_tag-linux-arm64.tar.gz")
+sha256sums_x86_64=(SKIP)
+sha256sums_aarch64=(SKIP)
+
+package() {
+  install -Dm755 flock-php "$pkgdir/usr/bin/flock-php"
+  install -Dm644 -t "$pkgdir/usr/share/licenses/$pkgname" LICENSE NOTICE THIRD_PARTY_NOTICES
+}

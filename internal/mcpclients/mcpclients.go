@@ -16,6 +16,8 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+
+	"flock/internal/paths"
 )
 
 // Name is the server's name in the clients' configs.
@@ -79,10 +81,7 @@ func DefaultEnv(root string) (Env, error) {
 // Executable is the flock binary clients should start: the one `flock install` copied into
 // <root>/bin, which stays put across updates, or else the running one.
 func Executable(root string) string {
-	exe := "flock"
-	if runtime.GOOS == "windows" {
-		exe += ".exe"
-	}
+	exe := paths.CLI()
 	if installed := filepath.Join(root, "bin", exe); fileExists(installed) {
 		return installed
 	}

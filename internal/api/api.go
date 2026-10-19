@@ -163,7 +163,8 @@ type DNSStatus struct {
 	TLD  string `json:"tld"`
 	Addr string `json:"addr"` // the embedded DNS server, when it runs
 	// Wildcard reports whether every name under the TLD resolves (any subdomain, at any depth).
-	// When it doesn't, WildcardProblem says why. On Windows (the DNS rule is missing or overridden
+	// When it doesn't, WildcardProblem says why. On Linux it can also be set while names resolve,
+	// for what will stop them (Flock's link lost its address, or NetworkManager manages it). On Windows (the DNS rule is missing or overridden
 	// by a policy) the sites' domains and extra domains still resolve, through the hosts file; on
 	// macOS (/etc/resolver/<tld> missing or overridden) nothing under the TLD does.
 	Wildcard        bool   `json:"wildcard"`

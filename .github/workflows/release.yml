@@ -128,7 +128,8 @@ jobs:
           VERSION: ${{ needs.release-please.outputs.version }}
         run: |
           ls dist
-          for f in "dist/Flock-$VERSION-macOS.dmg" "dist/Flock-Setup-$VERSION-x64.exe"; do
+          for f in "dist/Flock-$VERSION-macOS.dmg" "dist/Flock-Setup-$VERSION-x64.exe" \
+            "dist/flock-$VERSION-linux-x64.tar.gz" "dist/flock-$VERSION-linux-arm64.tar.gz"; do
             [ -f "$f" ] || { echo "::error::$f missing"; exit 1; }
           done
           gh release upload "$TAG" dist/* --clobber --repo "$GITHUB_REPOSITORY"

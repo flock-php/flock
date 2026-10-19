@@ -14,10 +14,14 @@ import (
 
 	"flock/internal/certs"
 	"flock/internal/node"
+	"flock/internal/paths"
 	"flock/internal/php"
 )
 
 const composerURL = "https://getcomposer.org/download/latest-stable/composer.phar"
+
+// serviceNote is what `flock install` reports once installService is done.
+var serviceNote = "daemon runs in the background and starts at login"
 
 func newInstallCommand() *cobra.Command {
 	var skipPrivileged, privilegedOnly, ignoreConflicts bool
@@ -97,7 +101,7 @@ func newInstallCommand() *cobra.Command {
 			if err := installService(s.root, bin); err != nil {
 				return fmt.Errorf("install background service: %w", err)
 			}
-			cmd.Println("✓ daemon runs in the background and starts at login")
+			cmd.Println("✓ " + serviceNote)
 
 			if skipPrivileged || privilegedFirst {
 				return nil
@@ -146,7 +150,7 @@ func installBinary(root string) (string, error) {
 		return "", err
 	}
 
-	dst := filepath.Join(root, "bin", exeName("flock"))
+	dst := filepath.Join(root, "bin", paths.CLI())
 	if self == dst {
 		return dst, nil
 	}
