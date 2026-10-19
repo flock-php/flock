@@ -130,3 +130,29 @@ func TestCaddyfileProxiesFrankenPHPSitesButNotTheirXdebugRequests(t *testing.T) 
 		}
 	}
 }
+
+func TestCaddyfileSendsReverbRequestsFirst(t *testing.T) {
+	cfg := testConfig()
+	cfg.Sites = []Site{
+		{Domain: "chat.test", Root: "/code/chat/public", FPM: []string{"unix//run/php84.sock"}, Reverb: "127.0.0.1:21001", DebugFPM: []string{"unix//run/php84-xdebug.sock"}},
+		{Domain: "octane.test", Root: "/code/octane/public", Proxy: "127.0.0.1:21002", Reverb: "127.0.0.1:21003"},
+	}
+
+	cf := Caddyfile(cfg)
+	json, _, err := caddyconfig.GetAdapter("caddyfile").Adapt([]byte(cf), nil)
+	if err != nil {
+		t.Fatalf("%v\n%s", err, cf)
+	}
+	for _, want := range []string{`"dial":"127.0.0.1:21001"`, `"dial":"127.0.0.1:21003"`, `"/apps/*"`, `query.auth_signature`} {
+		if !strings.Contains(string(json), want) {
+			t.Errorf("missing %s in:\n%s", want, json)
+		}
+	}
+	// Xdebug's handle block would win if it came first.
+	if strings.Index(cf, "handle @reverb") > strings.Index(cf, "handle @xdebug") {
+		t.Errorf("Reverb's route comes after Xdebug's:\n%s", cf)
+	}
+	if strings.Contains(Caddyfile(testConfig()), "@reverb") {
+		t.Error("a site without Reverb has its route")
+	}
+}

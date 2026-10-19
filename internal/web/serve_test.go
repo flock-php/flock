@@ -201,3 +201,111 @@ func TestServesEveryDepthAliasAndCatchAllOverTrustedHTTPS(t *testing.T) {
 		t.Errorf("example.com: the handshake took %v", time.Since(start))
 	}
 }
+
+// TestSendsReverbRequestsToReverb runs the embedded Caddy in front of a stand-in Reverb server: a
+// WebSocket connection over HTTPS and a signed broadcast reach it, the app's own pages under
+// /app and /apps don't.
+func TestSendsReverbRequestsToReverb(t *testing.T) {
+	dir, err := os.MkdirTemp("", "flock-web-test-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(dir) })
+	if err := os.WriteFile(filepath.Join(dir, "index.php"), []byte("<?php\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	ca, err := certs.Ensure(filepath.Join(dir, "certs"), "test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	certFile, keyFile, err := ca.SiteCert("chat.test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	pool := x509.NewCertPool()
+	caPEM, _ := os.ReadFile(ca.CertPath())
+	pool.AppendCertsFromPEM(caPEM)
+
+	// Reverb's stand-in echoes what a WebSocket sends, and answers anything else with its path.
+	reverb, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	go http.Serve(reverb, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Upgrade") != "websocket" {
+			fmt.Fprint(w, "reverb "+r.URL.Path)
+			return
+		}
+		conn, rw, err := http.NewResponseController(w).Hijack()
+		if err != nil {
+			return
+		}
+		defer conn.Close()
+		rw.WriteString("HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n\r\n")
+		rw.Flush()
+		_, _ = io.Copy(conn, rw)
+	}))
+	t.Cleanup(func() { reverb.Close() })
+
+	cfg := Config{
+		StorageDir: filepath.Join(dir, "caddy"),
+		LogFile:    filepath.Join(dir, "web.log"),
+		HTTPPort:   freePort(t),
+		HTTPSPort:  freePort(t),
+		Bind:       "127.0.0.1",
+		TLD:        "test",
+		Sites: []Site{{Domain: "chat.test", Root: dir, FPM: []string{"127.0.0.1:1"}, Reverb: reverb.Addr().String(),
+			CertFile: certFile, KeyFile: keyFile}},
+	}
+	if err := Apply(cfg); err != nil {
+		t.Fatalf("%v\n%s", err, Caddyfile(cfg))
+	}
+	t.Cleanup(func() { _ = Stop() })
+	base := fmt.Sprintf("https://chat.test:%d", cfg.HTTPSPort)
+	tlsConfig := &tls.Config{RootCAs: pool, ServerName: "chat.test", NextProtos: []string{"http/1.1"}}
+
+	// wss://chat.test/app/<key>, as pusher-js opens it.
+	conn, err := tls.Dial("tcp", fmt.Sprintf("127.0.0.1:%d", cfg.HTTPSPort), tlsConfig)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Close()
+	_ = conn.SetDeadline(time.Now().Add(5 * time.Second))
+	fmt.Fprint(conn, "GET /app/key?protocol=7&client=js HTTP/1.1\r\nHost: chat.test\r\nConnection: Upgrade\r\nUpgrade: websocket\r\n"+
+		"Sec-WebSocket-Version: 13\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n\r\n")
+	head := make([]byte, 512)
+	n, err := conn.Read(head)
+	if err != nil || !strings.HasPrefix(string(head[:n]), "HTTP/1.1 101") {
+		t.Fatalf("WebSocket handshake: %v %q", err, head[:n])
+	}
+	fmt.Fprint(conn, "ping")
+	if n, err = io.ReadFull(conn, head[:4]); err != nil || string(head[:n]) != "ping" {
+		t.Fatalf("through the WebSocket: %v %q", err, head[:n])
+	}
+
+	client := &http.Client{Timeout: 5 * time.Second, Transport: &http.Transport{
+		TLSClientConfig: &tls.Config{RootCAs: pool},
+		DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
+			_, port, _ := net.SplitHostPort(addr)
+			return (&net.Dialer{}).DialContext(ctx, network, "127.0.0.1:"+port)
+		},
+		ForceAttemptHTTP2: true,
+	}}
+	for path, want := range map[string]string{
+		"/apps/1/events?auth_key=k&auth_timestamp=1&auth_signature=s": "reverb /apps/1/events", // a broadcast
+		"/app/key?protocol=7": "reverb /app/key", // a WebSocket over HTTP/2 has no Upgrade header
+		"/app/dashboard":      "",                // the app's pages: PHP, a 502 here
+		"/apps/list":          "",
+	} {
+		resp, err := client.Post(base+path, "application/json", strings.NewReader("{}"))
+		if err != nil {
+			t.Errorf("%s: %v", path, err)
+			continue
+		}
+		body, _ := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		if want == "" && resp.StatusCode != http.StatusBadGateway || want != "" && string(body) != want {
+			t.Errorf("%s: got %d %q", path, resp.StatusCode, body)
+		}
+	}
+}

@@ -121,6 +121,9 @@ func newSitesCommand() *cobra.Command {
 							version += " (Octane)"
 						}
 					}
+					if site.Reverb != nil {
+						version += " + Reverb"
+					}
 					fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", site.Name, version, url, site.Path)
 				}
 				return w.Flush()
