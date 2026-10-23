@@ -385,6 +385,36 @@ jobs:
           path: windows/dist/Flock-Setup-*-x64.exe
           if-no-files-found: error
 
+  # The Linux app (linux/, Rust with GTK 4 and libadwaita) against Ubuntu 24.04's GTK 4.14 and
+  # libadwaita 1.5, the oldest Flock supports.
+  linux-app:
+    name: Linux app
+    needs: [version, changes]
+    runs-on: ubuntu-24.04
+    env:
+      CODE: ${{ needs.changes.outputs.code }}
+    steps:
+      - uses: actions/checkout@v7
+        if: env.CODE == 'true'
+        with:
+          ref: ${{ inputs.ref || github.event.pull_request.head.sha }}
+
+      - name: GTK and libadwaita
+        if: env.CODE == 'true'
+        run: sudo apt-get install -y --no-install-recommends libgtk-4-dev libadwaita-1-dev
+
+      - name: Format
+        if: env.CODE == 'true'
+        run: cargo fmt --manifest-path linux/Cargo.toml --check
+
+      - name: Clippy
+        if: env.CODE == 'true'
+        run: cargo clippy --manifest-path linux/Cargo.toml --all-targets --locked -- -D warnings
+
+      - name: Test
+        if: env.CODE == 'true'
+        run: cargo test --manifest-path linux/Cargo.toml --locked
+
   # The flockphp .deb and .rpm per architecture (linux/build-packages.sh), installed, run and
   # removed again on the distributions Flock supports. Unsigned packages: the repository signs
   # its index, not the packages.
