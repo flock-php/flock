@@ -217,10 +217,16 @@ func serviceUser() (string, error) {
 // unitName is the daemon's unit for name, flock@name.service.
 func unitName(name string) string { return "flock@" + name + ".service" }
 
+// packaged reports whether Flock was installed from its .deb or .rpm, which ship flock@.service
+// and the polkit rule: the privileged setup then leaves both to the package manager.
+func packaged() bool {
+	return fileExists(filepath.Join(packagedUnits, "flock@.service"))
+}
+
 // templatePath is where flock@.service is: the package's, or the one the privileged setup writes.
 func templatePath() string {
-	if packaged := filepath.Join(packagedUnits, "flock@.service"); fileExists(packaged) {
-		return packaged
+	if packaged() {
+		return filepath.Join(packagedUnits, "flock@.service")
 	}
 	return filepath.Join(unitDir, "flock@.service")
 }
@@ -475,16 +481,16 @@ func newPrivilegedSetupCommand() *cobra.Command {
 // setupPrivileged registers name's daemon, lets them manage it, sends tld to Flock's DNS server
 // and trusts the CA system-wide. It is safe to run again: every file is rewritten.
 func setupPrivileged(name, root, tld string, dnsPort int, caPath string) error {
-	if templatePath() == filepath.Join(unitDir, "flock@.service") {
+	if !packaged() {
 		if err := writeOwnFile(templatePath(), unitTemplate); err != nil {
+			return err
+		}
+		if err := writeOwnFile(polkitRule, polkitRuleContent); err != nil {
 			return err
 		}
 	}
 	bin := filepath.Join(root, "bin", exeName("flock"))
 	if err := writeOwnFile(dropInPath(name), instanceDropIn(root, bin)); err != nil {
-		return err
-	}
-	if err := writeOwnFile(polkitRule, polkitRuleContent); err != nil {
 		return err
 	}
 	if err := runRoot("systemctl", "daemon-reload"); err != nil {
@@ -545,8 +551,10 @@ func removePrivileged(name string) error {
 
 	others, _ := filepath.Glob(filepath.Join(unitDir, "flock@?*.service.d"))
 	if len(others) == 0 {
-		for _, path := range []string{filepath.Join(unitDir, "flock@.service"), polkitRule} {
-			errs = append(errs, removeManaged(path))
+		if !packaged() {
+			for _, path := range []string{filepath.Join(unitDir, "flock@.service"), polkitRule} {
+				errs = append(errs, removeManaged(path))
+			}
 		}
 		if fileExists(dns.ResolvedFile()) {
 			errs = append(errs, removeManaged(dns.ResolvedFile()))

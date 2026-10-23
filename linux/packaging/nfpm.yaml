@@ -1,0 +1,64 @@
+# The flockphp .deb and .rpm (linux/build-packages.sh). The command is flock, but util-linux owns
+# /usr/bin/flock: the binary lives in /usr/lib/flockphp and only `flk` goes on PATH. `flk install`
+# copies it into the user's data dir, whose bin/ (first on PATH) then has `flock` too.
+name: flockphp
+arch: ${NFPM_ARCH}
+platform: linux
+version: ${VERSION}
+section: devel
+priority: optional
+maintainer: Guava s.r.o.
+vendor: Guava s.r.o.
+homepage: https://flockphp.com
+license: AGPL-3.0-only
+description: |-
+  Native local development environment for Laravel and PHP.
+  PHP, Node.js, databases and *.test sites with trusted HTTPS, without Docker.
+
+contents:
+  - src: build/linux/flock
+    dst: /usr/lib/flockphp/flock
+    file_info:
+      mode: 0755
+  - src: /usr/lib/flockphp/flock
+    dst: /usr/bin/flk
+    type: symlink
+  # Each user's daemon is an instance of it, set up by `flk install` (per-user drop-in).
+  - src: linux/packaging/flock@.service
+    dst: /usr/lib/systemd/system/flock@.service
+  - src: linux/packaging/50-flock.rules
+    dst: /usr/share/polkit-1/rules.d/50-flock.rules
+  - src: LICENSE
+    dst: /usr/share/doc/flockphp/copyright
+    packager: deb
+  - src: LICENSE
+    dst: /usr/share/licenses/flockphp/LICENSE
+    packager: rpm
+
+scripts:
+  postinstall: linux/packaging/postinstall.sh
+  preremove: linux/packaging/preremove.sh
+
+overrides:
+  deb:
+    depends:
+      - systemd
+      - polkitd | policykit-1
+      - ca-certificates
+      - libnss3-tools
+    recommends:
+      # Services Flock downloads link these from the system: MongoDB (OpenSSL 3, libcurl), MySQL
+      # (libkeyutils, for its Kerberos plugin). See LINUX_SYSTEM_LIBS in flockphp-binaries.
+      - libssl3t64 | libssl3
+      - libcurl4t64 | libcurl4
+      - libkeyutils1
+  rpm:
+    depends:
+      - systemd
+      - polkit
+      - ca-certificates
+      - nss-tools
+    recommends:
+      - openssl-libs
+      - libcurl
+      - keyutils-libs

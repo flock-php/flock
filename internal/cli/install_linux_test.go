@@ -121,3 +121,19 @@ func TestRemoveManaged(t *testing.T) {
 		t.Fatalf("ours %v, rule %v, theirs %v", fileExists(ours), fileExists(rule), fileExists(theirs))
 	}
 }
+
+// The .deb and .rpm ship the unit template and polkit rule the privileged setup writes otherwise.
+func TestPackagedFilesMatch(t *testing.T) {
+	for file, want := range map[string]string{
+		"flock@.service": unitTemplate,
+		"50-flock.rules": polkitRuleContent,
+	} {
+		got, err := os.ReadFile(filepath.Join("..", "..", "linux", "packaging", file))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if string(got) != want {
+			t.Errorf("linux/packaging/%s differs from the one in install_linux.go", file)
+		}
+	}
+}

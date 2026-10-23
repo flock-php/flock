@@ -9,6 +9,7 @@
 /build/valkey/*.log
 /macos/.build/
 /build/macos/
+/build/linux/
 /windows/**/bin/
 /windows/**/obj/
 /windows/dist/
