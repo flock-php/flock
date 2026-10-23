@@ -1,6 +1,6 @@
 # CLI reference
 
-Almost every feature of Flock is available from the `flock` command. Run `flock --help` or `flock <command> --help` for details.
+Almost every feature of Flock is available from the `flock` command. Run `flock --help` or `flock <command> --help` for details. `flk` is a shorter name for the same command: `flk link` does what `flock link` does.
 
 :::app
 This page lists the `flock` commands. The other pages show where to find each action in the app.
