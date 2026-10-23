@@ -31,6 +31,9 @@ func init() {
 		panic(err)
 	}
 	dns.ResolverDir, dns.ResolvedDir = dir, dir
+
+	// Test daemons' CAs stay out of the browsers in the real home.
+	trustInBrowsers = func(string) error { return nil }
 }
 
 // resolverFile is the file `flock install` writes to send the TLD to Flock, and its content for port.

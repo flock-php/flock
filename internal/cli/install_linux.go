@@ -333,13 +333,14 @@ func ensurePrivileged(cmd *cobra.Command, s *state, _ string, ca *certs.CA) erro
 		return err
 	}
 	bin := filepath.Join(s.root, "bin", exeName("flock"))
-	anchor := caAnchorPath()
+	anchor := caAnchorPath(name)
 
 	ok := fileExists(templatePath()) &&
 		fileHas(dropInPath(name), instanceDropIn(s.root, bin)) &&
 		(fileHas(polkitRule, polkitRuleContent) || unreadable(polkitRule)) &&
 		dns.ResolvedProblem(s.cfg.TLD, s.cfg.Ports.DNS) == "" &&
-		(anchor == "" || sameFile(anchor, ca.CertPath()))
+		(anchor == "" || sameFile(anchor, ca.CertPath())) &&
+		certs.FirefoxPolicyInstalled(name, ca.CertPath())
 	if !ok {
 		if !dns.ResolvedRunning() {
 			return errors.New("systemd-resolved isn't running: Flock sends ." + s.cfg.TLD + " lookups to its DNS server through it")
@@ -360,15 +361,22 @@ func ensurePrivileged(cmd *cobra.Command, s *state, _ string, ca *certs.CA) erro
 	} else {
 		cmd.Println("✓ Flock CA is trusted")
 	}
+	// The browsers' own databases are the user's: no password needed. The daemon checks them again
+	// when it starts, for browsers installed later.
+	if err := certs.TrustInBrowsers(ca.CertPath()); err != nil {
+		cmd.Printf("! Chrome and other Chromium browsers don't trust the Flock CA: %v\n", err)
+	} else {
+		cmd.Println("✓ Firefox, Chrome and other Chromium browsers trust it")
+	}
 	return nil
 }
 
-// caAnchorPath is where the privileged setup puts Flock's CA in the system trust store, "" when
-// the distribution has neither Debian's nor Fedora's tooling.
-func caAnchorPath() string {
+// caAnchorPath is where the privileged setup puts user's CA in the system trust store, "" when
+// the distribution has neither Debian's nor Fedora's tooling. Every user has their own Flock CA.
+func caAnchorPath(user string) string {
 	for _, a := range caAnchors {
 		if dirExists(a.dir) {
-			return filepath.Join(a.dir, "flock.crt")
+			return filepath.Join(a.dir, "flock-"+user+".crt")
 		}
 	}
 	return ""
@@ -495,16 +503,19 @@ func setupPrivileged(name, root, tld string, dnsPort int, caPath string) error {
 		}
 	}
 
-	return trustSystemCA(caPath)
+	if err := certs.InstallFirefoxPolicy(name, caPath); err != nil {
+		return err
+	}
+	return trustSystemCA(name, caPath)
 }
 
-// trustSystemCA copies the CA into the system trust store's sources and rebuilds the store.
-func trustSystemCA(caPath string) error {
+// trustSystemCA copies name's CA into the system trust store's sources and rebuilds the store.
+func trustSystemCA(name, caPath string) error {
 	for _, a := range caAnchors {
 		if !dirExists(a.dir) {
 			continue
 		}
-		anchor := filepath.Join(a.dir, "flock.crt")
+		anchor := filepath.Join(a.dir, "flock-"+name+".crt")
 		if sameFile(anchor, caPath) {
 			return nil
 		}
@@ -521,10 +532,16 @@ func trustSystemCA(caPath string) error {
 }
 
 // removePrivileged undoes setupPrivileged for name. What other users' daemons share (the
-// template, the polkit rule, DNS and the CA) goes with the last one.
+// template, the polkit rule and DNS) goes with the last one.
 func removePrivileged(name string) error {
 	_ = runRoot("systemctl", "disable", "--now", unitName(name))
-	errs := []error{os.RemoveAll(filepath.Dir(dropInPath(name)))}
+	errs := []error{os.RemoveAll(filepath.Dir(dropInPath(name))), certs.RemoveFirefoxPolicy(name)}
+	for _, a := range caAnchors {
+		anchor := filepath.Join(a.dir, "flock-"+name+".crt")
+		if fileExists(anchor) {
+			errs = append(errs, os.Remove(anchor), runRoot(a.update))
+		}
+	}
 
 	others, _ := filepath.Glob(filepath.Join(unitDir, "flock@?*.service.d"))
 	if len(others) == 0 {
@@ -534,12 +551,6 @@ func removePrivileged(name string) error {
 		if fileExists(dns.ResolvedFile()) {
 			errs = append(errs, removeManaged(dns.ResolvedFile()))
 			errs = append(errs, runRoot("systemctl", "restart", "systemd-resolved"))
-		}
-		for _, a := range caAnchors {
-			anchor := filepath.Join(a.dir, "flock.crt")
-			if fileExists(anchor) {
-				errs = append(errs, os.Remove(anchor), runRoot(a.update))
-			}
 		}
 	}
 	errs = append(errs, runRoot("systemctl", "daemon-reload"))
@@ -600,6 +611,9 @@ func newUninstallCommand() *cobra.Command {
 				return err
 			}
 			cmd.Println("✓ background daemon removed")
+			if err := certs.UntrustInBrowsers(filepath.Join(s.root, "certs", "ca.crt")); err != nil {
+				cmd.Printf("! could not remove the Flock CA from your browsers: %v\n", err)
+			}
 			cmd.Printf("✓ removed Flock's *.%s DNS setup and the Flock CA's trust\n", s.cfg.TLD)
 
 			switch removed, err := removeFromShellProfiles(); {
