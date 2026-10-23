@@ -130,8 +130,9 @@ func (m *Manifest) Versions(pkg, platform string) []Version {
 	return out
 }
 
-// Platform names this machine in the manifest ("macos-arm64", "windows-x64"); "" where Flock
-// publishes no packages (Flock supports Apple Silicon Macs and Windows x64).
+// Platform names this machine in the manifest ("macos-arm64", "windows-x64", "linux-x64"); ""
+// where Flock publishes no packages (Flock supports Apple Silicon Macs, Windows x64 and Linux on
+// x64 and arm64).
 func Platform() string {
 	return platform(runtime.GOOS, runtime.GOARCH)
 }
@@ -142,6 +143,10 @@ func platform(goos, goarch string) string {
 		return "macos-arm64"
 	case goos == "windows" && goarch == "amd64":
 		return "windows-x64"
+	case goos == "linux" && goarch == "amd64":
+		return "linux-x64"
+	case goos == "linux" && goarch == "arm64":
+		return "linux-arm64"
 	}
 	return ""
 }

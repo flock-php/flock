@@ -5,14 +5,19 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 )
 
-// Root returns Flock's data directory:
-// ~/Library/Application Support/Flock on macOS, %AppData%\Flock on Windows.
-// FLOCK_HOME overrides it (used by tests and for running isolated instances).
+// Root returns Flock's data directory: ~/Library/Application Support/Flock on macOS,
+// %AppData%\Flock on Windows, $XDG_DATA_HOME/flock (~/.local/share/flock) on Linux.
+// FLOCK_HOME overrides it (used by tests, for running isolated instances, and by the Linux
+// service, which systemd starts without the user's environment).
 func Root() (string, error) {
 	if dir := os.Getenv("FLOCK_HOME"); dir != "" {
 		return dir, nil
+	}
+	if runtime.GOOS == "linux" {
+		return dataHome()
 	}
 
 	base, err := os.UserConfigDir()
@@ -23,7 +28,20 @@ func Root() (string, error) {
 	return filepath.Join(base, "Flock"), nil
 }
 
-// Socket is the daemon's API socket. AF_UNIX works on macOS and Windows 10+.
+// dataHome is $XDG_DATA_HOME/flock, ~/.local/share/flock when it is unset or relative (which
+// the XDG spec says to ignore).
+func dataHome() (string, error) {
+	if dir := os.Getenv("XDG_DATA_HOME"); filepath.IsAbs(dir) {
+		return filepath.Join(dir, "flock"), nil
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", fmt.Errorf("resolve home dir: %w", err)
+	}
+	return filepath.Join(home, ".local", "share", "flock"), nil
+}
+
+// Socket is the daemon's API socket. AF_UNIX works on macOS, Linux and Windows 10+.
 func Socket(root string) string {
 	return filepath.Join(root, "flockd.sock")
 }
