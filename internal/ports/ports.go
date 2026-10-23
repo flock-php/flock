@@ -38,6 +38,16 @@ func Free(host string, port int) bool {
 	return true
 }
 
+// Denied reports whether this process may not listen on host:port at all: below 1024 on Linux
+// without CAP_NET_BIND_SERVICE.
+func Denied(host string, port int) bool {
+	ln, err := net.Listen("tcp", net.JoinHostPort(host, strconv.Itoa(port)))
+	if err == nil {
+		_ = ln.Close()
+	}
+	return errors.Is(err, syscall.EACCES)
+}
+
 // Holder is a program listening on a port. Every field but Port may be empty: the port is taken,
 // but by whom could not be found out.
 type Holder struct {
@@ -50,6 +60,8 @@ type Holder struct {
 	App string `json:"app,omitempty"`
 	// Brew is the Homebrew formula the program comes from, stopped with `brew services stop`.
 	Brew string `json:"brew,omitempty"`
+	// Systemd is the system service the program runs as (Linux), stopped with `systemctl disable --now`.
+	Systemd string `json:"systemd,omitempty"`
 	// Special explains a holder that isn't a program to quit, e.g. Windows' http.sys.
 	Special string `json:"special,omitempty"`
 }
@@ -84,6 +96,8 @@ func (h Holder) Hint() string {
 		return ""
 	case h.Brew != "":
 		return fmt.Sprintf("run `brew services stop %s`", h.Brew)
+	case h.Systemd != "":
+		return fmt.Sprintf("run `sudo systemctl disable --now %s`", h.Systemd)
 	case h.App != "":
 		return "quit " + h.App
 	case h.Process != "":
@@ -119,7 +133,7 @@ func Foreign(port int, root string) []Holder {
 	all := Holders(port)
 	foreign := slices.DeleteFunc(slices.Clone(all), func(h Holder) bool { return Own(h, root) })
 	if len(all) == 0 && !Free(probeHost(port), port) {
-		foreign = []Holder{{Port: port}}
+		foreign = []Holder{unseen(port)}
 	}
 	return foreign
 }
@@ -175,7 +189,7 @@ func within(path, dir string) bool {
 func Describe(port int) string {
 	holders := Holders(port)
 	if len(holders) == 0 {
-		return fmt.Sprintf("port %d is used by another program", port)
+		holders = []Holder{unseen(port)}
 	}
 	h := holders[0]
 	text := fmt.Sprintf("port %d is used by %s", port, h)

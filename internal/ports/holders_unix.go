@@ -1,4 +1,4 @@
-//go:build unix && !darwin
+//go:build unix && !darwin && !linux
 
 package ports
 
@@ -20,3 +20,6 @@ func homeDir() string {
 	home, _ := os.UserHomeDir()
 	return home
 }
+
+// unseen describes a holder whose process can't be seen.
+func unseen(port int) Holder { return Holder{Port: port} }
