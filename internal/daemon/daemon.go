@@ -71,7 +71,8 @@ type daemon struct {
 	php       *php.Manager
 	// binaries is the manifest of prebuilt packages for the configured channel, shared by the managers.
 	binaries *binaries.Catalog
-	// frankenphp installs FrankenPHP builds; restarts counts RestartSite calls per site (see frankenphp.Site.Restart).
+	// frankenphp installs FrankenPHP builds; restarts counts RestartSite calls per site (see
+	// frankenphp.Site.Restart and reverb.Site.Restart).
 	frankenphp *frankenphp.Manager
 	restarts   map[string]int
 	// pg manages the PostgreSQL versions, catalog the other services (MySQL, Valkey, Meilisearch, ...).
@@ -673,6 +674,25 @@ func (d *daemon) reload() error {
 				return err
 			}
 		}
+		if site.Reverb {
+			spec, rs := d.reverbSite(cfg, site, version, scheme, extraEnv)
+			if spec != nil {
+				restarted := d.procs.Ensure(*spec)
+				keep[spec.Name] = true
+				ws.Reverb = fmt.Sprintf("127.0.0.1:%d", site.ReverbPort)
+				wait := 300 * time.Millisecond
+				if restarted {
+					wait = 10 * time.Second // Reverb boots the app first
+				}
+				if php.WaitReady([]string{ws.Reverb}, wait) {
+					rs.State = api.ReverbRunning
+				} else {
+					rs.State, rs.Problem = api.ReverbFailed, fmt.Sprintf("Reverb did not start — see `flock logs %s`", spec.Name)
+					warnings = append(warnings, fmt.Sprintf("reverb: %s did not start — see `flock logs %s`", site.Name, spec.Name))
+				}
+			}
+			status.Reverb = &rs
+		}
 		if cfg.Xdebug && cfg.XdebugBreakpoints {
 			breakpoints[site.Path] = d.breakpoints.Has(site.Path)
 			ws.Debugging = breakpoints[site.Path] && len(ws.DebugFPM) > 0
@@ -882,6 +902,9 @@ func serviceName(id string) string {
 		return "the capture collector"
 	case "postgres":
 		return "PostgreSQL"
+	}
+	if site, ok := strings.CutPrefix(id, "reverb-"); ok {
+		return site + "'s Reverb server"
 	}
 	for _, k := range catalog.Kinds(runtime.GOOS) {
 		if k.ID == id {

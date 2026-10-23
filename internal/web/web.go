@@ -35,6 +35,9 @@ type Site struct {
 	// Proxy is the loopback address of the site's own FrankenPHP ("127.0.0.1:<port>"). When set, requests
 	// go there instead of to FPM; those that ask for Xdebug still go to DebugFPM.
 	Proxy string
+	// Reverb is the loopback address of the site's Laravel Reverb server, which gets the site's
+	// WebSocket connections and broadcasts (see reverbRequest).
+	Reverb string
 	// CertFile and KeyFile (from certs.SiteCert, covering Domain and *.Domain) are set when the site
 	// is secured. Deeper subdomains and aliases get certificates from Config.Issue.
 	CertFile string
@@ -230,8 +233,18 @@ func unlinked(cfg Config) string {
 const xdebugRequest = `{cookie.XDEBUG_SESSION} != "" || {cookie.XDEBUG_TRIGGER} != "" || ` +
 	`{query.XDEBUG_SESSION} != "" || {query.XDEBUG_SESSION_START} != "" || {query.XDEBUG_TRIGGER} != ""`
 
+// reverbRequest matches the Pusher protocol's requests on /app/* and /apps/*: WebSocket connections
+// (an Upgrade header; ?protocol= also covers WebSockets over HTTP/2, which have none) and the signed
+// HTTP API Laravel broadcasts through. Other requests there stay the app's, e.g. a panel at /app.
+const reverbRequest = `{http.request.header.Upgrade} != "" || {query.protocol} != "" || {query.auth_signature} != ""`
+
 func app(s Site) string {
 	root := fmt.Sprintf("\troot * %s\n", quote(s.Root))
+	if s.Reverb != "" {
+		// Before the other handle blocks, which keep their order (none has a path matcher alone).
+		root += fmt.Sprintf("\t@reverb {\n\t\tpath /app/* /apps/*\n\t\texpression `%s`\n\t}\n\thandle @reverb {\n%s\t}\n",
+			reverbRequest, proxy(s.Reverb, "\t\t"))
+	}
 	serve := func(indent string) string { return php(s.FPM, indent) }
 	if s.Proxy != "" {
 		serve = func(indent string) string { return proxy(s.Proxy, indent) }
@@ -246,8 +259,8 @@ func app(s Site) string {
 		xdebugRequest, php(s.DebugFPM, "\t\t"), serve("\t\t"))
 }
 
-// proxy sends every request to a FrankenPHP process, which serves the static files too. The Host
-// header passes unchanged, so the app sees its own domain.
+// proxy sends requests to a site's own process: FrankenPHP, which serves the static files too, or
+// Reverb. The Host header passes unchanged, so the app sees its own domain.
 func proxy(upstream, indent string) string {
 	return fmt.Sprintf("%sreverse_proxy %s\n", indent, quote(upstream))
 }

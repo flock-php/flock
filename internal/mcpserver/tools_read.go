@@ -200,7 +200,11 @@ type siteInfo struct {
 	Octane     bool   `json:"octane_installed,omitempty"`
 	Parked     bool   `json:"parked,omitempty"`
 	Problem    string `json:"problem,omitempty"`
-	Notice     string `json:"notice,omitempty"`
+	// Reverb is the state of the site's Laravel Reverb server when it's on; ReverbEnv the .env lines
+	// that send the app's broadcasts and its Echo client through Flock (wss://<site>.test/app).
+	Reverb    string   `json:"reverb_state,omitempty"`
+	ReverbEnv []string `json:"reverb_env,omitempty"`
+	Notice    string   `json:"notice,omitempty"`
 }
 
 func siteInfoOf(st api.SiteStatus) siteInfo {
@@ -233,6 +237,12 @@ func siteInfoOf(st api.SiteStatus) siteInfo {
 		info.FrankenPHP = st.FrankenPHP.State
 		if info.Problem == "" {
 			info.Problem = st.FrankenPHP.Problem
+		}
+	}
+	if st.Reverb != nil {
+		info.Reverb, info.ReverbEnv = st.Reverb.State, st.Reverb.Env
+		if info.Problem == "" {
+			info.Problem = st.Reverb.Problem
 		}
 	}
 	return info

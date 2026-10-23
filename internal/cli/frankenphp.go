@@ -133,7 +133,7 @@ first time a site needs it. php.ini is the regular PHP's (see ` + "`flock php li
 
 	restart := &cobra.Command{
 		Use:   "restart [site]",
-		Short: "Restart a site's FrankenPHP (Octane's workers load changed code)",
+		Short: "Restart a site's FrankenPHP and Reverb (Octane's workers load changed code)",
 		Args:  cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			s, err := load()
