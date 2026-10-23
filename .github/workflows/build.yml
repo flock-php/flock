@@ -133,6 +133,8 @@ jobs:
         include:
           - { name: macOS, os: macos-26, flags: -race }
           - { name: Windows, os: windows-2025, flags: "" }
+          - { name: Linux, os: ubuntu-24.04, flags: -race }
+          - { name: Linux arm64, os: ubuntu-24.04-arm, flags: -race }
     runs-on: ${{ matrix.os }}
     env:
       CODE: ${{ needs.changes.outputs.code }}
