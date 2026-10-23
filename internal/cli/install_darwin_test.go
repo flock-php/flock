@@ -9,50 +9,6 @@ import (
 	"testing"
 )
 
-// Uninstalling leaves the shell profiles as they were before `flock install`.
-func TestShellProfileRoundTrip(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-
-	zshrc := filepath.Join(home, ".zshrc")
-	before := "export EDITOR=vim\nalias ll='ls -l'\n"
-	if err := os.WriteFile(zshrc, []byte(before), 0o600); err != nil {
-		t.Fatal(err)
-	}
-
-	if err := addToShellPath("/f/bin", "/f/node-global/current/bin"); err != nil {
-		t.Fatal(err)
-	}
-	// A second install with other directories rewrites the line instead of adding another.
-	if err := addToShellPath("/f/bin"); err != nil {
-		t.Fatal(err)
-	}
-	data, _ := os.ReadFile(zshrc)
-	if strings.Count(string(data), profileMarker) != 1 || !strings.Contains(string(data), `export PATH="/f/bin":"$PATH"`) {
-		t.Fatalf("profile after install:\n%s", data)
-	}
-
-	removed, err := removeFromShellProfiles()
-	if err != nil || !removed {
-		t.Fatalf("removed %v, err %v", removed, err)
-	}
-	data, _ = os.ReadFile(zshrc)
-	if string(data) != before {
-		t.Fatalf("profile after uninstall:\n%q\nwant\n%q", data, before)
-	}
-	if info, _ := os.Stat(zshrc); info.Mode().Perm() != 0o600 {
-		t.Fatalf("permissions changed to %v", info.Mode().Perm())
-	}
-	// No ~/.bash_profile existed, and none is created.
-	if _, err := os.Stat(filepath.Join(home, ".bash_profile")); !os.IsNotExist(err) {
-		t.Fatalf(".bash_profile: %v", err)
-	}
-
-	if removed, err := removeFromShellProfiles(); err != nil || removed {
-		t.Fatalf("second removal: removed %v, err %v", removed, err)
-	}
-}
-
 // The command line reaches the shell of `do shell script` intact, whatever the paths contain.
 func TestAdministratorScriptQuoting(t *testing.T) {
 	exe := "/Users/o'brien/Library/Application Support/Flock/bin/flock"

@@ -37,8 +37,10 @@ func (d *daemon) recheckWildcard() {
 
 // checkWildcard looks up a random name under the TLD through the system resolver, the way browsers
 // and PHP do, and checks that the query reached Flock's DNS server. On Windows that only happens
-// when the NRPT rule from `flock install` is in effect, on macOS when /etc/resolver/<tld> is;
-// Group Policy, VPN clients and security software can override either without Flock noticing otherwise.
+// when the NRPT rule from `flock install` is in effect, on macOS when /etc/resolver/<tld> is, on
+// Linux when the unit from `flock install` gives systemd-resolved Flock's link (or another resolver forwards
+// the TLD); Group Policy, VPN clients and security software can override them without Flock
+// noticing otherwise.
 func (d *daemon) checkWildcard() {
 	if !d.checking.CompareAndSwap(false, true) {
 		return
@@ -64,12 +66,15 @@ func (d *daemon) checkWildcard() {
 			state.problem = fmt.Sprintf("macOS doesn't send .%s lookups to Flock (a VPN or DNS filter may be overriding /etc/resolver)", cfg.TLD)
 		}
 		state.ok = state.problem == ""
-	case runtime.GOOS != "windows":
-		state.ok = true // nothing to check elsewhere (Flock runs on macOS and Windows)
 	case reaches(srv, cfg.TLD):
 		state.ok = true
-	default:
+		if runtime.GOOS == "linux" {
+			state.problem = dns.LinkProblem(cfg.TLD) // works now, but won't for long
+		}
+	case runtime.GOOS == "windows":
 		state.problem = windowsWildcardProblem(cfg.TLD)
+	default:
+		state.problem = linuxWildcardProblem(cfg.TLD, cfg.Ports.DNS)
 	}
 
 	d.mu.Lock()
@@ -93,7 +98,8 @@ func lookupReaches(srv *dns.Server, tld string) bool {
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 	// PreferGo false: ask the system resolver (which applies NRPT rules on Windows, /etc/resolver
-	// on macOS), as browsers and PHP do. On macOS that is libSystem's, with or without cgo.
+	// on macOS, systemd-resolved's routing domains on Linux), as browsers and PHP do. On macOS that
+	// is libSystem's, with or without cgo.
 	addrs, err := (&net.Resolver{PreferGo: false}).LookupHost(ctx, name)
 	return seen() && err == nil && slices.Contains(addrs, "127.0.0.1")
 }
@@ -107,4 +113,11 @@ func windowsWildcardProblem(tld string) string {
 	default:
 		return fmt.Sprintf("Windows doesn't send .%s lookups to Flock (a VPN or security software may be overriding DNS)", tld)
 	}
+}
+
+func linuxWildcardProblem(tld string, port int) string {
+	if problem := dns.ResolvedProblem(tld, port); problem != "" {
+		return problem
+	}
+	return fmt.Sprintf("Linux doesn't send .%s lookups to Flock (see `systemctl status %s`; a VPN or DNS filter may be overriding systemd-resolved, or /etc/resolv.conf doesn't use it)", tld, dns.Unit)
 }

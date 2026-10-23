@@ -121,7 +121,7 @@ jobs:
       - name: Check
         run: go run ./tools/docslint
 
-  # The Go tests on both platforms Flock supports (the race detector needs cgo, so macOS only).
+  # The Go tests on the platforms Flock supports (the race detector needs cgo, so not on Windows).
   # Without code changes the steps are skipped, not the job: a skipped matrix job reports under its
   # unexpanded name, so the required "Go tests (...)" checks would never pass.
   go-test:
@@ -133,6 +133,8 @@ jobs:
         include:
           - { name: macOS, os: macos-26, flags: -race }
           - { name: Windows, os: windows-2025, flags: "" }
+          - { name: Linux, os: ubuntu-24.04, flags: -race }
+          - { name: Linux arm64, os: ubuntu-24.04-arm, flags: -race }
     runs-on: ${{ matrix.os }}
     env:
       CODE: ${{ needs.changes.outputs.code }}

@@ -9,6 +9,8 @@ build:
 build-all:
 	GOOS=darwin  GOARCH=arm64 go build -ldflags "$(LDFLAGS)" -o dist/flock-darwin-arm64 ./cmd/flock
 	GOOS=windows GOARCH=amd64 go build -ldflags "$(LDFLAGS)" -o dist/flock-windows-amd64.exe ./cmd/flock
+	GOOS=linux   GOARCH=amd64 go build -ldflags "$(LDFLAGS)" -o dist/flock-linux-amd64 ./cmd/flock
+	GOOS=linux   GOARCH=arm64 go build -ldflags "$(LDFLAGS)" -o dist/flock-linux-arm64 ./cmd/flock
 
 test:
 	go test -race ./...

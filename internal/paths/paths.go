@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 )
 
 // Root returns Flock's data directory:
@@ -21,6 +22,19 @@ func Root() (string, error) {
 	}
 
 	return filepath.Join(base, "Flock"), nil
+}
+
+// CLI is the flock executable's name in <root>/bin, the directory `flock install` puts first on
+// PATH. On Linux it is flock-php: util-linux's flock(1) is in /usr/bin everywhere, and scripts
+// that lock with it would get Flock's CLI instead.
+func CLI() string {
+	switch runtime.GOOS {
+	case "windows":
+		return "flock.exe"
+	case "linux":
+		return "flock-php"
+	}
+	return "flock"
 }
 
 // Socket is the daemon's API socket. AF_UNIX works on macOS and Windows 10+.
