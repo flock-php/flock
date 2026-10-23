@@ -10,6 +10,8 @@ final class MailStore {
     private let client: FlockClient
 
     var messages: [MailSummary] = []
+    /// The mail service's .env lines (MAIL_MAILER=smtp, MAIL_PORT=…), empty until the daemon answers.
+    var env = ""
     var error: String?
     var isVisible = false
 
@@ -23,6 +25,11 @@ final class MailStore {
             let fresh = try await client.mail()
             if fresh != messages {
                 messages = fresh
+            }
+            // The port can change in Settings, so it is read again with the mail. Without it the
+            // window only loses the .env hint, not the mail.
+            if let mailEnv = try? await client.services().first(where: { $0.id == "mail" })?.env, mailEnv != env {
+                env = mailEnv
             }
             error = nil
         } catch {

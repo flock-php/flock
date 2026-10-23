@@ -170,12 +170,22 @@ func siteFor(sites []SiteStatus, source *dumps.Source, request *dumps.Request) s
 	}
 	if request != nil {
 		if u, err := url.Parse(request.URI); err == nil {
-			host := u.Hostname()
+			// The longest name wins, as in routing: accounts.shop.test can be another site's alias.
+			host, best, site := u.Hostname(), "", ""
 			for _, s := range sites {
-				if host == s.Domain || strings.HasSuffix(host, "."+s.Domain) {
-					return s.Domain
+				names := []string{s.Domain}
+				for _, d := range s.Domains {
+					if d.Alias && d.Problem == "" {
+						names = append(names, d.Host)
+					}
+				}
+				for _, name := range names {
+					if (host == name || strings.HasSuffix(host, "."+name)) && len(name) > len(best) {
+						best, site = name, s.Domain
+					}
 				}
 			}
+			return site
 		}
 	}
 	return ""

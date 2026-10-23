@@ -419,7 +419,8 @@ final class DumpTee
     }
     Transport::$address = $address;
     Agent::$kinds = \array_fill_keys(\array_filter(\explode(',', (string) \get_cfg_var('flock.capture'))), true);
-    Agent::$dumpsInPage = (bool) \get_cfg_var('flock.dumps_in_page');
+    // A shared site's visitors (FLOCK_SHARED, see `flock share`) never get dump() in the page.
+    Agent::$dumpsInPage = (bool) \get_cfg_var('flock.dumps_in_page') && empty($_SERVER['FLOCK_SHARED']);
     Agent::$apps = new \WeakMap();
 
     if (\PHP_SAPI === 'cli' && $argv0 === 'artisan') {

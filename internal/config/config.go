@@ -120,6 +120,10 @@ type Site struct {
 	Domains []string `json:"domains,omitempty"`
 	Parked  bool     `json:"-"` // discovered from a parked directory rather than linked
 
+	// Root is the document root set for the site on this machine, relative to Path ("src/www", "."
+	// for Path itself); empty means the project's .flockrc or detection decides (see project.RootFor).
+	Root string `json:"root,omitempty"`
+
 	// Server runs the site's PHP: "" through the version's FastCGI pool (PHP-FPM; php-cgi on
 	// Windows), or ServerFrankenPHP in a FrankenPHP process of its own on Port, behind the web server.
 	Server string `json:"server,omitempty"`

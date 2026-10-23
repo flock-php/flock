@@ -69,7 +69,7 @@ internal sealed partial class SettingsWindow : FlockWindow
             model.Settings.DismissError();
         });
         error.Margin = new Thickness(36, 0, 36, 16);
-        error.MaxWidth = PageWidth;
+        error.MaxWidth = PageWidth - 72;
 
         panes[SettingsPane.General] = new GeneralPane(this, model);
         panes[SettingsPane.Sites] = new SitesPane(this, model);
@@ -107,7 +107,8 @@ internal sealed partial class SettingsWindow : FlockWindow
         page.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         var heading = Ui.Column(2, title, subtitle);
         heading.Margin = new Thickness(36, 0, 36, 20);
-        heading.MaxWidth = PageWidth;
+        // The pane's MaxWidth includes its 36 side padding; this margin is outside it.
+        heading.MaxWidth = PageWidth - 72;
         Grid.SetRow(scroller, 1);
         Grid.SetRow(error, 2);
         page.Children.Add(heading);
@@ -191,7 +192,12 @@ internal sealed partial class SettingsWindow : FlockWindow
                 container.Children.Add(Ui.EmptyState(Ui.GlyphWarning, $"{panes[current].Title} couldn't be shown", $"{e.Message}\n\nDetails are in %LocalAppData%\\Flock\\tray.log."));
             }
         }
-        scroller.Content = container;
+        // The scroller centers a MaxWidth child by its desired width, not the width it gets, which
+        // pushed narrow panes right (and past the window's edge at some widths). A Grid in between
+        // takes the viewport's width and centers the container properly.
+        var host = new Grid();
+        host.Children.Add(container);
+        scroller.Content = host;
         return container;
     }
 

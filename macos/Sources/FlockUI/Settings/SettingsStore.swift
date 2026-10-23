@@ -309,12 +309,16 @@ final class SettingsStore {
     }
 
     /// Lets the user pick folders; empty when cancelled.
-    static func chooseDirectories(prompt: String, multiple: Bool) -> [URL] {
+    static func chooseDirectories(prompt: String, multiple: Bool, in directory: URL? = nil, message: String? = nil) -> [URL] {
         let panel = NSOpenPanel()
         panel.canChooseDirectories = true
         panel.canChooseFiles = false
         panel.allowsMultipleSelection = multiple
         panel.prompt = prompt
+        panel.directoryURL = directory
+        if let message {
+            panel.message = message
+        }
         NSApp.activate()
         return panel.runModal() == .OK ? panel.urls : []
     }

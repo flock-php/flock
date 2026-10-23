@@ -8,7 +8,6 @@ namespace Flock.Tray;
 /// <summary>Caught mail: the list on the left, the selected message on the right.</summary>
 internal sealed partial class MailWindow : FlockWindow
 {
-    private readonly AppModel model;
     private readonly MailStore store;
     private readonly ListView list = new() { SelectionMode = ListViewSelectionMode.Single };
     private readonly ContentControl detail = new()
@@ -20,11 +19,11 @@ internal sealed partial class MailWindow : FlockWindow
     private readonly InfoBar error = Ui.ErrorBar();
     private readonly AppBarButton clear;
     private List<MailSummary> shown = [];
+    private string? shownEnv;
     private string? selected;
 
     public MailWindow(AppModel model) : base("Mail", 1000, 660)
     {
-        this.model = model;
         store = model.Mail;
 
         var refresh = new AppBarButton { Icon = new SymbolIcon(Symbol.Refresh), Label = "Refresh" };
@@ -59,7 +58,7 @@ internal sealed partial class MailWindow : FlockWindow
         Grid.SetColumn(detailCard, 1);
         split.Children.Add(listArea);
         split.Children.Add(detailCard);
-        detail.Content = Ui.EmptyState(Ui.GlyphMail, "No message selected");
+        detail.Content = NoSelection();
 
         var root = new Grid();
         root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
@@ -102,17 +101,38 @@ internal sealed partial class MailWindow : FlockWindow
             if (index < 0 && selected is not null)
             {
                 selected = null;
-                detail.Content = Ui.EmptyState(Ui.GlyphMail, "No message selected");
+                detail.Content = NoSelection();
             }
+        }
+        // The .env lines arrive with the first refresh, or change with the port.
+        if (selected is null && store.Env != shownEnv)
+        {
+            detail.Content = NoSelection();
         }
 
         listArea.Children.Clear();
         listArea.Children.Add(list);
         if (shown.Count == 0)
         {
-            var smtp = model.Status?.Mail is { Length: > 0 } addr ? addr : "127.0.0.1:2525";
-            listArea.Children.Add(Ui.EmptyState(Ui.GlyphMail, "No mail", $"Send mail to {smtp}. MAIL_USERNAME picks the inbox."));
+            listArea.Children.Add(Ui.EmptyState(Ui.GlyphMail, "No mail"));
         }
+    }
+
+    /// <summary>
+    /// While no message is selected: what a project's .env needs for Flock to catch its mail, with a
+    /// copy button.
+    /// </summary>
+    private StackPanel NoSelection()
+    {
+        shownEnv = store.Env;
+        if (store.Env.Length == 0)
+        {
+            return Ui.EmptyState(Ui.GlyphMail, "No message selected");
+        }
+        var note = Ui.Caption("MAIL_USERNAME picks the inbox, so every project gets its own.");
+        note.TextAlignment = TextAlignment.Center;
+        return Ui.EmptyState(Ui.GlyphMail, "Catch your app's mail", "Add these lines to your project's .env:",
+            Ui.Column(8, Ui.CodeBlock(store.Env), note));
     }
 
     private static StackPanel Row(MailSummary message)
@@ -142,7 +162,7 @@ internal sealed partial class MailWindow : FlockWindow
         if (await dialog.ShowAsync() == ContentDialogResult.Primary)
         {
             selected = null;
-            detail.Content = Ui.EmptyState(Ui.GlyphMail, "No message selected");
+            detail.Content = NoSelection();
             await store.ClearAsync();
         }
     }

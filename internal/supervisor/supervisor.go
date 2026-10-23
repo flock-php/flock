@@ -264,3 +264,11 @@ func openLog(path string) (io.WriteCloser, error) {
 type nopCloser struct{ io.Writer }
 
 func (nopCloser) Close() error { return nil }
+
+// Configure prepares a command the way the supervisor starts its own children (a process group of
+// its own on unix, no console window on Windows), for processes Flock runs outside the supervisor.
+func Configure(cmd *exec.Cmd) { configure(cmd) }
+
+// Started ties a started command to the daemon like the supervisor's children: on Windows it
+// joins the job object that kills it when the daemon exits.
+func Started(cmd *exec.Cmd) { started(cmd) }

@@ -108,4 +108,4 @@ public sealed record SettingsChange(
 /// Body of PATCH /v1/sites/{name}; null fields are left out. An empty Php means "use the default";
 /// Server is "fastcgi" or "frankenphp", Worker "" (classic) or "octane" (see Status.SiteServer).
 /// </summary>
-public sealed record SiteChange(bool? Secured = null, string? Php = null, string? Node = null, string? Server = null, string? Worker = null);
+public sealed record SiteChange(bool? Secured = null, string? Php = null, string? Node = null, string? Server = null, string? Worker = null, string? Root = null);

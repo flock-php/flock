@@ -20,6 +20,7 @@ import (
 	"flock/internal/frankenphp"
 	"flock/internal/php"
 	"flock/internal/postgres"
+	"flock/internal/share"
 	"flock/internal/supervisor"
 )
 
@@ -112,6 +113,24 @@ type SiteStatus struct {
 	Parked       bool   `json:"parked"`
 	URL          string `json:"url,omitempty"`
 	Problem      string `json:"problem,omitempty"`
+	// Notice is something about the site that needs a decision from the user but isn't broken,
+	// e.g. that Flock found no document root in it.
+	Notice string `json:"notice,omitempty"`
+	// Root is the document root, relative to Path ("." for Path itself). RootSource is "isolated"
+	// (set for the site on this machine), "project" (root= in the project's .flockrc) or "default"
+	// (detected: public/, www/, web/ or webroot/ with an index.php, else Path). RootPinned is what
+	// the project's .flockrc says, in RootFile, also when an isolation wins over it.
+	Root       string `json:"root"`
+	RootSource string `json:"root_source"`
+	RootPinned string `json:"root_pinned"`
+	RootFile   string `json:"root_file"`
+	// RootState is "" when the site is served from Root, else why Flock serves its page instead:
+	// "missing" (the root set for it isn't a folder; see Problem), "not_found" (a Composer
+	// project without an index.php in Path or a conventional root; see Notice) or "empty" (Root
+	// has no index.php or index.html). RootSuggestions are then the folders with an index.php
+	// that could be the root.
+	RootState       string   `json:"root_state,omitempty"`
+	RootSuggestions []string `json:"root_suggestions,omitempty"`
 	// Debugging is set while PhpStorm breakpoints send every request of the site to Xdebug.
 	Debugging bool `json:"debugging,omitempty"`
 	// Domains are the site's extra domains (subdomains and aliases), in the order they were added.
@@ -128,6 +147,8 @@ type SiteStatus struct {
 	// Boost is whether the project uses Laravel Boost and has Flock's guideline (see package boost):
 	// "" (no Boost), "missing", "current", "outdated" or "custom".
 	Boost string `json:"boost,omitempty"`
+	// Share is the site's tunnel (`flock share`), while there is one.
+	Share *share.Status `json:"share,omitempty"`
 }
 
 // FrankenPHP states of a site.
@@ -209,6 +230,10 @@ type Backend interface {
 	Binaries() *binaries.Catalog
 	// RestartSite restarts a FrankenPHP site's process, e.g. so Octane's workers load changed code.
 	RestartSite(name string) error
+	// Shares runs the sites' tunnels (nil when unavailable); StartShare starts one after checking
+	// that the site can be shared, with the app's debug mode on for visitors when debug is set.
+	Shares() *share.Manager
+	StartShare(site string, allow []string, debug bool) error
 }
 
 // NewHandler builds the API routes. A non-empty token requires `Authorization: Bearer <token>`
@@ -253,6 +278,7 @@ func NewHandler(b Backend, token string) http.Handler {
 	registerLogs(mux, b)
 	registerMCP(mux, b)
 	registerBoost(mux, b)
+	registerShares(mux, b)
 
 	if token == "" {
 		return mux

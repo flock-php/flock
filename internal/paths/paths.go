@@ -41,3 +41,19 @@ func CLI() string {
 func Socket(root string) string {
 	return filepath.Join(root, "flockd.sock")
 }
+
+// Run is the directory for the services' unix sockets (PHP-FPM, MySQL/MariaDB, Postgres). Kept
+// short: AF_UNIX paths are limited to ~104 bytes on macOS.
+func Run(root string) string {
+	return filepath.Join(root, "run")
+}
+
+// EnsureRun creates Run(root) and returns it. Every process that puts a socket there calls it
+// before starting: nothing else creates the directory.
+func EnsureRun(root string) (string, error) {
+	dir := Run(root)
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return "", err
+	}
+	return dir, nil
+}
