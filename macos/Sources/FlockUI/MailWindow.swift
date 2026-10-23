@@ -26,7 +26,7 @@ struct MailWindow: View {
             }
             .overlay {
                 if store.messages.isEmpty {
-                    ContentUnavailableView("No mail", systemImage: "envelope.open", description: Text(emptyHint))
+                    ContentUnavailableView("No mail", systemImage: "envelope.open")
                 }
             }
             .frame(minWidth: 260, idealWidth: 320, maxWidth: 340)
@@ -34,8 +34,10 @@ struct MailWindow: View {
                 if let selection {
                     MailDetailView(id: selection)
                         .id(selection)
-                } else {
+                } else if store.env.isEmpty {
                     ContentUnavailableView("No message selected", systemImage: "envelope")
+                } else {
+                    MailSetupView(env: store.env)
                 }
             }
             .frame(minWidth: 420, maxWidth: .infinity, maxHeight: .infinity)
@@ -72,14 +74,29 @@ struct MailWindow: View {
             }
         }
     }
+}
 
-    /// Where to send mail, from the daemon's status.
-    private var emptyHint: String {
-        guard let status = model.status else { return "Flock is not running." }
-        if status.mail.isEmpty {
-            return "The mail catcher isn't running — start it in Settings → Services."
+/// What a project's .env needs for Flock to catch its mail, with a copy button; shown while no
+/// message is selected.
+private struct MailSetupView: View {
+    let env: String
+
+    var body: some View {
+        VStack(spacing: 12) {
+            Image(systemName: "envelope")
+                .font(.system(size: 40))
+                .foregroundStyle(.secondary)
+            Text("Catch your app's mail").font(.title2.weight(.semibold))
+            Text("Add these lines to your project's .env:")
+                .foregroundStyle(.secondary)
+            CodeBlock(text: env)
+            Text("MAIL_USERNAME picks the inbox, so every project gets its own.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
         }
-        return "Send mail to \(status.mail). MAIL_USERNAME picks the inbox."
+        .frame(maxWidth: 420)
+        .padding(24)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }
 

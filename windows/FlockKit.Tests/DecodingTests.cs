@@ -74,6 +74,45 @@ public class DecodingTests
     }
 
     [Fact]
+    public void DecodesTheDocumentRoot()
+    {
+        var status = FlockJson.Decode<Status>("""
+            {"version":"dev","pid":1,"started_at":"2026-10-13T14:10:01Z","processes":[],
+             "sites":[{"name":"zoo","domain":"zoo.test","path":"C:\\code\\zoo","php":"8.5","root":".","root_source":"default",
+                       "root_pinned":"","root_file":"","root_state":"not_found","root_suggestions":["src/www"],"notice":"No document root found"},
+                      {"name":"shop","domain":"shop.test","path":"C:\\code\\shop","php":"8.5","root":"web","root_source":"isolated",
+                       "root_pinned":"public","root_file":"C:\\code\\shop\\.flockrc"},
+                      {"name":"old","domain":"old.test","path":"C:\\code\\old","php":"8.5"},
+                      {"name":"cms","domain":"cms.test","path":"C:\\code\\cms","php":"8.5","root":"src/www","root_source":"isolated","root_state":"empty"}]}
+            """);
+
+        var zoo = status.Sites[0];
+        Assert.Equal((Status.DocumentRootState.NotFound, "No document root found"), (zoo.RootState, zoo.Notice));
+        Assert.Equal(["src/www"], zoo.RootSuggestions);
+        Assert.False(zoo.RootPinnedHere);
+        var shop = status.Sites[1];
+        Assert.Equal(("web", Status.VersionSource.Isolated, "public", ""), (shop.Root, shop.RootSource, shop.RootPinned, shop.RootState));
+        Assert.True(shop.RootPinnedHere);
+        // A daemon from before document roots: the project folder, detected.
+        var old = status.Sites[2];
+        Assert.Equal((".", Status.VersionSource.Default, "", null), (old.Root, old.RootSource, old.RootState, old.Notice));
+        Assert.Empty(old.RootSuggestions);
+        Assert.Equal((Status.DocumentRootState.Empty, null), (status.Sites[3].RootState, status.Sites[3].Notice));
+    }
+
+    [Theory]
+    [InlineData(@"C:\code\zoo\src\www", "src/www")]
+    [InlineData(@"c:\Code\Zoo\src\www\", "src/www")]
+    [InlineData(@"C:\code\zoo", ".")]
+    [InlineData(@"C:\code\zoo-2\www", null)]
+    [InlineData(@"C:\code", null)]
+    public void TurnsAChosenFolderIntoADocumentRoot(string folder, string? root)
+    {
+        var site = new Status.Site { Path = @"C:\code\zoo" };
+        Assert.Equal(root, site.RootFor(folder));
+    }
+
+    [Fact]
     public void DecodesExtraDomainsAndTheWildcardState()
     {
         var status = FlockJson.Decode<Status>("""
@@ -129,6 +168,38 @@ public class DecodingTests
         // An older daemon sends none of these fields.
         Assert.Equal((Status.SiteServer.FastCgi, "", false), (status.Sites[3].Server, status.Sites[3].Worker, status.Sites[3].OctaneAvailable));
         Assert.Null(status.Sites[3].FrankenPhp);
+    }
+
+    [Fact]
+    public void DecodesASitesShare()
+    {
+        var status = FlockJson.Decode<Status>("""
+            {"version":"dev","pid":1,"started_at":"2026-10-19T14:10:01Z","dns":{"tld":"test","addr":""},
+             "http_port":80,"https_port":443,"mail":"","xdebug":false,"dumps":false,"mail_count":0,"dump_count":0,"processes":[],
+             "sites":[{"name":"shop","domain":"shop.test","path":"C:\\code\\shop","php":"8.4","secured":true,"parked":false,
+                       "share":{"site":"shop","state":"running","url":"https://quiet-river-lamp.trycloudflare.com","allow":["*@acme.com"],
+                                "started_at":"2026-10-19T14:10:01Z","expires_at":"2026-10-19T22:10:05Z","built":true,"can_rebuild":true,
+                                "rebuilding":false,"log":"share-shop","qr":"iVBORw0KGgo="}},
+                      {"name":"blog","domain":"blog.test","path":"C:\\code\\blog","php":"8.4","secured":false,"parked":false,
+                       "share":{"site":"blog","state":"failed","allow":null,"started_at":"2026-10-19T14:10:01Z","built":false,
+                                "can_rebuild":false,"rebuilding":false,"error":"cloudflared exited","log":"share-blog"}},
+                      {"name":"old","domain":"old.test","path":"C:\\code\\old","php":"8.3","secured":false,"parked":true}]}
+            """);
+
+        var shop = status.Sites[0];
+        Assert.True(shop.IsShared);
+        Assert.Equal(("https://quiet-river-lamp.trycloudflare.com", "share-shop"), (shop.Share!.Url, shop.Share.Log));
+        Assert.Equal(["*@acme.com"], shop.Share.Allow);
+        Assert.Equal(new DateTimeOffset(2026, 10, 19, 22, 10, 5, TimeSpan.Zero), shop.Share.ExpiresAt);
+        Assert.True(shop.Share.CanRebuild);
+        Assert.Equal("iVBORw0KGgo=", shop.Share.Qr);
+        var blog = status.Sites[1];
+        Assert.False(blog.IsShared);
+        Assert.True(blog.Share!.IsFailed);
+        Assert.Empty(blog.Share.Allow);
+        Assert.Null(blog.Share.ExpiresAt);
+        Assert.Equal("cloudflared exited", blog.Share.Error);
+        Assert.Null(status.Sites[2].Share);
     }
 
     [Fact]

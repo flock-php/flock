@@ -68,7 +68,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Whether this launch is the login item's, read from the launch's Apple event.
     private(set) static var launchedAtLogin = false
 
-    func applicationWillFinishLaunching(_ notification: Notification) {
+    /// The launch's Apple event only arrives by now; in applicationWillFinishLaunching it is nil.
+    func applicationDidFinishLaunching(_ notification: Notification) {
         let event = NSAppleEventManager.shared().currentAppleEvent
         Self.launchedAtLogin = event?.eventID == kAEOpenApplication
             && event?.paramDescriptor(forKeyword: keyAEPropData)?.enumCodeValue == keyAELaunchedAsLogInItem

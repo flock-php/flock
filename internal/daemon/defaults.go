@@ -188,3 +188,12 @@ func waitingProblem(w web.Waiting) string {
 	}
 	return fmt.Sprintf("PHP %s%s is not installed", w.PHP, pinned)
 }
+
+// rootProblem is what the apps say about a site whose document root doesn't exist.
+func rootProblem(r project.DocRoot) string {
+	where := "set on this machine"
+	if r.Source == project.Project {
+		where = "set in " + filepath.Base(r.File)
+	}
+	return fmt.Sprintf("Document root %s doesn't exist (%s)", r.Rel, where)
+}

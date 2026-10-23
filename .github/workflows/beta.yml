@@ -29,6 +29,17 @@ jobs:
       version: ${{ steps.version.outputs.version }}
       sha: ${{ steps.version.outputs.sha }}
     steps:
+      # Anyone with write access can start a workflow; only admins may release.
+      - name: Check who started it
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ACTOR: ${{ github.triggering_actor }}
+        run: |
+          permission=$(gh api "repos/$GITHUB_REPOSITORY/collaborators/$ACTOR/permission" --jq .permission)
+          if [ "$permission" != admin ]; then
+            echo "::error::only admins can run this, not $ACTOR ($permission)" && exit 1
+          fi
+
       - name: Check the branch
         env:
           BRANCH: ${{ github.ref_name }}

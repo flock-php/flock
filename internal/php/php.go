@@ -38,6 +38,7 @@ import (
 
 	"flock/internal/archive"
 	"flock/internal/fsutil"
+	"flock/internal/paths"
 	"flock/internal/supervisor"
 )
 
@@ -62,9 +63,9 @@ func CGIBinary(root, minor string) string {
 // IniPath is the php.ini used by both CLI (via PHPRC) and FPM.
 func IniPath(root, minor string) string { return filepath.Join(Dir(root, minor), "php.ini") }
 
-// Socket is the FPM socket for a version. Kept short: AF_UNIX paths are limited to ~104 bytes on macOS.
+// Socket is the FPM socket for a version.
 func Socket(root, minor string) string {
-	return filepath.Join(root, "run", "php"+strings.ReplaceAll(minor, ".", "")+".sock")
+	return filepath.Join(paths.Run(root), "php"+strings.ReplaceAll(minor, ".", "")+".sock")
 }
 
 // CABundle is the CA bundle (system roots + Flock root) PHP uses for openssl/curl.
@@ -514,7 +515,7 @@ func fpmSpec(root, minor string, debug bool, extraEnv []string) (supervisor.Spec
 	if err := EnsureIni(root, minor); err != nil {
 		return supervisor.Spec{}, err
 	}
-	if err := os.MkdirAll(filepath.Join(root, "run"), 0o700); err != nil {
+	if _, err := paths.EnsureRun(root); err != nil {
 		return supervisor.Spec{}, err
 	}
 
@@ -560,7 +561,7 @@ clear_env = no
 
 // DebugSocket is the socket of a version's Xdebug FPM pool.
 func DebugSocket(root, minor string) string {
-	return filepath.Join(root, "run", "php"+strings.ReplaceAll(minor, ".", "")+"-xdebug.sock")
+	return filepath.Join(paths.Run(root), "php"+strings.ReplaceAll(minor, ".", "")+"-xdebug.sock")
 }
 
 // Pool is a version's FastCGI pool: the processes to supervise and the addresses

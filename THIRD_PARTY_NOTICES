@@ -6558,6 +6558,11 @@ THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+rsc.io/qr v0.2.0
+----------------
+
+LICENSE: the same text as for filippo.io/bigmod v0.1.0 above.
+
 PHP packages in the dumps server (embedded in flock)
 ====================================================
 

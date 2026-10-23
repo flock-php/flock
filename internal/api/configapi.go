@@ -91,15 +91,23 @@ func invalid(format string, args ...any) error {
 	return fmt.Errorf("%w: %s", errInvalid, fmt.Sprintf(format, args...))
 }
 
-// pinSite pins a version into the site's project (see project.PinSite), storing the site when
-// its isolation was lifted.
+// pinSite pins a version, or with tool "root" the document root, into the site's project (see
+// project.PinSite and project.PinSiteRoot), storing the site when its isolation was lifted.
 func pinSite(cfg *config.Config, site config.Site, tool, version string) error {
-	if _, lifted, err := project.PinSite(cfg, &site, tool, version); err != nil {
+	var lifted bool
+	var err error
+	if tool == project.Root {
+		_, lifted, err = project.PinSiteRoot(&site, version)
+	} else {
+		_, lifted, err = project.PinSite(cfg, &site, tool, version)
+	}
+	if err != nil {
 		if errors.Is(err, project.ErrInvalid) {
 			return invalid("%v", err)
 		}
 		return err
-	} else if lifted {
+	}
+	if lifted {
 		cfg.Upsert(site)
 	}
 	return nil
@@ -237,6 +245,9 @@ func registerConfig(mux *http.ServeMux, b Backend) {
 			Server *string `json:"server"`
 			Worker *string `json:"worker"`
 			Reverb *bool   `json:"reverb"`
+			// Root is the document root on this machine, relative to the project ("" lets the
+			// project's .flockrc or detection decide again).
+			Root *string `json:"root"`
 		}
 		if err := decodeBody(r, &body); err != nil {
 			writeError(w, http.StatusBadRequest, err)
@@ -264,6 +275,16 @@ func registerConfig(mux *http.ServeMux, b Backend) {
 					}
 				}
 				site.Node = *body.Node
+			}
+			if body.Root != nil {
+				site.Root = ""
+				if *body.Root != "" {
+					root, err := project.ValidRoot(site.Path, *body.Root)
+					if err != nil {
+						return invalid("%v", err)
+					}
+					site.Root = root
+				}
 			}
 			if body.Server != nil || body.Worker != nil {
 				server, worker := site.Server, site.Worker
@@ -328,7 +349,8 @@ func registerConfig(mux *http.ServeMux, b Backend) {
 	})
 
 	// Pins a version into the project's files (by default the version the site uses now) and
-	// lifts the site's isolation for that tool, so the project file decides from now on.
+	// lifts the site's isolation for that tool, so the project file decides from now on. With
+	// tool "root", version is the document root (by default the one the site uses now).
 	mux.HandleFunc("POST /v1/sites/{name}/pin", func(w http.ResponseWriter, r *http.Request) {
 		var body struct {
 			Tool    string `json:"tool"`
@@ -354,14 +376,17 @@ func registerConfig(mux *http.ServeMux, b Backend) {
 				return invalid("no site named %s", r.PathValue("name"))
 			}
 			tool := r.PathValue("tool")
-			if tool != project.PHP && tool != project.Node {
-				return invalid("unknown tool %q (php or node)", tool)
+			if tool != project.PHP && tool != project.Node && tool != project.Root {
+				return invalid("unknown tool %q (php, node or root)", tool)
 			}
 			changed, err := project.Unpin(site.Path, tool)
 			if err != nil {
 				return err
 			}
 			if len(changed) == 0 {
+				if tool == project.Root {
+					return invalid("%s has no document root pinned in %s", site.Name, site.Path)
+				}
 				return invalid("%s has no %s version pinned in %s", site.Name, tool, site.Path)
 			}
 			return nil
@@ -504,6 +529,7 @@ type SiteChange struct {
 	Server  *string `json:"server,omitempty"`
 	Worker  *string `json:"worker,omitempty"`
 	Reverb  *bool   `json:"reverb,omitempty"`
+	Root    *string `json:"root,omitempty"`
 }
 
 // Config fetches config.json plus the installed versions.

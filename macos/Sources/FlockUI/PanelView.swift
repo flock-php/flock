@@ -357,6 +357,9 @@ private struct SiteRow: View {
                     Text(site.domain).font(.callout)
                     if let problem = site.problem {
                         Text(problem).font(.caption2).foregroundStyle(.red)
+                    } else if let notice = site.notice {
+                        Label(notice, systemImage: "exclamationmark.triangle.fill")
+                            .font(.caption2).foregroundStyle(.orange)
                     }
                 }
                 Spacer()
@@ -365,6 +368,10 @@ private struct SiteRow: View {
                         .labelStyle(.iconOnly)
                         .font(.caption2)
                         .foregroundStyle(.orange)
+                }
+                if site.shared {
+                    Badge(text: "Shared", color: .green)
+                        .help(site.share?.url ?? "")
                 }
                 if site.server == .frankenphp {
                     Badge(text: site.worker == .octane ? "Octane" : "FrankenPHP", color: .secondary)
@@ -381,7 +388,15 @@ private struct SiteRow: View {
         .buttonStyle(.plain)
         .disabled(site.url == nil)
         .onHover { isHovered = $0 }
-        .help(site.url ?? site.problem ?? site.path)
+        .help(help)
+    }
+
+    /// The row's tooltip: where a site without a document root is fixed, else its address.
+    private var help: String {
+        if site.rootState == .notFound {
+            return "No public/, www/, web/ or webroot/ with an index.php in \(site.path). Choose the document root in Settings → Sites."
+        }
+        return site.url ?? site.problem ?? site.path
     }
 }
 

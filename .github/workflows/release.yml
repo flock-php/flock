@@ -29,6 +29,8 @@ jobs:
       !github.event.repository.private &&
       (github.ref_name == 'main' || endsWith(github.ref_name, '.x'))
     runs-on: ubuntu-latest
+    # RELEASE_PLEASE_TOKEN is a secret of this environment, so only main, develop and 1.x get it.
+    environment: release
     permissions:
       contents: write
       pull-requests: write
@@ -37,6 +39,18 @@ jobs:
       tag_name: ${{ steps.release.outputs.tag_name }}
       version: ${{ steps.release.outputs.version }}
     steps:
+      # Anyone with write access can start a workflow; only admins may release.
+      - name: Check who started it
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ACTOR: ${{ github.triggering_actor }}
+        run: |
+          permission=$(gh api "repos/$GITHUB_REPOSITORY/collaborators/$ACTOR/permission" --jq .permission)
+          if [ "$permission" != admin ]; then
+            echo "::error::only admins can run this, not $ACTOR ($permission)" && exit 1
+          fi
+
       - uses: googleapis/release-please-action@v5
         id: release
         with:
@@ -149,6 +163,7 @@ jobs:
     needs: [release-please, publish]
     if: always() && needs.publish.result == 'success' && github.ref_name == 'main'
     runs-on: ubuntu-latest
+    environment: release
     permissions:
       contents: write
       pull-requests: write

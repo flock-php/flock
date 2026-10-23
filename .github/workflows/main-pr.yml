@@ -1,6 +1,7 @@
 # main is what's released: it gets promoted betas (promote.yml), hotfixes and release-please's
 # release PRs, nothing else. This check fails a PR into main from any other branch (most likely
-# one meant for develop); make "Pull request source" a required check of main.
+# one meant for develop), or from a fork, whose branch could be named anything; make "Pull
+# request source" a required check of main.
 name: Main branch
 
 on:
@@ -23,7 +24,11 @@ jobs:
         if: github.event_name == 'pull_request'
         env:
           HEAD: ${{ github.head_ref }}
+          HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
         run: |
+          if [ "$HEAD_REPO" != "$GITHUB_REPOSITORY" ]; then
+            echo "::error::PRs into main come from branches of $GITHUB_REPOSITORY, not forks. Change this PR's base to develop." && exit 1
+          fi
           case "$HEAD" in
             promote/* | hotfix/* | release-please--*) echo "$HEAD may go into main" ;;
             *) echo "::error::PRs into main come from promote/<beta> (the Promote beta workflow), hotfix/* or release-please. Change this PR's base to develop." && exit 1 ;;

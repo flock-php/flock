@@ -107,6 +107,18 @@ public struct Status: Decodable, Sendable, Equatable {
         public var parked: Bool
         public var url: String?
         public var problem: String?
+        /// Something that needs a decision but isn't broken, e.g. that no document root was found.
+        public var notice: String?
+        /// The document root relative to `path` ("." for the project folder); `rootSource` says why:
+        /// set on this machine (isolated), in the project's .flockrc, or detected (default).
+        public var root: String
+        public var rootSource: VersionSource
+        /// What the project's .flockrc says (in `rootFile`), also when this machine's root wins over it.
+        public var rootPinned: String
+        public var rootFile: String
+        /// Why Flock serves its page instead of the site, and which folders could be the root.
+        public var rootState: RootState
+        public var rootSuggestions: [String]
         public var domains: [SiteDomain]
         /// PhpStorm breakpoints send every request of the site to Xdebug.
         public var debugging: Bool
@@ -120,8 +132,13 @@ public struct Status: Decodable, Sendable, Equatable {
         public var frankenPHP: SiteFrankenPHP?
         /// Whether the project uses Laravel Boost and has Flock's guideline.
         public var boost: Boost
+        /// The site's tunnel (`flock share`), while there is one.
+        public var share: ShareStatus?
 
         public var id: String { name }
+
+        /// The site is reachable at a public share URL right now.
+        public var shared: Bool { share?.state == .running }
 
         /// FrankenPHP needs PHP 8.2 or newer.
         public var supportsFrankenPHP: Bool { Self.frankenPHPSupports(php) }
@@ -137,6 +154,17 @@ public struct Status: Decodable, Sendable, Equatable {
         /// The file pinning PHP sits in the site's own folder (so it can be unpinned there).
         public var phpPinnedHere: Bool { !phpFile.isEmpty && Self.inFolder(phpFile, path) }
         public var nodePinnedHere: Bool { !nodeFile.isEmpty && Self.inFolder(nodeFile, path) }
+        public var rootPinnedHere: Bool { !rootPinned.isEmpty }
+
+        /// A folder as a document root of the site: relative to its path ("src/www", "." for the
+        /// project folder itself), or nil when the folder isn't in the project.
+        public func root(for folder: URL) -> String? {
+            let project = URL(fileURLWithPath: path).resolvingSymlinksInPath().standardizedFileURL.pathComponents
+            let chosen = folder.resolvingSymlinksInPath().standardizedFileURL.pathComponents
+            guard chosen.count >= project.count, Array(chosen.prefix(project.count)) == project else { return nil }
+            let rest = chosen.dropFirst(project.count)
+            return rest.isEmpty ? "." : rest.joined(separator: "/")
+        }
 
         private static func inFolder(_ file: String, _ folder: String) -> Bool {
             URL(fileURLWithPath: file).deletingLastPathComponent().standardizedFileURL.path == URL(fileURLWithPath: folder).standardizedFileURL.path
@@ -144,7 +172,8 @@ public struct Status: Decodable, Sendable, Equatable {
 
         enum CodingKeys: String, CodingKey {
             case name, domain, path, php, phpSource, phpPinned, phpFile, node, nodeSource, nodePinned, nodeFile, nodeShadowed
-            case secured, parked, url, problem, domains, debugging, server, worker, octaneAvailable, boost
+            case secured, parked, url, problem, notice, root, rootSource, rootPinned, rootFile, rootState, rootSuggestions
+            case domains, debugging, server, worker, octaneAvailable, boost, share
             case frankenPHP = "frankenphp"
         }
 
@@ -166,6 +195,13 @@ public struct Status: Decodable, Sendable, Equatable {
             parked = try c.decodeIfPresent(Bool.self, forKey: .parked) ?? false
             url = try c.decodeIfPresent(String.self, forKey: .url)
             problem = try c.decodeIfPresent(String.self, forKey: .problem)
+            notice = try c.decodeIfPresent(String.self, forKey: .notice)
+            root = try c.decodeIfPresent(String.self, forKey: .root) ?? "."
+            rootSource = try c.decodeIfPresent(VersionSource.self, forKey: .rootSource) ?? .default
+            rootPinned = try c.decodeIfPresent(String.self, forKey: .rootPinned) ?? ""
+            rootFile = try c.decodeIfPresent(String.self, forKey: .rootFile) ?? ""
+            rootState = try c.decodeIfPresent(RootState.self, forKey: .rootState) ?? .ok
+            rootSuggestions = try c.decodeIfPresent([String].self, forKey: .rootSuggestions) ?? []
             domains = try c.decodeIfPresent([SiteDomain].self, forKey: .domains) ?? []
             debugging = try c.decodeIfPresent(Bool.self, forKey: .debugging) ?? false
             server = try c.decodeIfPresent(Server.self, forKey: .server) ?? .fastcgi
@@ -173,6 +209,22 @@ public struct Status: Decodable, Sendable, Equatable {
             octaneAvailable = try c.decodeIfPresent(Bool.self, forKey: .octaneAvailable) ?? false
             frankenPHP = try c.decodeIfPresent(SiteFrankenPHP.self, forKey: .frankenPHP)
             boost = try c.decodeIfPresent(Boost.self, forKey: .boost) ?? .none
+            share = try c.decodeIfPresent(ShareStatus.self, forKey: .share)
+        }
+    }
+
+    /// Why a site isn't served from its document root; the raw values are the API's.
+    public enum RootState: String, Decodable, Sendable, Hashable {
+        case ok = ""
+        /// The root set on this machine or in .flockrc isn't a folder.
+        case missing
+        /// A Composer project without an index.php in public/, www/, web/, webroot/ or its own folder.
+        case notFound = "not_found"
+        /// The root has neither an index.php nor an index.html (yet).
+        case empty
+
+        public init(from decoder: Decoder) throws {
+            self = RootState(rawValue: try decoder.singleValueContainer().decode(String.self)) ?? .ok
         }
     }
 

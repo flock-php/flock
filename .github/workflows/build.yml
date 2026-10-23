@@ -2,7 +2,10 @@
 # (signed with Artifact Signing) and keeps them as run artifacts. Signing takes the secrets and
 # variables of the "release" environment, and is required in the merge queue and for releases.
 #
-#   - on every pull request: the Go tests only; the builds are skipped (which counts as passed)
+#   - on every pull request: the Go tests, and the apps compiled and tested unsigned ("macOS app",
+#     "Windows app"); the signed builds are skipped (which counts as passed).
+#     One that changes only docs/ skips the Go tests too, unless it goes into main, and one that
+#     changes docs/ gets the docs check (tools/docslint)
 #   - in the merge queue: everything, named with the version in .release-please-manifest.json. These
 #     are the checks that must pass before a PR (the release PR) is merged, and release.yml attaches
 #     these very files to the release.
@@ -64,10 +67,66 @@ jobs:
           fi
           echo "version=$version" >> "$GITHUB_OUTPUT"
 
+  # What a pull request changes: "code" unless it's only docs/, "docs" if any of docs/. Into main
+  # it's always "code", so everything that's released has had the Go tests run on it.
+  # (With git, not the API: beta.yml and release.yml call this workflow with contents: read only.)
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      code: ${{ steps.changes.outputs.code }}
+      docs: ${{ steps.changes.outputs.docs }}
+    steps:
+      - uses: actions/checkout@v7
+        if: github.event_name == 'pull_request'
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+
+      - name: Changed files
+        id: changes
+        env:
+          EVENT: ${{ github.event_name }}
+          BASE: ${{ github.event.pull_request.base.ref }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          if [ "$EVENT" != pull_request ]; then
+            echo "code=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          # Since the PR's branch left its base; --no-renames lists both sides of a rename.
+          files=$(git diff --name-only --no-renames "$BASE_SHA...$HEAD_SHA")
+          code=false
+          if [ "$BASE" = main ] || grep -v '^docs/' <<< "$files" | grep -q .; then code=true; fi
+          docs=false
+          if grep -q '^docs/' <<< "$files"; then docs=true; fi
+          echo "code=$code" >> "$GITHUB_OUTPUT"
+          echo "docs=$docs" >> "$GITHUB_OUTPUT"
+
+  # The pages, navigation.json, links and images in docs/, as flockphp.com reads them.
+  docs:
+    name: Docs
+    needs: changes
+    if: needs.changes.outputs.docs == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+
+      - name: Check
+        run: go run ./tools/docslint
+
   # The Go tests on both platforms Flock supports (the race detector needs cgo, so macOS only).
+  # Without code changes the steps are skipped, not the job: a skipped matrix job reports under its
+  # unexpanded name, so the required "Go tests (...)" checks would never pass.
   go-test:
     name: Go tests (${{ matrix.name }})
-    needs: version
+    needs: [version, changes]
     strategy:
       fail-fast: false
       matrix:
@@ -75,25 +134,76 @@ jobs:
           - { name: macOS, os: macos-26, flags: -race }
           - { name: Windows, os: windows-2025, flags: "" }
     runs-on: ${{ matrix.os }}
+    env:
+      CODE: ${{ needs.changes.outputs.code }}
     steps:
       - uses: actions/checkout@v7
+        if: env.CODE == 'true'
         with:
           ref: ${{ inputs.ref || github.event.pull_request.head.sha }}
 
       - uses: actions/setup-go@v7
+        if: env.CODE == 'true'
         with:
           go-version-file: go.mod
 
       - name: Vet
+        if: env.CODE == 'true'
         run: go vet ./...
 
       - name: Test
+        if: env.CODE == 'true'
         run: go test ${{ matrix.flags }} ./...
 
       # The licenses that ship with the builds; run `make notices` after changing dependencies.
       - name: Third-party notices
-        if: matrix.name == 'macOS'
+        if: env.CODE == 'true' && matrix.name == 'macOS'
         run: go run ./tools/notices -check
+
+  # On pull requests the apps are only compiled and tested (unsigned, no secrets, so forks get it
+  # too); the signed builds below run in the merge queue and for releases.
+  macos-check:
+    name: macOS app
+    needs: changes
+    if: github.event_name == 'pull_request' && needs.changes.outputs.code == 'true'
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      # Every target, FlockScreenshots too: it reaches the app's views through @testable import.
+      - name: Build
+        run: swift build --package-path macos
+
+      - name: Test
+        run: swift test --package-path macos
+
+  windows-check:
+    name: Windows app
+    needs: changes
+    if: github.event_name == 'pull_request' && needs.changes.outputs.code == 'true'
+    runs-on: windows-2025
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Test
+        run: dotnet test windows/FlockKit.Tests
+
+      # FlockScreenshots compiles the app's sources with SCREENSHOTS defined, so a change can break
+      # it without touching it.
+      - name: Build
+        run: |
+          dotnet build windows/FlockTray -c Release -p:Platform=x64
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          dotnet build windows/FlockScreenshots -c Release -p:Platform=x64
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
   macos:
     name: macOS (Apple silicon)

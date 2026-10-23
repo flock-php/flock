@@ -192,12 +192,15 @@ public struct SiteChange: Encodable, Sendable {
     public var node: String?
     public var server: String?
     public var worker: String?
+    /// The document root on this machine, relative to the project ("" lets the project or detection decide).
+    public var root: String?
 
-    public init(secured: Bool? = nil, php: String? = nil, node: String? = nil, server: String? = nil, worker: String? = nil) {
+    public init(secured: Bool? = nil, php: String? = nil, node: String? = nil, server: String? = nil, worker: String? = nil, root: String? = nil) {
         self.secured = secured
         self.php = php
         self.node = node
         self.server = server
         self.worker = worker
+        self.root = root
     }
 }

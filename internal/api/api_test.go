@@ -21,6 +21,7 @@ import (
 	"flock/internal/php"
 	"flock/internal/phpext"
 	"flock/internal/postgres"
+	"flock/internal/share"
 )
 
 // fakeBackend applies mutations to config.json in root, like the daemon, without running services.
@@ -37,11 +38,13 @@ type fakeBackend struct {
 
 func (f *fakeBackend) PHP() *php.Manager { return f.php }
 
-func (f *fakeBackend) PostgresVersions() *postgres.Manager { return f.pg }
-func (f *fakeBackend) Catalog() *catalog.Manager           { return f.catalog }
-func (f *fakeBackend) FrankenPHP() *frankenphp.Manager     { return f.frankenphp }
-func (f *fakeBackend) Binaries() *binaries.Catalog         { return f.binaries }
-func (f *fakeBackend) RestartSite(string) error            { return nil }
+func (f *fakeBackend) PostgresVersions() *postgres.Manager     { return f.pg }
+func (f *fakeBackend) Catalog() *catalog.Manager               { return f.catalog }
+func (f *fakeBackend) FrankenPHP() *frankenphp.Manager         { return f.frankenphp }
+func (f *fakeBackend) Binaries() *binaries.Catalog             { return f.binaries }
+func (f *fakeBackend) RestartSite(string) error                { return nil }
+func (f *fakeBackend) Shares() *share.Manager                  { return nil }
+func (f *fakeBackend) StartShare(string, []string, bool) error { return nil }
 
 func (f *fakeBackend) Status() Status      { return Status{Sites: f.sites} }
 func (f *fakeBackend) Reload() error       { return nil }
@@ -194,9 +197,14 @@ func TestDumpsAreAttributedToSites(t *testing.T) {
 	_ = os.MkdirAll(filepath.Dir(dumps.File(root)), 0o700)
 	lines := `{"id":"1","time":"2026-10-13T12:00:00.000+00:00","source":{"file":"/code/shop/app/Http/Kernel.php","line":3,"name":"Kernel.php"},"text":"a","html":""}
 {"id":"2","time":"2026-10-13T12:00:01.000+00:00","request":{"method":"GET","uri":"https://api.blog.test/x"},"text":"b","html":""}
+{"id":"3","time":"2026-10-13T12:00:02.000+00:00","request":{"method":"GET","uri":"https://x.accounts.blog.test/y"},"text":"c","html":""}
 `
 	_ = os.WriteFile(dumps.File(root), []byte(lines), 0o600)
-	b := &fakeBackend{root: root, sites: []SiteStatus{{Name: "shop", Domain: "shop.test", Path: "/code/shop"}, {Name: "blog", Domain: "blog.test", Path: "/code/blog"}}}
+	b := &fakeBackend{root: root, sites: []SiteStatus{
+		{Name: "shop", Domain: "shop.test", Path: "/code/shop"},
+		{Name: "blog", Domain: "blog.test", Path: "/code/blog"},
+		{Name: "accounts", Domain: "accounts.test", Path: "/code/accounts", Domains: []SiteDomain{{Entry: "accounts.blog.test", Host: "accounts.blog.test", Alias: true}}},
+	}}
 	srv := serve(t, b, "")
 
 	_, body := call(t, "GET", srv.URL+"/v1/dumps", "", "")
@@ -204,7 +212,7 @@ func TestDumpsAreAttributedToSites(t *testing.T) {
 	if err := json.Unmarshal([]byte(body), &entries); err != nil {
 		t.Fatal(err)
 	}
-	if len(entries) != 2 || entries[0].Site != "blog.test" || entries[1].Site != "shop.test" {
+	if len(entries) != 3 || entries[0].Site != "accounts.test" || entries[1].Site != "blog.test" || entries[2].Site != "shop.test" {
 		t.Fatalf("got %+v", entries)
 	}
 }
@@ -490,5 +498,62 @@ func TestSiteExtensionsAndRequiringOne(t *testing.T) {
 	}
 	if resp, _ := call(t, "GET", srv.URL+"/v1/sites/nope/extensions", "", ""); resp.StatusCode != http.StatusNotFound {
 		t.Fatalf("an unknown site: %d", resp.StatusCode)
+	}
+}
+
+func TestSiteDocumentRootEndpoints(t *testing.T) {
+	b := &fakeBackend{root: t.TempDir()}
+	srv := serve(t, b, "")
+	project := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(project, "src", "www"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if resp, body := call(t, "POST", srv.URL+"/v1/sites", "", `{"path":`+jsonString(project)+`,"name":"zoo"}`); resp.StatusCode != http.StatusOK {
+		t.Fatalf("link: %d %s", resp.StatusCode, body)
+	}
+
+	// On this machine: relative to the project, inside it, a folder.
+	if resp, body := call(t, "PATCH", srv.URL+"/v1/sites/zoo", "", `{"root":"./src/www/"}`); resp.StatusCode != http.StatusOK {
+		t.Fatalf("set root: %d %s", resp.StatusCode, body)
+	}
+	if site, _ := b.config(t).FindSite("zoo"); site.Root != "src/www" {
+		t.Fatalf("root not stored normalized: %+v", site)
+	}
+	for _, bad := range []string{"../elsewhere", "/etc", "missing"} {
+		if resp, _ := call(t, "PATCH", srv.URL+"/v1/sites/zoo", "", `{"root":`+jsonString(bad)+`}`); resp.StatusCode != http.StatusBadRequest {
+			t.Errorf("root %q must be rejected, got %d", bad, resp.StatusCode)
+		}
+	}
+
+	// Pinning writes the root in use into .flockrc and lifts this machine's.
+	if resp, body := call(t, "POST", srv.URL+"/v1/sites/zoo/pin", "", `{"tool":"root"}`); resp.StatusCode != http.StatusOK {
+		t.Fatalf("pin root: %d %s", resp.StatusCode, body)
+	}
+	if data, _ := os.ReadFile(filepath.Join(project, ".flockrc")); string(data) != "root=src/www\n" {
+		t.Fatalf(".flockrc: %q", data)
+	}
+	if site, _ := b.config(t).FindSite("zoo"); site.Root != "" {
+		t.Fatalf("the machine's root must be lifted: %+v", site)
+	}
+
+	if resp, body := call(t, "DELETE", srv.URL+"/v1/sites/zoo/pin/root", "", ""); resp.StatusCode != http.StatusOK {
+		t.Fatalf("unpin root: %d %s", resp.StatusCode, body)
+	}
+	if _, err := os.Stat(filepath.Join(project, ".flockrc")); !os.IsNotExist(err) {
+		t.Fatalf("an empty .flockrc must be removed: %v", err)
+	}
+	if resp, _ := call(t, "DELETE", srv.URL+"/v1/sites/zoo/pin/root", "", ""); resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("unpinning nothing must be rejected, got %d", resp.StatusCode)
+	}
+
+	// An empty root lets the project decide again.
+	if resp, _ := call(t, "PATCH", srv.URL+"/v1/sites/zoo", "", `{"root":"src/www"}`); resp.StatusCode != http.StatusOK {
+		t.Fatal("set root again")
+	}
+	if resp, _ := call(t, "PATCH", srv.URL+"/v1/sites/zoo", "", `{"root":""}`); resp.StatusCode != http.StatusOK {
+		t.Fatal("clear root")
+	}
+	if site, _ := b.config(t).FindSite("zoo"); site.Root != "" {
+		t.Fatalf("root not cleared: %+v", site)
 	}
 }
