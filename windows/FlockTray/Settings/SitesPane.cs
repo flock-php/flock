@@ -5,11 +5,12 @@ using Microsoft.UI.Xaml.Controls;
 namespace Flock.Tray;
 
 /// <summary>
-/// The sites in a list, and the selected one's details beside it, as in Services: its address and
-/// domains, its PHP and Node.js versions and what serves it. Each version picker offers the
-/// project's pinned version (or the default) first, then the installed versions, which isolate the
-/// site on this machine; the "…" menu pins a version into the project or removes it again. Each
-/// site runs on php-cgi or on FrankenPHP (classic, or Laravel Octane's worker mode).
+/// The sites in a list, and the selected one's details beside it, as in Services: its address,
+/// domains and document root, its PHP and Node.js versions and what serves it. Each version picker
+/// offers the project's pinned version (or the default) first, then the installed versions, which
+/// isolate the site on this machine; the document root picker works the same way. The "…" menu
+/// pins a version or the document root into the project or removes it again. Each site runs on
+/// php-cgi or on FrankenPHP (classic, or Laravel Octane's worker mode).
 /// </summary>
 internal sealed partial class SitesPane(SettingsWindow window, AppModel model) : Pane(window, model)
 {
@@ -114,6 +115,12 @@ internal sealed partial class SitesPane(SettingsWindow window, AppModel model) :
             ToolTipService.SetToolTip(warning, problem);
             marks.Children.Add(warning);
         }
+        if (site.IsShared)
+        {
+            var shared = Ui.Badge("Shared");
+            ToolTipService.SetToolTip(shared, $"Shared at {site.Share!.Url}");
+            marks.Children.Add(shared);
+        }
         if (site.Secured)
         {
             var secured = Ui.Icon(Ui.GlyphLock, 12, Ui.SecondaryText);
@@ -134,9 +141,10 @@ internal sealed partial class SitesPane(SettingsWindow window, AppModel model) :
         return card;
     }
 
-    /// <summary>What a site's list row warns about: the site, one of its domains, or its FrankenPHP.</summary>
+    /// <summary>What a site's list row warns about: the site, its document root, one of its domains, or its FrankenPHP.</summary>
     private static string? Problem(Status.Site site) =>
         site.Problem
+        ?? site.Notice
         ?? site.Domains.Select(d => d.Problem is { } p ? $"{d.Host}: {p}" : null).FirstOrDefault(p => p is not null)
         ?? (site.IsFrankenPhp && site.FrankenPhp is { IsRunning: false, IsInstalling: false, Problem.Length: > 0 } f ? f.Problem : null);
 
@@ -219,7 +227,14 @@ internal sealed partial class SitesPane(SettingsWindow window, AppModel model) :
         {
             siteSection.Children.Add(Ui.Caption($"Subdomains only work when you add them here: {dns.WildcardProblem}.", Ui.Caution));
         }
+        siteSection.Children.Add(Field("Root", RootPicker(site)));
+        foreach (var hint in RootHints(site))
+        {
+            siteSection.Children.Add(hint);
+        }
+        siteSection.Children.Add(Ui.Caption("The folder Flock serves the site from. One picked here applies on this machine only; pin it (…) to write it into .flockrc for everyone.", Ui.TertiaryText));
         panel.Children.Add(siteSection);
+        panel.Children.Add(Share(site));
 
         // Versions: PHP and Node.js, with what pins or isolates them.
         var php = Picker("PHP", site.Php, site.PhpSource, site.PhpPinned, site.PhpFile, config?.DefaultPhp ?? "",
@@ -471,6 +486,98 @@ internal sealed partial class SitesPane(SettingsWindow window, AppModel model) :
         return picker;
     }
 
+    /// <summary>
+    /// The document root picker: first the project's (.flockrc) or the detected one, which follow
+    /// the project; then the folders with an index.php Flock found and the one set here, which set
+    /// the root on this machine; then any folder in the project.
+    /// </summary>
+    private ComboBox RootPicker(Status.Site site)
+    {
+        var follow = site.RootPinnedHere ? $"Use .flockrc ({RootLabel(site.RootPinned)})"
+            : site.RootSource != Status.VersionSource.Default ? "Automatic"
+            : site.RootState == Status.DocumentRootState.NotFound ? "Automatic (none found)"
+            : $"Automatic ({RootLabel(site.Root)})";
+        var folders = site.RootSuggestions.ToList();
+        if (site.RootSource == Status.VersionSource.Isolated && !folders.Contains(site.Root))
+        {
+            folders.Add(site.Root);
+        }
+
+        var picker = new ComboBox { MinWidth = 190 };
+        picker.Items.Add(follow);
+        foreach (var folder in folders)
+        {
+            picker.Items.Add(RootLabel(folder));
+        }
+        picker.Items.Add("Choose Folder…");
+        picker.SelectedIndex = site.RootSource == Status.VersionSource.Isolated ? folders.IndexOf(site.Root) + 1 : 0;
+        var selected = picker.SelectedIndex;
+        picker.SelectionChanged += (_, _) =>
+        {
+            if (picker.SelectedIndex < 0 || picker.SelectedIndex == selected)
+            {
+                return;
+            }
+            if (picker.SelectedIndex == picker.Items.Count - 1)
+            {
+                picker.SelectedIndex = selected;
+                _ = ChooseRoot(site);
+                return;
+            }
+            var root = picker.SelectedIndex == 0 ? "" : folders[picker.SelectedIndex - 1];
+            _ = Perform(c => c.UpdateSiteAsync(site.Name, new SiteChange(Root: root)));
+        };
+        Ui.AutomationName(picker, "Document root");
+        ToolTipService.SetToolTip(picker, site.RootSource switch
+        {
+            Status.VersionSource.Isolated => $"{RootLabel(site.Root)} is set for this site on this machine.",
+            Status.VersionSource.Project => $"The project sets {RootLabel(site.Root)} in .flockrc.",
+            _ => "Flock serves the first of public\\, www\\, web\\ and webroot\\ with an index.php, else the project folder.",
+        });
+        return picker;
+    }
+
+    /// <summary>Asks for a folder in the project and serves the site from it on this machine.</summary>
+    private async Task ChooseRoot(Status.Site site)
+    {
+        if (await Window.PickFolder() is not { } folder)
+        {
+            return;
+        }
+        if (site.RootFor(folder) is not { } root)
+        {
+            Store.Error = $"{folder} isn't in {site.Path}. The document root must be a folder in the project.";
+            Rerender();
+            return;
+        }
+        await Perform(c => c.UpdateSiteAsync(site.Name, new SiteChange(Root: root)));
+    }
+
+    /// <summary>Why the site isn't served from its root, and a root set here over the project's.</summary>
+    private IEnumerable<UIElement> RootHints(Status.Site site)
+    {
+        if (site.RootState == Status.DocumentRootState.NotFound)
+        {
+            yield return Hint("No public\\, www\\, web\\ or webroot\\ with an index.php was found, so Flock shows a page instead of the site. Choose the folder with the app's index.php.", null, null);
+        }
+        else if (site.RootState == Status.DocumentRootState.Missing)
+        {
+            yield return Hint($"Choose the folder with the app's index.php, or create {site.Root}.", null, null);
+        }
+        else if (site.RootState == Status.DocumentRootState.Empty)
+        {
+            yield return Ui.Caption($"{RootLabel(site.Root)} has no index.php or index.html, so Flock shows a page instead of the site until it does.", Ui.TertiaryText);
+        }
+        else if (site.RootSource == Status.VersionSource.Isolated && site.RootPinnedHere)
+        {
+            yield return Hint($"{RootLabel(site.Root)} is set here; the project sets {RootLabel(site.RootPinned)} in .flockrc.",
+                "Use .flockrc", () => _ = Perform(c => c.UpdateSiteAsync(site.Name, new SiteChange(Root: ""))));
+        }
+    }
+
+    /// <summary>"src/www", or "Project folder" for ".".</summary>
+    private static string RootLabel(string root) => root == "." ? "Project folder" : root;
+
     /// <summary>Notes when versions disagree: an isolation over the project's pin, .flockrc over .nvmrc.</summary>
     private IEnumerable<UIElement> Hints(Status.Site site)
     {
@@ -673,7 +780,12 @@ internal sealed partial class SitesPane(SettingsWindow window, AppModel model) :
             menu.Items.Add(Item($"Pin Node {nodeMajor} to Project…", () => _ = Pin(site, "node", nodeMajor,
                 $"Writes {nodeMajor} to {nodeFile} in {site.Path}. Commit it, and Flock, nvm and other Node tools use Node {nodeMajor} for this project.")));
         }
-        if (site.PhpPinnedHere || site.NodePinnedHere)
+        if ((site.RootState is "" or Status.DocumentRootState.Empty) && site.RootSource != Status.VersionSource.Project)
+        {
+            menu.Items.Add(Item($"Pin Document Root ({RootLabel(site.Root)}) to Project…", () => _ = Pin(site, "root", site.Root,
+                $"Writes root={site.Root} to .flockrc in {site.Path}. Commit it, and everyone using Flock on this project serves it from {RootLabel(site.Root)}.")));
+        }
+        if (site.PhpPinnedHere || site.NodePinnedHere || site.RootPinnedHere)
         {
             if (menu.Items.Count > 0)
             {
@@ -689,9 +801,14 @@ internal sealed partial class SitesPane(SettingsWindow window, AppModel model) :
                 menu.Items.Add(Item($"Unpin Node ({System.IO.Path.GetFileName(site.NodeFile)})…", () => _ = Unpin(site, "node",
                     $"Removes the Node.js version from .flockrc and deletes .nvmrc / .node-version in {site.Path}. The site then uses Flock's default Node.js.")));
             }
+            if (site.RootPinnedHere)
+            {
+                menu.Items.Add(Item("Unpin Document Root (.flockrc)…", () => _ = Unpin(site, "root",
+                    $"Removes root= from .flockrc in {site.Path}. Flock then finds the document root itself.")));
+            }
         }
 
-        var button = Ui.IconButton(Ui.GlyphMore, "Pin versions to the project", () => { });
+        var button = Ui.IconButton(Ui.GlyphMore, "Pin versions and the document root to the project", () => { });
         button.Flyout = menu;
         button.IsEnabled = menu.Items.Count > 0;
         return button;
@@ -707,8 +824,8 @@ internal sealed partial class SitesPane(SettingsWindow window, AppModel model) :
 
     private async Task Pin(Status.Site site, string tool, string version, string details)
     {
-        var name = tool == "php" ? "PHP" : "Node";
-        if (await Window.Confirm($"Pin {name} {version} to {site.Name}?", details + " This changes a file in your project.", "Pin"))
+        var shown = tool == "root" ? RootLabel(version) : version;
+        if (await Window.Confirm($"Pin {ToolName(tool)} {shown} to {site.Name}?", details + " This changes a file in your project.", "Pin"))
         {
             await Perform(c => c.PinAsync(site.Name, tool, version));
         }
@@ -716,12 +833,18 @@ internal sealed partial class SitesPane(SettingsWindow window, AppModel model) :
 
     private async Task Unpin(Status.Site site, string tool, string details)
     {
-        var name = tool == "php" ? "PHP" : "Node";
-        if (await Window.Confirm($"Unpin {name} from {site.Name}?", details + " This changes files in your project.", "Unpin"))
+        if (await Window.Confirm($"Unpin {ToolName(tool)} from {site.Name}?", details + " This changes files in your project.", "Unpin"))
         {
             await Perform(c => c.UnpinAsync(site.Name, tool));
         }
     }
+
+    private static string ToolName(string tool) => tool switch
+    {
+        "php" => "PHP",
+        "root" => "the document root",
+        _ => "Node",
+    };
 
     private static MenuFlyoutItem Item(string text, Action click)
     {

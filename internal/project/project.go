@@ -1,5 +1,5 @@
 // Package project reads and writes the PHP and Node.js versions a project pins, and decides which
-// version a site or directory uses:
+// version a site or directory uses (the document root follows the same order, see RootFor):
 //
 //  1. isolated: set for the site in Flock (`flock isolate`), on this machine only;
 //  2. project: pinned in the project (`flock pin`), committed with it: .flockrc for PHP and Node,
@@ -21,7 +21,7 @@ import (
 	"flock/internal/php"
 )
 
-// RC is Flock's own project file: "php=8.4" and "node=22" lines, # comments.
+// RC is Flock's own project file: "php=8.4", "node=22" and "root=src/www" lines, # comments.
 const RC = ".flockrc"
 
 // Tools a version can be isolated for or pinned.
@@ -216,10 +216,13 @@ func readKey(path, key string) (string, error) {
 	}
 	for _, line := range strings.Split(string(data), "\n") {
 		if k, v, ok := parseLine(line); ok && k == key {
-			if key == Node {
+			switch key {
+			case Node:
 				return node.ValidSpec(v), nil
+			case PHP:
+				return php.MinorOf(v), nil // "8.4.1" pins 8.4
 			}
-			return php.MinorOf(v), nil // "8.4.1" pins 8.4
+			return v, nil
 		}
 	}
 	return "", nil

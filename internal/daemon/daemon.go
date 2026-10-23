@@ -36,6 +36,7 @@ import (
 	"flock/internal/ports"
 	"flock/internal/postgres"
 	"flock/internal/project"
+	"flock/internal/share"
 	"flock/internal/supervisor"
 	"flock/internal/web"
 	"flock/internal/xdebug"
@@ -77,6 +78,8 @@ type daemon struct {
 	// pg manages the PostgreSQL versions, catalog the other services (MySQL, Valkey, Meilisearch, ...).
 	pg      *postgres.Manager
 	catalog *catalog.Manager
+	// shares are the sites shared through tunnels (`flock share`); never kept across restarts.
+	shares *share.Manager
 
 	// leaves issues certificates for deep subdomains, aliases and unknown names during handshakes.
 	leaves *certs.Leaves
@@ -97,6 +100,10 @@ type daemon struct {
 }
 
 func (d *daemon) shutdown() {
+	// First, while reloads still work: stopping a share reloads the web server.
+	if d.shares != nil {
+		d.shares.StopAll()
+	}
 	d.reloadMu.Lock()
 	defer d.reloadMu.Unlock()
 
@@ -279,6 +286,12 @@ func Run(ctx context.Context, cfg Config) error {
 	go d.frankenphp.Run(ctx)
 	d.catalog = catalog.NewManager(cfg.Root, catalog.Kinds(runtime.GOOS), d.binaries, d.Mutate)
 	go d.catalog.Run(ctx)
+	d.shares = share.NewManager(cfg.Root, d.binaries)
+	d.shares.Changed = func() {
+		if err := d.reload(); err != nil {
+			d.setWarnings([]string{err.Error()})
+		}
+	}
 
 	// A broken config or a busy port must not kill the daemon: launchd would restart it in a loop
 	// and `flock status` could not explain what is wrong. Problems become warnings instead.
@@ -373,8 +386,8 @@ loop:
 var projectWatchInterval = 3 * time.Second
 
 // projectFiles fingerprints the sites, so folders added to or removed from a parked path count,
-// and their project files (.flockrc, .nvmrc, .node-version, also in parent directories) by size
-// and modification time.
+// their project files (.flockrc, .nvmrc, .node-version, also in parent directories) by size and
+// modification time, and which of the files that decide their document root exist.
 func (d *daemon) projectFiles() string {
 	d.mu.Lock()
 	cfg := d.cfg
@@ -393,6 +406,11 @@ func (d *daemon) projectFiles() string {
 			seen[file] = true
 			if info, err := os.Stat(file); err == nil {
 				fmt.Fprintf(&b, "%s %d %d\n", file, info.Size(), info.ModTime().UnixNano())
+			}
+		}
+		for _, file := range project.RootFiles(&site) {
+			if _, err := os.Stat(file); err == nil {
+				fmt.Fprintf(&b, "%s\n", file)
 			}
 		}
 	}
@@ -495,7 +513,8 @@ func (d *daemon) reload() error {
 	var (
 		statuses    []api.SiteStatus
 		webSites    []web.Site
-		waiting     []web.Waiting // sites whose PHP isn't installed
+		waiting     []web.Waiting  // sites whose PHP isn't installed
+		rootless    []web.Rootless // sites without a document root
 		domains     []string
 		keep        = map[string]bool{}
 		pools       = map[string][]string{} // version → FastCGI upstreams
@@ -553,6 +572,10 @@ func (d *daemon) reload() error {
 		return debugPools[version]
 	}
 
+	// shareable are the served sites a share can serve: their document root and PHP version.
+	type shareable struct{ root, version string }
+	shareables := map[string]shareable{}
+
 	sites := cfg.AllSites()
 	extras := cfg.DomainsBySite(sites)
 	for _, site := range sites {
@@ -586,6 +609,15 @@ func (d *daemon) reload() error {
 			status.Domains = append(status.Domains, sd)
 		}
 
+		root := project.RootFor(&site)
+		status.Root, status.RootSource, status.RootPinned, status.RootFile, status.RootState = root.Rel, root.Source, root.Pinned, root.File, root.State
+		if root.State != "" {
+			status.RootSuggestions = project.SuggestRoots(site.Path)
+			if root.State == project.RootNotFound {
+				status.Notice = "No document root found"
+			}
+		}
+
 		if version == "" || !contains(installed, version) {
 			// Its names get a page that says what's missing instead of the site (see web.Waiting).
 			w := d.waitingFor(site, phpVersion, domain, aliases)
@@ -597,7 +629,24 @@ func (d *daemon) reload() error {
 		}
 		status.Problem = extensionsProblem(d.root, site.Path, version)
 
-		ws := web.Site{Domain: domain, Aliases: aliases, Root: web.DocumentRoot(site.Path)}
+		if root.State != "" {
+			// Its names get a page that says why and suggests roots instead of the site (see web.Rootless).
+			r := web.Rootless{Domain: domain, Aliases: aliases, Name: site.Name, State: root.State, Root: root.Rel,
+				Set: root.Source != project.Default, Suggestions: status.RootSuggestions}
+			if root.Source == project.Project {
+				r.File = filepath.Base(root.File)
+			}
+			if root.State == project.RootMissing {
+				status.Problem = rootProblem(root)
+			}
+			rootless = append(rootless, r)
+			status.URL = scheme + "://" + domain + portSuffix(scheme, cfg)
+			domains = append(append(domains, domain), served...)
+			statuses = append(statuses, status)
+			continue
+		}
+
+		ws := web.Site{Domain: domain, Aliases: aliases, Root: root.Dir}
 		if cfg.Xdebug {
 			ws.DebugFPM = debugPool(version)
 		}
@@ -637,10 +686,34 @@ func (d *daemon) reload() error {
 			}
 		}
 		status.URL = scheme + "://" + domain + portSuffix(scheme, cfg)
+		shareables[site.Name] = shareable{root: ws.Root, version: version}
 
 		webSites = append(webSites, ws)
 		domains = append(append(domains, domain), served...)
 		statuses = append(statuses, status)
+	}
+
+	// Shares always go through the version's normal FastCGI pool, also for FrankenPHP sites: only
+	// FastCGI takes the per-request settings that keep a share safe (see web.Share).
+	var shares []web.Share
+	if d.shares != nil {
+		keep := map[string]bool{}
+		for name := range shareables {
+			keep[name] = true
+		}
+		d.shares.Retain(keep)
+		for _, s := range d.shares.Serving() {
+			info, ok := shareables[s.Site]
+			if !ok {
+				continue
+			}
+			upstreams, err := pool(info.version)
+			if err != nil {
+				return err
+			}
+			site, _ := cfg.FindSite(s.Site)
+			shares = append(shares, web.Share{Port: s.Port, Root: info.root, Public: filepath.Join(site.Path, "public"), FPM: upstreams, Debug: s.Debug})
+		}
 	}
 
 	if runtime.GOOS == "windows" {
@@ -714,7 +787,7 @@ func (d *daemon) reload() error {
 
 	listen, listenProblems := listenAddresses(cfg)
 	warnings = append(warnings, listenProblems...)
-	if err := d.applyWeb(cfg, bind, listen, webSites, waiting, ca); err != nil {
+	if err := d.applyWeb(cfg, bind, listen, webSites, waiting, rootless, shares, ca); err != nil {
 		warnings = append(warnings, "web: "+err.Error())
 	}
 
@@ -732,7 +805,7 @@ func (d *daemon) reload() error {
 
 // applyWeb (re)configures Caddy. Before the first successful start it checks the ports itself,
 // because Caddy's own error does not say who holds them.
-func (d *daemon) applyWeb(cfg *config.Config, bind string, listen []string, sites []web.Site, waiting []web.Waiting, ca *certs.CA) error {
+func (d *daemon) applyWeb(cfg *config.Config, bind string, listen []string, sites []web.Site, waiting []web.Waiting, rootless []web.Rootless, shares []web.Share, ca *certs.CA) error {
 	owned := map[int]bool{}
 	if d.webUp && d.cfg != nil {
 		owned[d.cfg.Ports.HTTP], owned[d.cfg.Ports.HTTPS] = true, true
@@ -758,6 +831,8 @@ func (d *daemon) applyWeb(cfg *config.Config, bind string, listen []string, site
 		Listen:     listen,
 		Sites:      sites,
 		Waiting:    waiting,
+		Rootless:   rootless,
+		Shares:     shares,
 		TLD:        cfg.TLD,
 		Issue:      func(name string) (*tls.Certificate, error) { return d.leaves.Get(ca, name) },
 	})
@@ -785,7 +860,14 @@ func (d *daemon) postgresSpec(cfg *config.Config, id string) (supervisor.Spec, e
 	if err := postgres.InitDB(bin, data); err != nil {
 		return supervisor.Spec{}, err
 	}
-	return postgres.Spec(bin, data, filepath.Join(d.root, "run"), filepath.Join(d.root, "log", "postgres.log"), cfg.Ports.Postgres), nil
+	run := "" // Windows has no unix sockets: clients connect over TCP
+	if runtime.GOOS != "windows" {
+		var err error
+		if run, err = paths.EnsureRun(d.root); err != nil {
+			return supervisor.Spec{}, err
+		}
+	}
+	return postgres.Spec(bin, data, run, filepath.Join(d.root, "log", "postgres.log"), cfg.Ports.Postgres), nil
 }
 
 // PostgresVersions implements api.Backend.
@@ -861,7 +943,7 @@ func (d *daemon) Status() api.Status {
 		Version:   d.version,
 		PID:       os.Getpid(),
 		StartedAt: d.startedAt,
-		Sites:     withBoost(d.liveSites()),
+		Sites:     d.withShares(withBoost(d.liveSites())),
 		Processes: d.procs.Status(),
 		Warnings:  d.warnings,
 	}

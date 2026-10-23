@@ -52,6 +52,8 @@ foreach (var (theme, mark) in trayMarks)
 }
 // The app icon in the windows (title bar, Setup, About): up to 72 points at 300%.
 File.WriteAllBytes(Path.Combine(windowsAssets, "AppIcon.png"), Png(Render(appIcon, 256, 256, 0)));
+// The same tile in the middle of a share's QR code (internal/share/qr.go).
+File.WriteAllBytes(Path.Combine(root, "internal", "share", "logo.png"), Png(Render(appIcon, 256, 256, 0)));
 
 // macOS app icon: the tile on Apple's icon grid (824 of 1024 points, with a soft shadow).
 WriteIcns(Path.Combine(macResources, "AppIcon.icns"), size =>

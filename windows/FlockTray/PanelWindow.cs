@@ -120,8 +120,8 @@ internal sealed partial class PanelWindow : Window
         }
         // Before the window has been shown once, layout may not be measurable yet.
         var height = scroller.Content is UIElement measured && measured.DesiredSize.Height > 100 ? measured.DesiredSize.Height + 2 : 560;
-        var w = (int)(Width * scale);
         // The size set below includes the window border, which the content doesn't get.
+        var w = (int)(Width * scale) + AppWindow.Size.Width - AppWindow.ClientSize.Width;
         var frame = AppWindow.Size.Height - AppWindow.ClientSize.Height;
         var max = (int)(area.Height * 0.85);
         var needed = (int)Math.Ceiling(height * scale) + frame;
@@ -148,7 +148,8 @@ internal sealed partial class PanelWindow : Window
     private void Render()
     {
         dirty = false;
-        var root = new StackPanel { Spacing = 12, Padding = new Thickness(16), Width = Width };
+        // Fills the window's client area rather than a fixed width, so the right padding matches the left.
+        var root = new StackPanel { Spacing = 12, Padding = new Thickness(16) };
         root.Children.Add(Header());
         if (model.Updater.Available is { } update)
         {
@@ -332,6 +333,10 @@ internal sealed partial class PanelWindow : Window
         {
             name.Children.Add(Ui.Caption(problem, Ui.Critical));
         }
+        else if (site.Notice is { } notice)
+        {
+            name.Children.Add(Ui.Row(4, Ui.Icon(Ui.GlyphWarning, 10, Ui.Caution), Ui.Caption(notice, Ui.Caution)));
+        }
         var icon = Ui.Icon(site.Secured ? Ui.GlyphLock : Ui.GlyphGlobe, 12, site.Secured ? Ui.Success : Ui.SecondaryText);
         UIElement php = Ui.Caption($"PHP {site.Php}", wrap: false);
         if (site.Debugging)
@@ -343,6 +348,12 @@ internal sealed partial class PanelWindow : Window
         if (site.IsFrankenPhp)
         {
             php = Ui.Row(6, Ui.Badge(site.Worker == Status.SiteServer.Octane ? "Octane" : "FrankenPHP", Ui.Tone.Neutral), php);
+        }
+        if (site.IsShared)
+        {
+            var shared = Ui.Badge("Shared");
+            ToolTipService.SetToolTip(shared, $"Shared at {site.Share!.Url}");
+            php = Ui.Row(6, shared, php);
         }
         var row = Ui.Spread(Ui.Row(8, icon, name), php);
 
@@ -356,7 +367,10 @@ internal sealed partial class PanelWindow : Window
             Padding = new Thickness(6, 4, 6, 4),
             IsEnabled = site.Url is not null,
         };
-        ToolTipService.SetToolTip(button, site.Url ?? site.Problem ?? site.Path);
+        // A site without a document root: say where it's fixed.
+        ToolTipService.SetToolTip(button, site.RootState == Status.DocumentRootState.NotFound
+            ? $"No public\\, www\\, web\\ or webroot\\ with an index.php in {site.Path}. Choose the document root in Settings → Sites."
+            : site.Url ?? site.Problem ?? site.Path);
         button.Click += (_, _) => AppModel.Open(site);
         return button;
     }

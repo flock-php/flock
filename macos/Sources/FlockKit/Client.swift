@@ -157,6 +157,24 @@ public actor FlockClient {
         try await decode(ExtensionReport.self, "POST", "/v1/sites/\(escape(site))/extensions/\(escape(name))/require", timeout: 300)
     }
 
+    // MARK: Sharing
+
+    /// Shares a site at a temporary public URL; allow limits it to these emails (or *@domain).
+    /// It returns at once: the share's progress shows on the site in `status()`.
+    public func startShare(site: String, allow: [String], debug: Bool = false) async throws -> ShareStatus {
+        struct Request: Encodable { let allow: [String]; let debug: Bool }
+        return try await decode(ShareStatus.self, "POST", "/v1/shares/\(escape(site))", body: try JSONEncoder().encode(Request(allow: allow, debug: debug)))
+    }
+
+    /// Builds a running share's assets again, so visitors see the latest changes when they reload.
+    public func rebuildShare(site: String) async throws -> ShareStatus {
+        try await decode(ShareStatus.self, "POST", "/v1/shares/\(escape(site))/rebuild")
+    }
+
+    public func stopShare(site: String) async throws {
+        _ = try await send("DELETE", "/v1/shares/\(escape(site))")
+    }
+
     // MARK: AI clients
 
     /// The AI clients Flock's MCP server can be registered with.

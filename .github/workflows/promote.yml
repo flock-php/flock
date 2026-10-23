@@ -24,7 +24,20 @@ permissions:
 jobs:
   promote:
     runs-on: ubuntu-latest
+    # RELEASE_PLEASE_TOKEN is a secret of this environment, so only main, develop and 1.x get it.
+    environment: release
     steps:
+      # Anyone with write access can start a workflow; only admins may release.
+      - name: Check who started it
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ACTOR: ${{ github.triggering_actor }}
+        run: |
+          permission=$(gh api "repos/$GITHUB_REPOSITORY/collaborators/$ACTOR/permission" --jq .permission)
+          if [ "$permission" != admin ]; then
+            echo "::error::only admins can run this, not $ACTOR ($permission)" && exit 1
+          fi
+
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0

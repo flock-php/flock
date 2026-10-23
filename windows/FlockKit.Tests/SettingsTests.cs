@@ -74,6 +74,7 @@ public class SettingsTests
         Assert.Equal("""{"default_php":"8.4"}""", FlockJson.Encode(new SettingsChange(DefaultPhp: "8.4")));
         Assert.Equal("""{"channel":"beta"}""", FlockJson.Encode(new SettingsChange(Channel: "beta")));
         Assert.Equal("""{"php":""}""", FlockJson.Encode(new SiteChange(Php: "")));
+        Assert.Equal("""{"root":"src/www"}""", FlockJson.Encode(new SiteChange(Root: "src/www")));
         Assert.Equal("""{"capture_off":["query"]}""", FlockJson.Encode(new SettingsChange(CaptureOff: ["query"])));
         Assert.Equal("""{"capture_off":[]}""", FlockJson.Encode(new SettingsChange(CaptureOff: [])));
         Assert.Equal("""{"dumps_in_page":true}""", FlockJson.Encode(new SettingsChange(DumpsInPage: true)));

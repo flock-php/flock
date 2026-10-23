@@ -79,6 +79,26 @@ public class ClientTests : IDisposable
     }
 
     [Fact]
+    public async Task StartsRebuildsAndStopsAShare()
+    {
+        var handler = new Handler(r => new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StringContent(r.Method == HttpMethod.Delete ? "[]" : """{"site":"my app","state":"building","allow":["bob@acme.com"]}"""),
+        });
+        using var client = new FlockClient(WriteApiJson("http://127.0.0.1:53531", "secret"), handler);
+
+        var started = await client.StartShareAsync("my app", ["bob@acme.com"], debug: true);
+        await client.RebuildShareAsync("my app");
+        Assert.Empty(await client.StopShareAsync("my app"));
+
+        Assert.Equal(Status.ShareState.Building, started.State);
+        Assert.Equal((HttpMethod.Post, "/v1/shares/my%20app"), (handler.Requests[0].Method, handler.Requests[0].RequestUri?.AbsolutePath));
+        Assert.Equal("""{"allow":["bob@acme.com"],"debug":true}""", handler.Bodies[0]);
+        Assert.Equal((HttpMethod.Post, "/v1/shares/my%20app/rebuild"), (handler.Requests[1].Method, handler.Requests[1].RequestUri?.AbsolutePath));
+        Assert.Equal((HttpMethod.Delete, "/v1/shares/my%20app"), (handler.Requests[2].Method, handler.Requests[2].RequestUri?.AbsolutePath));
+    }
+
+    [Fact]
     public async Task ReportsServerErrorsWithTheDaemonsMessage()
     {
         var handler = new Handler(_ => new HttpResponseMessage(HttpStatusCode.Conflict) { Content = new StringContent("""{"error":"PHP 8.5 is the default version"}""") });

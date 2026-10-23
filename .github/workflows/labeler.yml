@@ -1,0 +1,21 @@
+# Labels pull requests by the files they change, as .github/labeler.yml says: "documentation" for
+# PRs that change only docs/. Checked again on every push, and taken off once that's no longer true.
+name: Labeler
+
+on:
+  # pull_request_target, so the token can label PRs from forks. It never checks out or runs the
+  # PR's code; the labels come from .github/labeler.yml on the default branch.
+  pull_request_target:
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  label:
+    name: Label
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/labeler@v7
+        with:
+          sync-labels: true

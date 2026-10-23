@@ -173,6 +173,17 @@ type versionInfo struct {
 	Pinned string `json:"pinned,omitempty"` // what File pins, when an isolation wins over it
 }
 
+type rootInfo struct {
+	Path string `json:"path"` // relative to the project, "." for the project folder itself
+	// Source is "isolated" (set for the site in Flock, this machine only), "project" (root= in
+	// File, committed with the project) or "default" (detected: public/, www/, web/ or webroot/).
+	Source string `json:"source"`
+	File   string `json:"file,omitempty"`
+	// Suggestions are folders with an index.php, when Flock found no usable root and serves a page
+	// saying so instead of the site.
+	Suggestions []string `json:"suggestions,omitempty"`
+}
+
 type siteInfo struct {
 	Name      string      `json:"name"`
 	URL       string      `json:"url"`
@@ -181,6 +192,7 @@ type siteInfo struct {
 	HTTPS     bool        `json:"https"`
 	PHP       versionInfo `json:"php"`
 	Node      versionInfo `json:"node"`
+	Root      rootInfo    `json:"document_root"`
 	// Server is "fastcgi" (PHP-FPM; php-cgi on Windows) or "frankenphp"; Worker "octane" in worker mode.
 	Server     string `json:"server"`
 	Worker     string `json:"worker,omitempty"`
@@ -188,14 +200,16 @@ type siteInfo struct {
 	Octane     bool   `json:"octane_installed,omitempty"`
 	Parked     bool   `json:"parked,omitempty"`
 	Problem    string `json:"problem,omitempty"`
+	Notice     string `json:"notice,omitempty"`
 }
 
 func siteInfoOf(st api.SiteStatus) siteInfo {
 	info := siteInfo{
 		Name: st.Name, URL: st.URL, Path: st.Path, HTTPS: st.Secured, Server: st.Server, Worker: st.Worker,
-		Octane: st.OctaneAvailable, Parked: st.Parked, Problem: st.Problem,
+		Octane: st.OctaneAvailable, Parked: st.Parked, Problem: st.Problem, Notice: st.Notice,
 		PHP:  versionInfo{Version: st.PHP, Source: st.PHPSource, File: st.PHPFile},
 		Node: versionInfo{Version: st.Node, Source: st.NodeSource, File: st.NodeFile},
+		Root: rootInfo{Path: st.Root, Source: st.RootSource, File: st.RootFile, Suggestions: st.RootSuggestions},
 	}
 	if info.URL == "" {
 		scheme := "http"

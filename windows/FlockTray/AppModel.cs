@@ -320,6 +320,8 @@ public abstract class Store
 public sealed class MailStore(FlockClient client) : Store
 {
     public List<MailSummary> Messages { get; private set; } = [];
+    /// <summary>The mail service's .env lines (MAIL_MAILER=smtp, MAIL_PORT=…), empty until the daemon answers.</summary>
+    public string Env { get; private set; } = "";
     public bool IsVisible { get; set; }
 
     public Task RefreshAsync() => Guard(async () =>
@@ -328,6 +330,15 @@ public sealed class MailStore(FlockClient client) : Store
         if (!Json.Same(fresh, Messages))
         {
             Messages = fresh;
+        }
+        // The port can change in Settings, so it is read again with the mail. Without it the
+        // window only loses the .env hint, not the mail.
+        try
+        {
+            Env = (await client.ServicesAsync()).FirstOrDefault(s => s.Id == "mail")?.Env ?? Env;
+        }
+        catch (FlockException)
+        {
         }
     });
 

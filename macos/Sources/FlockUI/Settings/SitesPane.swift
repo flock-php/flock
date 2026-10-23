@@ -1,11 +1,13 @@
 import AppKit
 import FlockKit
 import SwiftUI
+import UniformTypeIdentifiers
 
-/// The sites in a list, and the selected one's details beside it, as in Services: its address and
-/// domains, its PHP and Node.js versions and what serves it. Each version picker offers the
-/// project's pinned version (or the default) first, then the installed versions, which isolate the
-/// site on this machine; the pin menu pins a version into the project or removes it again.
+/// The sites in a list, and the selected one's details beside it, as in Services: its address,
+/// domains and document root, its PHP and Node.js versions and what serves it. Each version picker
+/// offers the project's pinned version (or the default) first, then the installed versions, which
+/// isolate the site on this machine; the document root picker works the same way. The pin menu
+/// pins a version or the document root into the project or removes it again.
 struct SitesPane: View {
     @Environment(AppModel.self) private var model
     @Environment(\.openWindow) private var openWindow
@@ -31,6 +33,12 @@ struct SitesPane: View {
     private var restarting: String? {
         get { restartingState.wrappedValue }
         nonmutating set { restartingState.wrappedValue = newValue }
+    }
+    /// The site the Share sheet is open for.
+    private let sharingState = State<String?>(initialValue: nil)
+    private var sharing: String? {
+        get { sharingState.wrappedValue }
+        nonmutating set { sharingState.wrappedValue = newValue }
     }
 
     var body: some View {
@@ -93,6 +101,15 @@ struct SitesPane: View {
         .sheet(item: extensionsState.projectedValue) { site in
             SiteExtensionsSheet(site: site)
         }
+        .sheet(isPresented: Binding(get: { sharing != nil }, set: { if !$0 { sharing = nil } })) {
+            ShareSheet(site: sharing ?? "") { allow, debug in
+                let name = sharing ?? ""
+                sharing = nil
+                startShare(name, allow: allow, debug: debug)
+            } cancel: {
+                sharing = nil
+            }
+        }
         .confirmationDialog(confirm?.title ?? "", isPresented: Binding(get: { confirm != nil }, set: { if !$0 { confirm = nil } }), presenting: confirm) { action in
             Button(action.button, role: action.destructive ? .destructive : nil) {
                 Task { await store.perform { _ = try await action.run($0) } }
@@ -146,7 +163,8 @@ struct SitesPane: View {
         return "Wildcard subdomains don't work here (\(dns?.wildcardProblem ?? "")), so add each subdomain you use (tenant1, a.b). A full name adds an alias."
     }
 
-    /// A site in the list: its name and address, a lock when it is secured, a warning when something is wrong.
+    /// A site in the list: its name and address, a lock when it is secured, a badge while it is shared, a
+    /// warning when something is wrong.
     private func siteRow(_ site: Status.Site) -> some View {
         HStack(spacing: 6) {
             VStack(alignment: .leading, spacing: 1) {
@@ -159,6 +177,10 @@ struct SitesPane: View {
                 Image(systemName: "exclamationmark.triangle.fill").font(.caption).foregroundStyle(.orange)
                     .help(problem)
             }
+            if site.shared {
+                Badge(text: "Shared", color: .green)
+                    .help("Shared at \(site.share?.url ?? "")")
+            }
             if site.secured {
                 Image(systemName: "lock.fill").font(.caption).foregroundStyle(.secondary)
                     .help("Served over HTTPS")
@@ -168,10 +190,13 @@ struct SitesPane: View {
         .help(site.path)
     }
 
-    /// What a site's list row warns about: the site, one of its domains, or its FrankenPHP.
+    /// What a site's list row warns about: the site, its document root, one of its domains, or its FrankenPHP.
     private func problem(_ site: Status.Site) -> String? {
         if let problem = site.problem {
             return problem
+        }
+        if let notice = site.notice {
+            return notice
         }
         if let domain = site.domains.first(where: { $0.problem != nil }) {
             return "\(domain.host): \(domain.problem ?? "")"
@@ -275,6 +300,14 @@ struct SitesPane: View {
                         .font(.caption).foregroundStyle(.orange)
                         .fixedSize(horizontal: false, vertical: true)
                 }
+                field("Root") {
+                    rootPicker(site)
+                }
+                rootHints(site)
+            }
+
+            section("Share") {
+                shareFields(site)
             }
 
             section("Versions") {
@@ -353,6 +386,104 @@ struct SitesPane: View {
         .fixedSize()
         .help(help)
     }
+
+    /// The tag of the picker's "Choose Folder…" item, which no document root can be.
+    private static let chooseRootTag = "\u{0}choose"
+
+    /// The document root: the project's (.flockrc) or the detected one first, which follow the
+    /// project; then the folders with an index.php Flock found and the one set here, which set the
+    /// root on this machine; then any folder in the project. The tag "" means "follow".
+    private func rootPicker(_ site: Status.Site) -> some View {
+        let store = model.settings
+        let follow: String = switch (site.rootSource, site.rootPinnedHere, site.rootState) {
+        case (_, true, _): "Use .flockrc (\(rootLabel(site.rootPinned)))"
+        case (.default, _, .notFound): "Automatic (none found)"
+        case (.default, _, _): "Automatic (\(rootLabel(site.root)))"
+        default: "Automatic"
+        }
+        var folders = site.rootSuggestions
+        if site.rootSource == .isolated, !folders.contains(site.root) {
+            folders.append(site.root)
+        }
+        let help: String = switch site.rootSource {
+        case .isolated: "\(rootLabel(site.root)) is set for this site on this machine."
+        case .project: "The project sets \(rootLabel(site.root)) in .flockrc."
+        case .default: "Flock serves the first of public/, www/, web/ and webroot/ with an index.php, else the project folder."
+        }
+        return Picker("Document root", selection: Binding(
+            get: { site.rootSource == .isolated ? site.root : "" },
+            set: { root in
+                if root == Self.chooseRootTag {
+                    chooseRoot(site)
+                } else {
+                    Task { await store.perform { _ = try await $0.updateSite(site.name, SiteChange(root: root)) } }
+                }
+            }
+        )) {
+            Text(follow).tag("")
+            if !folders.isEmpty {
+                Divider()
+                ForEach(folders, id: \.self) { folder in
+                    Text(rootLabel(folder)).tag(folder)
+                }
+            }
+            Divider()
+            Text("Choose Folder…").tag(Self.chooseRootTag)
+        }
+        .labelsHidden()
+        .fixedSize()
+        .help(help)
+    }
+
+    /// Asks for a folder in the project and serves the site from it on this machine.
+    private func chooseRoot(_ site: Status.Site) {
+        let store = model.settings
+        let start = URL(fileURLWithPath: site.path)
+        guard let folder = SettingsStore.chooseDirectories(prompt: "Choose", multiple: false, in: start,
+                                                           message: "Choose the folder with the app's index.php in \(site.name).").first else { return }
+        guard let root = site.root(for: folder) else {
+            store.error = "\(folder.path) isn't in \(site.path). The document root must be a folder in the project."
+            return
+        }
+        Task { await store.perform { _ = try await $0.updateSite(site.name, SiteChange(root: root)) } }
+    }
+
+    /// Why the site isn't served from its root, and a root set here over the project's.
+    @ViewBuilder
+    private func rootHints(_ site: Status.Site) -> some View {
+        let store = model.settings
+        switch site.rootState {
+        case .notFound:
+            Text("No public/, www/, web/ or webroot/ with an index.php was found, so Flock shows a page instead of the site. Choose the folder with the app's index.php.")
+                .font(.caption).foregroundStyle(.orange)
+                .fixedSize(horizontal: false, vertical: true)
+        case .missing:
+            Text("Choose the folder with the app's index.php, or create \(site.root).")
+                .font(.caption).foregroundStyle(.orange)
+                .fixedSize(horizontal: false, vertical: true)
+        case .empty:
+            Text("\(rootLabel(site.root)) has no index.php or index.html, so Flock shows a page instead of the site until it does.")
+                .font(.caption).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        case .ok:
+            if site.rootSource == .isolated, site.rootPinnedHere {
+                HStack(spacing: 4) {
+                    Text("\(rootLabel(site.root)) is set here; the project sets \(rootLabel(site.rootPinned)) in .flockrc.")
+                    Button("Use .flockrc") {
+                        Task { await store.perform { _ = try await $0.updateSite(site.name, SiteChange(root: "")) } }
+                    }
+                    .buttonStyle(.link)
+                }
+                .font(.caption).foregroundStyle(.orange)
+            }
+        }
+        Text("The folder Flock serves the site from. One picked here applies on this machine only; pin it (\(Image(systemName: "pin"))) to write it into .flockrc for everyone.")
+            .font(.caption).foregroundStyle(.secondary)
+            .fixedSize(horizontal: false, vertical: true)
+    }
+
+    /// "src/www", or "Project folder" for ".".
+    private func rootLabel(_ root: String) -> String { root == "." ? "Project folder" : root }
 
     /// What runs the site's PHP (PHP-FPM or FrankenPHP); on FrankenPHP also its mode (classic or
     /// Laravel Octane), its state, Restart and its log.
@@ -510,6 +641,154 @@ struct SitesPane: View {
         }
     }
 
+    /// The site's share (`flock share`): Share… when there is none, then its progress, its URL with
+    /// a QR code while it runs, or why it failed.
+    @ViewBuilder
+    private func shareFields(_ site: Status.Site) -> some View {
+        let store = model.settings
+        let stop: () -> Void = { _ = Task { await store.perform { try await $0.stopShare(site: site.name) } } }
+        if let share = site.share {
+            switch share.state {
+            case .building, .starting, .unknown:
+                HStack(spacing: 8) {
+                    ProgressView().controlSize(.small)
+                    Text(share.state == .building ? "Building assets…" : "Starting the tunnel…")
+                    Spacer(minLength: 8)
+                    Button("Stop") { stop() }
+                }
+                .font(.callout)
+            case .running:
+                runningShare(site, share, stop: stop)
+            case .failed:
+                VStack(alignment: .leading, spacing: 8) {
+                    Label(share.error ?? "Sharing failed.", systemImage: "exclamationmark.triangle.fill")
+                        .foregroundStyle(.orange)
+                        .textSelection(.enabled)
+                        .fixedSize(horizontal: false, vertical: true)
+                    HStack(spacing: 8) {
+                        Button("Try Again") { startShare(site.name, allow: share.allow, debug: share.debug) }
+                        Button("Dismiss") { stop() }
+                    }
+                }
+                .font(.callout)
+            }
+        } else {
+            VStack(alignment: .leading, spacing: 6) {
+                Button("Share…") { sharing = site.name }
+                    .disabled(site.url == nil)
+                Text("Show the site at a temporary public address to preview work in progress, never for production. Visitors don't get debug pages, dumps or the dev tools.")
+                    .font(.caption).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
+
+    /// A running share: its URL, Copy, the QR code, when it ends, who may open it, and Rebuild / Stop.
+    private func runningShare(_ site: Status.Site, _ share: ShareStatus, stop: @escaping () -> Void) -> some View {
+        let store = model.settings
+        let url = share.url ?? ""
+        return VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 8) {
+                if let link = URL(string: url) {
+                    Link(url, destination: link)
+                        .font(.callout)
+                        .lineLimit(1).truncationMode(.middle)
+                        .textSelection(.enabled)
+                }
+                Button("Copy") {
+                    NSPasteboard.general.clearContents()
+                    NSPasteboard.general.setString(url, forType: .string)
+                }
+                .controlSize(.small)
+            }
+            if let data = share.qrPNG, let image = NSImage(data: data) {
+                Image(nsImage: image)
+                    .resizable()
+                    .interpolation(.high)
+                    .frame(width: 160, height: 160)
+                    .accessibilityLabel("QR code of \(url)")
+                    .help("Right-click to copy or save the QR code, or drag it out")
+                    .contextMenu {
+                        Button("Copy Image") { copyQR(data, image) }
+                        Button("Save Image…") { saveQR(data, site: site.name) }
+                    }
+                    .onDrag { qrProvider(data, site: site.name) }
+            }
+            VStack(alignment: .leading, spacing: 2) {
+                if let expires = share.expiresAt {
+                    Text("Ends at \(expires.formatted(date: .omitted, time: .shortened))")
+                }
+                if !share.allow.isEmpty {
+                    Text("Only for: \(share.allow.joined(separator: ", "))")
+                }
+                if share.debug {
+                    Text("Debug mode is on: visitors see stack traces")
+                }
+            }
+            .font(.caption).foregroundStyle(.secondary)
+            if let warning = share.warning {
+                Label(warning, systemImage: "exclamationmark.triangle.fill")
+                    .font(.caption).foregroundStyle(.orange)
+                    .textSelection(.enabled)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            if let error = share.rebuildError {
+                Label(error, systemImage: "exclamationmark.triangle.fill")
+                    .font(.caption).foregroundStyle(.orange)
+                    .textSelection(.enabled)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            HStack(spacing: 8) {
+                if share.canRebuild {
+                    Button(share.rebuilding ? "Rebuilding…" : "Rebuild Assets") {
+                        Task { await store.perform { _ = try await $0.rebuildShare(site: site.name) } }
+                    }
+                    .disabled(share.rebuilding)
+                    .help("Runs npm run build again, so visitors see your latest changes when they reload")
+                }
+                Button("Stop Sharing") { stop() }
+            }
+        }
+    }
+
+    private func startShare(_ site: String, allow: [String], debug: Bool) {
+        Task { await model.settings.perform { _ = try await $0.startShare(site: site, allow: allow, debug: debug) } }
+    }
+
+    /// Copies the share's QR code as PNG, and as TIFF for apps that only paste that.
+    private func copyQR(_ data: Data, _ image: NSImage) {
+        let item = NSPasteboardItem()
+        item.setData(data, forType: .png)
+        if let tiff = image.tiffRepresentation {
+            item.setData(tiff, forType: .tiff)
+        }
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.writeObjects([item])
+    }
+
+    /// Asks where to save the share's QR code, then writes the PNG there.
+    private func saveQR(_ data: Data, site: String) {
+        let panel = NSSavePanel()
+        panel.nameFieldStringValue = "\(site)-share-qr.png"
+        panel.allowedContentTypes = [.png]
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+
+        do {
+            try data.write(to: url)
+        } catch {
+            model.settings.error = error.localizedDescription
+        }
+    }
+
+    /// The QR code for dragging out: a .png file, so Finder, Mail and Slack all take it.
+    private func qrProvider(_ data: Data, site: String) -> NSItemProvider {
+        let file = FileManager.default.temporaryDirectory.appendingPathComponent("\(site)-share-qr.png")
+        if (try? data.write(to: file)) != nil, let provider = NSItemProvider(contentsOf: file) {
+            return provider
+        }
+        return NSItemProvider(item: data as NSData, typeIdentifier: UTType.png.identifier)
+    }
+
     /// The project uses Laravel Boost, and Flock's guideline is missing from it or outdated.
     private func boost(_ site: Status.Site) -> some View {
         VStack(alignment: .leading, spacing: 4) {
@@ -535,6 +814,7 @@ struct SitesPane: View {
         let nodeFile = site.nodePinnedHere ? fileName(site.nodeFile) : ".nvmrc"
         let canPinPHP = !(site.phpSource == .project && site.phpPinnedHere)
         let canPinNode = !nodeMajor.isEmpty && !(site.nodeSource == .project && site.nodePinnedHere)
+        let canPinRoot = (site.rootState == .ok || site.rootState == .empty) && site.rootSource != .project
 
         return Menu {
             if canPinPHP {
@@ -553,7 +833,15 @@ struct SitesPane: View {
                         run: { [name = site.name] client in try await client.pin(site: name, tool: "node", version: nodeMajor) })
                 }
             }
-            if site.phpPinnedHere || site.nodePinnedHere {
+            if canPinRoot {
+                Button("Pin Document Root (\(rootLabel(site.root))) to Project…") {
+                    confirm = ConfirmAction(
+                        title: "Pin the document root \(rootLabel(site.root)) to \(site.name)?", button: "Pin",
+                        message: "Writes root=\(site.root) to .flockrc in \(site.path). Commit it, and everyone using Flock on this project serves it from \(rootLabel(site.root)). This changes a file in your project.",
+                        run: { [name = site.name, root = site.root] client in try await client.pin(site: name, tool: "root", version: root) })
+                }
+            }
+            if site.phpPinnedHere || site.nodePinnedHere || site.rootPinnedHere {
                 Divider()
             }
             if site.phpPinnedHere {
@@ -572,14 +860,22 @@ struct SitesPane: View {
                         run: { [name = site.name] client in try await client.unpin(site: name, tool: "node") })
                 }
             }
+            if site.rootPinnedHere {
+                Button("Unpin Document Root (.flockrc)…") {
+                    confirm = ConfirmAction(
+                        title: "Unpin the document root from \(site.name)?", button: "Unpin",
+                        message: "Removes root= from .flockrc in \(site.path). Flock then finds the document root itself. This changes files in your project.",
+                        run: { [name = site.name] client in try await client.unpin(site: name, tool: "root") })
+                }
+            }
         } label: {
             Image(systemName: "pin")
         }
         .menuStyle(.borderlessButton)
         .menuIndicator(.hidden)
         .fixedSize()
-        .help("Pin versions to the project")
-        .disabled(!canPinPHP && !canPinNode && !site.phpPinnedHere && !site.nodePinnedHere)
+        .help("Pin versions and the document root to the project")
+        .disabled(!canPinPHP && !canPinNode && !canPinRoot && !site.phpPinnedHere && !site.nodePinnedHere && !site.rootPinnedHere)
     }
 
     private func fileName(_ path: String) -> String { URL(fileURLWithPath: path).lastPathComponent }
@@ -596,4 +892,43 @@ private struct ConfirmAction: Identifiable, Sendable {
     let message: String
     let run: @Sendable (FlockClient) async throws -> Status
     var id: String { title }
+}
+
+/// Asks who may open a share before it starts (anyone with the link, or only the emails listed) and
+/// whether visitors see the app's debug mode.
+private struct ShareSheet: View {
+    let site: String
+    let share: ([String], Bool) -> Void
+    let cancel: () -> Void
+    private let allowState = State<String>(initialValue: "")
+    private let debugState = State<Bool>(initialValue: false)
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Share \(site)").font(.headline)
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Only these people (optional)")
+                TextField("colleague@acme.com, *@client.com", text: allowState.projectedValue)
+                    .textFieldStyle(.roundedBorder)
+            }
+            Text("Anyone with the link can open the site unless you list email addresses — Cloudflare then emails them a code. The link stops working after 8 hours or when you stop sharing.")
+                .font(.caption).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            VStack(alignment: .leading, spacing: 4) {
+                Toggle("Show error details to visitors", isOn: debugState.projectedValue)
+                Text("Turns the app's debug mode on for this share, so visitors see stack traces. Only for people you trust.")
+                    .font(.caption).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            HStack {
+                Spacer()
+                Button("Cancel", role: .cancel) { cancel() }
+                    .keyboardShortcut(.cancelAction)
+                Button("Share") { share(ShareStatus.parseAllow(allowState.wrappedValue), debugState.wrappedValue) }
+                    .keyboardShortcut(.defaultAction)
+            }
+        }
+        .padding(20)
+        .frame(width: 420)
+    }
 }
