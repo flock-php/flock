@@ -384,3 +384,58 @@ jobs:
           name: flock-windows
           path: windows/dist/Flock-Setup-*-x64.exe
           if-no-files-found: error
+
+  # The flockphp .deb and .rpm per architecture (linux/build-packages.sh), installed, run and
+  # removed again on the distributions Flock supports. Unsigned packages: the repository signs
+  # its index, not the packages.
+  linux:
+    name: Linux (${{ matrix.arch }})
+    needs: version
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { arch: amd64, os: ubuntu-24.04 }
+          - { arch: arm64, os: ubuntu-24.04-arm }
+    runs-on: ${{ matrix.os }}
+    env:
+      VERSION: ${{ needs.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref || github.event.pull_request.head.sha }}
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+
+      - name: Build packages
+        run: linux/build-packages.sh "${{ matrix.arch }}"
+
+      - name: Install, run and remove
+        run: |
+          for image in ubuntu:24.04 ubuntu:26.04 fedora:latest; do
+            echo "::group::$image"
+            case "$image" in
+              fedora*) install='dnf install -y -q /pkgs/flockphp*.rpm'; remove='dnf remove -y -q flockphp' ;;
+              *) install='apt-get update -qq && DEBIAN_FRONTEND=noninteractive apt-get install -y -qq /pkgs/flockphp*.deb'
+                 remove='DEBIAN_FRONTEND=noninteractive apt-get remove -y -qq flockphp' ;;
+            esac
+            docker run --rm -v "$PWD/build/linux:/pkgs:ro" "$image" sh -ec "
+              $install
+              test -x /usr/lib/flockphp/flock && test -f /usr/lib/systemd/system/flock@.service
+              flk version
+              flk --help >/dev/null
+              $remove
+              ! test -e /usr/bin/flk
+            "
+            echo "::endgroup::"
+          done
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: flock-linux-${{ matrix.arch }}
+          path: |
+            build/linux/flockphp*.deb
+            build/linux/flockphp*.rpm
+          if-no-files-found: error

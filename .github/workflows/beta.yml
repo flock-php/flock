@@ -114,6 +114,8 @@ jobs:
           for f in "dist/Flock-$VERSION-macOS.dmg" "dist/Flock-Setup-$VERSION-x64.exe"; do
             [ -f "$f" ] || { echo "::error::$f missing"; exit 1; }
           done
+          # Linux: a .deb and an .rpm for each architecture (nfpm writes 1.2.0-beta.1 as 1.2.0~beta.1).
+          [ "$(ls dist/flockphp*.deb dist/flockphp*.rpm 2>/dev/null | wc -l)" -eq 4 ] || { echo "::error::Linux packages missing"; ls dist; exit 1; }
           gh release create "v$VERSION" --repo "$GITHUB_REPOSITORY" --target "$SHA" --prerelease --latest=false \
             --title "Flock $VERSION" --notes-file "$RUNNER_TEMP/notes.md" dist/*
 
