@@ -29,6 +29,9 @@ import (
 	"flock/internal/paths"
 )
 
+// serviceStarts says when the scheduled task starts the daemon.
+const serviceStarts = "at login"
+
 // On Windows, `flock install` sets up:
 //
 //   - <root>\bin\php.exe, composer.exe, ... — hard links to flock.exe, which acts as

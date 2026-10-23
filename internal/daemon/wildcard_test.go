@@ -30,7 +30,15 @@ func init() {
 	if err != nil {
 		panic(err)
 	}
-	dns.ResolverDir = dir
+	dns.ResolverDir, dns.ResolvedDir = dir, dir
+}
+
+// resolverFile is the file `flock install` writes to send the TLD to Flock, and its content for port.
+func resolverFile(tld string, port int) (string, string) {
+	if runtime.GOOS == "linux" {
+		return dns.ResolvedFile(), dns.ResolvedContent(tld, port)
+	}
+	return dns.ResolverFile(tld), dns.ResolverContent(port)
 }
 
 func waitStatus(t *testing.T, client *api.Client, ok func(api.Status) bool) api.Status {
@@ -118,14 +126,14 @@ func TestWildcardCheckReportsWhyItDoesNotWork(t *testing.T) {
 		return
 	}
 
-	// macOS: no resolver file for the test daemon's port.
+	// macOS and Linux: no resolver file for the test daemon's port.
 	if st.DNS.Wildcard || !strings.Contains(st.DNS.WildcardProblem, "flock install") {
 		t.Fatalf("want a missing /etc/resolver problem, got %+v", st.DNS)
 	}
 
 	// A resolver file for another port.
-	file := dns.ResolverFile(cfg.TLD)
-	if err := os.WriteFile(file, []byte(dns.ResolverContent(cfg.Ports.DNS+1)), 0o644); err != nil {
+	file, content := resolverFile(cfg.TLD, cfg.Ports.DNS+1)
+	if err := os.WriteFile(file, []byte(content), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { os.Remove(file) })
@@ -134,7 +142,8 @@ func TestWildcardCheckReportsWhyItDoesNotWork(t *testing.T) {
 	})
 
 	// The right file, but lookups don't arrive (a VPN overriding DNS), then they do.
-	if err := os.WriteFile(file, []byte(dns.ResolverContent(cfg.Ports.DNS)), 0o644); err != nil {
+	_, content = resolverFile(cfg.TLD, cfg.Ports.DNS)
+	if err := os.WriteFile(file, []byte(content), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	reloadUntil(t, client, func(st api.Status) bool {

@@ -2,18 +2,35 @@
 package ports
 
 import (
+	"errors"
 	"fmt"
 	"net"
 	"runtime"
 	"slices"
 	"strconv"
 	"strings"
+	"syscall"
+	"time"
 	"unicode"
 )
 
-// Free reports whether a TCP listener can be opened on host:port right now.
+// Free reports whether a TCP listener can be opened on host:port right now. A port this process
+// may not open (below 1024 on Linux, for anyone without CAP_NET_BIND_SERVICE) counts as free when
+// nothing accepts connections on it: the daemon, which has the capability, can open it.
 func Free(host string, port int) bool {
-	ln, err := net.Listen("tcp", net.JoinHostPort(host, strconv.Itoa(port)))
+	addr := net.JoinHostPort(host, strconv.Itoa(port))
+	ln, err := net.Listen("tcp", addr)
+	if errors.Is(err, syscall.EACCES) {
+		if host == "" {
+			addr = net.JoinHostPort("127.0.0.1", strconv.Itoa(port))
+		}
+		conn, err := net.DialTimeout("tcp", addr, time.Second)
+		if err != nil {
+			return true
+		}
+		_ = conn.Close()
+		return false
+	}
 	if err != nil {
 		return false
 	}

@@ -157,6 +157,6 @@ func wildcardNote(out io.Writer, dns api.DNSStatus) {
 		fmt.Fprintf(out, "\nWildcard DNS is off: %s.\nOnly site domains and extra domains resolve (through the hosts file) — add each subdomain you use.\n", dns.WildcardProblem)
 		return
 	}
-	// macOS has no hosts file fallback: every name under the TLD goes through /etc/resolver.
+	// macOS and Linux have no hosts file fallback: every name under the TLD goes through the resolver setup.
 	fmt.Fprintf(out, "\nDNS for .%s is not working: %s.\nNo .%s domain resolves to Flock until that is fixed.\n", dns.TLD, dns.WildcardProblem, dns.TLD)
 }

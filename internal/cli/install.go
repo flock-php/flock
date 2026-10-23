@@ -97,7 +97,7 @@ func newInstallCommand() *cobra.Command {
 			if err := installService(s.root, bin); err != nil {
 				return fmt.Errorf("install background service: %w", err)
 			}
-			cmd.Println("✓ daemon runs in the background and starts at login")
+			cmd.Println("✓ daemon runs in the background and starts " + serviceStarts)
 
 			if skipPrivileged || privilegedFirst {
 				return nil
