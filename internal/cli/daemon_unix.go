@@ -17,7 +17,7 @@ func redirectOutput(f *os.File) {
 	os.Stdout, os.Stderr = f, f
 }
 
-// runWatchdog is only needed on Windows; launchd keeps the daemon alive on macOS.
+// runWatchdog is only needed on Windows; launchd keeps the daemon alive on macOS, systemd on Linux.
 func runWatchdog(*cobra.Command, string) error {
-	return errors.New("--watchdog is only supported on Windows (launchd restarts the daemon on macOS)")
+	return errors.New("--watchdog is only supported on Windows (launchd or systemd restart the daemon elsewhere)")
 }

@@ -818,6 +818,11 @@ func (d *daemon) applyWeb(cfg *config.Config, bind string, sites []web.Site, wai
 		if !owned[port] && !ports.Free(bind, port) {
 			return errors.New(ports.Describe(port))
 		}
+		// On Linux the service gives the daemon the capability for ports below 1024; one started
+		// some other way (`flock daemon` in a terminal) lacks it.
+		if !owned[port] && runtime.GOOS == "linux" && ports.Denied(bind, port) {
+			return fmt.Errorf("the daemon may not use port %d: it needs the CAP_NET_BIND_SERVICE capability, which it has when systemd starts it — run `flock restart` instead of `flock daemon`", port)
+		}
 	}
 
 	err := web.Apply(web.Config{
