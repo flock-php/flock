@@ -81,7 +81,7 @@ jobs:
   publish:
     needs: [prepare, build]
     runs-on: ubuntu-latest
-    # SPARKLE_PRIVATE_KEY, which signs the macOS update.
+    # SPARKLE_PRIVATE_KEY, which signs the macOS update, and REPO_SIGNING_KEY, Linux's repository.
     environment: release
     permissions:
       contents: write
@@ -108,13 +108,20 @@ jobs:
           path: dist
           merge-multiple: true
 
+      - uses: ./.github/actions/linux-repo
+        with:
+          mode: sign
+          version: ${{ env.VERSION }}
+          signing-key: ${{ secrets.REPO_SIGNING_KEY }}
+          token: ${{ github.token }}
+
       - name: Release
         run: |
           go run ./tools/release notes > "$RUNNER_TEMP/notes.md"
           for f in "dist/Flock-$VERSION-macOS.dmg" "dist/Flock-Setup-$VERSION-x64.exe"; do
             [ -f "$f" ] || { echo "::error::$f missing"; exit 1; }
           done
-          # Linux: a .deb and an .rpm for each architecture (nfpm writes 1.2.0-beta.1 as 1.2.0~beta.1).
+          # Linux: a .deb and an .rpm for each architecture.
           [ "$(ls dist/flockphp*.deb dist/flockphp*.rpm 2>/dev/null | wc -l)" -eq 4 ] || { echo "::error::Linux packages missing"; ls dist; exit 1; }
           gh release create "v$VERSION" --repo "$GITHUB_REPOSITORY" --target "$SHA" --prerelease --latest=false \
             --title "Flock $VERSION" --notes-file "$RUNNER_TEMP/notes.md" dist/*
@@ -124,4 +131,11 @@ jobs:
           version: ${{ env.VERSION }}
           notes: ${{ runner.temp }}/notes.md
           private-key: ${{ secrets.SPARKLE_PRIVATE_KEY }}
+          token: ${{ github.token }}
+
+      - uses: ./.github/actions/linux-repo
+        with:
+          mode: index
+          version: ${{ env.VERSION }}
+          signing-key: ${{ secrets.REPO_SIGNING_KEY }}
           token: ${{ github.token }}

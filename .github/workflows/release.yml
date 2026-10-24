@@ -110,7 +110,7 @@ jobs:
     needs: [release-please, find-builds, build]
     if: always() && needs.find-builds.result == 'success' && needs.build.result != 'failure' && needs.build.result != 'cancelled'
     runs-on: ubuntu-latest
-    # SPARKLE_PRIVATE_KEY, which signs the macOS update.
+    # SPARKLE_PRIVATE_KEY, which signs the macOS update, and REPO_SIGNING_KEY, Linux's repository.
     environment: release
     permissions:
       actions: read
@@ -135,6 +135,13 @@ jobs:
           run-id: ${{ needs.find-builds.outputs.run_id || github.run_id }}
           github-token: ${{ github.token }}
 
+      - uses: ./.github/actions/linux-repo
+        with:
+          mode: sign
+          version: ${{ needs.release-please.outputs.version }}
+          signing-key: ${{ secrets.REPO_SIGNING_KEY }}
+          token: ${{ github.token }}
+
       - name: Upload
         env:
           GH_TOKEN: ${{ github.token }}
@@ -145,7 +152,7 @@ jobs:
           for f in "dist/Flock-$VERSION-macOS.dmg" "dist/Flock-Setup-$VERSION-x64.exe"; do
             [ -f "$f" ] || { echo "::error::$f missing"; exit 1; }
           done
-          # Linux: a .deb and an .rpm for each architecture (nfpm writes 1.2.0-beta.1 as 1.2.0~beta.1).
+          # Linux: a .deb and an .rpm for each architecture.
           [ "$(ls dist/flockphp*.deb dist/flockphp*.rpm 2>/dev/null | wc -l)" -eq 4 ] || { echo "::error::Linux packages missing"; ls dist; exit 1; }
           gh release upload "$TAG" dist/* --clobber --repo "$GITHUB_REPOSITORY"
           gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json body --jq .body > "$RUNNER_TEMP/notes.md"
@@ -155,6 +162,13 @@ jobs:
           version: ${{ needs.release-please.outputs.version }}
           notes: ${{ runner.temp }}/notes.md
           private-key: ${{ secrets.SPARKLE_PRIVATE_KEY }}
+          token: ${{ github.token }}
+
+      - uses: ./.github/actions/linux-repo
+        with:
+          mode: index
+          version: ${{ needs.release-please.outputs.version }}
+          signing-key: ${{ secrets.REPO_SIGNING_KEY }}
           token: ${{ github.token }}
 
   # develop must contain everything main has: the release-please commit (CHANGELOG.md, the version)
