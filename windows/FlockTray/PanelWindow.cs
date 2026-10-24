@@ -255,10 +255,6 @@ internal sealed partial class PanelWindow : Window
         {
             panel.Children.Add(ServiceRow("PostgreSQL", postgres, status.Processes.FirstOrDefault(p => p.Name == "postgres")?.Up ?? false));
         }
-        if (status.Valkey is { } valkey)
-        {
-            panel.Children.Add(ServiceRow("Valkey", valkey, status.Processes.FirstOrDefault(p => p.Name == "valkey")?.Up ?? false));
-        }
         foreach (var extra in status.Extras)
         {
             panel.Children.Add(ServiceRow(extra.Name, extra.Enabled ? $"{extra.Version} on 127.0.0.1:{extra.Port}" : "stopped", extra.Up));

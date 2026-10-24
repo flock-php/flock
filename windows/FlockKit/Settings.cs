@@ -33,7 +33,6 @@ public sealed class FlockConfig
         public int Dns { get; init; }
         public int Smtp { get; init; }
         public int Postgres { get; init; }
-        public int Valkey { get; init; }
         public int Dumps { get; init; }
         public int Api { get; init; }
     }
