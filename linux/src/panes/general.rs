@@ -1,4 +1,5 @@
-//! General: the daemon, the domain, the data folder, updates and the project folders.
+//! General: the daemon, the domain, the data folder, opening at login, updates and the project
+//! folders.
 
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -9,6 +10,7 @@ use gtk::{gio, glib};
 use super::common::{PaneView, group, info_row, report, status_dot, switch_row};
 use super::{Data, Pane};
 use crate::api::{Client, Config, SettingsChange, Status};
+use crate::autostart;
 use crate::model::AppModel;
 
 pub struct GeneralPane {
@@ -88,6 +90,22 @@ impl GeneralPane {
         });
         row.add_suffix(&open);
         group.add(&row);
+        group
+    }
+
+    fn startup(&self) -> adw::PreferencesGroup {
+        let group = group("Startup", "");
+        let banner = self.banner.clone();
+        group.add(&switch_row(
+            "Open Flock at login",
+            "Shows the Flock icon in the tray when you log in. The daemon itself always starts with your computer.",
+            autostart::enabled(),
+            move |on| {
+                if let Err(e) = autostart::set(on) {
+                    report(&banner, Some(format!("Could not change the startup setting: {e}")));
+                }
+            },
+        ));
         group
     }
 
@@ -182,6 +200,7 @@ impl Pane for GeneralPane {
         if let Some(config) = &data.config {
             groups.push(self.network(config, &status).upcast());
             groups.push(self.data(config).upcast());
+            groups.push(self.startup().upcast());
             groups.push(self.updates(config).upcast());
             groups.push(self.project_folders(config).upcast());
         }

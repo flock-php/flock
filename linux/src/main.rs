@@ -2,6 +2,7 @@
 //! bar app and the Windows tray app. It talks to the daemon over its local API (api.json).
 
 mod api;
+mod autostart;
 mod dumps;
 mod installation;
 mod logs;

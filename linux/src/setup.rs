@@ -10,6 +10,7 @@ use adw::prelude::*;
 use gtk::{gio, glib};
 
 use crate::api::{DefaultInstall, DefaultsStatus};
+use crate::autostart;
 use crate::installation::{self, Conflict};
 use crate::model::AppModel;
 
@@ -28,6 +29,10 @@ pub struct SetupView {
     next_steps: RefCell<Option<adw::PreferencesGroup>>,
     /// The rows in it now.
     step_rows: RefCell<Vec<adw::ActionRow>>,
+    /// Open Flock at login, set once the setup succeeded.
+    startup: gtk::CheckButton,
+    /// Why that couldn't be set, for the next steps.
+    startup_problem: RefCell<Option<String>>,
 }
 
 impl SetupView {
@@ -40,6 +45,8 @@ impl SetupView {
             seen_defaults: RefCell::default(),
             next_steps: RefCell::default(),
             step_rows: RefCell::default(),
+            startup: gtk::CheckButton::builder().label("Open Flock when I log in").active(true).build(),
+            startup_problem: RefCell::default(),
         });
         this.intro();
         let weak = Rc::downgrade(&this);
@@ -138,12 +145,19 @@ impl SetupView {
                 "",
             ),
         ]);
+        let body = gtk::Box::builder().orientation(gtk::Orientation::Vertical).spacing(12).build();
+        body.append(&list);
+        // The page is rebuilt after a failed setup: the check moves along.
+        if let Some(parent) = self.startup.parent().and_downcast::<gtk::Box>() {
+            parent.remove(&self.startup);
+        }
+        body.append(&self.startup);
         let this = self.clone();
         let set_up = self.button("Set Up Flock", true, move || this.run());
         self.page(
             "Welcome to Flock",
             "Flock runs your Laravel sites, PHP, mail and databases on this computer. Setting it up takes a moment:",
-            Some(list.upcast_ref()),
+            Some(body.upcast_ref()),
             &[set_up],
         );
         self.next_steps.replace(None);
@@ -213,7 +227,13 @@ impl SetupView {
                     pulse.remove();
                 }
                 this.model.refresh();
-                if output.ok { this.done() } else { this.failed(&output) }
+                if output.ok {
+                    let problem = autostart::set(this.startup.is_active()).err();
+                    this.startup_problem.replace(problem.map(|e| format!("Could not change the startup setting: {e}.")));
+                    this.done();
+                } else {
+                    this.failed(&output);
+                }
             },
         );
     }
@@ -313,6 +333,14 @@ impl SetupView {
                     "success",
                 ));
             }
+        }
+        if let Some(problem) = self.startup_problem.borrow().as_deref() {
+            add(item(
+                "dialog-warning-symbolic",
+                "Flock won't open at login",
+                &format!("{problem} Settings → General has it too."),
+                "warning",
+            ));
         }
         add(item("utilities-terminal-symbolic", "Open a new terminal", "Terminals that were already open still have the old PATH.", ""));
         add(item(
