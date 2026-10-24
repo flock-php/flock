@@ -2,6 +2,7 @@ package daemon
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"io"
 	"net"
@@ -122,6 +123,46 @@ func TestStatusReportsRunningServices(t *testing.T) {
 
 	if status.PID != os.Getpid() || status.Version != "dev" || status.DNS.TLD != "test" || status.Mail == "" || status.HTTPPort != cfg.Ports.HTTP {
 		t.Fatalf("unexpected status: %+v", status)
+	}
+}
+
+func TestStatusListsValkeyOnce(t *testing.T) {
+	root, _ := testRoot(t, func(c *config.Config) {
+		c.Services.SetExtra("valkey", config.Extra{Version: "9.1.2", Port: freePort(t)})
+	})
+	client := startDaemon(t, root)
+
+	status, err := client.Status(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	body, err := json.Marshal(status)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var listed struct {
+		Valkey string `json:"valkey"`
+		Extras []struct {
+			ID string `json:"id"`
+		} `json:"extras"`
+	}
+	if err := json.Unmarshal(body, &listed); err != nil {
+		t.Fatal(err)
+	}
+
+	count := 0
+	if listed.Valkey != "" {
+		count++
+	}
+	for _, x := range listed.Extras {
+		if x.ID == "valkey" {
+			count++
+		}
+	}
+	if count != 1 {
+		t.Fatalf("valkey listed %d times: %s", count, body)
 	}
 }
 
