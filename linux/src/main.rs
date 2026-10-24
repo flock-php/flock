@@ -33,8 +33,9 @@ const STYLE: &str = "
 /// The app's windows besides the main one, each created when it is first opened.
 #[derive(Default)]
 struct Windows {
+    /// The main window, which holds the setup until Flock is set up.
+    main: RefCell<Option<gtk::Window>>,
     settings: RefCell<Option<Rc<settings::SettingsWindow>>>,
-    setup: RefCell<Option<Rc<setup::SetupWindow>>>,
     mail: RefCell<Option<Rc<mail::MailWindow>>>,
     dumps: RefCell<Option<Rc<dumps::DumpsWindow>>>,
     logs: RefCell<Option<Rc<logs::LogsWindow>>>,
@@ -55,10 +56,11 @@ impl Windows {
         window.window.clone().upcast()
     }
 
-    fn setup(&self, app: &adw::Application, model: &Rc<model::AppModel>) -> gtk::Window {
-        let window = self.setup.borrow_mut().get_or_insert_with(|| setup::SetupWindow::new(app, model.clone())).clone();
+    /// The main window: it shows the setup while Flock isn't set up.
+    fn main(&self) -> Option<gtk::Window> {
+        let window = self.main.borrow().clone()?;
         window.present();
-        window.window.clone().upcast()
+        Some(window)
     }
 
     fn mail(&self, app: &adw::Application, model: &Rc<model::AppModel>) -> gtk::Window {
@@ -87,7 +89,7 @@ impl Windows {
     /// (logs/sites/<name>, logs/services/<name> at a log), settings or settings/<pane>.
     fn open(&self, app: &adw::Application, model: &Rc<model::AppModel>, name: &str) -> Option<gtk::Window> {
         match name {
-            "setup" => Some(self.setup(app, model)),
+            "setup" => self.main(),
             "mail" => Some(self.mail(app, model)),
             "dumps" => Some(self.dumps(app, model)),
             "logs" => Some(self.logs(app, None)),
@@ -144,12 +146,10 @@ fn main() -> glib::ExitCode {
         let main = window::MainWindow::new(app, m.clone());
         m.start_polling();
         main.window.present();
+        w.main.replace(Some(main.window.clone().upcast()));
         let mut shown: gtk::Window = main.window.clone().upcast();
         if let Some(window) = open.as_deref().and_then(|name| w.open(app, &m, name)) {
             shown = window;
-        } else if m.needs_setup() && screenshot.is_none() {
-            // The first start after installing the package goes straight to the setup.
-            w.setup(app, &m);
         }
         if let Some(path) = screenshot.clone() {
             // The paintable follows the content from its next frame on.

@@ -1,9 +1,9 @@
-//! First start after installing the package: explains what setting Flock up does, makes sure no
-//! other program holds Flock's ports, runs `flock install` (one password prompt, polkit's dialog)
-//! and shows its output; then follows the first run's install of the default PHP and Node.js.
-//! The macOS app's SetupWindow.
+//! What the main window shows until Flock is set up: what setting it up does, a check that no
+//! other program holds Flock's ports, `flock install` (one password prompt, polkit's dialog) with
+//! its output, then the first run's install of the default PHP and Node.js. The macOS and Windows
+//! apps have a setup window for this; their menu bar and tray panels can't hold the steps.
 
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 
 use adw::prelude::*;
@@ -13,10 +13,14 @@ use crate::api::{DefaultInstall, DefaultsStatus};
 use crate::installation::{self, Conflict};
 use crate::model::AppModel;
 
-pub struct SetupWindow {
-    pub window: adw::Window,
+pub struct SetupView {
+    pub widget: adw::Bin,
     model: Rc<AppModel>,
-    content: adw::Bin,
+    /// From "Set Up Flock" until "Done": the main window keeps showing the steps, also once the
+    /// daemon is registered (which happens before the setup has finished).
+    engaged: Cell<bool>,
+    /// Called when the user is done with the setup, to show the main window's status.
+    on_finish: RefCell<Option<Box<dyn Fn()>>>,
     /// The first run's installs as this window last saw them in the status: the status stops
     /// listing them once both are done.
     seen_defaults: RefCell<Option<DefaultsStatus>>,
@@ -26,24 +30,13 @@ pub struct SetupWindow {
     step_rows: RefCell<Vec<adw::ActionRow>>,
 }
 
-impl SetupWindow {
-    pub fn new(app: &adw::Application, model: Rc<AppModel>) -> Rc<Self> {
-        let content = adw::Bin::new();
-        let view = adw::ToolbarView::new();
-        view.add_top_bar(&adw::HeaderBar::builder().show_title(false).build());
-        view.set_content(Some(&content));
-        let window = adw::Window::builder()
-            .application(app)
-            .title("Set Up Flock")
-            .default_width(580)
-            .default_height(620)
-            .content(&view)
-            .hide_on_close(true)
-            .build();
+impl SetupView {
+    pub fn new(model: Rc<AppModel>) -> Rc<Self> {
         let this = Rc::new(Self {
-            window,
+            widget: adw::Bin::new(),
             model,
-            content,
+            engaged: Cell::new(false),
+            on_finish: RefCell::default(),
             seen_defaults: RefCell::default(),
             next_steps: RefCell::default(),
             step_rows: RefCell::default(),
@@ -58,16 +51,22 @@ impl SetupWindow {
         this
     }
 
-    /// Opens the window at its first page, unless a setup is running.
-    pub fn present(self: &Rc<Self>) {
-        if self.next_steps.borrow().is_none() && !self.running() {
-            self.intro();
-        }
-        self.window.present();
+    /// The setup was started and isn't done yet.
+    pub fn engaged(&self) -> bool {
+        self.engaged.get()
     }
 
-    fn running(&self) -> bool {
-        self.content.child().is_some_and(|c| c.widget_name() == "running")
+    pub fn connect_finish(&self, f: impl Fn() + 'static) {
+        self.on_finish.replace(Some(Box::new(f)));
+    }
+
+    /// Back to the first page, and the main window to its status.
+    fn finish(self: &Rc<Self>) {
+        self.engaged.set(false);
+        self.intro();
+        if let Some(f) = self.on_finish.borrow().as_ref() {
+            f();
+        }
     }
 
     fn page(&self, title: &str, text: &str, body: Option<&gtk::Widget>, buttons: &[gtk::Button]) {
@@ -98,8 +97,9 @@ impl SetupWindow {
             row.append(button);
         }
         column.append(&row);
-        let scrolled = gtk::ScrolledWindow::builder().hscrollbar_policy(gtk::PolicyType::Never).child(&column).build();
-        self.content.set_child(Some(&scrolled));
+        let clamp = adw::Clamp::builder().maximum_size(560).child(&column).build();
+        let scrolled = gtk::ScrolledWindow::builder().hscrollbar_policy(gtk::PolicyType::Never).child(&clamp).build();
+        self.widget.set_child(Some(&scrolled));
     }
 
     fn button(&self, label: &str, suggested: bool, clicked: impl Fn() + 'static) -> gtk::Button {
@@ -111,9 +111,10 @@ impl SetupWindow {
         button
     }
 
-    fn close_button(&self, label: &str, suggested: bool) -> gtk::Button {
-        let window = self.window.clone();
-        self.button(label, suggested, move || window.close())
+    /// Leaves a failed or blocked setup for the first page.
+    fn back_button(self: &Rc<Self>) -> gtk::Button {
+        let this = self.clone();
+        self.button("Back", false, move || this.finish())
     }
 
     fn intro(self: &Rc<Self>) {
@@ -143,12 +144,13 @@ impl SetupWindow {
             "Welcome to Flock",
             "Flock runs your Laravel sites, PHP, mail and databases on this computer. Setting it up takes a moment:",
             Some(list.upcast_ref()),
-            &[self.close_button("Not Now", false), set_up],
+            &[set_up],
         );
         self.next_steps.replace(None);
     }
 
     fn run(self: &Rc<Self>) {
+        self.engaged.set(true);
         let bar = gtk::ProgressBar::new();
         bar.pulse();
         self.page("Checking Flock's ports…", "", Some(bar.upcast_ref()), &[]);
@@ -186,7 +188,7 @@ impl SetupWindow {
                 "Flock needs these ports and *.{tld} for itself, but other programs use them. Running both would leave neither working."
             ),
             Some(list.upcast_ref()),
-            &[self.close_button("Not Now", false), again],
+            &[self.back_button(), again],
         );
     }
 
@@ -197,7 +199,6 @@ impl SetupWindow {
         body.append(&bar);
         body.append(&log);
         self.page("Setting up Flock…", "Linux asks for your password in a moment.", Some(body.upcast_ref()), &[]);
-        self.content.child().expect("page").set_widget_name("running");
         let pulse = glib::timeout_add_local(std::time::Duration::from_millis(150), move || {
             bar.pulse();
             glib::ControlFlow::Continue
@@ -227,21 +228,21 @@ impl SetupWindow {
         };
         let this = self.clone();
         let again = self.button("Try Again", true, move || this.run());
-        self.page("Setup didn't finish", text, Some(log.upcast_ref()), &[self.close_button("Close", false), again]);
+        self.page("Setup didn't finish", text, Some(log.upcast_ref()), &[self.back_button(), again]);
     }
 
     fn done(self: &Rc<Self>) {
         let group = adw::PreferencesGroup::builder().title("Next steps").build();
         self.next_steps.replace(Some(group.clone()));
         self.update_next_steps();
-        let settings = self.button("Open Settings", false, {
-            let window = self.window.clone();
-            move || {
-                window.close();
-                let _ = window.application().map(|app| app.activate_action("settings", None));
-            }
+        let this = self.clone();
+        let settings = self.button("Open Settings", false, move || {
+            this.finish();
+            let _ = this.widget.activate_action("app.settings", None);
         });
-        self.page("Flock is ready", "", Some(group.upcast_ref()), &[settings, self.close_button("Done", true)]);
+        let this = self.clone();
+        let done = self.button("Done", true, move || this.finish());
+        self.page("Flock is ready", "", Some(group.upcast_ref()), &[settings, done]);
     }
 
     /// The next steps, with the first run's installs of the newest PHP and Node.js LTS as the

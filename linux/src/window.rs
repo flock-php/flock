@@ -1,5 +1,6 @@
 //! The main window: what the macOS menu bar panel and the Windows tray panel show. Status,
-//! services, sites, the Xdebug and capture toggles, and shortcuts to Mail, Dumps and Logs.
+//! services, sites, the Xdebug and capture toggles, and shortcuts to Mail, Dumps and Logs; until
+//! Flock is set up, the setup.
 
 use std::cell::{Cell, RefCell};
 use std::rc::Rc;
@@ -9,6 +10,7 @@ use gtk::{gio, glib};
 
 use crate::api::{SettingsChange, SiteStatus, Status};
 use crate::model::AppModel;
+use crate::setup::SetupView;
 
 pub struct MainWindow {
     pub window: adw::ApplicationWindow,
@@ -17,6 +19,7 @@ pub struct MainWindow {
     stack: gtk::Stack,
     status_page: adw::StatusPage,
     status_button: gtk::Button,
+    setup: Rc<SetupView>,
     restart: gtk::Button,
     spinner: gtk::Spinner,
     warnings: adw::PreferencesGroup,
@@ -93,9 +96,11 @@ impl MainWindow {
         let status_button = gtk::Button::builder().halign(gtk::Align::Center).css_classes(["pill", "suggested-action"]).build();
         let status_page = adw::StatusPage::builder().icon_name("network-server-symbolic").child(&status_button).build();
 
+        let setup = SetupView::new(model.clone());
         let stack = gtk::Stack::new();
         stack.add_named(&scrolled, Some("running"));
         stack.add_named(&status_page, Some("stopped"));
+        stack.add_named(&setup.widget, Some("setup"));
 
         let body = gtk::Box::new(gtk::Orientation::Vertical, 0);
         body.append(&banner);
@@ -108,8 +113,8 @@ impl MainWindow {
         let window = adw::ApplicationWindow::builder()
             .application(app)
             .title("Flock")
-            .default_width(440)
-            .default_height(680)
+            .default_width(480)
+            .default_height(700)
             .content(&toolbar)
             .build();
 
@@ -120,6 +125,7 @@ impl MainWindow {
             stack,
             status_page,
             status_button,
+            setup,
             restart,
             spinner,
             warnings,
@@ -152,12 +158,12 @@ impl MainWindow {
         let model = self.model.clone();
         self.restart.connect_clicked(move |_| model.restart());
 
-        let this = self.clone();
-        self.status_button.connect_clicked(move |button| {
-            if this.model.needs_setup() {
-                let _ = button.activate_action("app.setup", None);
-            } else {
-                this.model.restart();
+        let model = self.model.clone();
+        self.status_button.connect_clicked(move |_| model.restart());
+        let weak = Rc::downgrade(self);
+        self.setup.connect_finish(move || {
+            if let Some(this) = weak.upgrade() {
+                this.render();
             }
         });
 
@@ -192,7 +198,7 @@ impl MainWindow {
         let restarting = self.model.is_restarting();
 
         self.spinner.set_visible(restarting);
-        self.restart.set_sensitive(!restarting && !needs_setup && status.is_some());
+        self.restart.set_sensitive(!restarting && !needs_setup && !self.setup.engaged() && status.is_some());
         self.title.set_subtitle(&self.model.headline());
         match self.model.action_error() {
             Some(message) => {
@@ -202,20 +208,17 @@ impl MainWindow {
             None => self.banner.set_revealed(false),
         }
 
-        // Before the setup is done, a daemon that answers is the setup's (it may still fail).
-        let Some(status) = status.filter(|_| !needs_setup) else {
+        // Until the setup is done, a daemon that answers is the setup's (it may still fail).
+        if needs_setup || self.setup.engaged() {
+            self.stack.set_visible_child_name("setup");
+            self.shown.replace(None);
+            return;
+        }
+        let Some(status) = status else {
             self.stack.set_visible_child_name("stopped");
-            if needs_setup {
-                self.status_page.set_title("Set Up Flock");
-                self.status_page.set_description(Some(
-                    "Setup installs the daemon, puts php, composer and node on your PATH, and makes *.test sites work with trusted HTTPS.",
-                ));
-                self.status_button.set_label("Set Up Flock…");
-            } else {
-                self.status_page.set_title("Flock Is Not Running");
-                self.status_page.set_description(self.model.error().as_deref());
-                self.status_button.set_label("Start Flock");
-            }
+            self.status_page.set_title("Flock Is Not Running");
+            self.status_page.set_description(self.model.error().as_deref());
+            self.status_button.set_label("Start Flock");
             self.status_button.set_sensitive(!restarting);
             self.shown.replace(None);
             return;
