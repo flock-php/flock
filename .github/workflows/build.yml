@@ -399,9 +399,9 @@ jobs:
         with:
           ref: ${{ inputs.ref || github.event.pull_request.head.sha }}
 
-      - name: GTK and libadwaita
+      - name: GTK, libadwaita and WebKitGTK
         if: env.CODE == 'true'
-        run: sudo apt-get install -y --no-install-recommends libgtk-4-dev libadwaita-1-dev
+        run: sudo apt-get install -y --no-install-recommends libgtk-4-dev libadwaita-1-dev libwebkitgtk-6.0-dev
 
       - name: Format
         if: env.CODE == 'true'
