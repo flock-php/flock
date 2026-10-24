@@ -1,6 +1,6 @@
-//! The main window: what the macOS menu bar panel and the Windows tray panel show. Status,
-//! services, sites, the Xdebug and capture toggles, and shortcuts to Mail, Dumps and Logs; until
-//! Flock is set up, the setup.
+//! The Flock window: a sidebar of panes like the macOS app's Settings window has them, the selected
+//! pane next to it. Until Flock is set up, the window is the setup. It reads the daemon's config
+//! and services while it is open.
 
 use std::cell::{Cell, RefCell};
 use std::rc::Rc;
@@ -8,397 +8,300 @@ use std::rc::Rc;
 use adw::prelude::*;
 use gtk::{gio, glib};
 
-use crate::api::{SettingsChange, SiteStatus, Status};
+use crate::api::Client;
 use crate::model::AppModel;
+use crate::panes::{self, Data, Pane};
 use crate::setup::SetupView;
+
+/// The panes in sidebar order: id, title, icon.
+const PANES: [(&str, &str, &str); 10] = [
+    ("general", "General", "emblem-system-symbolic"),
+    ("sites", "Sites", "web-browser-symbolic"),
+    ("php", "PHP", "utilities-terminal-symbolic"),
+    ("node", "Node", "package-x-generic-symbolic"),
+    ("services", "Services", "network-server-symbolic"),
+    ("mail", "Mail", "mail-unread-symbolic"),
+    ("dumps", "Dumps", "applications-science-symbolic"),
+    ("debugger", "Debugger", "applications-engineering-symbolic"),
+    ("ai", "AI", "starred-symbolic"),
+    ("about", "About", "help-about-symbolic"),
+];
 
 pub struct MainWindow {
     pub window: adw::ApplicationWindow,
-    title: adw::WindowTitle,
-    banner: adw::Banner,
-    stack: gtk::Stack,
-    status_page: adw::StatusPage,
-    status_button: gtk::Button,
-    setup: Rc<SetupView>,
-    restart: gtk::Button,
-    spinner: gtk::Spinner,
-    warnings: adw::PreferencesGroup,
-    services: adw::PreferencesGroup,
-    sites: adw::PreferencesGroup,
-    xdebug: adw::SwitchRow,
-    dumps: adw::SwitchRow,
-    mail_button: gtk::Button,
-    dumps_button: gtk::Button,
-    /// Rows added for the current status, removed before the next one is shown.
-    rows: RefCell<Vec<(adw::PreferencesGroup, gtk::Widget)>>,
-    /// The status the rows show, so they are only rebuilt when it changes.
-    shown: RefCell<Option<Status>>,
-    /// Set while the toggles follow the status, so their handlers don't send it back.
-    syncing: Cell<bool>,
     model: Rc<AppModel>,
+    /// The setup or the panes.
+    top: gtk::Stack,
+    setup: Rc<SetupView>,
+    title: adw::WindowTitle,
+    stack: gtk::Stack,
+    content: adw::NavigationPage,
+    split: adw::NavigationSplitView,
+    sidebar: gtk::ListBox,
+    banner: adw::Banner,
+    unavailable: adw::StatusPage,
+    unavailable_button: gtk::Button,
+    panes: Vec<(&'static str, Box<dyn Pane>)>,
+    services: panes::services::ServicesPane,
+    sites: panes::sites::SitesPane,
+    data: RefCell<Data>,
+    loading: Cell<bool>,
+    /// The failed action (a restart, a toggle in the tray) the banner shows.
+    action_error: RefCell<Option<String>>,
 }
 
 impl MainWindow {
     pub fn new(app: &adw::Application, model: Rc<AppModel>) -> Rc<Self> {
+        let sidebar = gtk::ListBox::builder().css_classes(["navigation-sidebar"]).build();
+        for (_, title, icon) in PANES {
+            let row = gtk::Box::builder().spacing(12).margin_top(6).margin_bottom(6).margin_start(6).build();
+            row.append(&gtk::Image::from_icon_name(icon));
+            row.append(&gtk::Label::new(Some(title)));
+            sidebar.append(&row);
+        }
         let title = adw::WindowTitle::new("Flock", "");
-        let header = adw::HeaderBar::new();
-        header.set_title_widget(Some(&title));
-
-        let restart = gtk::Button::from_icon_name("view-refresh-symbolic");
-        restart.set_tooltip_text(Some("Restart Flock"));
-        header.pack_start(&restart);
-        let spinner = gtk::Spinner::builder().spinning(true).visible(false).build();
-        header.pack_start(&spinner);
-
         let menu = gio::Menu::new();
-        menu.append(Some("Settings"), Some("app.settings"));
-        menu.append(Some("Quit"), Some("app.quit"));
+        let windows = gio::Menu::new();
+        windows.append(Some("Mail"), Some("app.mail"));
+        windows.append(Some("Dumps"), Some("app.dumps"));
+        windows.append(Some("Logs"), Some("app.logs"));
+        menu.append_section(None, &windows);
+        let quit = gio::Menu::new();
+        quit.append(Some("Quit Flock"), Some("app.quit"));
+        menu.append_section(None, &quit);
         let menu_button = gtk::MenuButton::builder().icon_name("open-menu-symbolic").menu_model(&menu).primary(true).build();
-        header.pack_end(&menu_button);
+        let sidebar_header = adw::HeaderBar::builder().title_widget(&title).build();
+        sidebar_header.pack_end(&menu_button);
+        let sidebar_view = adw::ToolbarView::new();
+        sidebar_view.add_top_bar(&sidebar_header);
+        sidebar_view.set_content(Some(&gtk::ScrolledWindow::builder().child(&sidebar).build()));
+        let sidebar_page = adw::NavigationPage::new(&sidebar_view, "Flock");
 
         let banner = adw::Banner::builder().button_label("Dismiss").build();
-
-        let warnings = adw::PreferencesGroup::new();
-        let services = adw::PreferencesGroup::builder().title("Services").build();
-        let sites = adw::PreferencesGroup::builder().title("Sites").build();
-
-        let xdebug = adw::SwitchRow::builder().title("Xdebug").subtitle("Debug requests that ask for it").build();
-        let dumps =
-            adw::SwitchRow::builder().title("Capture dumps &amp; queries").subtitle("dump(), queries, logs, views and jobs").build();
-        let toggles = adw::PreferencesGroup::new();
-        toggles.add(&xdebug);
-        toggles.add(&dumps);
-
-        let mail_button = shortcut_button("Mail", "mail-unread-symbolic");
-        let dumps_button = shortcut_button("Dumps", "applications-science-symbolic");
-        let logs_button = shortcut_button("Logs", "text-x-generic-symbolic");
-        let shortcuts = gtk::Box::builder().spacing(8).homogeneous(true).build();
-        shortcuts.append(&mail_button);
-        shortcuts.append(&dumps_button);
-        shortcuts.append(&logs_button);
-
-        let content = gtk::Box::builder()
-            .orientation(gtk::Orientation::Vertical)
-            .spacing(18)
-            .margin_top(12)
-            .margin_bottom(18)
-            .margin_start(12)
-            .margin_end(12)
-            .build();
-        content.append(&warnings);
-        content.append(&services);
-        content.append(&sites);
-        content.append(&toggles);
-        content.append(&shortcuts);
-        let clamp = adw::Clamp::builder().maximum_size(560).child(&content).build();
-        let scrolled = gtk::ScrolledWindow::builder().hscrollbar_policy(gtk::PolicyType::Never).child(&clamp).vexpand(true).build();
-
-        let status_button = gtk::Button::builder().halign(gtk::Align::Center).css_classes(["pill", "suggested-action"]).build();
-        let status_page = adw::StatusPage::builder().icon_name("network-server-symbolic").child(&status_button).build();
-
-        let setup = SetupView::new(model.clone());
+        let services = panes::services::ServicesPane::new(banner.clone());
+        let sites = panes::sites::SitesPane::new(model.clone(), banner.clone());
+        let panes: Vec<(&'static str, Box<dyn Pane>)> = vec![
+            ("general", Box::new(panes::general::GeneralPane::new(model.clone(), banner.clone()))),
+            ("sites", Box::new(sites.clone())),
+            ("php", Box::new(panes::php::PhpPane::new(model.clone(), banner.clone()))),
+            ("node", Box::new(panes::node::NodePane::new(model.clone(), banner.clone()))),
+            ("services", Box::new(services.clone())),
+            ("mail", Box::new(panes::mail::MailPane::new())),
+            ("dumps", Box::new(panes::dumps::DumpsPane::new(model.clone(), banner.clone()))),
+            ("debugger", Box::new(panes::debugger::DebuggerPane::new(model.clone(), banner.clone()))),
+            ("ai", Box::new(panes::ai::AiPane::new(banner.clone()))),
+            ("about", Box::new(panes::about::AboutPane::new(model.clone()))),
+        ];
         let stack = gtk::Stack::new();
-        stack.add_named(&scrolled, Some("running"));
-        stack.add_named(&status_page, Some("stopped"));
-        stack.add_named(&setup.widget, Some("setup"));
+        for (id, pane) in &panes {
+            stack.add_named(&pane.widget(), Some(id));
+        }
+        let unavailable_button = gtk::Button::builder().halign(gtk::Align::Center).css_classes(["pill", "suggested-action"]).build();
+        let unavailable = adw::StatusPage::builder().icon_name("network-server-symbolic").child(&unavailable_button).build();
+        stack.add_named(&unavailable, Some("unavailable"));
 
         let body = gtk::Box::new(gtk::Orientation::Vertical, 0);
         body.append(&banner);
         body.append(&stack);
+        let content_view = adw::ToolbarView::new();
+        content_view.add_top_bar(&adw::HeaderBar::new());
+        content_view.set_content(Some(&body));
+        let content = adw::NavigationPage::new(&content_view, "General");
+        let split = adw::NavigationSplitView::builder().sidebar(&sidebar_page).content(&content).build();
 
-        let toolbar = adw::ToolbarView::new();
-        toolbar.add_top_bar(&header);
-        toolbar.set_content(Some(&body));
+        let setup = SetupView::new(model.clone());
+        let setup_view = adw::ToolbarView::new();
+        setup_view.add_top_bar(&adw::HeaderBar::builder().title_widget(&adw::WindowTitle::new("Flock", "")).build());
+        setup_view.set_content(Some(&setup.widget));
 
-        let window = adw::ApplicationWindow::builder()
-            .application(app)
-            .title("Flock")
-            .default_width(480)
-            .default_height(700)
-            .content(&toolbar)
-            .build();
+        let top = gtk::Stack::new();
+        top.add_named(&split, Some("panes"));
+        top.add_named(&setup_view, Some("setup"));
+
+        let window =
+            adw::ApplicationWindow::builder().application(app).title("Flock").default_width(900).default_height(640).content(&top).build();
+        // Narrow, the sidebar and the pane take turns.
+        let breakpoint = adw::Breakpoint::new(adw::BreakpointCondition::new_length(
+            adw::BreakpointConditionLengthType::MaxWidth,
+            560.0,
+            adw::LengthUnit::Sp,
+        ));
+        breakpoint.add_setter(&split, "collapsed", Some(&true.to_value()));
+        window.add_breakpoint(breakpoint);
 
         let this = Rc::new(Self {
             window,
-            title,
-            banner,
-            stack,
-            status_page,
-            status_button,
+            model,
+            top,
             setup,
-            restart,
-            spinner,
-            warnings,
+            title,
+            stack,
+            content,
+            split,
+            sidebar,
+            banner,
+            unavailable,
+            unavailable_button,
+            panes,
             services,
             sites,
-            xdebug,
-            dumps,
-            mail_button,
-            dumps_button,
-            rows: RefCell::new(Vec::new()),
-            shown: RefCell::new(None),
-            syncing: Cell::new(false),
-            model,
+            data: RefCell::new(Data::default()),
+            loading: Cell::new(false),
+            action_error: RefCell::new(None),
         });
-        this.connect(&logs_button);
-        this.render();
-        let weak = Rc::downgrade(&this);
-        this.model.subscribe(move || {
-            if let Some(this) = weak.upgrade() {
-                this.render();
-            }
-        });
+        this.connect();
+        this.select("general");
         this
     }
 
-    fn connect(self: &Rc<Self>, logs_button: &gtk::Button) {
+    fn connect(self: &Rc<Self>) {
+        let weak = Rc::downgrade(self);
+        self.sidebar.connect_row_selected(move |_, row| {
+            if let (Some(this), Some(row)) = (weak.upgrade(), row) {
+                this.show(PANES[row.index() as usize].0);
+            }
+        });
+        // Collapsed, a click on the selected pane shows it again.
+        let weak = Rc::downgrade(self);
+        self.sidebar.connect_row_activated(move |_, _| {
+            if let Some(this) = weak.upgrade() {
+                this.split.set_show_content(true);
+            }
+        });
         let model = self.model.clone();
-        self.banner.connect_button_clicked(move |_| model.dismiss_error());
+        self.banner.connect_button_clicked(move |banner| {
+            banner.set_revealed(false);
+            model.dismiss_error();
+        });
 
         let model = self.model.clone();
-        self.restart.connect_clicked(move |_| model.restart());
+        self.unavailable_button.connect_clicked(move |_| model.restart());
 
-        let model = self.model.clone();
-        self.status_button.connect_clicked(move |_| model.restart());
         let weak = Rc::downgrade(self);
         self.setup.connect_finish(move || {
             if let Some(this) = weak.upgrade() {
-                this.render();
+                this.reload();
             }
         });
 
-        let this = self.clone();
-        self.xdebug.connect_active_notify(move |row| {
-            if !this.syncing.get() {
-                this.change(SettingsChange { xdebug: Some(row.is_active()), ..Default::default() });
+        let weak = Rc::downgrade(self);
+        self.model.subscribe(move || {
+            if let Some(this) = weak.upgrade() {
+                this.title.set_subtitle(&this.model.headline());
+                this.show_action_error();
+                if this.window.is_visible() {
+                    this.reload();
+                }
             }
         });
-        let this = self.clone();
-        self.dumps.connect_active_notify(move |row| {
-            if !this.syncing.get() {
-                this.change(SettingsChange { dumps: Some(row.is_active()), ..Default::default() });
+        let weak = Rc::downgrade(self);
+        self.window.connect_visible_notify(move |window| {
+            if let Some(this) = weak.upgrade().filter(|_| window.is_visible()) {
+                this.reload();
             }
         });
-
-        self.mail_button.set_action_name(Some("app.mail"));
-        self.dumps_button.set_action_name(Some("app.dumps"));
-        logs_button.set_action_name(Some("app.logs"));
     }
 
-    /// Changes a setting; a failure shows in the banner.
-    fn change(&self, change: SettingsChange) {
-        let model = self.model.clone();
-        self.model.change_settings(change, move |error| model.report(error));
-    }
-
-    /// Shows the current state. Rows are rebuilt from the status; the window keeps its scroll position.
-    fn render(&self) {
-        let status = self.model.status();
-        let needs_setup = self.model.needs_setup();
-        let restarting = self.model.is_restarting();
-
-        self.spinner.set_visible(restarting);
-        self.restart.set_sensitive(!restarting && !needs_setup && !self.setup.engaged() && status.is_some());
-        self.title.set_subtitle(&self.model.headline());
-        match self.model.action_error() {
+    /// Shows a failed action in the banner the panes report their errors in, once.
+    fn show_action_error(&self) {
+        let error = self.model.action_error();
+        if *self.action_error.borrow() == error {
+            return;
+        }
+        let previous = self.action_error.replace(error.clone());
+        match error {
             Some(message) => {
                 self.banner.set_title(&glib::markup_escape_text(&message));
                 self.banner.set_revealed(true);
             }
-            None => self.banner.set_revealed(false),
+            // The action succeeded since; a pane's error stays.
+            None if previous.is_some_and(|p| self.banner.title() == glib::markup_escape_text(&p)) => self.banner.set_revealed(false),
+            None => {}
         }
+    }
 
+    /// Shows a pane, e.g. from the tray's menu.
+    pub fn select(&self, id: &str) {
+        if let Some(index) = PANES.iter().position(|(pane, _, _)| *pane == id) {
+            self.sidebar.select_row(self.sidebar.row_at_index(index as i32).as_ref());
+            self.split.set_show_content(true);
+        }
+    }
+
+    /// Shows a site's detail in the Sites pane.
+    pub fn select_site(&self, name: &str) {
+        self.select("sites");
+        self.sites.select(name);
+    }
+
+    /// Shows a service's detail in the Services pane.
+    pub fn select_service(&self, id: &str) {
+        self.select("services");
+        self.services.select(id);
+    }
+
+    fn show(&self, id: &str) {
+        let title = PANES.iter().find(|(pane, _, _)| *pane == id).map_or("", |p| p.1);
+        self.content.set_title(title);
+        self.stack.set_visible_child_name(id);
+        self.render();
+    }
+
+    fn selected(&self) -> &'static str {
+        self.sidebar.selected_row().map_or("general", |row| PANES[row.index() as usize].0)
+    }
+
+    /// Reads the config and services again, then shows them with the current status.
+    fn reload(self: &Rc<Self>) {
+        self.render();
+        if self.model.status().is_none() || self.loading.replace(true) {
+            return;
+        }
+        let this = self.clone();
+        glib::spawn_future_local(async move {
+            let (config, services) = gio::spawn_blocking(|| (Client.config(), Client.services())).await.expect("settings requests");
+            this.loading.set(false);
+            {
+                let mut data = this.data.borrow_mut();
+                if let Ok(config) = config {
+                    data.config = Some(config);
+                }
+                if let Ok(services) = services {
+                    data.services = services;
+                }
+            }
+            this.render();
+        });
+    }
+
+    fn render(&self) {
         // Until the setup is done, a daemon that answers is the setup's (it may still fail).
-        if needs_setup || self.setup.engaged() {
-            self.stack.set_visible_child_name("setup");
-            self.shown.replace(None);
+        if self.model.needs_setup() || self.setup.engaged() {
+            self.top.set_visible_child_name("setup");
             return;
         }
-        let Some(status) = status else {
-            self.stack.set_visible_child_name("stopped");
-            self.status_page.set_title("Flock Is Not Running");
-            self.status_page.set_description(self.model.error().as_deref());
-            self.status_button.set_label("Start Flock");
-            self.status_button.set_sensitive(!restarting);
-            self.shown.replace(None);
+        self.top.set_visible_child_name("panes");
+        let status = self.model.status();
+        let id = self.selected();
+        if status.is_none() && id != "about" {
+            self.unavailable.set_title("Flock Is Not Running");
+            self.unavailable
+                .set_description(Some(&self.model.error().unwrap_or_else(|| "Start the daemon to change its settings.".to_owned())));
+            self.unavailable_button.set_label("Start Flock");
+            self.unavailable_button.set_sensitive(!self.model.is_restarting());
+            self.stack.set_visible_child_name("unavailable");
             return;
+        }
+        self.stack.set_visible_child_name(id);
+        let data = {
+            let mut data = self.data.borrow_mut();
+            data.status = status;
+            data.clone()
         };
-        self.stack.set_visible_child_name("running");
-        // Also after a failed change, which leaves the status as it was.
-        self.syncing.set(true);
-        self.xdebug.set_active(status.xdebug);
-        self.dumps.set_active(status.dumps);
-        self.syncing.set(false);
-        if self.shown.borrow().as_ref() == Some(&status) {
-            return;
-        }
-        self.shown.replace(Some(status.clone()));
-
-        for (group, row) in self.rows.take() {
-            group.remove(&row);
-        }
-        self.warnings.set_visible(!status.warnings.is_empty());
-        for warning in &status.warnings {
-            let row = adw::ActionRow::builder().title(glib::markup_escape_text(warning)).css_classes(["warning"]).build();
-            row.add_prefix(&gtk::Image::from_icon_name("dialog-warning-symbolic"));
-            self.add(&self.warnings, row);
-        }
-        self.render_services(&status);
-        self.render_sites(&status.sites);
-
-        set_count(&self.mail_button, status.mail_count);
-        set_count(&self.dumps_button, status.dump_count);
-    }
-
-    fn render_services(&self, status: &Status) {
-        self.add(&self.services, service_row("Web", &format!("http :{} · https :{}", status.http_port, status.https_port), true));
-        if status.dns.wildcard {
-            self.add(&self.services, service_row("DNS", &format!("*.{}", status.dns.tld), true));
-        } else if !status.dns.tld.is_empty() {
-            let detail = if status.dns.wildcard_problem.is_empty() {
-                format!("*.{} doesn't resolve", status.dns.tld)
-            } else {
-                status.dns.wildcard_problem.clone()
-            };
-            self.add(&self.services, service_row("DNS", &detail, false));
-        }
-        let mail = if status.mail.is_empty() { "stopped".to_owned() } else { format!("smtp {}", status.mail) };
-        self.add(&self.services, service_row("Mail", &mail, !status.mail.is_empty()));
-        if let Some(version) = &status.postgres {
-            self.add(&self.services, service_row("PostgreSQL", version, status.process("postgres").is_some_and(|p| p.up)));
-        }
-        if let Some(version) = &status.valkey {
-            self.add(&self.services, service_row("Valkey", version, status.process("valkey").is_some_and(|p| p.up)));
-        }
-        for extra in &status.extras {
-            let detail = if extra.enabled { format!("{} on 127.0.0.1:{}", extra.version, extra.port) } else { "stopped".to_owned() };
-            self.add(&self.services, service_row(&extra.name, &detail, extra.up));
-        }
-        if status.postgres.is_none() && status.valkey.is_none() && status.extras.is_empty() {
-            let row = adw::ActionRow::builder().title("No database or cache installed").build();
-            let install = gtk::Button::builder()
-                .label("Install…")
-                .valign(gtk::Align::Center)
-                .css_classes(["flat"])
-                .tooltip_text("Opens Settings → Services")
-                .build();
-            install.set_action_name(Some("app.open"));
-            install.set_action_target_value(Some(&"settings/services/postgres".to_variant()));
-            row.add_suffix(&install);
-            self.add(&self.services, row);
-        }
-        for process in status.processes.iter().filter(|p| p.name.starts_with("php")) {
-            let detail = match (process.up, process.restarts) {
-                (false, _) => process.last_error.clone().unwrap_or_else(|| "down".to_owned()),
-                (true, 0) => "up".to_owned(),
-                (true, n) => format!("up (restarted {n}×)"),
-            };
-            self.add(&self.services, service_row(&process.name, &detail, process.up));
-        }
-        for process in status.processes.iter().filter(|p| !p.up && !p.name.starts_with("php")) {
-            let row = adw::ActionRow::builder()
-                .title(glib::markup_escape_text(&format!("{}: {}", process.name, process.last_error.as_deref().unwrap_or("down"))))
-                .css_classes(["error"])
-                .build();
-            self.add(&self.services, row);
-        }
-    }
-
-    fn render_sites(&self, sites: &[SiteStatus]) {
-        if sites.is_empty() {
-            let row = adw::ActionRow::builder().title("No sites yet").subtitle("Run `flock link` or `flock park` in a project").build();
-            self.add(&self.sites, row);
-            return;
-        }
-        for site in sites {
-            let row = adw::ActionRow::builder().title(glib::markup_escape_text(&site.domain)).build();
-            if let Some(problem) = &site.problem {
-                row.set_subtitle(&glib::markup_escape_text(problem));
-                row.add_css_class("error");
-            } else if let Some(notice) = &site.notice {
-                row.set_subtitle(&glib::markup_escape_text(notice));
-                row.add_css_class("warning");
+        for (pane_id, pane) in &self.panes {
+            if *pane_id == id {
+                pane.update(&data);
             }
-            let icon = gtk::Image::from_icon_name(if site.secured { "channel-secure-symbolic" } else { "web-browser-symbolic" });
-            if site.secured {
-                icon.add_css_class("success");
-            }
-            row.add_prefix(&icon);
-            if site.debugging {
-                let bug = gtk::Image::from_icon_name("applications-engineering-symbolic");
-                bug.add_css_class("warning");
-                bug.set_tooltip_text(Some("Debugging"));
-                row.add_suffix(&bug);
-            }
-            if site.shared() {
-                row.add_suffix(&badge("Shared", Some("success")));
-            }
-            if site.server == "frankenphp" {
-                row.add_suffix(&badge(if site.worker == "octane" { "Octane" } else { "FrankenPHP" }, None));
-            }
-            let php = gtk::Label::builder().label(format!("PHP {}", site.php)).css_classes(["caption", "dim-label", "numeric"]).build();
-            row.add_suffix(&php);
-            row.set_tooltip_text(Some(&site_help(site)));
-            if let Some(url) = site.url.clone() {
-                row.set_activatable(true);
-                row.connect_activated(move |row| {
-                    let window = row.root().and_downcast::<gtk::Window>();
-                    gtk::UriLauncher::new(&url).launch(window.as_ref(), gio::Cancellable::NONE, |_| {});
-                });
-            }
-            self.add(&self.sites, row);
         }
-    }
-
-    fn add(&self, group: &adw::PreferencesGroup, row: impl IsA<gtk::Widget>) {
-        group.add(&row);
-        self.rows.borrow_mut().push((group.clone(), row.upcast()));
-    }
-}
-
-fn service_row(name: &str, detail: &str, up: bool) -> adw::ActionRow {
-    let row = adw::ActionRow::builder().title(glib::markup_escape_text(name)).build();
-    let dot = gtk::Label::builder().label("●").css_classes([if up { "success" } else { "error" }]).build();
-    row.add_prefix(&dot);
-    let label = gtk::Label::builder()
-        .label(detail)
-        .css_classes(["dim-label"])
-        .ellipsize(gtk::pango::EllipsizeMode::Middle)
-        .max_width_chars(28)
-        .build();
-    label.set_tooltip_text(Some(detail));
-    row.add_suffix(&label);
-    row
-}
-
-fn badge(text: &str, class: Option<&str>) -> gtk::Label {
-    let label = gtk::Label::builder().label(text).valign(gtk::Align::Center).css_classes(["caption", "badge"]).build();
-    if let Some(class) = class {
-        label.add_css_class(class);
-    }
-    label
-}
-
-/// The row's tooltip: where a site without a document root is fixed, else its address.
-fn site_help(site: &SiteStatus) -> String {
-    if site.root_state.as_deref() == Some("not_found") {
-        return format!(
-            "No public/, www/, web/ or webroot/ with an index.php in {}. Choose the document root in Settings → Sites.",
-            site.path
-        );
-    }
-    site.url.clone().or_else(|| site.problem.clone()).unwrap_or_else(|| site.path.clone())
-}
-
-fn shortcut_button(title: &str, icon: &str) -> gtk::Button {
-    let content = adw::ButtonContent::builder().label(title).icon_name(icon).build();
-    gtk::Button::builder().child(&content).build()
-}
-
-/// Shows a count after a shortcut's title, e.g. "Mail 3".
-fn set_count(button: &gtk::Button, count: u32) {
-    if let Some(content) = button.child().and_downcast::<adw::ButtonContent>() {
-        let title = content.label().split(' ').next().unwrap_or_default().to_owned();
-        content.set_label(&if count > 0 { format!("{title} {count}") } else { title });
     }
 }

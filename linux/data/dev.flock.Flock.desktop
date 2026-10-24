@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Name=Flock
+GenericName=Local Development Environment
+Comment=Sites, PHP, Node.js and services for local development
+Exec=flock-app
+Icon=dev.flock.Flock
+Terminal=false
+Categories=Development;
+Keywords=php;laravel;node;server;dev;
+StartupNotify=true
+StartupWMClass=dev.flock.Flock

@@ -1,5 +1,5 @@
-//! Flock's Linux app: a libadwaita window for the local daemon, like the macOS menu bar app and
-//! the Windows tray app. It talks to the daemon over its local API (api.json).
+//! Flock's Linux app: a tray icon and a libadwaita window for the local daemon, like the macOS menu
+//! bar app and the Windows tray app. It talks to the daemon over its local API (api.json).
 
 mod api;
 mod dumps;
@@ -7,9 +7,9 @@ mod installation;
 mod logs;
 mod mail;
 mod model;
+mod panes;
 mod paths;
 mod prefs;
-mod settings;
 mod setup;
 mod timeline;
 mod tray;
@@ -31,21 +31,19 @@ const STYLE: &str = "
 .badge { padding: 1px 7px; border-radius: 99px; font-weight: 600; background: alpha(currentColor, 0.12); }
 ";
 
-/// The app's windows besides the main one, each created when it is first opened.
+/// The app's windows: the Flock window, created at start, and the others when first opened.
 #[derive(Default)]
 struct Windows {
-    /// The main window, which holds the setup until Flock is set up.
-    main: RefCell<Option<gtk::Window>>,
-    settings: RefCell<Option<Rc<settings::SettingsWindow>>>,
+    main: RefCell<Option<Rc<window::MainWindow>>>,
     mail: RefCell<Option<Rc<mail::MailWindow>>>,
     dumps: RefCell<Option<Rc<dumps::DumpsWindow>>>,
     logs: RefCell<Option<Rc<logs::LogsWindow>>>,
 }
 
 impl Windows {
-    /// Opens Settings at a pane, "services/<id>" at a service or "sites/<name>" at a site.
-    fn settings(&self, app: &adw::Application, model: &Rc<model::AppModel>, pane: &str) -> gtk::Window {
-        let window = self.settings.borrow_mut().get_or_insert_with(|| settings::SettingsWindow::new(app, model.clone())).clone();
+    /// Opens the Flock window at a pane, "services/<id>" at a service or "sites/<name>" at a site.
+    fn pane(&self, pane: &str) -> Option<gtk::Window> {
+        let window = self.main.borrow().clone()?;
         if let Some(service) = pane.strip_prefix("services/") {
             window.select_service(service);
         } else if let Some(site) = pane.strip_prefix("sites/") {
@@ -53,15 +51,14 @@ impl Windows {
         } else {
             window.select(pane);
         }
-        window.window.present();
-        window.window.clone().upcast()
+        self.main()
     }
 
-    /// The main window: it shows the setup while Flock isn't set up.
+    /// Brings the Flock window up at the pane it shows; until Flock is set up, that is the setup.
     fn main(&self) -> Option<gtk::Window> {
-        let window = self.main.borrow().clone()?;
+        let window = self.main.borrow().as_ref()?.window.clone();
         window.present();
-        Some(window)
+        Some(window.upcast())
     }
 
     fn mail(&self, app: &adw::Application, model: &Rc<model::AppModel>) -> gtk::Window {
@@ -86,11 +83,12 @@ impl Windows {
         window.window.clone().upcast()
     }
 
-    /// Opens a window by name: setup, mail (mail/newest at the newest message), dumps, logs
-    /// (logs/sites/<name>, logs/services/<name> at a log), settings or settings/<pane>.
+    /// Opens a window by name: flock (the Flock window as it was) or setup, mail (mail/newest at the
+    /// newest message), dumps, logs (logs/sites/<name>, logs/services/<name> at a log), settings
+    /// (General) or settings/<pane>, e.g. settings/sites.
     fn open(&self, app: &adw::Application, model: &Rc<model::AppModel>, name: &str) -> Option<gtk::Window> {
         match name {
-            "setup" => self.main(),
+            "flock" | "setup" => self.main(),
             "mail" => Some(self.mail(app, model)),
             "dumps" => Some(self.dumps(app, model)),
             "logs" => Some(self.logs(app, None)),
@@ -101,14 +99,14 @@ impl Windows {
                 }
                 Some(window)
             }
-            "settings" => Some(self.settings(app, model, "general")),
+            "settings" => self.pane("general"),
             _ => {
                 if let Some(site) = name.strip_prefix("logs/sites/") {
                     Some(self.logs(app, Some(logs::Source::Site(site.to_owned()))))
                 } else if let Some(service) = name.strip_prefix("logs/services/") {
                     Some(self.logs(app, Some(logs::Source::Service(service.to_owned()))))
                 } else {
-                    name.strip_prefix("settings/").map(|pane| self.settings(app, model, pane))
+                    name.strip_prefix("settings/").and_then(|pane| self.pane(pane))
                 }
             }
         }
@@ -147,25 +145,21 @@ fn main() -> glib::ExitCode {
     let (m, w) = (model.clone(), windows.clone());
     app.connect_activate(move |app| {
         // Started again (from the launcher) while it runs, maybe hidden in the tray.
-        if let Some(window) = w.main.borrow().as_ref() {
-            window.present();
+        if w.main().is_some() {
             return;
         }
         let main = window::MainWindow::new(app, m.clone());
         m.start_polling();
+        w.main.replace(Some(main.clone()));
         // At login, the window only shows if there is no tray to stay in.
-        if !background || screenshot.is_some() {
-            main.window.present();
-        }
-        w.main.replace(Some(main.window.clone().upcast()));
+        let mut shown = (!background || screenshot.is_some()).then(|| w.main()).flatten();
         if screenshot.is_none() {
             start_tray(app, &m, &w);
         }
-        let mut shown: gtk::Window = main.window.clone().upcast();
         if let Some(window) = open.as_deref().and_then(|name| w.open(app, &m, name)) {
-            shown = window;
+            shown = Some(window);
         }
-        if let Some(path) = screenshot.clone() {
+        if let (Some(path), Some(shown)) = (screenshot.clone(), shown) {
             // The paintable follows the content from its next frame on.
             let paintable = gtk::WidgetPaintable::new(shown.child().as_ref());
             // FLOCK_APP_SCREENSHOT_DELAY: seconds to wait for slow content (default 3).
@@ -207,20 +201,21 @@ fn main() -> glib::ExitCode {
     app.run_with_args(&args[..1])
 }
 
-/// Shows the tray icon. With a tray, closing the main window hides it, and the app keeps running;
+/// Shows the tray icon. With a tray, closing the Flock window hides it, and the app keeps running;
 /// without one, closing it quits.
 fn start_tray(app: &adw::Application, model: &Rc<model::AppModel>, windows: &Rc<Windows>) {
     let w = windows.clone();
     let shown = Cell::new(false);
     let available = move |yes: bool| {
-        let Some(main) = w.main.borrow().clone() else { return };
-        main.set_hide_on_close(yes);
-        // A start at login without a tray shows the window after all. A tray that goes away later
-        // (GNOME's, while the screen is locked) leaves a hidden window hidden: the launcher shows it.
-        if !yes && !shown.get() && !main.is_visible() {
+        let Some(main) = w.main.borrow().as_ref().map(|m| m.window.clone()) else { return };
+        // Without a tray from the start, the window is the app: it shows after all (at login), and
+        // closing it quits. A tray that goes away later (GNOME's, while the screen is locked) keeps
+        // a hidden window hidden; the launcher shows it.
+        if !yes && !shown.get() {
             main.present();
         }
         shown.set(shown.get() || yes);
+        main.set_hide_on_close(shown.get());
     };
     let (app, m, w) = (app.clone(), model.clone(), windows.clone());
     tray::start(model.clone(), available, move |command| match command {

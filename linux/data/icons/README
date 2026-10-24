@@ -5,3 +5,6 @@ Flock's icons for Linux, installed into /usr/share/icons/hicolor by the packages
   logomark of design/logo/flock-logomark-black.svg; stopped is dimmed, a warning adds the ember
   badge, as on Windows and macOS (design/icongen). GNOME recolors -symbolic icons for its top
   bar, KDE through the ColorScheme-Text class.
+
+The launcher, ../dev.flock.Flock.desktop, goes to /usr/share/applications; its name matches the
+app ID, which is how the dock finds the window's icon.

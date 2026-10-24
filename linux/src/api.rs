@@ -515,10 +515,6 @@ impl Status {
     pub fn is_degraded(&self) -> bool {
         !self.warnings.is_empty() || self.processes.iter().any(|p| !p.up)
     }
-
-    pub fn process(&self, name: &str) -> Option<&ProcStatus> {
-        self.processes.iter().find(|p| p.name == name)
-    }
 }
 
 /// The kinds of events Flock captures besides dumps, in the order the apps list them.

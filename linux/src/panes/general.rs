@@ -37,6 +37,13 @@ impl GeneralPane {
         value.append(&gtk::Label::new(Some(if degraded { "Needs attention" } else { "Running" })));
         state.add_suffix(&value);
         group.add(&state);
+        // What "Needs attention" is about.
+        let down = status.processes.iter().filter(|p| !p.up).map(|p| format!("{}: {}", p.name, p.last_error.as_deref().unwrap_or("down")));
+        for warning in status.warnings.iter().cloned().chain(down) {
+            let row = adw::ActionRow::builder().title(glib::markup_escape_text(&warning)).css_classes(["warning"]).build();
+            row.add_prefix(&gtk::Image::from_icon_name("dialog-warning-symbolic"));
+            group.add(&row);
+        }
         group.add(&info_row("Version", &status.version));
         group.add(&info_row("Process", &format!("pid {}", status.pid)));
 
