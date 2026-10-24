@@ -24,6 +24,14 @@ pub fn enabled() -> bool {
         .is_ok_and(|entry| !entry.lines().any(|line| matches!(line.trim(), "Hidden=true" | "X-GNOME-Autostart-enabled=false")))
 }
 
+/// Points an existing entry at this app, which may have moved (a development build, then the
+/// package's).
+pub fn refresh() {
+    if enabled() && fs::read_to_string(file()).ok() != std::env::current_exe().ok().map(|exe| entry(&exe.to_string_lossy())) {
+        let _ = set(true);
+    }
+}
+
 pub fn set(on: bool) -> io::Result<()> {
     let file = file();
     if !on {

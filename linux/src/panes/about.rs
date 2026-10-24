@@ -18,7 +18,7 @@ impl AboutPane {
     pub fn new(model: Rc<AppModel>) -> Self {
         let daemon = gtk::Label::new(None);
         let versions = gtk::Box::builder().orientation(gtk::Orientation::Vertical).spacing(4).build();
-        versions.append(&gtk::Label::new(Some(&format!("App {}", env!("CARGO_PKG_VERSION")))));
+        versions.append(&gtk::Label::new(Some(&format!("App {}", crate::VERSION))));
         versions.append(&daemon);
 
         let links = gtk::Box::builder().spacing(8).halign(gtk::Align::Center).build();
@@ -106,7 +106,7 @@ fn issue_url(daemon: Option<String>) -> String {
         .ok()
         .and_then(|s| s.lines().find_map(|l| l.strip_prefix("PRETTY_NAME=").map(|v| v.trim_matches('"').to_owned())))
         .unwrap_or_else(|| "Linux".to_owned());
-    let body = format!("\n\n---\nApp: {}\nDaemon: {}\nOS: {os}\n", env!("CARGO_PKG_VERSION"), daemon.as_deref().unwrap_or("not running"));
+    let body = format!("\n\n---\nApp: {}\nDaemon: {}\nOS: {os}\n", crate::VERSION, daemon.as_deref().unwrap_or("not running"));
     let encoded: String = body
         .bytes()
         .map(|b| match b {

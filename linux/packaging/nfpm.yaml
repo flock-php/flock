@@ -1,6 +1,7 @@
-# The flockphp .deb and .rpm (linux/build-packages.sh). The command is flock, but util-linux owns
-# /usr/bin/flock: the binary lives in /usr/lib/flockphp and only `flk` goes on PATH. `flk install`
-# copies it into the user's data dir, whose bin/ (first on PATH) then has `flock` too.
+# The flockphp .deb and .rpm (linux/build-packages.sh): the CLI and daemon, and the app (linux/).
+# The command is flock, but util-linux owns /usr/bin/flock: the binary lives in /usr/lib/flockphp
+# and only `flk` goes on PATH. `flk install` links it into the user's data dir, whose bin/ (first on
+# PATH) then has `flock` too.
 name: flockphp
 arch: ${NFPM_ARCH}
 platform: linux
@@ -23,6 +24,23 @@ contents:
   - src: /usr/lib/flockphp/flock
     dst: /usr/bin/flk
     type: symlink
+  # The app: its launcher (which also takes flock:// links), icons and what software centers show.
+  - src: build/linux/flock-app
+    dst: /usr/lib/flockphp/flock-app
+    file_info:
+      mode: 0755
+  - src: linux/data/dev.flock.Flock.desktop
+    dst: /usr/share/applications/dev.flock.Flock.desktop
+  - src: linux/data/dev.flock.Flock.metainfo.xml
+    dst: /usr/share/metainfo/dev.flock.Flock.metainfo.xml
+  - src: linux/data/icons/hicolor/scalable/apps/dev.flock.Flock.svg
+    dst: /usr/share/icons/hicolor/scalable/apps/dev.flock.Flock.svg
+  - src: linux/data/icons/hicolor/symbolic/apps/dev.flock.Flock-symbolic.svg
+    dst: /usr/share/icons/hicolor/symbolic/apps/dev.flock.Flock-symbolic.svg
+  - src: linux/data/icons/hicolor/symbolic/apps/dev.flock.Flock-stopped-symbolic.svg
+    dst: /usr/share/icons/hicolor/symbolic/apps/dev.flock.Flock-stopped-symbolic.svg
+  - src: linux/data/icons/hicolor/symbolic/apps/dev.flock.Flock-warning-symbolic.svg
+    dst: /usr/share/icons/hicolor/symbolic/apps/dev.flock.Flock-warning-symbolic.svg
   # Each user's daemon is an instance of it, set up by `flk install` (per-user drop-in).
   - src: linux/packaging/flock@.service
     dst: /usr/lib/systemd/system/flock@.service
@@ -46,6 +64,10 @@ overrides:
       - polkitd | policykit-1
       - ca-certificates
       - libnss3-tools
+      # The app; Ubuntu 24.04 has GTK 4.14 and libadwaita 1.5, the oldest it is built for.
+      - libgtk-4-1 (>= 4.14)
+      - libadwaita-1-0 (>= 1.5)
+      - libwebkitgtk-6.0-4
     recommends:
       # Services Flock downloads link these from the system: MongoDB (OpenSSL 3, libcurl), MySQL
       # (libkeyutils, for its Kerberos plugin). See LINUX_SYSTEM_LIBS in flockphp-binaries.
@@ -58,6 +80,9 @@ overrides:
       - polkit
       - ca-certificates
       - nss-tools
+      - gtk4 >= 4.14
+      - libadwaita >= 1.5
+      - webkitgtk6.0
     recommends:
       - openssl-libs
       - libcurl

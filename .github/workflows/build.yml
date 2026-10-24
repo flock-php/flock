@@ -415,7 +415,8 @@ jobs:
         if: env.CODE == 'true'
         run: cargo test --manifest-path linux/Cargo.toml --locked
 
-  # The flockphp .deb and .rpm per architecture (linux/build-packages.sh), installed, run and
+  # The flockphp .deb and .rpm per architecture (linux/build-packages.sh): the CLI and the app,
+  # built on Ubuntu 24.04 (the oldest GTK and glibc Flock supports), then installed, run and
   # removed again on the distributions Flock supports. Unsigned packages: the repository signs
   # its index, not the packages.
   linux:
@@ -439,6 +440,9 @@ jobs:
         with:
           go-version-file: go.mod
 
+      - name: GTK, libadwaita and WebKitGTK
+        run: sudo apt-get install -y --no-install-recommends libgtk-4-dev libadwaita-1-dev libwebkitgtk-6.0-dev
+
       - name: Build packages
         run: linux/build-packages.sh "${{ matrix.arch }}"
 
@@ -454,6 +458,8 @@ jobs:
             docker run --rm -v "$PWD/build/linux:/pkgs:ro" "$image" sh -ec "
               $install
               test -x /usr/lib/flockphp/flock && test -f /usr/lib/systemd/system/flock@.service
+              test -f /usr/share/applications/dev.flock.Flock.desktop
+              ! ldd /usr/lib/flockphp/flock-app | grep 'not found'
               flk version
               flk --help >/dev/null
               $remove

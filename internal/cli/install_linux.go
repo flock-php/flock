@@ -673,6 +673,24 @@ func newUninstallCommand() *cobra.Command {
 	return cmd
 }
 
-// appDirs are the app's own files outside the data dir, removed on uninstall. There is no Linux
-// app yet.
-func appDirs() []string { return nil }
+// appDirs are the app's own files outside the data dir, removed on uninstall: its settings, the
+// start at login, and WebKit's data and cache (named after the program).
+func appDirs() []string {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return nil
+	}
+	xdg := func(name, fallback string) string {
+		if dir := os.Getenv(name); filepath.IsAbs(dir) {
+			return dir
+		}
+		return filepath.Join(home, fallback)
+	}
+	config := xdg("XDG_CONFIG_HOME", ".config")
+	return []string{
+		filepath.Join(config, "flock"),
+		filepath.Join(config, "autostart", "dev.flock.Flock.desktop"),
+		filepath.Join(xdg("XDG_DATA_HOME", ".local/share"), "flock-app"),
+		filepath.Join(xdg("XDG_CACHE_HOME", ".cache"), "flock-app"),
+	}
+}

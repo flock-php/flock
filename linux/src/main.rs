@@ -28,6 +28,12 @@ use gtk::{gio, glib};
 
 const APP_ID: &str = "dev.flock.Flock";
 
+/// The package's version (linux/build-packages.sh); "dev" for a build from the source tree.
+const VERSION: &str = match option_env!("FLOCK_VERSION") {
+    Some(version) => version,
+    None => "dev",
+};
+
 /// Styles libadwaita has no class for: the small labels next to versions and sites.
 const STYLE: &str = "
 .badge { padding: 1px 7px; border-radius: 99px; font-weight: 600; background: alpha(currentColor, 0.12); }
@@ -159,6 +165,7 @@ fn main() -> glib::ExitCode {
             gtk::IconTheme::for_display(&gtk::gdk::Display::default().expect("display")).add_search_path(icons.join("hicolor"));
         }
         gtk::Window::set_default_icon_name(APP_ID);
+        autostart::refresh();
     });
 
     let (m, w) = (model.clone(), windows.clone());
