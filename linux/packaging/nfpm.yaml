@@ -46,6 +46,17 @@ contents:
     dst: /usr/lib/systemd/system/flock@.service
   - src: linux/packaging/50-flock.rules
     dst: /usr/share/polkit-1/rules.d/50-flock.rules
+  # The key Flock's repository is signed with; postinstall.sh adds the repository.
+  - src: build/linux/flockphp.asc
+    dst: /usr/share/keyrings/flockphp.asc
+    packager: deb
+    file_info:
+      mode: 0644
+  - src: build/linux/flockphp.asc
+    dst: /etc/pki/rpm-gpg/RPM-GPG-KEY-flockphp
+    packager: rpm
+    file_info:
+      mode: 0644
   - src: LICENSE
     dst: /usr/share/doc/flockphp/copyright
     packager: deb
@@ -56,6 +67,7 @@ contents:
 scripts:
   postinstall: linux/packaging/postinstall.sh
   preremove: linux/packaging/preremove.sh
+  postremove: linux/packaging/postremove.sh
 
 overrides:
   deb:

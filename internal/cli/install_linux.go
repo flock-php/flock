@@ -474,9 +474,9 @@ func runPrivileged(cmd *cobra.Command, exe string, args ...string) error {
 var validUser = regexp.MustCompile(`^[a-z_][a-z0-9_-]*$`)
 
 func newPrivilegedSetupCommand() *cobra.Command {
-	var name, root, tld, caPath string
+	var name, root, tld, caPath, repo string
 	var dnsPort int
-	var remove bool
+	var remove, ifMissing bool
 
 	cmd := &cobra.Command{
 		Use:    "privileged-setup",
@@ -486,6 +486,11 @@ func newPrivilegedSetupCommand() *cobra.Command {
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			if os.Geteuid() != 0 {
 				return fmt.Errorf("must run as root")
+			}
+			// --repo <suite>: Flock's package repository (`flock channel`, and the package's
+			// install with --if-missing). Not per user.
+			if repo != "" {
+				return writeRepo(repo, ifMissing)
 			}
 			if !validUser.MatchString(name) {
 				return fmt.Errorf("invalid --user %q", name)
@@ -509,6 +514,8 @@ func newPrivilegedSetupCommand() *cobra.Command {
 	cmd.Flags().IntVar(&dnsPort, "dns-port", 0, "")
 	cmd.Flags().StringVar(&caPath, "ca", "", "")
 	cmd.Flags().BoolVar(&remove, "remove", false, "")
+	cmd.Flags().StringVar(&repo, "repo", "", "")
+	cmd.Flags().BoolVar(&ifMissing, "if-missing", false, "")
 
 	return cmd
 }
