@@ -24,13 +24,12 @@ public struct FlockConfig: Decodable, Sendable, Equatable {
         public var dns: Int
         public var smtp: Int
         public var postgres: Int
-        public var valkey: Int
         public var dumps: Int
         /// Where the PHP agent sends what it captures.
         public var agent: Int
         public var api: Int
 
-        enum CodingKeys: String, CodingKey { case http, https, dns, smtp, postgres, valkey, dumps, agent, api }
+        enum CodingKeys: String, CodingKey { case http, https, dns, smtp, postgres, dumps, agent, api }
 
         public init(from decoder: Decoder) throws {
             let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -40,7 +39,6 @@ public struct FlockConfig: Decodable, Sendable, Equatable {
             dns = try port(.dns)
             smtp = try port(.smtp)
             postgres = try port(.postgres)
-            valkey = try port(.valkey)
             dumps = try port(.dumps)
             agent = try port(.agent)
             api = try port(.api)

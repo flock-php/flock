@@ -964,9 +964,6 @@ func (d *daemon) Status() api.Status {
 		if d.cfg.Services.Postgres != "" {
 			st.Postgres = fmt.Sprintf("%s on 127.0.0.1:%d", postgres.VersionOf(d.cfg.Services.Postgres), d.cfg.Ports.Postgres)
 		}
-		if x, ok := d.cfg.Services.Extra("valkey"); ok {
-			st.Valkey = fmt.Sprintf("%s on 127.0.0.1:%d", x.Version, x.Port)
-		}
 		if d.catalog != nil {
 			for _, k := range d.catalog.Kinds() {
 				if x, ok := d.cfg.Services.Extra(k.ID); ok {
