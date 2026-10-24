@@ -5,7 +5,7 @@ use std::rc::Rc;
 
 use adw::prelude::*;
 
-use super::common::{PaneView, group, info_row, report, switch_row};
+use super::common::{PaneView, group, open_row, report, switch_row};
 use super::{Data, Pane};
 use crate::api::{EVENT_KINDS, SettingsChange, Status};
 use crate::model::AppModel;
@@ -47,7 +47,7 @@ impl Pane for DumpsPane {
             let banner = banner.clone();
             model.change_settings(SettingsChange { dumps: Some(on), ..Default::default() }, move |e| report(&banner, e));
         }));
-        main.add(&info_row("Captured", &format!("{} dumps, {} events", status.dump_count, status.event_count)));
+        main.add(&open_row("Captured", &format!("{} dumps, {} events", status.dump_count, status.event_count), "Open Dumps", "app.dumps"));
 
         let unsupported = status.capture_unsupported.clone().unwrap_or_default();
         let mut footer = "dd() always shows in the page too, as it ends the request.".to_owned();

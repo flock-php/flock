@@ -181,7 +181,9 @@ impl Inner {
             return;
         }
         self.shown.replace(Some(key));
-        match self.selected.borrow().clone() {
+        // Not borrowed while rendering: the detail goes back to the list when its service is gone.
+        let selected = self.selected.borrow().clone();
+        match selected {
             Some(id) => self.render_detail(&id),
             None => self.render_list(),
         }
@@ -407,7 +409,10 @@ impl Inner {
 
     fn render_detail(self: &Rc<Self>, id: &str) {
         let Some(service) = self.services.borrow().iter().find(|s| s.id == id).cloned() else {
-            self.back();
+            // Before the services are loaded (a link opened the pane), the detail waits for them.
+            if !self.services.borrow().is_empty() {
+                self.back();
+            }
             return;
         };
         let header = group("", "");

@@ -63,6 +63,13 @@ pub fn info_row(title: &str, value: &str) -> adw::ActionRow {
     row
 }
 
+/// An info row with a button that opens a window through an app action, e.g. "Open Mail" (app.mail).
+pub fn open_row(title: &str, value: &str, button: &str, action: &str) -> adw::ActionRow {
+    let row = info_row(title, value);
+    row.add_suffix(&gtk::Button::builder().label(button).action_name(action).valign(gtk::Align::Center).build());
+    row
+}
+
 /// A switch row that calls changed with its new state when the user flips it.
 pub fn switch_row(title: &str, subtitle: &str, active: bool, changed: impl Fn(bool) + 'static) -> adw::SwitchRow {
     let row = adw::SwitchRow::builder().title(glib::markup_escape_text(title)).active(active).build();

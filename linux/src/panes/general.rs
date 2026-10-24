@@ -113,7 +113,8 @@ impl GeneralPane {
     /// Linux apps don't update themselves: the flockphp package comes with the system's updates.
     fn updates(&self, config: &Config, status: &Status) -> adw::PreferencesGroup {
         let group = group("Updates", "");
-        let version = info_row("Flock", &format!("Version {}", status.version));
+        // The version in the title: as a value next to the subtitle and the button, it got squeezed.
+        let version = adw::ActionRow::builder().title(glib::markup_escape_text(&format!("Flock {}", status.version))).build();
         version.set_subtitle("New versions come with your system's updates. `flock update` installs one right away.");
         if let Some((name, updater)) = system_updater() {
             let open =

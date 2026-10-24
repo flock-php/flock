@@ -4,7 +4,7 @@ use std::cell::RefCell;
 
 use adw::prelude::*;
 
-use super::common::{PaneView, code_block, group, info_row, status_dot};
+use super::common::{PaneView, code_block, group, info_row, open_row, status_dot};
 use super::{Data, Pane};
 
 pub struct MailPane {
@@ -49,7 +49,7 @@ impl Pane for MailPane {
 
         let caught = group("", "");
         let count = data.status.as_ref().map_or(0, |s| s.mail_count);
-        caught.add(&info_row("Caught emails", &count.to_string()));
+        caught.add(&open_row("Caught emails", &count.to_string(), "Open Mail", "app.mail"));
 
         self.view.set_groups(&[server.upcast(), env.upcast(), caught.upcast()]);
     }
