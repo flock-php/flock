@@ -9,8 +9,9 @@ use gtk::{gio, glib};
 
 use super::common::{PaneView, group, info_row, report, status_dot, switch_row};
 use super::{Data, Pane};
-use crate::api::{Client, Config, SettingsChange, Status};
+use crate::api::{Client, Config, Status};
 use crate::autostart;
+use crate::installation;
 use crate::model::AppModel;
 
 pub struct GeneralPane {
@@ -126,17 +127,35 @@ impl GeneralPane {
             version.add_suffix(&open);
         }
         group.add(&version);
-        let (model, banner) = (self.model.clone(), self.banner.clone());
-        let beta = switch_row(
-            "Beta versions",
-            "Get new versions of PHP and services earlier, including pre-releases. They may not work yet.",
-            config.channel == "beta",
-            move |on| {
-                let banner = banner.clone();
-                let channel = if on { "beta" } else { "stable" }.to_owned();
-                model.change_settings(SettingsChange { channel: Some(channel), ..Default::default() }, move |e| report(&banner, e));
-            },
-        );
+        // `flock channel`: on Linux, Flock's own betas come from its package repository's beta
+        // suite, which the system's file names, so the switch asks for a password.
+        let beta = adw::SwitchRow::builder()
+            .title("Beta versions")
+            .subtitle("Get new versions of Flock, PHP and services earlier, including pre-releases. They may not work yet.")
+            .active(config.channel == "beta")
+            .build();
+        let (model, banner, current) = (self.model.clone(), self.banner.clone(), config.channel == "beta");
+        beta.connect_active_notify(move |row| {
+            let on = row.is_active();
+            // Also the switch going back after a declined prompt.
+            if on == current {
+                return;
+            }
+            let (model, banner, row) = (model.clone(), banner.clone(), row.clone());
+            row.set_sensitive(false);
+            glib::spawn_future_local(async move {
+                let channel = if on { "beta" } else { "stable" };
+                let out = gio::spawn_blocking(move || installation::run(&["channel", channel])).await.expect("flock channel");
+                row.set_sensitive(true);
+                if !out.ok {
+                    if !installation::declined(&out) {
+                        report(&banner, Some(out.text));
+                    }
+                    row.set_active(!on);
+                }
+                model.refresh();
+            });
+        });
         beta.set_sensitive(config.channel != "experimental");
         group.add(&beta);
         if config.channel == "experimental" {
