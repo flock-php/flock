@@ -8,10 +8,11 @@ use std::rc::Rc;
 use adw::prelude::*;
 use gtk::{gio, glib};
 
-use super::common::{PaneView, group, report};
+use super::common::{PaneView, ask_link, group, report};
 use super::versions::{badge, button, checked_text, confirm, more_menu};
 use super::{Data, Pane};
 use crate::api::{Client, Error, NodeRelease, NodeVersions, SettingsChange};
+use crate::links::{self, Link};
 use crate::model::AppModel;
 
 pub struct NodePane(Rc<Inner>);
@@ -103,7 +104,23 @@ impl Inner {
         });
     }
 
+    /// Asks about a pending flock://install/node link once the versions are loaded.
+    fn ask_link(self: &Rc<Self>) {
+        let Some(Link::Install(link)) = self.model.link().filter(|l| matches!(l, Link::Install(i) if i.service == links::NODE)) else {
+            return;
+        };
+        let installing: Vec<String> = self.steps.borrow().keys().cloned().chain(self.default_install.borrow().clone()).collect();
+        let Some(resolution) = link.resolve_node(self.versions.borrow().as_ref(), &installing) else { return };
+        self.model.set_link(None);
+        let this = self.clone();
+        ask_link(&self.view.scrolled, resolution, "Install", move |target| {
+            let major = target.line.clone();
+            this.run(&target.line, format!("Downloading Node.js {}…", target.version), move |c| c.install_node(&major));
+        });
+    }
+
     fn render(self: &Rc<Self>) {
+        self.ask_link();
         let versions = self.versions.borrow().clone();
         let key = format!("{versions:?}{:?}{:?}{}", self.steps.borrow(), self.default_install.borrow(), self.checking.get());
         if self.shown.borrow().as_deref() == Some(key.as_str()) {

@@ -5,6 +5,7 @@ mod api;
 mod autostart;
 mod dumps;
 mod installation;
+mod links;
 mod logs;
 mod mail;
 mod model;
@@ -44,15 +45,31 @@ struct Windows {
 impl Windows {
     /// Opens the Flock window at a pane, "services/<id>" at a service or "sites/<name>" at a site.
     fn pane(&self, pane: &str) -> Option<gtk::Window> {
-        let window = self.main.borrow().clone()?;
-        if let Some(service) = pane.strip_prefix("services/") {
-            window.select_service(service);
-        } else if let Some(site) = pane.strip_prefix("sites/") {
-            window.select_site(site);
-        } else {
-            window.select(pane);
-        }
+        self.main.borrow().as_ref()?.select(pane);
         self.main()
+    }
+
+    /// Opens what a flock:// link asks about. Install links before the setup wait for it: the
+    /// setup opens their pane when it's done.
+    fn link(&self, model: &model::AppModel, link: links::Link) {
+        match &link {
+            // The app's update comes from the package manager; General has it.
+            links::Link::Update => {
+                self.pane("general");
+            }
+            links::Link::Secure(_) if model.needs_setup() => {
+                self.main();
+            }
+            links::Link::Secure(_) => {
+                model.set_link(Some(link));
+                self.pane("sites");
+            }
+            links::Link::Install(install) => {
+                let pane = install.pane();
+                model.set_link(Some(link));
+                if model.needs_setup() { self.main() } else { self.pane(&pane) };
+            }
+        }
     }
 
     /// Brings the Flock window up at the pane it shows; until Flock is set up, that is the setup.
@@ -125,7 +142,8 @@ fn main() -> glib::ExitCode {
     let open = flag("--open");
     let screenshot = flag("--screenshot").map(PathBuf::from);
 
-    let app = adw::Application::builder().application_id(APP_ID).build();
+    // A flock:// link (x-scheme-handler/flock) starts the app with it, or goes to the running one.
+    let app = adw::Application::builder().application_id(APP_ID).flags(gio::ApplicationFlags::HANDLES_OPEN).build();
     let model = model::AppModel::new();
     let windows = Rc::new(Windows::default());
 
@@ -172,6 +190,16 @@ fn main() -> glib::ExitCode {
         }
     });
 
+    let (m, w) = (model.clone(), windows.clone());
+    app.connect_open(move |app, files, _| {
+        app.activate();
+        for file in files {
+            if let Some(link) = links::parse(&file.uri()) {
+                w.link(&m, link);
+            }
+        }
+    });
+
     // app.settings opens General, app.open('settings/sites') a pane, app.open('mail') a window.
     let quit = gio::ActionEntry::builder("quit").activate(|app: &adw::Application, _, _| app.quit()).build();
     let (m, w) = (model.clone(), windows.clone());
@@ -198,8 +226,9 @@ fn main() -> glib::ExitCode {
     app.set_accels_for_action("app.quit", &["<Control>q"]);
     app.set_accels_for_action("app.settings", &["<Control>comma"]);
 
-    // GApplication would reject our flags as unknown options.
-    app.run_with_args(&args[..1])
+    // GApplication would reject our flags as unknown options; it gets the links.
+    let links: Vec<&String> = args.iter().take(1).chain(args.iter().skip(1).filter(|a| links::parse(a).is_some())).collect();
+    app.run_with_args(&links)
 }
 
 /// Shows the tray icon. With a tray, closing the Flock window hides it, and the app keeps running;

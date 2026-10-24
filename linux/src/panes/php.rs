@@ -9,10 +9,11 @@ use std::time::{Duration, Instant};
 use adw::prelude::*;
 use gtk::{gio, glib};
 
-use super::common::{PaneView, group, report};
+use super::common::{PaneView, ask_link, group, report};
 use super::versions::{MenuItem, badge, button, checked_text, confirm, detail, more_menu, show_log};
 use super::{Data, Pane};
 use crate::api::{Client, Error, FrankenPhpBuild, FrankenPhpState, PhpRelease, PhpVersions, SettingsChange};
+use crate::links::{self, Link};
 use crate::model::AppModel;
 
 /// How often the versions are read again: while something downloads, and otherwise.
@@ -107,7 +108,23 @@ impl Inner {
         });
     }
 
+    /// Asks about a pending flock://install/php link (e.g. from the page served for a site whose
+    /// PHP is missing) once the versions are loaded, like Services does for services.
+    fn ask_link(self: &Rc<Self>) {
+        let Some(Link::Install(link)) = self.model.link().filter(|l| matches!(l, Link::Install(i) if i.service == links::PHP)) else {
+            return;
+        };
+        let Some(resolution) = link.resolve_php(self.versions.borrow().as_ref()) else { return };
+        self.model.set_link(None);
+        let this = self.clone();
+        ask_link(&self.view.scrolled, resolution, "Install", move |target| {
+            let minor = target.line.clone();
+            this.run_php(&target.line, move |c| c.install_php(&minor));
+        });
+    }
+
     fn render(self: &Rc<Self>) {
+        self.ask_link();
         let versions = self.versions.borrow().clone();
         let franken = self.frankenphp.borrow().clone();
         let key = format!("{versions:?}{franken:?}{:?}{:?}{}", self.inis.borrow(), self.busy.borrow(), self.checking.get());

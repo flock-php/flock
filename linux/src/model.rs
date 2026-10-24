@@ -9,6 +9,7 @@ use gtk::{gio, glib};
 
 use crate::api::{Client, Error, SettingsChange, Status};
 use crate::installation;
+use crate::links::Link;
 
 /// How often the daemon is asked for its status.
 const POLL_INTERVAL: Duration = Duration::from_secs(2);
@@ -24,6 +25,8 @@ pub struct AppModel {
     needs_setup: Cell<bool>,
     restarting: Cell<bool>,
     polling: Cell<bool>,
+    /// A flock:// link the pane it opened asks about once its data is loaded.
+    link: RefCell<Option<Link>>,
     listeners: RefCell<Vec<Rc<dyn Fn()>>>,
 }
 
@@ -58,6 +61,14 @@ impl AppModel {
 
     pub fn is_restarting(&self) -> bool {
         self.restarting.get()
+    }
+
+    pub fn link(&self) -> Option<Link> {
+        self.link.borrow().clone()
+    }
+
+    pub fn set_link(&self, link: Option<Link>) {
+        self.link.replace(link);
     }
 
     /// Calls f after every change, from now on.

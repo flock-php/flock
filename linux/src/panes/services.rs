@@ -9,10 +9,12 @@ use std::time::{Duration, Instant};
 use adw::prelude::*;
 use gtk::{gio, glib};
 
-use super::common::{PaneView, code_block, group, info_row, report, status_dot};
+use super::common::{PaneView, ask_link, code_block, group, info_row, report, status_dot};
 use super::versions::{MenuItem, badge, button, checked_text, confirm, more_menu, show_log};
 use super::{Data, Pane};
 use crate::api::{Catalog, CatalogEntry, CatalogLine, Client, Error, PostgresMajor, PostgresVersions, Service};
+use crate::links::{self, Link};
+use crate::model::AppModel;
 use crate::paths;
 
 const CATEGORY_ORDER: [&str; 7] = ["Core", "Database", "Cache & Queue", "Search", "Storage", "Mail", "Debugging"];
@@ -23,6 +25,7 @@ const IDLE_INTERVAL: Duration = Duration::from_secs(30);
 pub struct ServicesPane(Rc<Inner>);
 
 struct Inner {
+    model: Rc<AppModel>,
     stack: gtk::Stack,
     list: PaneView,
     detail: PaneView,
@@ -44,13 +47,14 @@ struct Inner {
 }
 
 impl ServicesPane {
-    pub fn new(banner: adw::Banner) -> Self {
+    pub fn new(model: Rc<AppModel>, banner: adw::Banner) -> Self {
         let list = PaneView::new("Databases, caches, search and the tools around your sites. Everything listens on 127.0.0.1 only.");
         let detail = PaneView::new("");
         let stack = gtk::Stack::builder().transition_type(gtk::StackTransitionType::SlideLeftRight).build();
         stack.add_named(&list.scrolled, Some("list"));
         stack.add_named(&detail.scrolled, Some("detail"));
         Self(Rc::new(Inner {
+            model,
             stack,
             list,
             detail,
@@ -136,7 +140,33 @@ impl Inner {
         self.render();
     }
 
+    /// Asks about a pending flock://install link (main.rs) once the services and versions are
+    /// loaded: nothing installs until the user confirms. The PHP and Node panes ask about links to
+    /// their versions.
+    fn ask_link(self: &Rc<Self>) {
+        let Some(Link::Install(link)) =
+            self.model.link().filter(|l| matches!(l, Link::Install(i) if i.service != links::PHP && i.service != links::NODE))
+        else {
+            return;
+        };
+        let resolution = link.resolve(&self.services.borrow(), self.catalog.borrow().as_ref(), self.postgres.borrow().as_ref());
+        let Some(resolution) = resolution else { return };
+        self.model.set_link(None);
+        let this = self.clone();
+        ask_link(&self.stack, resolution, "Install", move |target| {
+            let (id, line) = (target.service.clone(), target.line.clone());
+            if id == "postgres" {
+                this.run_postgres(move |c| c.postgres_operation(&line, "install"));
+                return;
+            }
+            let port = this.catalog.borrow().as_ref().and_then(|c| c.services.iter().flatten().find(|e| e.id == id).map(|e| e.port));
+            let i2 = id.clone();
+            this.run_catalog(&id, move |c| c.install_catalog(&i2, &line, port.unwrap_or_default()));
+        });
+    }
+
     fn render(self: &Rc<Self>) {
+        self.ask_link();
         let key = format!(
             "{:?}{:?}{:?}{:?}{}{:?}{}",
             self.services.borrow(),

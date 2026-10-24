@@ -9,6 +9,7 @@ use adw::prelude::*;
 use gtk::{gio, glib};
 
 use crate::api::Client;
+use crate::links::Link;
 use crate::model::AppModel;
 use crate::panes::{self, Data, Pane};
 use crate::setup::SetupView;
@@ -78,7 +79,7 @@ impl MainWindow {
         let sidebar_page = adw::NavigationPage::new(&sidebar_view, "Flock");
 
         let banner = adw::Banner::builder().button_label("Dismiss").build();
-        let services = panes::services::ServicesPane::new(banner.clone());
+        let services = panes::services::ServicesPane::new(model.clone(), banner.clone());
         let sites = panes::sites::SitesPane::new(model.clone(), banner.clone());
         let panes: Vec<(&'static str, Box<dyn Pane>)> = vec![
             ("general", Box::new(panes::general::GeneralPane::new(model.clone(), banner.clone()))),
@@ -180,6 +181,10 @@ impl MainWindow {
         let weak = Rc::downgrade(self);
         self.setup.connect_finish(move || {
             if let Some(this) = weak.upgrade() {
+                // An install link that waited for the setup.
+                if let Some(Link::Install(link)) = this.model.link() {
+                    this.select(&link.pane());
+                }
                 this.reload();
             }
         });
@@ -220,24 +225,19 @@ impl MainWindow {
         }
     }
 
-    /// Shows a pane, e.g. from the tray's menu.
-    pub fn select(&self, id: &str) {
-        if let Some(index) = PANES.iter().position(|(pane, _, _)| *pane == id) {
+    /// Shows a pane, e.g. from the tray's menu: "general", "services/<id>" at a service's detail,
+    /// "sites/<name>" at a site's.
+    pub fn select(&self, pane: &str) {
+        if let Some(service) = pane.strip_prefix("services/") {
+            self.select("services");
+            self.services.select(service);
+        } else if let Some(site) = pane.strip_prefix("sites/") {
+            self.select("sites");
+            self.sites.select(site);
+        } else if let Some(index) = PANES.iter().position(|(id, _, _)| *id == pane) {
             self.sidebar.select_row(self.sidebar.row_at_index(index as i32).as_ref());
             self.split.set_show_content(true);
         }
-    }
-
-    /// Shows a site's detail in the Sites pane.
-    pub fn select_site(&self, name: &str) {
-        self.select("sites");
-        self.sites.select(name);
-    }
-
-    /// Shows a service's detail in the Services pane.
-    pub fn select_service(&self, id: &str) {
-        self.select("services");
-        self.services.select(id);
     }
 
     fn show(&self, id: &str) {

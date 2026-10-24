@@ -10,10 +10,11 @@ use adw::prelude::*;
 use base64::Engine;
 use gtk::{gdk, gio, glib};
 
-use super::common::{PaneView, group, report};
+use super::common::{PaneView, ask_link, group, report};
 use super::versions::{MenuItem, badge, button, more_menu};
 use super::{Data, Pane};
 use crate::api::{Client, Config, Error, ExtensionReport, PhpExtension, ShareStatus, SiteChange, SiteStatus, Status};
+use crate::links::{self, Link};
 use crate::model::AppModel;
 
 #[derive(Clone)]
@@ -75,7 +76,22 @@ impl Pane for SitesPane {
 }
 
 impl Inner {
+    /// Asks about a flock://secure link (main.rs) once the sites are loaded: nothing changes until
+    /// the user confirms.
+    fn ask_link(self: &Rc<Self>) {
+        let Some(Link::Secure(site)) = self.model.link() else { return };
+        let Some(status) = self.status.borrow().clone() else { return };
+        self.model.set_link(None);
+        let resolution = links::resolve_secure(&site, &status.sites);
+        if let Some(name) = &resolution.action {
+            self.selected.replace(Some(name.clone()));
+        }
+        let this = self.clone();
+        ask_link(&self.stack, resolution, "Secure", move |name| this.change(&name, SiteChange { secured: Some(true), ..Default::default() }));
+    }
+
     fn render(self: &Rc<Self>) {
+        self.ask_link();
         let key = format!("{:?}{:?}{:?}{:?}", self.status.borrow(), self.config.borrow(), self.selected.borrow(), self.restarting.borrow());
         if self.shown.borrow().as_deref() == Some(key.as_str()) {
             return;
