@@ -223,6 +223,41 @@ func packaged() bool {
 	return fileExists(filepath.Join(packagedUnits, "flock@.service"))
 }
 
+// packagedBinary is flock in the .deb and .rpm. Tests move it.
+var packagedBinary = "/usr/lib/flockphp/flock"
+
+// linkPackaged makes dst a symlink to the package's flock when self is it. Updates come from the
+// package manager (the system's updates, or `flock update`), which replaces only that file: the
+// link brings them to the CLI at once, and to the daemon when the package restarts it.
+func linkPackaged(self, dst string) (bool, error) {
+	if self != packagedBinary {
+		return false, nil
+	}
+	if target, err := os.Readlink(dst); err == nil && target == packagedBinary {
+		return true, nil
+	}
+	// Next to it, then renamed over it: replaces an earlier copy, even a running one.
+	tmp := dst + ".new"
+	_ = os.Remove(tmp)
+	if err := os.Symlink(packagedBinary, tmp); err != nil {
+		return true, err
+	}
+	return true, os.Rename(tmp, dst)
+}
+
+// refreshAfterUpgrade rewrites what `flock install` keeps in the data dir for the binary that
+// runs it: an upgrade through the package manager doesn't run `flock install`, so the daemon
+// does this when the package restarts it. Only for the package's flock, through the link.
+func refreshAfterUpgrade(cmd *cobra.Command, root string) {
+	bin := filepath.Join(root, "bin", "flock")
+	if target, err := os.Readlink(bin); err != nil || target != packagedBinary {
+		return
+	}
+	if err := writeShims(root, bin); err != nil {
+		cmd.PrintErrln("Could not update the shims:", err)
+	}
+}
+
 // templatePath is where flock@.service is: the package's, or the one the privileged setup writes.
 func templatePath() string {
 	if packaged() {

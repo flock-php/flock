@@ -137,3 +137,28 @@ func TestPackagedFilesMatch(t *testing.T) {
 		}
 	}
 }
+
+func TestLinkPackaged(t *testing.T) {
+	dir := t.TempDir()
+	old := packagedBinary
+	packagedBinary = filepath.Join(dir, "usr-lib-flock")
+	t.Cleanup(func() { packagedBinary = old })
+	dst := filepath.Join(dir, "bin-flock")
+
+	// Another flock (a dev build) is copied as before.
+	if linked, err := linkPackaged(filepath.Join(dir, "dev-flock"), dst); linked || err != nil {
+		t.Fatalf("dev build: linked %v, %v", linked, err)
+	}
+	// The package's replaces an earlier copy with a link, and keeps it.
+	if err := os.WriteFile(dst, []byte("copy"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for range 2 {
+		if linked, err := linkPackaged(packagedBinary, dst); !linked || err != nil {
+			t.Fatalf("package: linked %v, %v", linked, err)
+		}
+		if target, err := os.Readlink(dst); err != nil || target != packagedBinary {
+			t.Fatalf("link = %q, %v", target, err)
+		}
+	}
+}
