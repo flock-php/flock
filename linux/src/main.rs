@@ -12,10 +12,11 @@ mod prefs;
 mod settings;
 mod setup;
 mod timeline;
+mod tray;
 mod ui;
 mod window;
 
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::path::PathBuf;
 use std::rc::Rc;
 use std::time::Duration;
@@ -117,9 +118,11 @@ impl Windows {
 fn main() -> glib::ExitCode {
     let args: Vec<String> = std::env::args().collect();
     let flag = |name: &str| args.iter().position(|a| a == name).and_then(|i| args.get(i + 1)).cloned();
+    // --background: the start at login, which stays in the tray (when the desktop has one).
     // --open <window>: opens setup, mail, settings or settings/<pane> at start.
     // --screenshot <file.png>: renders that window (else the main one) once it shows the status,
     // saves it and quits (development and the docs' screenshots).
+    let background = args.iter().any(|a| a == "--background");
     let open = flag("--open");
     let screenshot = flag("--screenshot").map(PathBuf::from);
 
@@ -135,18 +138,29 @@ fn main() -> glib::ExitCode {
             &css,
             gtk::STYLE_PROVIDER_PRIORITY_APPLICATION,
         );
+        if let Some(icons) = tray::development_icons() {
+            gtk::IconTheme::for_display(&gtk::gdk::Display::default().expect("display")).add_search_path(icons.join("hicolor"));
+        }
+        gtk::Window::set_default_icon_name(APP_ID);
     });
 
     let (m, w) = (model.clone(), windows.clone());
     app.connect_activate(move |app| {
-        if let Some(window) = app.active_window() {
+        // Started again (from the launcher) while it runs, maybe hidden in the tray.
+        if let Some(window) = w.main.borrow().as_ref() {
             window.present();
             return;
         }
         let main = window::MainWindow::new(app, m.clone());
         m.start_polling();
-        main.window.present();
+        // At login, the window only shows if there is no tray to stay in.
+        if !background || screenshot.is_some() {
+            main.window.present();
+        }
         w.main.replace(Some(main.window.clone().upcast()));
+        if screenshot.is_none() {
+            start_tray(app, &m, &w);
+        }
         let mut shown: gtk::Window = main.window.clone().upcast();
         if let Some(window) = open.as_deref().and_then(|name| w.open(app, &m, name)) {
             shown = window;
@@ -191,6 +205,40 @@ fn main() -> glib::ExitCode {
 
     // GApplication would reject our flags as unknown options.
     app.run_with_args(&args[..1])
+}
+
+/// Shows the tray icon. With a tray, closing the main window hides it, and the app keeps running;
+/// without one, closing it quits.
+fn start_tray(app: &adw::Application, model: &Rc<model::AppModel>, windows: &Rc<Windows>) {
+    let w = windows.clone();
+    let shown = Cell::new(false);
+    let available = move |yes: bool| {
+        let Some(main) = w.main.borrow().clone() else { return };
+        main.set_hide_on_close(yes);
+        // A start at login without a tray shows the window after all. A tray that goes away later
+        // (GNOME's, while the screen is locked) leaves a hidden window hidden: the launcher shows it.
+        if !yes && !shown.get() && !main.is_visible() {
+            main.present();
+        }
+        shown.set(shown.get() || yes);
+    };
+    let (app, m, w) = (app.clone(), model.clone(), windows.clone());
+    tray::start(model.clone(), available, move |command| match command {
+        tray::Command::Show => {
+            w.main();
+        }
+        tray::Command::Open(name) => {
+            w.open(&app, &m, name);
+        }
+        tray::Command::Browse(url) => gtk::UriLauncher::new(&url).launch(None::<&gtk::Window>, gio::Cancellable::NONE, |_| {}),
+        tray::Command::Change(change) => {
+            let model = m.clone();
+            m.change_settings(change, move |error| model.report(error));
+        }
+        tray::Command::Restart => m.restart(),
+        tray::Command::Quit => app.quit(),
+        tray::Command::Available(_) => {}
+    });
 }
 
 /// Renders the window's content (a toplevel can't paint itself into a paintable) into a PNG.

@@ -1,0 +1,7 @@
+Flock's icons for Linux, installed into /usr/share/icons/hicolor by the packages:
+
+- scalable/apps/dev.flock.Flock.svg: the app icon (design/logo/flock-app-icon.svg).
+- symbolic/apps/dev.flock.Flock{,-stopped,-warning}-symbolic.svg: the tray icon by state, the
+  logomark of design/logo/flock-logomark-black.svg; stopped is dimmed, a warning adds the ember
+  badge, as on Windows and macOS (design/icongen). GNOME recolors -symbolic icons for its top
+  bar, KDE through the ColorScheme-Text class.
