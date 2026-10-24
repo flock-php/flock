@@ -1,7 +1,14 @@
-//! Whether Flock is set up for this user, and running the flock CLI for it (setup, restart).
+//! Whether Flock is set up for this user, and running the flock CLI for it (setup, restart,
+//! uninstall).
 
+use std::io::{BufRead, BufReader};
 use std::path::PathBuf;
-use std::process::Command;
+use std::process::{Command, Stdio};
+use std::sync::mpsc;
+use std::time::Duration;
+
+use gtk::glib;
+use serde::Deserialize;
 
 use crate::paths;
 
@@ -43,4 +50,104 @@ pub fn run(args: &[&str]) -> Output {
         }
         Err(e) => Output { ok: false, text: format!("{}: {e}", flock.display()) },
     }
+}
+
+/// The flock to set Flock up or remove it with: the package's, else the user's.
+pub fn setup_flock() -> Option<PathBuf> {
+    [PathBuf::from(PACKAGED_FLOCK), paths::flock_binary()].into_iter().find(|f| f.exists())
+}
+
+/// Runs flock without a terminal (so it asks for the password with the desktop's polkit dialog),
+/// calling on_line with every line it prints, then done with the outcome.
+pub fn run_streaming(args: Vec<String>, on_line: impl Fn(&str) + 'static, done: impl FnOnce(Output) + 'static) {
+    let Some(flock) = setup_flock() else {
+        done(Output { ok: false, text: "Flock isn't installed: install the flockphp package first.".to_owned() });
+        return;
+    };
+    let (tx, rx) = mpsc::channel::<Result<String, Output>>();
+    std::thread::spawn(move || {
+        let child = Command::new(&flock).args(&args).stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::piped()).spawn();
+        let mut child = match child {
+            Ok(child) => child,
+            Err(e) => {
+                let _ = tx.send(Err(Output { ok: false, text: format!("{}: {e}", flock.display()) }));
+                return;
+            }
+        };
+        let stderr = child.stderr.take().expect("stderr");
+        let err_tx = tx.clone();
+        let errors = std::thread::spawn(move || {
+            for line in BufReader::new(stderr).lines().map_while(Result::ok) {
+                let _ = err_tx.send(Ok(line));
+            }
+        });
+        for line in BufReader::new(child.stdout.take().expect("stdout")).lines().map_while(Result::ok) {
+            let _ = tx.send(Ok(line));
+        }
+        let _ = errors.join();
+        let ok = child.wait().is_ok_and(|s| s.success());
+        let _ = tx.send(Err(Output { ok, text: String::new() }));
+    });
+
+    // The lines arrive on this (the UI) thread.
+    let mut text = String::new();
+    let mut done = Some(done);
+    glib::timeout_add_local(Duration::from_millis(100), move || {
+        while let Ok(message) = rx.try_recv() {
+            match message {
+                Ok(line) => {
+                    text.push_str(&line);
+                    text.push('\n');
+                    on_line(&line);
+                }
+                Err(mut output) => {
+                    if output.text.is_empty() {
+                        output.text = text.trim_end().to_owned();
+                    }
+                    if let Some(done) = done.take() {
+                        done(output);
+                    }
+                    return glib::ControlFlow::Break;
+                }
+            }
+        }
+        glib::ControlFlow::Continue
+    });
+}
+
+/// The password dialog was dismissed (flock's errDeclined).
+pub fn declined(output: &Output) -> bool {
+    output.text.contains("administrator permission was declined")
+}
+
+/// Another program on one of Flock's ports (`flock conflicts --json`).
+#[derive(Deserialize, Clone, Debug, PartialEq)]
+pub struct Conflict {
+    pub port: Option<u16>,
+    pub service: String,
+    pub holder: String,
+    /// What to quit: a program, or a systemd service.
+    pub app: String,
+    /// "quit nginx (pid 812)", "run `sudo systemctl disable --now apache2`".
+    pub hint: Option<String>,
+}
+
+/// The programs to stop before Flock can be set up, each with the ports it holds. Empty when there
+/// are none, and when the check itself fails: `flock install` checks again and reports them.
+pub fn conflicts() -> Vec<(String, Option<String>, Vec<Conflict>)> {
+    #[derive(Deserialize)]
+    struct Response {
+        conflicts: Vec<Conflict>,
+    }
+    let Some(flock) = setup_flock() else { return Vec::new() };
+    let Ok(out) = Command::new(flock).args(["conflicts", "--json"]).stdin(Stdio::null()).output() else { return Vec::new() };
+    let Ok(response) = serde_json::from_slice::<Response>(&out.stdout) else { return Vec::new() };
+    let mut apps: Vec<(String, Option<String>, Vec<Conflict>)> = Vec::new();
+    for conflict in response.conflicts {
+        match apps.iter_mut().find(|(app, _, _)| *app == conflict.app) {
+            Some((_, _, list)) => list.push(conflict),
+            None => apps.push((conflict.app.clone(), conflict.hint.clone(), vec![conflict])),
+        }
+    }
+    apps
 }

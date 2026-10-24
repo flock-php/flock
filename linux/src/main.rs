@@ -2,11 +2,22 @@
 //! the Windows tray app. It talks to the daemon over its local API (api.json).
 
 mod api;
+mod dumps;
 mod installation;
+mod logs;
+mod mail;
+mod model;
 mod paths;
+mod prefs;
+mod settings;
+mod setup;
+mod timeline;
+mod ui;
 mod window;
 
+use std::cell::RefCell;
 use std::path::PathBuf;
+use std::rc::Rc;
 use std::time::Duration;
 
 use adw::prelude::*;
@@ -14,52 +25,176 @@ use gtk::{gio, glib};
 
 const APP_ID: &str = "dev.flock.Flock";
 
+/// Styles libadwaita has no class for: the small labels next to versions and sites.
+const STYLE: &str = "
+.badge { padding: 1px 7px; border-radius: 99px; font-weight: 600; background: alpha(currentColor, 0.12); }
+";
+
+/// The app's windows besides the main one, each created when it is first opened.
+#[derive(Default)]
+struct Windows {
+    settings: RefCell<Option<Rc<settings::SettingsWindow>>>,
+    setup: RefCell<Option<Rc<setup::SetupWindow>>>,
+    mail: RefCell<Option<Rc<mail::MailWindow>>>,
+    dumps: RefCell<Option<Rc<dumps::DumpsWindow>>>,
+    logs: RefCell<Option<Rc<logs::LogsWindow>>>,
+}
+
+impl Windows {
+    /// Opens Settings at a pane, "services/<id>" at a service or "sites/<name>" at a site.
+    fn settings(&self, app: &adw::Application, model: &Rc<model::AppModel>, pane: &str) -> gtk::Window {
+        let window = self.settings.borrow_mut().get_or_insert_with(|| settings::SettingsWindow::new(app, model.clone())).clone();
+        if let Some(service) = pane.strip_prefix("services/") {
+            window.select_service(service);
+        } else if let Some(site) = pane.strip_prefix("sites/") {
+            window.select_site(site);
+        } else {
+            window.select(pane);
+        }
+        window.window.present();
+        window.window.clone().upcast()
+    }
+
+    fn setup(&self, app: &adw::Application, model: &Rc<model::AppModel>) -> gtk::Window {
+        let window = self.setup.borrow_mut().get_or_insert_with(|| setup::SetupWindow::new(app, model.clone())).clone();
+        window.present();
+        window.window.clone().upcast()
+    }
+
+    fn mail(&self, app: &adw::Application, model: &Rc<model::AppModel>) -> gtk::Window {
+        let window = self.mail.borrow_mut().get_or_insert_with(|| mail::MailWindow::new(app, model.clone())).clone();
+        window.window.present();
+        window.window.clone().upcast()
+    }
+
+    fn dumps(&self, app: &adw::Application, model: &Rc<model::AppModel>) -> gtk::Window {
+        let window = self.dumps.borrow_mut().get_or_insert_with(|| dumps::DumpsWindow::new(app, model.clone())).clone();
+        window.window.present();
+        window.window.clone().upcast()
+    }
+
+    /// Opens the Logs window, at a log when one is given.
+    fn logs(&self, app: &adw::Application, source: Option<logs::Source>) -> gtk::Window {
+        let window = self.logs.borrow_mut().get_or_insert_with(|| logs::LogsWindow::new(app)).clone();
+        if let Some(source) = source {
+            window.select(source);
+        }
+        window.window.present();
+        window.window.clone().upcast()
+    }
+
+    /// Opens a window by name: setup, mail (mail/newest at the newest message), dumps, logs
+    /// (logs/sites/<name>, logs/services/<name> at a log), settings or settings/<pane>.
+    fn open(&self, app: &adw::Application, model: &Rc<model::AppModel>, name: &str) -> Option<gtk::Window> {
+        match name {
+            "setup" => Some(self.setup(app, model)),
+            "mail" => Some(self.mail(app, model)),
+            "dumps" => Some(self.dumps(app, model)),
+            "logs" => Some(self.logs(app, None)),
+            "mail/newest" => {
+                let window = self.mail(app, model);
+                if let Some(mail) = self.mail.borrow().as_ref() {
+                    mail.select_newest();
+                }
+                Some(window)
+            }
+            "settings" => Some(self.settings(app, model, "general")),
+            _ => {
+                if let Some(site) = name.strip_prefix("logs/sites/") {
+                    Some(self.logs(app, Some(logs::Source::Site(site.to_owned()))))
+                } else if let Some(service) = name.strip_prefix("logs/services/") {
+                    Some(self.logs(app, Some(logs::Source::Service(service.to_owned()))))
+                } else {
+                    name.strip_prefix("settings/").map(|pane| self.settings(app, model, pane))
+                }
+            }
+        }
+    }
+}
+
 fn main() -> glib::ExitCode {
-    // --screenshot <file.png>: renders the window once the status is shown, saves it and quits
-    // (development and the docs' screenshots).
     let args: Vec<String> = std::env::args().collect();
-    let screenshot = args.iter().position(|a| a == "--screenshot").and_then(|i| args.get(i + 1)).map(PathBuf::from);
+    let flag = |name: &str| args.iter().position(|a| a == name).and_then(|i| args.get(i + 1)).cloned();
+    // --open <window>: opens setup, mail, settings or settings/<pane> at start.
+    // --screenshot <file.png>: renders that window (else the main one) once it shows the status,
+    // saves it and quits (development and the docs' screenshots).
+    let open = flag("--open");
+    let screenshot = flag("--screenshot").map(PathBuf::from);
 
     let app = adw::Application::builder().application_id(APP_ID).build();
+    let model = model::AppModel::new();
+    let windows = Rc::new(Windows::default());
+
+    app.connect_startup(|_| {
+        let css = gtk::CssProvider::new();
+        css.load_from_string(STYLE);
+        gtk::style_context_add_provider_for_display(
+            &gtk::gdk::Display::default().expect("display"),
+            &css,
+            gtk::STYLE_PROVIDER_PRIORITY_APPLICATION,
+        );
+    });
+
+    let (m, w) = (model.clone(), windows.clone());
     app.connect_activate(move |app| {
         if let Some(window) = app.active_window() {
             window.present();
             return;
         }
-        let main = window::MainWindow::new(app);
-        main.start_polling();
+        let main = window::MainWindow::new(app, m.clone());
+        m.start_polling();
         main.window.present();
+        let mut shown: gtk::Window = main.window.clone().upcast();
+        if let Some(window) = open.as_deref().and_then(|name| w.open(app, &m, name)) {
+            shown = window;
+        } else if m.needs_setup() && screenshot.is_none() {
+            // The first start after installing the package goes straight to the setup.
+            w.setup(app, &m);
+        }
         if let Some(path) = screenshot.clone() {
             // The paintable follows the content from its next frame on.
-            let paintable = gtk::WidgetPaintable::new(main.window.content().as_ref());
-            let window = main.window.clone();
-            glib::timeout_add_local_once(Duration::from_secs(3), move || {
-                save_screenshot(&window, &paintable, &path);
-                window.application().expect("application").quit();
+            let paintable = gtk::WidgetPaintable::new(shown.child().as_ref());
+            // FLOCK_APP_SCREENSHOT_DELAY: seconds to wait for slow content (default 3).
+            let delay = std::env::var("FLOCK_APP_SCREENSHOT_DELAY").ok().and_then(|d| d.parse().ok()).unwrap_or(3);
+            glib::timeout_add_local_once(Duration::from_secs(delay), move || {
+                save_screenshot(&shown, &paintable, &path);
+                shown.application().expect("application").quit();
             });
         }
     });
 
+    // app.settings opens General, app.open('settings/sites') a pane, app.open('mail') a window.
     let quit = gio::ActionEntry::builder("quit").activate(|app: &adw::Application, _, _| app.quit()).build();
-    let settings = gio::ActionEntry::builder("settings")
-        .activate(|app: &adw::Application, _, _| {
-            if let Some(window) = app.active_window() {
-                let dialog = adw::AlertDialog::new(Some("Settings"), Some("The Settings window isn't in the Linux app yet."));
-                dialog.add_response("ok", "OK");
-                dialog.present(Some(&window));
+    let (m, w) = (model.clone(), windows.clone());
+    let open_action = gio::ActionEntry::builder("open")
+        .parameter_type(Some(glib::VariantTy::STRING))
+        .activate(move |app: &adw::Application, _, name| {
+            if let Some(name) = name.and_then(|n| n.str()) {
+                w.open(app, &m, name);
             }
         })
         .build();
-    app.add_action_entries([quit, settings]);
+    let mut entries = vec![quit, open_action];
+    for name in ["settings", "setup", "mail", "dumps", "logs"] {
+        let (m, w) = (model.clone(), windows.clone());
+        entries.push(
+            gio::ActionEntry::builder(name)
+                .activate(move |app: &adw::Application, _, _| {
+                    w.open(app, &m, name);
+                })
+                .build(),
+        );
+    }
+    app.add_action_entries(entries);
     app.set_accels_for_action("app.quit", &["<Control>q"]);
     app.set_accels_for_action("app.settings", &["<Control>comma"]);
 
-    // GApplication would reject --screenshot as an unknown option.
+    // GApplication would reject our flags as unknown options.
     app.run_with_args(&args[..1])
 }
 
 /// Renders the window's content (a toplevel can't paint itself into a paintable) into a PNG.
-fn save_screenshot(window: &adw::ApplicationWindow, paintable: &gtk::WidgetPaintable, path: &PathBuf) {
+fn save_screenshot(window: &gtk::Window, paintable: &gtk::WidgetPaintable, path: &PathBuf) {
     let (width, height) = (paintable.intrinsic_width(), paintable.intrinsic_height());
     let snapshot = gtk::Snapshot::new();
     paintable.snapshot(&snapshot, width as f64, height as f64);

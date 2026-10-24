@@ -3,21 +3,16 @@
 
 use std::cell::{Cell, RefCell};
 use std::rc::Rc;
-use std::time::Duration;
 
 use adw::prelude::*;
 use gtk::{gio, glib};
 
-use crate::api::{Client, SettingsChange, SiteStatus, Status};
-use crate::installation;
-
-/// How often the window asks the daemon for its status.
-const POLL_INTERVAL: Duration = Duration::from_secs(2);
+use crate::api::{SettingsChange, SiteStatus, Status};
+use crate::model::AppModel;
 
 pub struct MainWindow {
     pub window: adw::ApplicationWindow,
     title: adw::WindowTitle,
-    toasts: adw::ToastOverlay,
     banner: adw::Banner,
     stack: gtk::Stack,
     status_page: adw::StatusPage,
@@ -33,18 +28,15 @@ pub struct MainWindow {
     dumps_button: gtk::Button,
     /// Rows added for the current status, removed before the next one is shown.
     rows: RefCell<Vec<(adw::PreferencesGroup, gtk::Widget)>>,
-    status: RefCell<Option<Status>>,
-    /// Why the status couldn't be read; replaced by every poll.
-    error: RefCell<Option<String>>,
-    needs_setup: Cell<bool>,
-    restarting: Cell<bool>,
-    polling: Cell<bool>,
+    /// The status the rows show, so they are only rebuilt when it changes.
+    shown: RefCell<Option<Status>>,
     /// Set while the toggles follow the status, so their handlers don't send it back.
     syncing: Cell<bool>,
+    model: Rc<AppModel>,
 }
 
 impl MainWindow {
-    pub fn new(app: &adw::Application) -> Rc<Self> {
+    pub fn new(app: &adw::Application, model: Rc<AppModel>) -> Rc<Self> {
         let title = adw::WindowTitle::new("Flock", "");
         let header = adw::HeaderBar::new();
         header.set_title_widget(Some(&title));
@@ -75,7 +67,7 @@ impl MainWindow {
         toggles.add(&dumps);
 
         let mail_button = shortcut_button("Mail", "mail-unread-symbolic");
-        let dumps_button = shortcut_button("Dumps", "bug-symbolic");
+        let dumps_button = shortcut_button("Dumps", "applications-science-symbolic");
         let logs_button = shortcut_button("Logs", "text-x-generic-symbolic");
         let shortcuts = gtk::Box::builder().spacing(8).homogeneous(true).build();
         shortcuts.append(&mail_button);
@@ -108,12 +100,10 @@ impl MainWindow {
         let body = gtk::Box::new(gtk::Orientation::Vertical, 0);
         body.append(&banner);
         body.append(&stack);
-        let toasts = adw::ToastOverlay::new();
-        toasts.set_child(Some(&body));
 
         let toolbar = adw::ToolbarView::new();
         toolbar.add_top_bar(&header);
-        toolbar.set_content(Some(&toasts));
+        toolbar.set_content(Some(&body));
 
         let window = adw::ApplicationWindow::builder()
             .application(app)
@@ -126,7 +116,6 @@ impl MainWindow {
         let this = Rc::new(Self {
             window,
             title,
-            toasts,
             banner,
             stack,
             status_page,
@@ -141,140 +130,77 @@ impl MainWindow {
             mail_button,
             dumps_button,
             rows: RefCell::new(Vec::new()),
-            status: RefCell::new(None),
-            error: RefCell::new(None),
-            needs_setup: Cell::new(installation::needs_setup()),
-            restarting: Cell::new(false),
-            polling: Cell::new(false),
+            shown: RefCell::new(None),
             syncing: Cell::new(false),
+            model,
         });
         this.connect(&logs_button);
         this.render();
+        let weak = Rc::downgrade(&this);
+        this.model.subscribe(move || {
+            if let Some(this) = weak.upgrade() {
+                this.render();
+            }
+        });
         this
     }
 
     fn connect(self: &Rc<Self>, logs_button: &gtk::Button) {
-        self.banner.connect_button_clicked(|banner| banner.set_revealed(false));
+        let model = self.model.clone();
+        self.banner.connect_button_clicked(move |_| model.dismiss_error());
+
+        let model = self.model.clone();
+        self.restart.connect_clicked(move |_| model.restart());
 
         let this = self.clone();
-        self.restart.connect_clicked(move |_| this.clone().restart());
-
-        let this = self.clone();
-        self.status_button.connect_clicked(move |_| {
-            if this.needs_setup.get() {
-                this.toast("Setup comes with the setup window; until then run `flk install` in a terminal");
+        self.status_button.connect_clicked(move |button| {
+            if this.model.needs_setup() {
+                let _ = button.activate_action("app.setup", None);
             } else {
-                this.clone().restart();
+                this.model.restart();
             }
         });
 
         let this = self.clone();
         self.xdebug.connect_active_notify(move |row| {
             if !this.syncing.get() {
-                this.clone().change(SettingsChange { xdebug: Some(row.is_active()), ..Default::default() });
+                this.change(SettingsChange { xdebug: Some(row.is_active()), ..Default::default() });
             }
         });
         let this = self.clone();
         self.dumps.connect_active_notify(move |row| {
             if !this.syncing.get() {
-                this.clone().change(SettingsChange { dumps: Some(row.is_active()), ..Default::default() });
+                this.change(SettingsChange { dumps: Some(row.is_active()), ..Default::default() });
             }
         });
 
-        for button in [&self.mail_button, &self.dumps_button, logs_button] {
-            let this = self.clone();
-            button.connect_clicked(move |_| this.toast("This window isn't in the Linux app yet"));
-        }
-    }
-
-    /// Polls the daemon's status from now on.
-    pub fn start_polling(self: &Rc<Self>) {
-        self.clone().poll();
-        let this = self.clone();
-        glib::timeout_add_local(POLL_INTERVAL, move || {
-            this.clone().poll();
-            glib::ControlFlow::Continue
-        });
-    }
-
-    fn poll(self: Rc<Self>) {
-        if self.polling.replace(true) {
-            return;
-        }
-        glib::spawn_future_local(async move {
-            let result = gio::spawn_blocking(|| Client.status()).await.expect("status request");
-            self.polling.set(false);
-            match result {
-                Ok(status) => self.apply(status),
-                Err(e) => {
-                    self.status.replace(None);
-                    self.error.replace(Some(e.to_string()));
-                }
-            }
-            // `flock install` or `flock uninstall` in a terminal changes it while the app runs.
-            self.needs_setup.set(installation::needs_setup());
-            self.render();
-        });
-    }
-
-    fn apply(&self, status: Status) {
-        self.status.replace(Some(status));
-        self.error.replace(None);
+        self.mail_button.set_action_name(Some("app.mail"));
+        self.dumps_button.set_action_name(Some("app.dumps"));
+        logs_button.set_action_name(Some("app.logs"));
     }
 
     /// Changes a setting; a failure shows in the banner.
-    fn change(self: Rc<Self>, change: SettingsChange) {
-        glib::spawn_future_local(async move {
-            match gio::spawn_blocking(move || Client.update_settings(&change)).await.expect("settings request") {
-                Ok(status) => {
-                    self.apply(status);
-                    self.banner.set_revealed(false);
-                }
-                Err(e) => self.show_error(&e.to_string()),
-            }
-            self.render();
-        });
-    }
-
-    /// Runs `flock restart`, which also starts a stopped daemon.
-    fn restart(self: Rc<Self>) {
-        self.restarting.set(true);
-        self.render();
-        glib::spawn_future_local(async move {
-            let out = gio::spawn_blocking(|| installation::run(&["restart"])).await.expect("flock restart");
-            self.restarting.set(false);
-            if out.ok {
-                self.banner.set_revealed(false);
-            } else {
-                self.show_error(&out.text);
-            }
-            self.poll();
-        });
-    }
-
-    fn show_error(&self, message: &str) {
-        self.banner.set_title(&glib::markup_escape_text(message));
-        self.banner.set_revealed(true);
-    }
-
-    fn toast(&self, message: &str) {
-        self.toasts.add_toast(adw::Toast::new(message));
+    fn change(&self, change: SettingsChange) {
+        let model = self.model.clone();
+        self.model.change_settings(change, move |error| model.report(error));
     }
 
     /// Shows the current state. Rows are rebuilt from the status; the window keeps its scroll position.
     fn render(&self) {
-        let status = self.status.borrow().clone();
-        let needs_setup = self.needs_setup.get();
-        let restarting = self.restarting.get();
+        let status = self.model.status();
+        let needs_setup = self.model.needs_setup();
+        let restarting = self.model.is_restarting();
 
         self.spinner.set_visible(restarting);
         self.restart.set_sensitive(!restarting && !needs_setup && status.is_some());
-        self.title.set_subtitle(&match (&status, needs_setup) {
-            (_, true) => "Not set up".to_owned(),
-            (Some(s), _) if s.is_degraded() => format!("Needs attention · v{}", s.version),
-            (Some(s), _) => format!("Running · v{}", s.version),
-            (None, _) => "Not running".to_owned(),
-        });
+        self.title.set_subtitle(&self.model.headline());
+        match self.model.action_error() {
+            Some(message) => {
+                self.banner.set_title(&glib::markup_escape_text(&message));
+                self.banner.set_revealed(true);
+            }
+            None => self.banner.set_revealed(false),
+        }
 
         // Before the setup is done, a daemon that answers is the setup's (it may still fail).
         let Some(status) = status.filter(|_| !needs_setup) else {
@@ -287,13 +213,23 @@ impl MainWindow {
                 self.status_button.set_label("Set Up Flock…");
             } else {
                 self.status_page.set_title("Flock Is Not Running");
-                self.status_page.set_description(self.error.borrow().as_deref());
+                self.status_page.set_description(self.model.error().as_deref());
                 self.status_button.set_label("Start Flock");
             }
             self.status_button.set_sensitive(!restarting);
+            self.shown.replace(None);
             return;
         };
         self.stack.set_visible_child_name("running");
+        // Also after a failed change, which leaves the status as it was.
+        self.syncing.set(true);
+        self.xdebug.set_active(status.xdebug);
+        self.dumps.set_active(status.dumps);
+        self.syncing.set(false);
+        if self.shown.borrow().as_ref() == Some(&status) {
+            return;
+        }
+        self.shown.replace(Some(status.clone()));
 
         for (group, row) in self.rows.take() {
             group.remove(&row);
@@ -307,10 +243,6 @@ impl MainWindow {
         self.render_services(&status);
         self.render_sites(&status.sites);
 
-        self.syncing.set(true);
-        self.xdebug.set_active(status.xdebug);
-        self.dumps.set_active(status.dumps);
-        self.syncing.set(false);
         set_count(&self.mail_button, status.mail_count);
         set_count(&self.dumps_button, status.dump_count);
     }
@@ -340,11 +272,16 @@ impl MainWindow {
             self.add(&self.services, service_row(&extra.name, &detail, extra.up));
         }
         if status.postgres.is_none() && status.valkey.is_none() && status.extras.is_empty() {
-            let row = adw::ActionRow::builder()
-                .title("No database or cache installed")
-                .subtitle("Install them in Settings → Services")
-                .css_classes(["dim-label"])
+            let row = adw::ActionRow::builder().title("No database or cache installed").build();
+            let install = gtk::Button::builder()
+                .label("Install…")
+                .valign(gtk::Align::Center)
+                .css_classes(["flat"])
+                .tooltip_text("Opens Settings → Services")
                 .build();
+            install.set_action_name(Some("app.open"));
+            install.set_action_target_value(Some(&"settings/services/postgres".to_variant()));
+            row.add_suffix(&install);
             self.add(&self.services, row);
         }
         for process in status.processes.iter().filter(|p| p.name.starts_with("php")) {
@@ -385,7 +322,7 @@ impl MainWindow {
             }
             row.add_prefix(&icon);
             if site.debugging {
-                let bug = gtk::Image::from_icon_name("bug-symbolic");
+                let bug = gtk::Image::from_icon_name("applications-engineering-symbolic");
                 bug.add_css_class("warning");
                 bug.set_tooltip_text(Some("Debugging"));
                 row.add_suffix(&bug);
