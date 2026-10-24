@@ -12,6 +12,8 @@ mod model;
 mod panes;
 mod paths;
 mod prefs;
+#[cfg(feature = "screenshots")]
+mod screenshots;
 mod setup;
 mod timeline;
 mod tray;
@@ -137,8 +139,24 @@ impl Windows {
     }
 }
 
+/// The app's styles and icons, once the display is there.
+fn load_style() {
+    let display = gtk::gdk::Display::default().expect("display");
+    let css = gtk::CssProvider::new();
+    css.load_from_string(STYLE);
+    gtk::style_context_add_provider_for_display(&display, &css, gtk::STYLE_PROVIDER_PRIORITY_APPLICATION);
+    if let Some(icons) = tray::development_icons() {
+        gtk::IconTheme::for_display(&display).add_search_path(icons.join("hicolor"));
+    }
+    gtk::Window::set_default_icon_name(APP_ID);
+}
+
 fn main() -> glib::ExitCode {
     let args: Vec<String> = std::env::args().collect();
+    #[cfg(feature = "screenshots")]
+    if args.iter().any(|a| a == "--screenshots") {
+        return screenshots::main(&args);
+    }
     let flag = |name: &str| args.iter().position(|a| a == name).and_then(|i| args.get(i + 1)).cloned();
     // --background: the start at login, which stays in the tray (when the desktop has one).
     // --open <window>: opens setup, mail, settings or settings/<pane> at start.
@@ -154,17 +172,7 @@ fn main() -> glib::ExitCode {
     let windows = Rc::new(Windows::default());
 
     app.connect_startup(|_| {
-        let css = gtk::CssProvider::new();
-        css.load_from_string(STYLE);
-        gtk::style_context_add_provider_for_display(
-            &gtk::gdk::Display::default().expect("display"),
-            &css,
-            gtk::STYLE_PROVIDER_PRIORITY_APPLICATION,
-        );
-        if let Some(icons) = tray::development_icons() {
-            gtk::IconTheme::for_display(&gtk::gdk::Display::default().expect("display")).add_search_path(icons.join("hicolor"));
-        }
-        gtk::Window::set_default_icon_name(APP_ID);
+        load_style();
         autostart::refresh();
     });
 

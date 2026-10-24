@@ -23,6 +23,10 @@ serde_json = "1.0.154"
 ureq = "3.5.0"
 webkit6 = "0.6.1"
 
+[features]
+# The docs' screenshots on demo data (src/screenshots.rs), not in the package.
+screenshots = []
+
 [profile.release]
 lto = true
 strip = true

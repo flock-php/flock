@@ -409,11 +409,11 @@ jobs:
 
       - name: Clippy
         if: env.CODE == 'true'
-        run: cargo clippy --manifest-path linux/Cargo.toml --all-targets --locked -- -D warnings
+        run: cargo clippy --manifest-path linux/Cargo.toml --all-targets --all-features --locked -- -D warnings
 
       - name: Test
         if: env.CODE == 'true'
-        run: cargo test --manifest-path linux/Cargo.toml --locked
+        run: cargo test --manifest-path linux/Cargo.toml --all-features --locked
 
   # The flockphp .deb and .rpm per architecture (linux/build-packages.sh): the CLI and the app,
   # built on Ubuntu 24.04 (the oldest GTK and glibc Flock supports), then installed, run and
