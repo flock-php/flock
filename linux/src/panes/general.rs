@@ -109,13 +109,27 @@ impl GeneralPane {
         group
     }
 
-    fn updates(&self, config: &Config) -> adw::PreferencesGroup {
+    /// Linux apps don't update themselves: the flockphp package comes with the system's updates.
+    fn updates(&self, config: &Config, status: &Status) -> adw::PreferencesGroup {
         let group = group("Updates", "");
-        group.add(&info_row("Flock", &format!("Version {}", env!("CARGO_PKG_VERSION"))));
+        let version = info_row("Flock", &format!("Version {}", status.version));
+        version.set_subtitle("New versions come with your system's updates. `flock update` installs one right away.");
+        if let Some((name, updater)) = system_updater() {
+            let open =
+                gtk::Button::builder().label("Check for Updates…").tooltip_text(format!("Opens {name}")).valign(gtk::Align::Center).build();
+            let banner = self.banner.clone();
+            open.connect_clicked(move |_| {
+                if let Err(e) = std::process::Command::new(updater[0]).args(&updater[1..]).spawn() {
+                    report(&banner, Some(format!("Could not open {}: {e}", updater[0])));
+                }
+            });
+            version.add_suffix(&open);
+        }
+        group.add(&version);
         let (model, banner) = (self.model.clone(), self.banner.clone());
         let beta = switch_row(
             "Beta versions",
-            "Get new versions of Flock, PHP and services earlier, including pre-releases. They may not work yet.",
+            "Get new versions of PHP and services earlier, including pre-releases. They may not work yet.",
             config.channel == "beta",
             move |on| {
                 let banner = banner.clone();
@@ -201,11 +215,23 @@ impl Pane for GeneralPane {
             groups.push(self.network(config, &status).upcast());
             groups.push(self.data(config).upcast());
             groups.push(self.startup().upcast());
-            groups.push(self.updates(config).upcast());
+            groups.push(self.updates(config, &status).upcast());
             groups.push(self.project_folders(config).upcast());
         }
         self.view.set_groups(&groups);
     }
+}
+
+/// The desktop's program for system updates, its name and the command that opens its updates: Ubuntu's
+/// Software Updater, GNOME Software or KDE Discover.
+fn system_updater() -> Option<(&'static str, &'static [&'static str])> {
+    const UPDATERS: [(&str, &[&str]); 3] = [
+        ("Software Updater", &["update-manager"]),
+        ("Software", &["gnome-software", "--mode=updates"]),
+        ("Discover", &["plasma-discover", "--mode", "Update"]),
+    ];
+    let path = std::env::var_os("PATH")?;
+    UPDATERS.into_iter().find(|(_, u)| std::env::split_paths(&path).any(|dir| dir.join(u[0]).is_file()))
 }
 
 /// Asks before a project folder's sites stop being served.

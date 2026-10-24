@@ -4,7 +4,9 @@
 //! - flock://install/<service>[/<line>], from the website, the docs or the page served for a site
 //!   whose PHP is missing: flock://install/mysql/8.4, flock://install/php/8.5, flock://install/node/24.
 //! - flock://secure/<site>, from the page served for a site that isn't secured yet.
-//! - flock://update, from `flock update`.
+//!
+//! flock://update is the macOS and Windows apps' alone: on Linux, `flock update` runs the package
+//! manager.
 //!
 //! Any web page can open them, so they change nothing by themselves: the pane they open says what
 //! the link asks for and waits for the user to confirm.
@@ -22,7 +24,6 @@ pub enum Link {
     Install(InstallLink),
     /// The site's name.
     Secure(String),
-    Update,
 }
 
 /// A service and its version line ("8.4", a PostgreSQL or Node.js major); None for the newest.
@@ -54,7 +55,6 @@ pub fn parse(text: &str) -> Option<Link> {
             [site] if safe(site, 63) => Some(Link::Secure(site.to_ascii_lowercase())),
             _ => None,
         },
-        "update" if parts.is_empty() => Some(Link::Update),
         _ => None,
     }
 }
@@ -281,7 +281,9 @@ impl InstallLink {
 pub fn resolve_secure(site: &str, sites: &[SiteStatus]) -> Resolution<String> {
     match sites.iter().find(|s| s.name.eq_ignore_ascii_case(site)) {
         None => Resolution::inform(format!("Flock has no site called {site}"), "Add the site in Settings → Sites first."),
-        Some(s) if s.secured => Resolution::inform(format!("{} is already secured", s.name), format!("It's served at https://{}.", s.domain)),
+        Some(s) if s.secured => {
+            Resolution::inform(format!("{} is already secured", s.name), format!("It's served at https://{}.", s.domain))
+        }
         Some(s) => Resolution {
             title: format!("Serve {} over HTTPS?", s.name),
             message: format!("A link asked Flock to secure {}. It gets a certificate this computer already trusts.", s.domain),
@@ -308,8 +310,6 @@ mod tests {
         assert_eq!(parse("flock://install/node/24"), Some(Link::Install(link(NODE, Some("24")))));
         assert_eq!(parse("flock://secure/watchtower"), Some(Link::Secure("watchtower".to_owned())));
         assert_eq!(parse("FLOCK://SECURE/My-App/"), Some(Link::Secure("my-app".to_owned())));
-        assert_eq!(parse("flock://update"), Some(Link::Update));
-        assert_eq!(parse("flock://update/"), Some(Link::Update));
     }
 
     #[test]
@@ -331,7 +331,7 @@ mod tests {
             "flock://secure/watchtower/extra",
             "flock://secure/watch%20tower",
             "flock://secure/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-            "flock://update/now",
+            "flock://update",
         ] {
             assert_eq!(parse(text), None, "{text}");
         }

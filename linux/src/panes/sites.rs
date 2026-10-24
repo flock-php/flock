@@ -87,7 +87,9 @@ impl Inner {
             self.selected.replace(Some(name.clone()));
         }
         let this = self.clone();
-        ask_link(&self.stack, resolution, "Secure", move |name| this.change(&name, SiteChange { secured: Some(true), ..Default::default() }));
+        ask_link(&self.stack, resolution, "Secure", move |name| {
+            this.change(&name, SiteChange { secured: Some(true), ..Default::default() })
+        });
     }
 
     fn render(self: &Rc<Self>) {

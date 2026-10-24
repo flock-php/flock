@@ -53,10 +53,6 @@ impl Windows {
     /// setup opens their pane when it's done.
     fn link(&self, model: &model::AppModel, link: links::Link) {
         match &link {
-            // The app's update comes from the package manager; General has it.
-            links::Link::Update => {
-                self.pane("general");
-            }
             links::Link::Secure(_) if model.needs_setup() => {
                 self.main();
             }
@@ -67,7 +63,11 @@ impl Windows {
             links::Link::Install(install) => {
                 let pane = install.pane();
                 model.set_link(Some(link));
-                if model.needs_setup() { self.main() } else { self.pane(&pane) };
+                if model.needs_setup() {
+                    self.main()
+                } else {
+                    self.pane(&pane)
+                };
             }
         }
     }
