@@ -11,9 +11,9 @@ Flock installs databases, caches, search engines and object storage as native pr
 | MariaDB | Database | 3306 | 12.3, 11.8, 11.4, 10.11 |
 | MongoDB | Database | 27017 | 9.0, 8.0, 7.0 |
 | Valkey | Cache & queue | 6379 | 9.1 |
-| Redis | Cache & queue | 6379 | 8.10, 8.4, 7.4, 7.2 (macOS only; on Windows use Valkey) |
+| Redis | Cache & queue | 6379 | 8.10, 8.4, 7.4, 7.2 (macOS only; on Windows and Linux use Valkey) |
 | Meilisearch | Search | 7700 | 1.x |
-| Typesense | Search | 8108 | 30, 29 (macOS only) |
+| Typesense | Search | 8108 | 30, 29 (macOS and Linux) |
 | RustFS | Storage | 9000 | 1.x |
 
 PostgreSQL has its own section. See [PostgreSQL](postgres.md).
@@ -25,7 +25,7 @@ Without a version, Flock installs the newest one. A different port lets two serv
 Installing another version of a service you already have doesn't switch to it: the current one keeps running until you switch. When you uninstall the active version, the newest other installed version takes over.
 
 :::app
-Open **Settings…** from the Flock panel and go to **Services**. Switch the filter from **Installed** to **All** to see every service, and select one. Pick a **Version** and **Port**, then click the install button, for example **Install MySQL 8.4.x** (it shows the exact release).
+Open **Settings…** from the Flock panel and go to **Services**. Switch the filter from **Installed** to **All** to see every service, and select one. Pick a **Version** and **Port**, then click the install button, for example **Install MySQL 8.4.x** (it shows the exact release; on Linux, it's **Install**).
 
 ![Installing a service in Settings → Services](screenshot:settings-services-install)
 
@@ -33,8 +33,8 @@ Once a service is installed:
 
 - **Start** and **Stop** it from its row.
 - **Switch…** to another version, or **Update to …** the installed one, from its detail.
-- Change its port with **Change…** next to **Port** in the detail (macOS), or the **Port…** button on its row (Windows).
-- Remove it from the **⋯** menu: **Uninstall MySQL 8.4…** on macOS, which asks whether to keep the data (**Uninstall, Keep Data** or **Uninstall and Delete Data**), or **Uninstall…** on Windows, where you tick **Also delete its data** to remove it.
+- Change its port with **Change…** next to **Port** in the detail (macOS and Linux), or the **Port…** button on its row (Windows).
+- Remove it from the **⋯** menu: **Uninstall MySQL 8.4…** on macOS (**Uninstall…** on Linux), which asks whether to keep the data (**Uninstall, Keep Data** or **Uninstall and Delete Data**), or **Uninstall…** on Windows, where you tick **Also delete its data** to remove it.
 :::
 
 :::cli
@@ -147,4 +147,4 @@ AWS_USE_PATH_STYLE_ENDPOINT=true
 
 ## Valkey or Redis?
 
-Valkey is the open-source Redis: the same commands, and Laravel's Redis settings work with it unchanged. Flock offers it on macOS and Windows. Redis itself is available on macOS only.
+Valkey is the open-source Redis: the same commands, and Laravel's Redis settings work with it unchanged. Flock offers it on every platform. Redis itself is available on macOS only.

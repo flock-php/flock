@@ -5,7 +5,7 @@
 The **Logs** window in the Flock app reads each site's newest log file in `storage/logs` (its last 2 MB) and splits it into individual entries, with their level, environment, message and details such as stack traces. With daily logs, that's today's file. The window shows the newest 200 entries.
 
 :::app
-Click **Logs** in the Flock panel. On Windows, it's also in the tray icon's right-click menu. Pick a site under **Sites** in the sidebar, then filter by level (for example **Error and above**) or search to find the entry you're looking for. **Auto-refresh** keeps the list up to date, and **Clear** empties every `.log` file of the site.
+Click **Logs** in the Flock panel. On Windows, it's also in the tray icon's right-click menu, and on Linux in the Flock window's main menu. Pick a site under **Sites** in the sidebar, then filter by level (for example **Error and above**) or search to find the entry you're looking for. **Auto-refresh** keeps the list up to date, and **Clear** empties every `.log` file of the site.
 
 ![The Logs window](screenshot:logs-window)
 :::
@@ -31,7 +31,7 @@ flock logs postgres -n 200
 flock logs php8.5-fpm -f   # follow, like tail -f
 ```
 
-PHP's logs are named after the version: `php8.5-fpm` on macOS, `php8.5-cgi` on Windows.
+PHP's logs are named after the version: `php8.5-fpm` on macOS and Linux, `php8.5-cgi` on Windows.
 :::
 
 ## Checking health
