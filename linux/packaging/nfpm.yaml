@@ -5,7 +5,7 @@
 name: flockphp
 arch: ${NFPM_ARCH}
 platform: linux
-version: ${VERSION}
+version: ${PKG_VERSION}
 section: devel
 priority: optional
 maintainer: Guava s.r.o.

@@ -32,7 +32,11 @@ fi
 FLOCK_VERSION="$VERSION" cargo build --release --locked --manifest-path linux/Cargo.toml
 cp linux/target/release/flock-app "$OUT/flock-app"
 
-export NFPM_ARCH="$ARCH" VERSION
+# A package version starts with a digit: a build that isn't a release (dev-d635400, git describe's
+# hash) becomes a pre-release of 0.0.0 (0.0.0~dev.d635400), lower than any release.
+PKG_VERSION="$VERSION"
+case "$PKG_VERSION" in [0-9]*) ;; *) PKG_VERSION="0.0.0-${PKG_VERSION//-/.}" ;; esac
+export NFPM_ARCH="$ARCH" PKG_VERSION
 # Named after the release (1.2.0-beta.1), not the package version (1.2.0~beta.1): GitHub renames
 # release assets with characters like ~. The repository's index points at these names.
 case "$ARCH" in amd64) RPM_ARCH=x86_64 ;; arm64) RPM_ARCH=aarch64 ;; *) RPM_ARCH="$ARCH" ;; esac
