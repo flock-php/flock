@@ -42,6 +42,8 @@ contents:
     dst: /usr/share/icons/hicolor/symbolic/apps/dev.flock.Flock-stopped-symbolic.svg
   - src: linux/data/icons/hicolor/symbolic/apps/dev.flock.Flock-warning-symbolic.svg
     dst: /usr/share/icons/hicolor/symbolic/apps/dev.flock.Flock-warning-symbolic.svg
+  - src: linux/data/icons/hicolor/symbolic/apps/dev.flock.Flock-sites-symbolic.svg
+    dst: /usr/share/icons/hicolor/symbolic/apps/dev.flock.Flock-sites-symbolic.svg
   # Each user's daemon is an instance of it, set up by `flk install` (per-user drop-in).
   - src: linux/packaging/flock@.service
     dst: /usr/lib/systemd/system/flock@.service

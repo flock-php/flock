@@ -200,7 +200,7 @@ impl LogsWindow {
         }
         for source in &sources {
             let (name, icon) = match source {
-                Source::Site(n) => (n.as_str(), "web-browser-symbolic"),
+                Source::Site(n) => (n.as_str(), "dev.flock.Flock-sites-symbolic"),
                 Source::Service(n) => (n.as_str(), "emblem-system-symbolic"),
             };
             let row = gtk::Box::builder().spacing(10).margin_top(4).margin_bottom(4).build();

@@ -256,7 +256,7 @@ impl Inner {
         let actions = gtk::Box::builder().spacing(4).valign(gtk::Align::Center).build();
         let icon_button =
             |icon: &str, tooltip: &str| gtk::Button::builder().icon_name(icon).tooltip_text(tooltip).css_classes(["flat"]).build();
-        let open = icon_button("web-browser-symbolic", "Open in the browser");
+        let open = icon_button("dev.flock.Flock-sites-symbolic", "Open in the browser");
         open.set_sensitive(site.url.is_some());
         let url = site.url.clone().unwrap_or_default();
         open.connect_clicked(move |b| launch_uri(b, &url));
@@ -513,7 +513,7 @@ impl Inner {
             move || row.clipboard().set_text(&url)
         }));
         let open = gtk::Button::builder()
-            .icon_name("web-browser-symbolic")
+            .icon_name("dev.flock.Flock-sites-symbolic")
             .tooltip_text("Open")
             .valign(gtk::Align::Center)
             .css_classes(["flat"])

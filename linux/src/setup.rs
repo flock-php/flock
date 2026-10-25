@@ -344,7 +344,7 @@ impl SetupView {
         }
         add(item("utilities-terminal-symbolic", "Open a new terminal", "Terminals that were already open still have the old PATH.", ""));
         add(item(
-            "web-browser-symbolic",
+            "dev.flock.Flock-sites-symbolic",
             "Link a project",
             "In a Laravel project, run `flock link`: the site is then at http://<folder>.test. `flock secure` adds HTTPS.",
             "",

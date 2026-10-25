@@ -146,7 +146,7 @@ fn load_style() {
     css.load_from_string(STYLE);
     gtk::style_context_add_provider_for_display(&display, &css, gtk::STYLE_PROVIDER_PRIORITY_APPLICATION);
     if let Some(icons) = tray::development_icons() {
-        gtk::IconTheme::for_display(&display).add_search_path(icons.join("hicolor"));
+        gtk::IconTheme::for_display(&display).add_search_path(icons);
     }
     gtk::Window::set_default_icon_name(APP_ID);
 }

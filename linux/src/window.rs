@@ -17,7 +17,7 @@ use crate::setup::SetupView;
 /// The panes in sidebar order: id, title, icon.
 const PANES: [(&str, &str, &str); 10] = [
     ("general", "General", "emblem-system-symbolic"),
-    ("sites", "Sites", "web-browser-symbolic"),
+    ("sites", "Sites", "dev.flock.Flock-sites-symbolic"),
     ("php", "PHP", "utilities-terminal-symbolic"),
     ("node", "Node", "package-x-generic-symbolic"),
     ("services", "Services", "network-server-symbolic"),
