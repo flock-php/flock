@@ -41,6 +41,8 @@ internal sealed class Screenshots(Screenshots.Options options)
         new("settings-sites-pin", app => app.ShowSiteMenu("shop")),
         new("settings-php", app => app.ShowSettings(SettingsPane.Php)),
         new("settings-node", app => app.ShowSettings(SettingsPane.Node)),
+        new("settings-services-single-update", app => app.ShowService("postgres")),
+        new("settings-services-all-updates", app => app.ShowService("mysql")),
         new("settings-services-postgres", app => app.ShowService("postgres")),
         new("settings-services-install", app => app.ShowService("mariadb")),
         new("settings-debugger", app => app.ShowSettings(SettingsPane.Debugger)),

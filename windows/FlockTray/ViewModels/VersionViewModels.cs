@@ -64,6 +64,24 @@ public sealed class PhpVersionViewModel : ObservableObject
     public bool IsInstalled => value.IsInstalled;
     public bool HasUpdate => value.Update;
     public ComponentJob? Job => value.Job;
+    public bool HasJob => Job is not null;
+    public bool HasRunningJob => Job?.IsRunning == true;
+    public bool HasFailedJob => Job?.IsFailed == true;
+    public double JobProgress => Job?.HasProgress == true ? Job.Progress : 0;
+    public bool IsJobProgressIndeterminate => Job?.HasProgress != true;
+    public string JobProgressText => Job is { } job
+        ? job.PhaseText + (job.HasProgress ? $" {Math.Round(job.Progress * 100)}%" : "")
+        : "";
+    public bool CanInstall => !IsInstalled && !HasJob;
+    public bool CanUpdate => IsInstalled && HasUpdate && !HasJob;
+    public bool CanMakeDefault => IsInstalled && !IsDefault && !HasJob;
+    public bool CanUninstall => IsInstalled && !HasJob;
+    public bool ShowPrimaryInstall => CanInstall;
+    public bool ShowPrimaryUpdate => CanUpdate;
+    public bool ShowPrimaryUninstall => CanUninstall && !HasUpdate;
+    public bool ShowPrimaryCancel => HasRunningJob;
+    public bool ShowPrimaryRetry => HasFailedJob;
+    public bool HasMoreActions => HasJob || CanMakeDefault || (CanUninstall && HasUpdate);
     public IAsyncRelayCommand InstallCommand { get; }
     public IAsyncRelayCommand CancelCommand { get; }
     public IAsyncRelayCommand DismissCommand { get; }
@@ -82,6 +100,22 @@ public sealed class PhpVersionViewModel : ObservableObject
         OnPropertyChanged(nameof(IsInstalled));
         OnPropertyChanged(nameof(HasUpdate));
         OnPropertyChanged(nameof(Job));
+        OnPropertyChanged(nameof(HasJob));
+        OnPropertyChanged(nameof(HasRunningJob));
+        OnPropertyChanged(nameof(HasFailedJob));
+        OnPropertyChanged(nameof(JobProgress));
+        OnPropertyChanged(nameof(IsJobProgressIndeterminate));
+        OnPropertyChanged(nameof(JobProgressText));
+        OnPropertyChanged(nameof(CanInstall));
+        OnPropertyChanged(nameof(CanUpdate));
+        OnPropertyChanged(nameof(CanMakeDefault));
+        OnPropertyChanged(nameof(CanUninstall));
+        OnPropertyChanged(nameof(ShowPrimaryInstall));
+        OnPropertyChanged(nameof(ShowPrimaryUpdate));
+        OnPropertyChanged(nameof(ShowPrimaryUninstall));
+        OnPropertyChanged(nameof(ShowPrimaryCancel));
+        OnPropertyChanged(nameof(ShowPrimaryRetry));
+        OnPropertyChanged(nameof(HasMoreActions));
         InstallCommand.NotifyCanExecuteChanged();
         CancelCommand.NotifyCanExecuteChanged();
         DismissCommand.NotifyCanExecuteChanged();
@@ -146,6 +180,23 @@ public sealed class FrankenPhpVersionViewModel : ObservableObject
     public bool IsInstalled => value.IsInstalled;
     public bool HasUpdate => value.Update;
     public ComponentJob? Job => value.Job;
+    public bool HasJob => Job is not null;
+    public bool HasRunningJob => Job?.IsRunning == true;
+    public bool HasFailedJob => Job?.IsFailed == true;
+    public double JobProgress => Job?.HasProgress == true ? Job.Progress : 0;
+    public bool IsJobProgressIndeterminate => Job?.HasProgress != true;
+    public string JobProgressText => Job is { } job
+        ? job.PhaseText + (job.HasProgress ? $" {Math.Round(job.Progress * 100)}%" : "")
+        : "";
+    public bool CanInstall => !IsInstalled && !HasJob;
+    public bool CanUpdate => IsInstalled && HasUpdate && !HasJob;
+    public bool CanUninstall => IsInstalled && !HasJob;
+    public bool ShowPrimaryInstall => CanInstall;
+    public bool ShowPrimaryUpdate => CanUpdate;
+    public bool ShowPrimaryUninstall => CanUninstall && !HasUpdate;
+    public bool ShowPrimaryCancel => HasRunningJob;
+    public bool ShowPrimaryRetry => HasFailedJob;
+    public bool HasMoreActions => HasJob || (CanUninstall && HasUpdate);
     public IAsyncRelayCommand InstallCommand { get; }
     public IAsyncRelayCommand CancelCommand { get; }
     public IAsyncRelayCommand DismissCommand { get; }
@@ -163,6 +214,21 @@ public sealed class FrankenPhpVersionViewModel : ObservableObject
         OnPropertyChanged(nameof(IsInstalled));
         OnPropertyChanged(nameof(HasUpdate));
         OnPropertyChanged(nameof(Job));
+        OnPropertyChanged(nameof(HasJob));
+        OnPropertyChanged(nameof(HasRunningJob));
+        OnPropertyChanged(nameof(HasFailedJob));
+        OnPropertyChanged(nameof(JobProgress));
+        OnPropertyChanged(nameof(IsJobProgressIndeterminate));
+        OnPropertyChanged(nameof(JobProgressText));
+        OnPropertyChanged(nameof(CanInstall));
+        OnPropertyChanged(nameof(CanUpdate));
+        OnPropertyChanged(nameof(CanUninstall));
+        OnPropertyChanged(nameof(ShowPrimaryInstall));
+        OnPropertyChanged(nameof(ShowPrimaryUpdate));
+        OnPropertyChanged(nameof(ShowPrimaryUninstall));
+        OnPropertyChanged(nameof(ShowPrimaryCancel));
+        OnPropertyChanged(nameof(ShowPrimaryRetry));
+        OnPropertyChanged(nameof(HasMoreActions));
         InstallCommand.NotifyCanExecuteChanged();
         CancelCommand.NotifyCanExecuteChanged();
         DismissCommand.NotifyCanExecuteChanged();
@@ -189,6 +255,7 @@ public sealed class NodePaneViewModel : ObservableObject, IDisposable
     public NodeCatalog? Current => service.Current;
     public string? Error => service.Error;
     public bool IsChecking => service.IsChecking;
+    public bool IsEmpty => Current?.Versions.Count == 0;
 
     public Task RefreshAsync(CancellationToken token = default) => service.RefreshAsync(token);
     public Task<OperationOutcome> CheckAsync(CancellationToken token = default) => service.CheckAsync(token);
@@ -201,6 +268,7 @@ public sealed class NodePaneViewModel : ObservableObject, IDisposable
         OnPropertyChanged(nameof(Current));
         OnPropertyChanged(nameof(Error));
         OnPropertyChanged(nameof(IsChecking));
+        OnPropertyChanged(nameof(IsEmpty));
     }
 }
 
@@ -229,6 +297,16 @@ public sealed class NodeVersionViewModel : ObservableObject
     public bool IsDefault => value.IsDefault;
     public bool IsInstalled => value.IsInstalled;
     public bool HasUpdate => value.Update;
+    public bool IsWorking => service.IsRunning(Major);
+    public bool CanInstall => !IsInstalled && !IsWorking;
+    public bool CanUpdate => IsInstalled && HasUpdate && !IsWorking;
+    public bool CanMakeDefault => IsInstalled && !IsDefault && !IsWorking;
+    public bool CanUninstall => IsInstalled && !IsWorking;
+    public bool CanUpdateNpm => IsInstalled && NpmLatest.Length > 0 && !IsWorking;
+    public bool ShowPrimaryInstall => CanInstall;
+    public bool ShowPrimaryUpdate => CanUpdate;
+    public bool ShowPrimaryUninstall => CanUninstall && !HasUpdate;
+    public bool HasMoreActions => CanMakeDefault || CanUpdateNpm || (CanUninstall && HasUpdate);
     public IAsyncRelayCommand InstallCommand { get; }
     public IAsyncRelayCommand UpdateNpmCommand { get; }
     public IAsyncRelayCommand UninstallCommand { get; }
@@ -248,6 +326,16 @@ public sealed class NodeVersionViewModel : ObservableObject
         OnPropertyChanged(nameof(IsDefault));
         OnPropertyChanged(nameof(IsInstalled));
         OnPropertyChanged(nameof(HasUpdate));
+        OnPropertyChanged(nameof(IsWorking));
+        OnPropertyChanged(nameof(CanInstall));
+        OnPropertyChanged(nameof(CanUpdate));
+        OnPropertyChanged(nameof(CanMakeDefault));
+        OnPropertyChanged(nameof(CanUninstall));
+        OnPropertyChanged(nameof(CanUpdateNpm));
+        OnPropertyChanged(nameof(ShowPrimaryInstall));
+        OnPropertyChanged(nameof(ShowPrimaryUpdate));
+        OnPropertyChanged(nameof(ShowPrimaryUninstall));
+        OnPropertyChanged(nameof(HasMoreActions));
         InstallCommand.NotifyCanExecuteChanged();
         UpdateNpmCommand.NotifyCanExecuteChanged();
         UninstallCommand.NotifyCanExecuteChanged();

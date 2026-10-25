@@ -35,7 +35,11 @@ Once a service is installed:
 - **Switch…** to another version, or **Update to …** the installed one, from its detail.
 - Change its port with **Change…** next to **Port** in the detail (macOS), or the **Port…** button on its row (Windows).
 - Remove it from the **⋯** menu: **Uninstall MySQL 8.4…** on macOS, which asks whether to keep the data (**Uninstall, Keep Data** or **Uninstall and Delete Data**), or **Uninstall…** on Windows, where you tick **Also delete its data** to remove it.
+- The service footer shows **Last checked** and **Check for Updates**. When several installed lines have updates, choose **Install all updates (N)** and confirm the listed lines and versions.
+  Catalog service lines update one at a time. A failed or canceled line stops the batch, and the job card keeps its retry, dismiss, cancel, and log controls when those actions apply.
 :::
+
+![Installing all available service updates](screenshot:settings-services-all-updates)
 
 :::cli
 ```bash

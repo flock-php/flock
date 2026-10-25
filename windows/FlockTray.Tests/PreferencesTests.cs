@@ -64,7 +64,7 @@ public sealed class PreferencesTests
             Assert.Equal(new PreferenceData(), await service.LoadAsync());
             Assert.False(Directory.Exists(parent));
             PreferenceData? published = null;
-            service.Changed += value => published = value;
+            service.StateChanged += () => published = service.Snapshot;
 
             var saved = await service.UpdateAsync(value => value with { Channel = "beta" });
 
@@ -73,6 +73,54 @@ public sealed class PreferencesTests
             Assert.Equal(saved, await new PreferencesService(path).LoadAsync());
             Assert.Null(service.ActionError);
             Assert.Empty(Directory.GetFiles(parent, "*.tmp.*"));
+        }
+        finally
+        {
+            Directory.Delete(directory.FullName, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task FailedSaveAndDismissalPublishTheCompleteState()
+    {
+        var directory = Directory.CreateTempSubdirectory("flock-preferences-");
+        try
+        {
+            var service = new PreferencesService(directory.FullName);
+            var notifications = 0;
+            service.StateChanged += () => notifications++;
+
+            await Assert.ThrowsAnyAsync<UnauthorizedAccessException>(() => service.UpdateAsync(value => value with { Channel = "beta" }));
+            Assert.Equal(1, notifications);
+            Assert.NotNull(service.Error);
+
+            service.DismissError();
+
+            Assert.Equal(2, notifications);
+            Assert.Null(service.Error);
+            Assert.Equal(new PreferenceData(), service.Snapshot);
+        }
+        finally
+        {
+            Directory.Delete(directory.FullName, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task NoOpUpdateClearsAnErrorAndPublishesState()
+    {
+        var directory = Directory.CreateTempSubdirectory("flock-preferences-");
+        try
+        {
+            var service = new PreferencesService(directory.FullName);
+            var notifications = 0;
+            service.StateChanged += () => notifications++;
+
+            await Assert.ThrowsAnyAsync<UnauthorizedAccessException>(() => service.UpdateAsync(value => value with { Channel = "beta" }));
+            await service.UpdateAsync(value => value);
+
+            Assert.Equal(2, notifications);
+            Assert.Null(service.Error);
         }
         finally
         {

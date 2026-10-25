@@ -3,6 +3,12 @@ namespace Flock.Kit.Tests;
 public class DecodingTests
 {
     [Fact]
+    public void DecodesNullListsAsEmpty()
+    {
+        Assert.Empty(FlockJson.Decode<List<string>>("null"));
+    }
+
+    [Fact]
     public void ParsesGoTimesWithAndWithoutFractions()
     {
         var whole = FlockJson.ParseDate("2026-10-13T13:40:07+02:00")!.Value;

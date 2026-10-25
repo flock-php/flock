@@ -1,0 +1,38 @@
+<UserControl
+    x:Class="Flock.Tray.GeneralPane"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <StackPanel Spacing="0">
+        <StackPanel Spacing="4" Margin="0,0,0,24">
+            <TextBlock Text="Daemon" Style="{StaticResource BodyStrongTextBlockStyle}" Margin="1,0,0,6" />
+            <Border Style="{StaticResource CardStyle}" Visibility="{Binding StatusVisibility}"><Grid Style="{StaticResource SettingRowStyle}"><Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions><TextBlock Text="Status" /><Grid Grid.Column="1" ColumnSpacing="8" VerticalAlignment="Center"><Grid.ColumnDefinitions><ColumnDefinition Width="Auto" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions><Ellipse Style="{StaticResource StatusDotStyle}" Fill="{Binding StatusBrush}" /><TextBlock Grid.Column="1" Text="{Binding StatusText}" VerticalAlignment="Center" /></Grid></Grid></Border>
+            <Border Style="{StaticResource CardStyle}" Visibility="{Binding StatusVisibility}"><Grid Style="{StaticResource SettingRowStyle}"><Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions><TextBlock Text="Version" /><TextBlock Grid.Column="1" Text="{Binding VersionText}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" /></Grid></Border>
+            <Border Style="{StaticResource CardStyle}" Visibility="{Binding StatusVisibility}"><Grid Style="{StaticResource SettingRowStyle}"><Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions><TextBlock Text="Process" /><TextBlock Grid.Column="1" Text="{Binding ProcessText}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" /></Grid></Border>
+            <Border Style="{StaticResource CardStyle}"><Grid Style="{StaticResource SettingRowStyle}"><Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions><StackPanel Spacing="1"><TextBlock Text="Restart" /><TextBlock Text="Restarts the daemon and every service it runs." Style="{StaticResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" /></StackPanel><Button x:Name="RestartButton" Grid.Column="1" Content="Restart Daemon" Click="RestartClicked" /></Grid></Border>
+        </StackPanel>
+        <StackPanel Spacing="4" Margin="0,0,0,24" Visibility="{Binding ConfigVisibility}">
+            <TextBlock Text="Network" Style="{StaticResource BodyStrongTextBlockStyle}" Margin="1,0,0,6" />
+            <Border Style="{StaticResource CardStyle}"><StackPanel Spacing="1"><TextBlock Text="Domain" /><TextBlock Text="{Binding DomainDescription}" Style="{StaticResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" /><TextBlock Text="{Binding DomainValue}" Margin="0,4,0,0" /></StackPanel></Border>
+            <TextBlock Text="{Binding PortsDescription}" Visibility="{Binding PortsVisibility}" Style="{StaticResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" Margin="2,6,0,0" TextWrapping="Wrap" />
+        </StackPanel>
+        <StackPanel Spacing="4" Margin="0,0,0,24" Visibility="{Binding ConfigVisibility}">
+            <TextBlock Text="Data" Style="{StaticResource BodyStrongTextBlockStyle}" Margin="1,0,0,6" />
+            <Border Style="{StaticResource CardStyle}"><Grid Style="{StaticResource SettingRowStyle}"><Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions><StackPanel Spacing="1"><TextBlock Text="Folder" /><TextBlock Text="{Binding Root}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextTrimming="CharacterEllipsis" /></StackPanel><Button Grid.Column="1" Content="Show in Explorer" Click="ShowRoot" /></Grid></Border>
+        </StackPanel>
+        <StackPanel Spacing="4" Margin="0,0,0,24">
+            <TextBlock Text="Startup" Style="{StaticResource BodyStrongTextBlockStyle}" Margin="1,0,0,6" />
+            <Border Style="{StaticResource CardStyle}"><Grid Style="{StaticResource SettingRowStyle}"><Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions><StackPanel Spacing="1"><TextBlock Text="Open Flock at sign-in" /><TextBlock Text="Shows the Flock icon in the notification area when you sign in. The daemon itself always starts at sign-in." Style="{StaticResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" /></StackPanel><ToggleSwitch x:Name="Startup" Grid.Column="1" MinWidth="0" Toggled="StartupToggled" OnContent="" OffContent="" /></Grid></Border>
+        </StackPanel>
+        <StackPanel Spacing="4" Margin="0,0,0,24">
+            <TextBlock Text="Updates" Style="{StaticResource BodyStrongTextBlockStyle}" Margin="1,0,0,6" />
+            <StackPanel x:Name="UpdateHost" Spacing="4" />
+            <Border Style="{StaticResource CardStyle}" Visibility="{Binding ConfigVisibility}"><Grid Style="{StaticResource SettingRowStyle}"><Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions><StackPanel Spacing="1"><TextBlock Text="Beta versions" /><TextBlock Text="Get new versions of Flock, PHP and services earlier, including pre-releases. They may not work yet." Style="{StaticResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" /></StackPanel><ToggleSwitch x:Name="Beta" Grid.Column="1" MinWidth="0" IsOn="{Binding IsBeta}" IsEnabled="{Binding BetaEnabled}" Toggled="BetaToggled" OnContent="" OffContent="" /></Grid></Border>
+            <TextBlock Text="Experimental channel: packages that aren't released yet are offered. `flock channel stable` switches back." Visibility="{Binding ExperimentalVisibility}" Style="{StaticResource CaptionTextBlockStyle}" Foreground="{ThemeResource SystemFillColorCautionBrush}" Margin="2,6,0,0" TextWrapping="Wrap" />
+        </StackPanel>
+        <StackPanel Spacing="4" Margin="0,0,0,24" Visibility="{Binding ConfigVisibility}">
+            <TextBlock Text="Project folders" Style="{StaticResource BodyStrongTextBlockStyle}" Margin="1,0,0,6" />
+            <Border Style="{StaticResource CardStyle}" Padding="8"><StackPanel Spacing="4"><TextBlock x:Name="NoParked" Text="No project folders" Visibility="Collapsed" Style="{StaticResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" /><ListView x:Name="Parked" ItemsSource="{Binding Config.Parked}" SelectionChanged="ParkedSelectionChanged" SelectionMode="Single" MinHeight="60"><ListView.ItemTemplate><DataTemplate><StackPanel Orientation="Horizontal" Spacing="10"><FontIcon Glyph="&#xE8B7;" FontFamily="{StaticResource SymbolsFont}" FontSize="14" /><TextBlock Text="{Binding}" TextTrimming="CharacterEllipsis" /></StackPanel></DataTemplate></ListView.ItemTemplate></ListView><StackPanel Orientation="Horizontal" Spacing="4"><Button x:Name="AddParked" Content="Add project folders…" Click="AddParkedClicked" /><Button x:Name="RemoveParked" Content="Remove" Click="RemoveParkedClicked" IsEnabled="False" /></StackPanel></StackPanel></Border>
+            <TextBlock Text="Every folder inside a project folder is served as &lt;folder&gt;.test — the same as `flock park`." Style="{StaticResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" Margin="2,6,0,0" TextWrapping="Wrap" />
+        </StackPanel>
+    </StackPanel>
+</UserControl>

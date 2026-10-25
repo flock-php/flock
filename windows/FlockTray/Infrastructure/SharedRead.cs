@@ -1,22 +1,34 @@
 namespace Flock.Tray.Infrastructure;
 
 /// <summary>Shares equivalent reads while allowing a newer generation to supersede an older one.</summary>
-public sealed class SharedRead<T> : IAsyncDisposable
+public sealed class SharedRead<T>(IUiDispatcher? dispatcher = null) : IAsyncDisposable
 {
-    private readonly object gate = new();
-    private readonly IUiDispatcher? dispatcher;
+    private readonly Lock gate = new();
     private readonly HashSet<Task> retired = [];
-    private CancellationTokenSource? currentCancellation;
     private Task? current;
+    private CancellationTokenSource? currentCancellation;
     private long generation;
 
-    public SharedRead(IUiDispatcher? dispatcher = null)
+    public async ValueTask DisposeAsync()
     {
-        this.dispatcher = dispatcher;
+        Task[] tasks;
+        lock (gate)
+        {
+            currentCancellation?.Cancel();
+            tasks = [.. retired];
+        }
+        if (tasks.Length > 0)
+        {
+            await Task.WhenAll(tasks);
+        }
     }
 
-    public Task JoinReadAsync(Func<CancellationToken, Task<T>> load, Action<T> publish,
-        Action<Exception> publishFailure, CancellationToken observerToken, CancellationToken applicationToken = default,
+    public Task JoinReadAsync(
+        Func<CancellationToken, Task<T>> load,
+        Action<T> publish,
+        Action<Exception> publishFailure,
+        CancellationToken observerToken,
+        CancellationToken applicationToken = default,
         CancellationToken lifetimeToken = default)
     {
         ArgumentNullException.ThrowIfNull(load);
@@ -37,8 +49,12 @@ public sealed class SharedRead<T> : IAsyncDisposable
         return task.WaitAsync(observerToken);
     }
 
-    public Task RunReadAsync(Func<CancellationToken, Task<T>> load, Action<T> publish,
-        Action<Exception> publishFailure, CancellationToken applicationToken = default, CancellationToken lifetimeToken = default)
+    public Task RunReadAsync(
+        Func<CancellationToken, Task<T>> load,
+        Action<T> publish,
+        Action<Exception> publishFailure,
+        CancellationToken applicationToken = default,
+        CancellationToken lifetimeToken = default)
     {
         lock (gate)
         {
@@ -58,8 +74,10 @@ public sealed class SharedRead<T> : IAsyncDisposable
     }
 
     public void StartRead(Func<CancellationToken, Task<T>> load, Action<T> publish,
-        Action<Exception> publishFailure, CancellationToken applicationToken = default, CancellationToken lifetimeToken = default) =>
+        Action<Exception> publishFailure, CancellationToken applicationToken = default, CancellationToken lifetimeToken = default)
+    {
         _ = RunReadAsync(load, publish, publishFailure, applicationToken, lifetimeToken);
+    }
 
     private Task StartLocked(Func<CancellationToken, Task<T>> load, Action<T> publish, Action<Exception> publishFailure,
         CancellationToken applicationToken, CancellationToken lifetimeToken)
@@ -148,109 +166,5 @@ public sealed class SharedRead<T> : IAsyncDisposable
         }
         action();
         return Task.CompletedTask;
-    }
-
-    public async ValueTask DisposeAsync()
-    {
-        Task[] tasks;
-        lock (gate)
-        {
-            currentCancellation?.Cancel();
-            tasks = [.. retired];
-        }
-        if (tasks.Length > 0)
-        {
-            await Task.WhenAll(tasks);
-        }
-    }
-}
-
-
-
-/// <summary>Retires stale reads and prevents their results from publishing after a newer generation.</summary>
-public sealed class LatestRequest : IAsyncDisposable
-{
-    private readonly object gate = new();
-    private readonly HashSet<Task> retired = [];
-    private CancellationTokenSource? current;
-    private long generation;
-
-    public void Invalidate()
-    {
-        lock (gate)
-        {
-            generation++;
-            current?.Cancel();
-        }
-    }
-
-    public async Task RunReadAsync<T>(Func<CancellationToken, Task<T>> read, Action<T> publish, CancellationToken applicationToken,
-        CancellationToken lifetimeToken = default, Action<Exception>? publishFailure = null)
-    {
-        CancellationTokenSource request;
-        var completion = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        long identity;
-        lock (gate)
-        {
-            generation++;
-            current?.Cancel();
-            request = CancellationTokenSource.CreateLinkedTokenSource(applicationToken, lifetimeToken);
-            current = request;
-            retired.Add(completion.Task);
-            identity = generation;
-        }
-        try
-        {
-            T result;
-            try
-            {
-                result = await read(request.Token);
-            }
-            catch (Exception error) when (error is not OperationCanceledException)
-            {
-                var currentRequest = false;
-                lock (gate)
-                {
-                    currentRequest = identity == generation && !request.IsCancellationRequested && ReferenceEquals(current, request);
-                }
-                if (currentRequest && publishFailure is not null)
-                {
-                    publishFailure(error);
-                    return;
-                }
-                throw;
-            }
-            var publishResult = false;
-            lock (gate)
-            {
-                publishResult = identity == generation && !request.IsCancellationRequested && ReferenceEquals(current, request);
-            }
-            if (publishResult)
-            {
-                publish(result);
-            }
-        }
-        finally
-        {
-            lock (gate)
-            {
-                current = ReferenceEquals(current, request) ? null : current;
-                retired.Remove(completion.Task);
-            }
-            request.Dispose();
-            completion.TrySetResult();
-        }
-    }
-
-    public async ValueTask DisposeAsync()
-    {
-        Task[] tasks;
-        lock (gate)
-        {
-            current?.Cancel();
-            tasks = [.. retired];
-        }
-        await Task.WhenAll(tasks);
-        current?.Dispose();
     }
 }

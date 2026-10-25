@@ -1,0 +1,111 @@
+using System.ComponentModel;
+using Flock.Kit;
+using Flock.Tray.ViewModels;
+using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Controls;
+
+namespace Flock.Tray;
+
+/// <summary>Laravel and Flock service logs with search, filtering, and polling.</summary>
+internal sealed partial class LogsWindow : FlockWindow
+{
+    private readonly LogsViewModel viewModel;
+    private (LogsViewModel.LogContent Data, string Query, LogLevelFilter Level)? rendered;
+
+    public LogsWindow(LogsViewModel viewModel) : base("Logs", 1000, 660)
+    {
+        this.viewModel = viewModel;
+        InitializeComponent();
+        InitializeChrome(WindowRoot, WindowTitleBar, WindowCaption, WindowIcon);
+        WindowBody.DataContext = viewModel;
+        foreach (var (_, name) in LogFilter.Choices) Levels.Items.Add(name);
+        Ui.AutomationName(Levels, "Level");
+        Ui.SettingsShortcut(WindowRoot);
+        viewModel.PropertyChanged += ViewModelChanged;
+        AppWindow.Changed += WindowChanged;
+        viewModel.SetWindowActive(IsWindowActive());
+        Render();
+        _ = viewModel.RefreshCommand.ExecuteAsync(null);
+    }
+
+    public Task ShowSourceAsync(LogsViewModel.Source source) => viewModel.ShowSourceAsync(source);
+
+    public override async Task ReleaseAsync()
+    {
+        AppWindow.Changed -= WindowChanged;
+        viewModel.PropertyChanged -= ViewModelChanged;
+        viewModel.SetWindowActive(false);
+        await viewModel.DisposeAsync();
+    }
+
+    private void SearchChanged(AutoSuggestBox sender, AutoSuggestBoxTextChangedEventArgs args) => viewModel.Query = Search.Text ?? "";
+
+    private void LevelChanged(object sender, SelectionChangedEventArgs args)
+    {
+        if (Levels.SelectedIndex >= 0) viewModel.Level = LogFilter.Choices[Levels.SelectedIndex].Filter;
+    }
+
+    private void AutoRefreshClicked(object sender, RoutedEventArgs args) => viewModel.AutoRefreshEnabled = AutoRefresh.IsChecked == true;
+
+    private async void SourceClicked(object sender, RoutedEventArgs args)
+    {
+        if (sender is Button { DataContext: LogsViewModel.Source source }) await viewModel.ShowSourceAsync(source);
+    }
+
+    private async void ClearClicked(object sender, RoutedEventArgs args)
+    {
+        if (viewModel.Selection is LogsViewModel.SiteSource site && await Confirm($"Clear the log of {site.Name}?", $"The Laravel log files in storage\\logs of {site.Name} are emptied. This can't be undone.", "Clear", destructive: true)) await viewModel.ClearCommand.ExecuteAsync(null);
+    }
+
+    private void DismissError(InfoBar sender, object args) => viewModel.DismissError();
+
+    private void WindowChanged(Microsoft.UI.Windowing.AppWindow sender, Microsoft.UI.Windowing.AppWindowChangedEventArgs args)
+    {
+        if (args.DidVisibilityChange || args.DidPresenterChange) viewModel.SetWindowActive(IsWindowActive());
+    }
+
+    private bool IsWindowActive() => AppWindow.IsVisible && AppWindow.Presenter is not Microsoft.UI.Windowing.OverlappedPresenter { State: Microsoft.UI.Windowing.OverlappedPresenterState.Minimized };
+
+    private void ViewModelChanged(object? sender, PropertyChangedEventArgs args) => Render();
+
+    private void Render()
+    {
+        Ui.ShowError(ErrorBar, viewModel.Error);
+        ClearButton.Visibility = viewModel.Selection is LogsViewModel.SiteSource ? Visibility.Visible : Visibility.Collapsed;
+        ClearButton.IsEnabled = viewModel.CanClear;
+        Levels.IsEnabled = viewModel.Selection is LogsViewModel.SiteSource;
+        AutoRefresh.IsChecked = viewModel.AutoRefreshEnabled;
+        SiteList.SelectedItem = viewModel.Selection is LogsViewModel.SiteSource selectedSite ? selectedSite : null;
+        ServiceList.SelectedItem = viewModel.Selection is LogsViewModel.ServiceSource selectedService ? selectedService : null;
+        if (viewModel.Selection is null)
+        {
+            DetailStateHost.Content = Ui.EmptyState(Ui.GlyphDocument, "Pick a log");
+            EntryList.Visibility = Visibility.Collapsed;
+            return;
+        }
+        if (viewModel.Current is not { } current || current.Source != viewModel.Selection)
+        {
+            rendered = null;
+            EntryList.Visibility = Visibility.Collapsed;
+            DetailStateHost.Content = viewModel.LoadError is { } failure ? Ui.EmptyState(Ui.GlyphWarning, "Log could not be loaded", failure) : new ProgressRing { Width = 32, Height = 32 };
+            return;
+        }
+        var key = (current, viewModel.Query, viewModel.Level);
+        if (rendered is { } shown && shown.Equals(key)) return;
+        rendered = key;
+        switch (current)
+        {
+            case LogsViewModel.SiteContent site:
+                if (site.Entries.Count == 0) { EntryList.Visibility = Visibility.Collapsed; DetailStateHost.Content = Ui.EmptyState(Ui.GlyphDocument, "No log entries", $"storage\\logs of {site.Site.Name} is empty."); }
+                else if (viewModel.FilteredEntries.Count == 0) { EntryList.Visibility = Visibility.Collapsed; DetailStateHost.Content = Ui.EmptyState(Ui.GlyphSearch, "No matching log entries", "Nothing in the latest entries matches the search and level."); }
+                else { DetailStateHost.Content = null; EntryList.Visibility = Visibility.Visible; }
+                break;
+            case LogsViewModel.ServiceContent service:
+                EntryList.Visibility = Visibility.Collapsed;
+                var text = MailDetailView.Monospaced(service.Text.Length == 0 ? "(empty)" : viewModel.FilteredText.Length == 0 ? "(no matching lines)" : viewModel.FilteredText);
+                DetailStateHost.Content = text;
+                text.Loaded += (_, _) => text.ChangeView(null, text.ScrollableHeight, null, disableAnimation: true);
+                break;
+        }
+    }
+}

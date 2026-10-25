@@ -29,7 +29,7 @@ public sealed class RuntimeService
     public RuntimeService(FlockClient client, UpdateService updates, InstallationService installation, CliProcessRunner processRunner,
         StatusPollingService statusPolling, OperationRunner operations, MailService mail, PreferencesService preferences,
         ConfigurationService configuration, PhpService php, FrankenPhpService frankenPhp, NodeService node,
-        ServicesService services, PostgresService postgres, CatalogFeatureService catalog, McpService mcp, DumpsService dumps,
+        ServicesService services, PostgresService postgres, CatalogFeatureService catalog, ServiceReleaseActions releaseActions, McpService mcp, DumpsService dumps,
         IUiDispatcher? dispatcher = null, SitesService? sites = null, TimeProvider? timeProvider = null, IShellLauncher? shell = null)
     {
         Client = client;
@@ -49,6 +49,7 @@ public sealed class RuntimeService
         Services = services;
         Postgres = postgres;
         Catalog = catalog;
+        ReleaseActions = releaseActions;
         Mcp = mcp;
         Dumps = dumps;
         Sites = sites ?? new SitesService(client, operations, dispatcher);
@@ -109,6 +110,7 @@ public sealed class RuntimeService
     public ServicesService Services { get; }
     public PostgresService Postgres { get; }
     public CatalogFeatureService Catalog { get; }
+    public ServiceReleaseActions ReleaseActions { get; }
     public McpService Mcp { get; }
     public SitesService Sites { get; }
     public event Action? Changed;

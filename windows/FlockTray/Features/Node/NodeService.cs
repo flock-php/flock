@@ -21,7 +21,7 @@ public sealed class NodeService : IAsyncDisposable
         this.runner = runner;
         this.configuration = configuration;
         request = new SharedRead<NodeCatalog>(dispatcher);
-        catalogErrors.PropertyChanged += (_, _) => Changed?.Invoke();
+        catalogErrors.PropertyChanged += (_, args) => { if (OperationErrors.IsDirectPropertyChange(args)) Changed?.Invoke(); };
         runner.RunningChanged += RunnerChanged;
     }
     public NodeCatalog? Current => current;
@@ -145,7 +145,7 @@ public sealed class NodeService : IAsyncDisposable
             return error;
         }
         error = new OperationErrors();
-        error.PropertyChanged += (_, _) => Changed?.Invoke();
+        error.PropertyChanged += (_, args) => { if (OperationErrors.IsDirectPropertyChange(args)) Changed?.Invoke(); };
         resourceErrors.Add(major, error);
         return error;
     }

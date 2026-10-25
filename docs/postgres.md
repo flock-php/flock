@@ -46,7 +46,7 @@ PostgreSQL has to be installed and running.
 Only one major version runs at a time. Each version keeps its own data directory, so switching back brings back your databases. Installing another major doesn't switch to it, and when you uninstall the active one, the newest other installed major takes over.
 
 :::app
-In the PostgreSQL detail, click **Switch…** next to the version you want and confirm with **Switch**. The card at the top shows the **Active** version and the size of its databases.
+In the PostgreSQL detail, open **More** next to the version you want, click **Switch…**, and confirm with **Switch**. The card at the top shows the **Active** version and the size of its databases.
 :::
 
 :::cli
@@ -58,7 +58,13 @@ flock services use postgres 17
 ## Updating and removing
 
 :::app
-Click **Update to …** next to a version to get its newest minor release (or a new build of the one you have), and **Check for Updates** to look for new ones. On macOS, the active version's update is the **Update** button in the card at the top. A build that turns out to be broken is replaced by a fixed one automatically, and your databases stay. To remove a version, open its **⋯** menu and choose **Uninstall PostgreSQL 16…** (macOS) or **Uninstall…** (Windows). Tick **Also delete its databases** to remove its data as well.
+Click **Update to …** next to a version to get its newest minor release (or a new build of the one you have), and **Check for Updates** to look for new ones. When several installed majors have updates, choose **Install all updates (N)** and confirm the listed majors and versions; Flock updates them one at a time and stops on the first failure.
+
+On macOS, the active version's update is the **Update** button in the card at the top.
+
+A build that turns out to be broken is replaced by a fixed one automatically, and your databases stay. To remove a version, open **More** and choose **Uninstall PostgreSQL 16…** (macOS) or **Uninstall…** (Windows). When an update is ready, **Uninstall…** is also in **More**. Tick **Also delete its databases** to remove its data as well.
+
+![Updating one PostgreSQL major](screenshot:settings-services-single-update)
 :::
 
 :::cli

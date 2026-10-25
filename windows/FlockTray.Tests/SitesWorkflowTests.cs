@@ -155,6 +155,41 @@ public sealed class SitesWorkflowTests : IDisposable
         Assert.Equal("8.4", retained.Php);
     }
 
+    [Fact]
+    public void StatusRefreshKeepsTheSelectedRowProjection()
+    {
+        var model = new SitesViewModel(service);
+        model.Apply(new Status { Sites = [Site("site", "8.3"), Site("other", "8.2")] });
+        var changed = new List<string?>();
+        model.PropertyChanged += (_, args) => changed.Add(args.PropertyName);
+        model.Select("other");
+        var selected = Assert.Single(model.Sites, row => row.Name == "other");
+
+        model.Apply(new Status { Sites = [Site("site", "8.4"), Site("other", "8.3")] });
+
+        Assert.Same(selected, model.Selected);
+        Assert.Equal("8.3", selected.Php);
+        Assert.Contains(nameof(SitesViewModel.Selected), changed);
+        Assert.Contains(nameof(SitesViewModel.Error), changed);
+    }
+
+    [Fact]
+    public async Task FailedSiteDraftCanRollBackWhileTheActionErrorStaysVisible()
+    {
+        handler.FailUpdate = true;
+        var model = new SitesViewModel(service);
+        model.Apply(new Status { Sites = [Site("site", "8.3")] });
+        var row = Assert.Single(model.Sites);
+        var rollback = row.SetDraftSecured(true);
+
+        Assert.Equal(OperationOutcome.Failed, await service.UpdateAsync("site", new SiteChange(Secured: true)));
+        rollback();
+        model.Apply(new Status { Sites = [Site("site", "8.3")] });
+
+        Assert.False(row.Secured);
+        Assert.Equal("write failed", service.ErrorFor("site"));
+    }
+
     private static Status.Site Site(string name, string php) => new() { Name = name, Domain = name + ".test", Php = php };
 
     private sealed class Handler : HttpMessageHandler

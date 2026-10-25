@@ -1,0 +1,33 @@
+<UserControl
+    x:Class="Flock.Tray.MailPane"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:local="using:Flock.Tray">
+    <UserControl.Resources>
+        <local:StatusBrushConverter x:Key="StatusBrushConverter" />
+        <local:RunningTextConverter x:Key="RunningTextConverter" />
+        <local:StringVisibilityConverter x:Key="StringVisibilityConverter" />
+    </UserControl.Resources>
+    <StackPanel Spacing="0">
+        <StackPanel Spacing="4" Margin="0,0,0,24">
+            <TextBlock Text="SMTP server" Style="{StaticResource BodyStrongTextBlockStyle}" Margin="1,0,0,6" />
+            <Border Style="{StaticResource CardStyle}"><Grid Style="{StaticResource SettingRowStyle}"><Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions><TextBlock Text="Host" /><TextBlock Grid.Column="1" Text="127.0.0.1" Foreground="{ThemeResource TextFillColorSecondaryBrush}" /></Grid></Border>
+            <Border Style="{StaticResource CardStyle}"><Grid Style="{StaticResource SettingRowStyle}"><Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions><TextBlock Text="Port" /><TextBlock Grid.Column="1" Text="{Binding Port}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" /></Grid></Border>
+            <Border Style="{StaticResource CardStyle}"><Grid Style="{StaticResource SettingRowStyle}"><Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions><TextBlock Text="Status" /><Grid Grid.Column="1" ColumnSpacing="8" VerticalAlignment="Center"><Grid.ColumnDefinitions><ColumnDefinition Width="Auto" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions><Ellipse Style="{StaticResource StatusDotStyle}" Fill="{Binding Running, Converter={StaticResource StatusBrushConverter}}" /><TextBlock Grid.Column="1" Text="{Binding Running, Converter={StaticResource RunningTextConverter}}" VerticalAlignment="Center" /></Grid></Grid></Border>
+        </StackPanel>
+        <StackPanel Spacing="4" Margin="0,0,0,24">
+            <TextBlock Text="Environment variables" Style="{StaticResource BodyStrongTextBlockStyle}" Margin="1,0,0,6" />
+            <Border Style="{StaticResource CardStyle}" Padding="16,12,16,12">
+                <Grid>
+                    <Border Style="{StaticResource CodeBlockStyle}"><TextBlock Text="{Binding Environment}" FontFamily="{StaticResource MonoFont}" FontSize="12" IsTextSelectionEnabled="True" TextWrapping="NoWrap" /></Border>
+                    <Button Content="Copy" Click="CopyEnvironment" HorizontalAlignment="Right" VerticalAlignment="Top" Padding="8,4" Visibility="{Binding Environment, Converter={StaticResource StringVisibilityConverter}}" />
+                </Grid>
+            </Border>
+            <TextBlock Text="MAIL_USERNAME picks the inbox, so every project gets its own." Style="{StaticResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" Margin="2,6,0,0" TextWrapping="Wrap" />
+        </StackPanel>
+        <StackPanel Spacing="4" Margin="0,0,0,24">
+            <Border Style="{StaticResource CardStyle}"><Grid Style="{StaticResource SettingRowStyle}"><Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions><TextBlock Text="Caught emails" /><TextBlock Grid.Column="1" Text="{Binding Count}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" /></Grid></Border>
+            <Border Style="{StaticResource CardStyle}"><Grid Style="{StaticResource SettingRowStyle}"><Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions><TextBlock Grid.Column="0" Text="Open Mail" /><Button Grid.Column="1" Content="Open Mail" Click="OpenMail" /></Grid></Border>
+        </StackPanel>
+    </StackPanel>
+</UserControl>

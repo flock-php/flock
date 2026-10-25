@@ -22,8 +22,7 @@ public sealed class DumpsViewModel : ObservableObject, IDisposable
         this.preferences = preferences;
         this.model = model;
         service.Changed += NotifyState;
-        preferences.Changed += PreferencesChanged;
-        preferences.ErrorChanged += NotifyState;
+        preferences.StateChanged += NotifyState;
         model.Changed += NotifyState;
         model.Configuration.Changed += NotifyState;
         SetDumpsCommand = new AsyncRelayCommand<bool>(SetDumpsAsync, _ => !service.IsCaptureBusy);
@@ -113,8 +112,7 @@ public sealed class DumpsViewModel : ObservableObject, IDisposable
         }
         released = true;
         service.Changed -= NotifyState;
-        preferences.Changed -= PreferencesChanged;
-        preferences.ErrorChanged -= NotifyState;
+        preferences.StateChanged -= NotifyState;
         if (model is not null)
         {
             model.Changed -= NotifyState;
@@ -130,8 +128,6 @@ public sealed class DumpsViewModel : ObservableObject, IDisposable
     {
         visibility ??= service.AcquireVisibility();
     }
-
-    private void PreferencesChanged(PreferenceData _) => NotifyState();
 
     private void NotifyState()
     {

@@ -40,7 +40,7 @@ public sealed class DeepLinkCoordinator(RuntimeService model)
         return link.Resolve(model.Status?.Sites);
     }
 
-    /// <summary>Consumes an install intent once all three Services snapshots have loaded.</summary>
+    /// <summary>Consumes an install intent once its required Services snapshots have loaded.</summary>
     public async Task<InstallLinkResolution?> ConsumeInstallAsync(CancellationToken cancellationToken = default)
     {
         var link = model.PendingInstall;
@@ -48,19 +48,19 @@ public sealed class DeepLinkCoordinator(RuntimeService model)
         {
             return null;
         }
-        while (!model.Services.HasSnapshot || !model.Postgres.HasSnapshot || !model.Catalog.HasSnapshot)
+        while (!HasRequiredSnapshots(link, model.Services.HasSnapshot, model.Postgres.HasSnapshot, model.Catalog.HasSnapshot))
         {
             var changed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
             void OnChanged()
             {
-                if (model.Services.HasSnapshot && model.Postgres.HasSnapshot && model.Catalog.HasSnapshot)
+                if (HasRequiredSnapshots(link, model.Services.HasSnapshot, model.Postgres.HasSnapshot, model.Catalog.HasSnapshot))
                 {
                     changed.TrySetResult();
                 }
             }
             model.Services.Changed += OnChanged;
-            model.Postgres.Changed += OnChanged;
-            model.Catalog.Changed += OnChanged;
+            if (link.Service == "postgres") model.Postgres.Changed += OnChanged;
+            else model.Catalog.Changed += OnChanged;
             try
             {
                 OnChanged();
@@ -72,8 +72,8 @@ public sealed class DeepLinkCoordinator(RuntimeService model)
             finally
             {
                 model.Services.Changed -= OnChanged;
-                model.Postgres.Changed -= OnChanged;
-                model.Catalog.Changed -= OnChanged;
+                if (link.Service == "postgres") model.Postgres.Changed -= OnChanged;
+                else model.Catalog.Changed -= OnChanged;
             }
         }
         if (!ReferenceEquals(model.PendingInstall, link))
@@ -83,4 +83,7 @@ public sealed class DeepLinkCoordinator(RuntimeService model)
         model.PendingInstall = null;
         return link.Resolve(model.Services.Current, model.Catalog.Current, model.Postgres.Current);
     }
+
+    internal static bool HasRequiredSnapshots(InstallLink link, bool servicesReady, bool postgresReady, bool catalogReady) =>
+        servicesReady && (link.Service == "postgres" ? postgresReady : catalogReady);
 }

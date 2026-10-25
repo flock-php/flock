@@ -4,8 +4,6 @@ using Flock.Tray.ViewModels;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
-using Microsoft.UI.Xaml.Markup;
-using Microsoft.UI.Xaml.XamlTypeInfo;
 
 namespace Flock.Tray;
 
@@ -15,10 +13,8 @@ public enum WindowKind { Mail, Dumps, Logs, Settings, Setup }
 /// The tray app: a notification area icon with a panel (the macOS menu bar extra), plus the
 /// Mail, Dumps, Logs and Settings windows. It keeps running with no window open.
 /// </summary>
-public sealed class App : Application, IXamlMetadataProvider
+public sealed partial class App : Application
 {
-    // Without XAML markup there is no generated type info; WinUI's own provider covers its controls.
-    private readonly XamlControlsXamlMetaDataProvider metadata = new();
     private ITrayIcon? tray;
     private IPanelWindow? panel;
 
@@ -59,6 +55,7 @@ public sealed class App : Application, IXamlMetadataProvider
 
     internal App(AppOptions options)
     {
+        InitializeComponent();
         Options = options;
         if (options.Theme is { } theme)
         {
@@ -79,12 +76,6 @@ public sealed class App : Application, IXamlMetadataProvider
             args.Handled = false;
         };
     }
-
-    public IXamlType GetXamlType(Type type) => metadata.GetXamlType(type);
-
-    public IXamlType GetXamlType(string fullName) => metadata.GetXamlType(fullName);
-
-    public XmlnsDefinition[] GetXmlnsDefinitions() => metadata.GetXmlnsDefinitions();
 
     protected override void OnLaunched(LaunchActivatedEventArgs args)
     {
@@ -253,10 +244,16 @@ public sealed class App : Application, IXamlMetadataProvider
                 Open(WindowKind.Settings, SettingsPane.Node);
                 break;
             default:
-                Open(WindowKind.Settings, SettingsPane.Services);
-                windowManager?.Get<SettingsWindow>(WindowKind.Settings)?.ShowService(link.Service);
+                OpenService(link.Service);
                 break;
         }
+    }
+
+    private void OpenService(string service)
+    {
+        panel?.Hide();
+        var kind = State.NeedsSetup ? WindowKind.Setup : WindowKind.Settings;
+        _ = OpenCoreAsync(kind, SettingsPane.Services, service);
     }
 
     private void ShowMenu()
@@ -348,16 +345,32 @@ public sealed class App : Application, IXamlMetadataProvider
         {
             kind = WindowKind.Setup;
         }
-        var window = windowManager?.Open(kind);
-        if (window is null)
+        _ = OpenCoreAsync(kind, pane);
+    }
+
+    private async Task OpenCoreAsync(WindowKind kind, SettingsPane? pane, string? service = null)
+    {
+        try
         {
-            return;
+            if (windowManager is null)
+            {
+                return;
+            }
+            var window = await windowManager.OpenAsync(kind);
+            if (pane is { } selected && window is SettingsWindow settings)
+            {
+                settings.Select(selected);
+                if (service is not null)
+                {
+                    settings.ShowService(service);
+                }
+            }
+            ((FlockWindow)window).Present();
         }
-        if (pane is { } p && window is SettingsWindow settings)
+        catch (Exception error)
         {
-            settings.Select(p);
+            Log(error);
         }
-        ((FlockWindow)window).Present();
     }
 
     /// <summary>Opens the Logs window on one log.</summary>

@@ -3,6 +3,7 @@ using Flock.Kit;
 using Flock.Tray.Features.Configuration;
 using Flock.Tray.Infrastructure;
 using Flock.Tray.ViewModels;
+using Microsoft.UI.Xaml;
 
 namespace Flock.Tray.Tests;
 
@@ -55,6 +56,17 @@ public sealed class GeneralViewModelTests : IDisposable
         Assert.Equal(["POST /v1/settings", "GET /v1/config"], handler.Requests);
     }
 
+    [Fact]
+    public async Task BindingProjectionsFollowTheLatestConfiguration()
+    {
+        await viewModel.RefreshAsync();
+
+        Assert.Equal("*.test", viewModel.DomainValue);
+        Assert.Equal("C:\\Flock", viewModel.Root);
+        Assert.Equal(["C:\\Projects"], viewModel.Config!.Parked);
+        Assert.Equal(Visibility.Visible, viewModel.PortsVisibility);
+    }
+
     private sealed class Handler : HttpMessageHandler
     {
         public bool FailWrites { get; set; }
@@ -73,7 +85,7 @@ public sealed class GeneralViewModelTests : IDisposable
             }
             return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
             {
-                Content = new StringContent("{\"channel\":\"beta\"}"),
+                Content = new StringContent("{\"channel\":\"beta\",\"tld\":\"test\",\"root\":\"C:\\\\Flock\",\"parked\":[\"C:\\\\Projects\"],\"ports\":{\"http\":8080,\"https\":8443}}"),
             });
         }
     }
