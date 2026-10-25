@@ -7,7 +7,7 @@ set -e
 if [ -d /run/systemd/system ]; then
   systemctl daemon-reload || true
 fi
-/usr/lib/flockphp/flock privileged-setup --repo stable --if-missing || echo "flockphp: could not add Flock's package repository" >&2
+/usr/libexec/flockphp/flock privileged-setup --repo stable --if-missing || echo "flockphp: could not add Flock's package repository" >&2
 # deb: configure <old version> on an upgrade; rpm: the number of installed versions (2 while upgrading).
 if [ "$1" = configure ] && [ -n "$2" ] || [ "$1" = 2 ]; then
   if [ -d /run/systemd/system ]; then

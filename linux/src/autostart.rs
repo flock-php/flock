@@ -74,7 +74,7 @@ mod tests {
 
     #[test]
     fn plain_paths_stay_unquoted() {
-        assert!(entry("/usr/lib/flockphp/flock-app").contains("\nExec=/usr/lib/flockphp/flock-app --background\n"));
+        assert!(entry("/usr/libexec/flockphp/flock-app").contains("\nExec=/usr/libexec/flockphp/flock-app --background\n"));
     }
 
     #[test]

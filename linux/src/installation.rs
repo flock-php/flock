@@ -14,7 +14,7 @@ use crate::paths;
 
 /// The flock the package installed (/usr/bin/flk links to it); `flock install` copies it into the
 /// user's data dir.
-const PACKAGED_FLOCK: &str = "/usr/lib/flockphp/flock";
+const PACKAGED_FLOCK: &str = "/usr/libexec/flockphp/flock";
 
 /// The user's daemon is registered: `flock install` wrote its unit's drop-in.
 pub fn is_set_up() -> bool {

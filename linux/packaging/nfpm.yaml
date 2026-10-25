@@ -1,7 +1,8 @@
 # The flockphp .deb and .rpm (linux/build-packages.sh): the CLI and daemon, and the app (linux/).
-# The command is flock, but util-linux owns /usr/bin/flock: the binary lives in /usr/lib/flockphp
+# The command is flock, but util-linux owns /usr/bin/flock: the binary lives in /usr/libexec/flockphp
 # and only `flk` goes on PATH. `flk install` links it into the user's data dir, whose bin/ (first on
-# PATH) then has `flock` too.
+# PATH) then has `flock` too. libexec, not lib: SELinux labels it bin_t, so systemd runs the daemon
+# unconfined (from lib_t it would stay init_t, which can't download anything).
 name: flockphp
 arch: ${NFPM_ARCH}
 platform: linux
@@ -18,15 +19,15 @@ description: |-
 
 contents:
   - src: build/linux/flock
-    dst: /usr/lib/flockphp/flock
+    dst: /usr/libexec/flockphp/flock
     file_info:
       mode: 0755
-  - src: /usr/lib/flockphp/flock
+  - src: /usr/libexec/flockphp/flock
     dst: /usr/bin/flk
     type: symlink
   # The app: its launcher (which also takes flock:// links), icons and what software centers show.
   - src: build/linux/flock-app
-    dst: /usr/lib/flockphp/flock-app
+    dst: /usr/libexec/flockphp/flock-app
     file_info:
       mode: 0755
   - src: linux/data/dev.flock.Flock.desktop
@@ -95,6 +96,8 @@ overrides:
       - gtk4 >= 4.14
       - libadwaita >= 1.5
       - webkitgtk6.0
+      # Under SELinux, the setup labels Flock's DNS port for systemd-resolved with semanage.
+      - (policycoreutils-python-utils if selinux-policy)
     recommends:
       - openssl-libs
       - libcurl

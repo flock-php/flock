@@ -224,7 +224,7 @@ func packaged() bool {
 }
 
 // packagedBinary is flock in the .deb and .rpm. Tests move it.
-var packagedBinary = "/usr/lib/flockphp/flock"
+var packagedBinary = "/usr/libexec/flockphp/flock"
 
 // linkPackaged makes dst a symlink to the package's flock when self is it. Updates come from the
 // package manager (the system's updates, or `flock update`), which replaces only that file: the
@@ -543,6 +543,12 @@ func setupPrivileged(name, root, tld string, dnsPort int, caPath string) error {
 	}
 
 	if !fileHas(dns.ResolvedFile(), dns.ResolvedContent(tld, dnsPort)) {
+		if old := resolvedPort(); old != 0 && old != dnsPort {
+			unlabelDNSPort(old)
+		}
+		if err := labelDNSPort(dnsPort); err != nil {
+			return err
+		}
 		if err := writeOwnFile(dns.ResolvedFile(), dns.ResolvedContent(tld, dnsPort)); err != nil {
 			return err
 		}
@@ -579,6 +585,53 @@ func trustSystemCA(name, caPath string) error {
 	return nil
 }
 
+// labelDNSPort labels Flock's DNS port dns_port_t under SELinux: the policy only lets
+// systemd-resolved query DNS ports, and Flock's (53535) is an ephemeral one. The .rpm requires
+// semanage (policycoreutils-python-utils) where SELinux is.
+func labelDNSPort(port int) error {
+	if !dns.SELinux() {
+		return nil
+	}
+	if !hasCommand("semanage") {
+		return errors.New("SELinux is on, and labelling Flock's DNS port for systemd-resolved needs semanage: install policycoreutils-python-utils")
+	}
+	p := strconv.Itoa(port)
+	for _, proto := range []string{"tcp", "udp"} {
+		// -a fails when the port is labelled already (by an earlier setup): -m relabels it.
+		if runRoot("semanage", "port", "-a", "-t", "dns_port_t", "-p", proto, p) != nil {
+			if err := runRoot("semanage", "port", "-m", "-t", "dns_port_t", "-p", proto, p); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+// unlabelDNSPort takes labelDNSPort's label off port again, as far as it is there.
+func unlabelDNSPort(port int) {
+	if !dns.SELinux() || !hasCommand("semanage") {
+		return
+	}
+	for _, proto := range []string{"tcp", "udp"} {
+		_ = runRoot("semanage", "port", "-d", "-p", proto, strconv.Itoa(port))
+	}
+}
+
+// resolvedPort is the DNS port the resolved drop-in sends lookups to, 0 without one.
+func resolvedPort() int {
+	data, err := os.ReadFile(dns.ResolvedFile())
+	if err != nil {
+		return 0
+	}
+	for line := range strings.Lines(string(data)) {
+		if rest, ok := strings.CutPrefix(strings.TrimSpace(line), "DNS=127.0.0.1:"); ok {
+			port, _ := strconv.Atoi(rest)
+			return port
+		}
+	}
+	return 0
+}
+
 // removePrivileged undoes setupPrivileged for name. What other users' daemons share (the
 // template, the polkit rule and DNS) goes with the last one.
 func removePrivileged(name string) error {
@@ -599,6 +652,9 @@ func removePrivileged(name string) error {
 			}
 		}
 		if fileExists(dns.ResolvedFile()) {
+			if port := resolvedPort(); port != 0 {
+				unlabelDNSPort(port)
+			}
 			errs = append(errs, removeManaged(dns.ResolvedFile()))
 			errs = append(errs, runRoot("systemctl", "restart", "systemd-resolved"))
 		}

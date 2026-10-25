@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"flock/internal/dns"
 )
 
 // Uninstalling leaves the shell profiles as they were before `flock install`.
@@ -119,6 +121,34 @@ func TestRemoveManaged(t *testing.T) {
 	}
 	if fileExists(ours) || fileExists(rule) || !fileExists(theirs) {
 		t.Fatalf("ours %v, rule %v, theirs %v", fileExists(ours), fileExists(rule), fileExists(theirs))
+	}
+}
+
+// Under SELinux the drop-in says the DNS port is labelled, so one written without the label is set
+// up again; the port is read back to take the label off.
+func TestResolvedDropInUnderSELinux(t *testing.T) {
+	dir := t.TempDir()
+	defer func(resolved, selinux string) { dns.ResolvedDir, dns.SELinuxDir = resolved, selinux }(dns.ResolvedDir, dns.SELinuxDir)
+	dns.ResolvedDir, dns.SELinuxDir = dir, filepath.Join(dir, "selinux")
+
+	plain := dns.ResolvedContent("test", 53535)
+	_ = os.WriteFile(dns.ResolvedFile(), []byte(plain), 0o644)
+	if p := dns.ResolvedProblem("test", 53535); p != "" || resolvedPort() != 53535 {
+		t.Fatalf("without SELinux: problem %q, port %d", p, resolvedPort())
+	}
+
+	_ = os.MkdirAll(dns.SELinuxDir, 0o755)
+	_ = os.WriteFile(filepath.Join(dns.SELinuxDir, "enforce"), []byte("1"), 0o644)
+	if dns.ResolvedProblem("test", 53535) == "" {
+		t.Fatal("a drop-in from before the port was labelled counts as set up")
+	}
+	labelled := dns.ResolvedContent("test", 53535)
+	if !strings.Contains(labelled, "port 53535 is labelled dns_port_t") {
+		t.Fatalf("drop-in under SELinux:\n%s", labelled)
+	}
+	_ = os.WriteFile(dns.ResolvedFile(), []byte(labelled), 0o644)
+	if p := dns.ResolvedProblem("test", 53535); p != "" || resolvedPort() != 53535 {
+		t.Fatalf("with SELinux: problem %q, port %d", p, resolvedPort())
 	}
 }
 

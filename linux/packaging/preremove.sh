@@ -12,5 +12,5 @@ for dir in /etc/systemd/system/flock@?*.service.d; do
   [ -d "$dir" ] || continue
   user="${dir#/etc/systemd/system/flock@}"
   user="${user%.service.d}"
-  /usr/lib/flockphp/flock privileged-setup --remove --user "$user" || echo "flockphp: could not undo Flock's setup for $user" >&2
+  /usr/libexec/flockphp/flock privileged-setup --remove --user "$user" || echo "flockphp: could not undo Flock's setup for $user" >&2
 done

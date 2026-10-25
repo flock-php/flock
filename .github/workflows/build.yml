@@ -459,9 +459,9 @@ jobs:
             esac
             docker run --rm -v "$PWD/build/linux:/pkgs:ro" "$image" sh -ec "
               $install
-              test -x /usr/lib/flockphp/flock && test -f /usr/lib/systemd/system/flock@.service
+              test -x /usr/libexec/flockphp/flock && test -f /usr/lib/systemd/system/flock@.service
               test -f /usr/share/applications/dev.flock.Flock.desktop
-              ! ldd /usr/lib/flockphp/flock-app | grep 'not found'
+              ! ldd /usr/libexec/flockphp/flock-app | grep 'not found'
               flk version
               flk --help >/dev/null
               $remove
