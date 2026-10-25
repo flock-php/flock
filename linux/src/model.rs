@@ -168,9 +168,14 @@ impl AppModel {
     pub fn headline(&self) -> String {
         match (self.status.borrow().as_ref(), self.needs_setup()) {
             (_, true) => "Not set up".to_owned(),
-            (Some(s), _) if s.is_degraded() => format!("Needs attention · v{}", s.version),
-            (Some(s), _) => format!("Running · v{}", s.version),
+            (Some(s), _) if s.is_degraded() => format!("Needs attention · {}", display_version(&s.version)),
+            (Some(s), _) => format!("Running · {}", display_version(&s.version)),
             (None, _) => "Not running".to_owned(),
         }
     }
+}
+
+/// "v1.2" for a release; a dev build's "dev-<hash>" as it is.
+fn display_version(version: &str) -> String {
+    if version.starts_with(|c: char| c.is_ascii_digit()) { format!("v{version}") } else { version.to_owned() }
 }

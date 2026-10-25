@@ -57,8 +57,15 @@ impl PaneView {
 /// A row with a value on its right, which can be selected and copied.
 pub fn info_row(title: &str, value: &str) -> adw::ActionRow {
     let row = adw::ActionRow::builder().title(glib::markup_escape_text(title)).build();
-    let label =
-        gtk::Label::builder().label(value).selectable(true).css_classes(["dim-label"]).ellipsize(gtk::pango::EllipsizeMode::Middle).build();
+    // Short values like "*.test" keep their width next to a long subtitle; longer ones (paths) may
+    // shrink to 24 characters before they are ellipsized.
+    let label = gtk::Label::builder()
+        .label(value)
+        .selectable(true)
+        .css_classes(["dim-label"])
+        .ellipsize(gtk::pango::EllipsizeMode::Middle)
+        .width_chars(value.chars().count().min(24) as i32)
+        .build();
     row.add_suffix(&label);
     row
 }
