@@ -401,7 +401,8 @@ jobs:
 
       - name: GTK, libadwaita and WebKitGTK
         if: env.CODE == 'true'
-        run: sudo apt-get install -y --no-install-recommends libgtk-4-dev libadwaita-1-dev libwebkitgtk-6.0-dev
+        # The runner image's package lists go stale: updated packages 404.
+        run: sudo apt-get update -qq && sudo apt-get install -y --no-install-recommends libgtk-4-dev libadwaita-1-dev libwebkitgtk-6.0-dev
 
       - name: Format
         if: env.CODE == 'true'
@@ -441,7 +442,8 @@ jobs:
           go-version-file: go.mod
 
       - name: GTK, libadwaita and WebKitGTK
-        run: sudo apt-get install -y --no-install-recommends libgtk-4-dev libadwaita-1-dev libwebkitgtk-6.0-dev
+        # The runner image's package lists go stale: updated packages 404.
+        run: sudo apt-get update -qq && sudo apt-get install -y --no-install-recommends libgtk-4-dev libadwaita-1-dev libwebkitgtk-6.0-dev
 
       - name: Build packages
         run: linux/build-packages.sh "${{ matrix.arch }}"
