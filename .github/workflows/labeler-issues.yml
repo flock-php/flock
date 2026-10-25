@@ -1,0 +1,37 @@
+﻿# Issues opened by people without repository access need a maintainer's first review.
+name: Issue Triage
+
+on:
+    issues:
+        types: [ opened ]
+
+permissions:
+    issues: write
+
+jobs:
+    label:
+        name: Label for triage
+        runs-on: ubuntu-latest
+        steps:
+            -   uses: actions/github-script@v9
+                with:
+                    #language=javascript
+                    script: |
+                        const { owner, repo } = context.repo;
+                        const issue = context.payload.issue;
+                        const author = issue.user.login;
+
+                        try {
+                            await github.rest.repos.getCollaboratorPermissionLevel({ owner, repo, username: author });
+                            core.info(`${author} is a repository collaborator`);
+                        } catch (error) {
+                            if (error.status !== 404) throw error;
+
+                            await github.rest.issues.addLabels({
+                                owner,
+                                repo,
+                                issue_number: issue.number,
+                                labels: ['needs triage'],
+                            });
+                            core.info(`Added "needs triage" to #${issue.number}, opened by ${author}`);
+                        }
