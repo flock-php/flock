@@ -242,7 +242,7 @@ func app(s Site) string {
 	root := fmt.Sprintf("\troot * %s\n", quote(s.Root))
 	if s.Reverb != "" {
 		// Before the other handle blocks, which keep their order (none has a path matcher alone).
-		root += fmt.Sprintf("\t@reverb {\n\t\tpath /app/* /apps/*\n\t\texpression `%s`\n\t}\n\thandle @reverb {\n%s\t}\n",
+		root += fmt.Sprintf("\t@reverb {\n\t\tpath /app/* /apps/*\n\t\texpression `%s`\n\t}\n\thandle @reverb {\n\t\tabort @remote\n%s\t}\n",
 			reverbRequest, proxy(s.Reverb, "\t\t"))
 	}
 	serve := func(indent string) string { return php(s.FPM, indent) }
