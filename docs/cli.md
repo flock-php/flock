@@ -57,10 +57,14 @@ This page lists the `flock` commands. The other pages show where to find each ac
 | `flock frankenphp` | Show the current site's server and the installed FrankenPHP builds |
 | `flock frankenphp on [site] [--octane\|--classic]` | Serve a site with FrankenPHP, optionally in Laravel Octane's worker mode |
 | `flock frankenphp off [site]` | Serve a site with PHP-FPM again (php-cgi on Windows) |
-| `flock frankenphp restart [site]` | Restart a site's FrankenPHP, e.g. to load changed code into Octane's workers |
+| `flock frankenphp restart [site]` | Restart a site's FrankenPHP (and its Reverb server), e.g. to load changed code into Octane's workers |
 | `flock frankenphp list` | List FrankenPHP builds, installed and available |
 | `flock frankenphp install <php-version>` | Install or update FrankenPHP for a PHP version (`--from <dir\|archive>` for a local package) |
 | `flock frankenphp uninstall <php-version>` | Remove FrankenPHP for a PHP version |
+| `flock reverb [site]` | Show a site's [Reverb](php.md#laravel-reverb) server and the `.env` lines its app needs |
+| `flock reverb on [site]` | Run a Laravel app's Reverb server, reached at `wss://<site>.test/app` |
+| `flock reverb off [site]` | Stop a site's Reverb server |
+| `flock reverb restart [site]` | Restart a site's Reverb server (and its FrankenPHP), e.g. to load changed code |
 
 ## Services
 

@@ -46,7 +46,7 @@ These tools only read, so most clients run them without asking:
 | Tool | What it does |
 | --- | --- |
 | `status` | Whether Flock runs, the default PHP and Node.js versions, and any problems |
-| `site_info` | A site's URLs, folder, HTTPS, PHP and Node.js versions (and where they come from), and its server |
+| `site_info` | A site's URLs, folder, HTTPS, PHP and Node.js versions (and where they come from), its server, and its Reverb server with the `.env` lines it needs |
 | `php_extensions` | The PHP extensions a site requires or uses, and whether Flock's PHP has each |
 | `list_sites` | Every site with its URL, folder and PHP version |
 | `list_services` | Databases and other services: installed, running, their port and the `.env` settings to connect |
@@ -66,7 +66,7 @@ These tools change things, so clients ask you first:
 | `service` | Install, start or stop a service |
 | `install_version` | Install a PHP or Node.js version |
 | `link_site` | Serve a project as a new site |
-| `update_site` | Turn HTTPS on or off, isolate, unisolate, pin or unpin a version, add a domain, switch between FrankenPHP (with or without Octane) and PHP-FPM, or restart it |
+| `update_site` | Turn HTTPS on or off, isolate, unisolate, pin or unpin a version, add a domain, switch between FrankenPHP (with or without Octane) and PHP-FPM, run or stop its Reverb server, or restart it |
 | `set_debugging` | Turn Xdebug or dump capture on or off |
 | `create_database` | Create a database in PostgreSQL, MySQL or MariaDB |
 
