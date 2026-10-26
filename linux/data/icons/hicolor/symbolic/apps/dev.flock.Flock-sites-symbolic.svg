@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16">
+  <!-- A site's globe, like macOS's "globe" (see linux/data/icons/README). -->
+  <g fill="#2e3436" fill-rule="evenodd">
+    <path d="M8 1a7 7 0 1 0 0 14A7 7 0 0 0 8 1zm0 1.5a5.5 5.5 0 1 1 0 11 5.5 5.5 0 0 1 0-11z"/>
+    <path d="M8 1C6.2 1 4.75 4.13 4.75 8S6.2 15 8 15s3.25-3.13 3.25-7S9.8 1 8 1zm0 1.5c.97 0 1.75 2.46 1.75 5.5S8.97 13.5 8 13.5 6.25 11.04 6.25 8 7.03 2.5 8 2.5z"/>
+    <path d="M1.5 7.25h13v1.5h-13z"/>
+  </g>
+</svg>

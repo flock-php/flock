@@ -35,7 +35,7 @@ Flock only adds its own `flock` entry to a client's settings and leaves everythi
 }
 ```
 
-On Windows the command is `C:\Users\you\AppData\Roaming\Flock\bin\flock.exe`. VS Code calls the top-level key `servers` instead of `mcpServers`, and its entry also has `"type": "stdio"`. Codex doesn't use JSON: its entry is a `[mcp_servers.flock]` table in `~/.codex/config.toml`.
+On Windows the command is `C:\Users\you\AppData\Roaming\Flock\bin\flock.exe`, and on Linux `/home/you/.local/share/flock/bin/flock`. VS Code calls the top-level key `servers` instead of `mcpServers`, and its entry also has `"type": "stdio"`. Codex doesn't use JSON: its entry is a `[mcp_servers.flock]` table in `~/.codex/config.toml`.
 
 ## What the agent can do
 

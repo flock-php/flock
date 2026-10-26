@@ -29,6 +29,9 @@ import (
 	"flock/internal/paths"
 )
 
+// serviceStarts says when the scheduled task starts the daemon.
+const serviceStarts = "at login"
+
 // On Windows, `flock install` sets up:
 //
 //   - <root>\bin\php.exe, composer.exe, ... — hard links to flock.exe, which acts as
@@ -47,14 +50,14 @@ const (
 
 func exeName(name string) string { return name + ".exe" }
 
-// writeShims links every tool name to the flock binary.
+// writeShims links every tool name, and the command's aliases, to the flock binary.
 func writeShims(root, bin string) error {
 	dir := filepath.Join(root, "bin")
 	data, err := os.ReadFile(bin)
 	if err != nil {
 		return err
 	}
-	for _, tool := range tools {
+	for _, tool := range append(slices.Clone(tools), cliAliases...) {
 		dst := filepath.Join(dir, exeName(tool))
 		if err := placeLink(bin, dst, data); err != nil {
 			return fmt.Errorf("%s: %w", dst, err)

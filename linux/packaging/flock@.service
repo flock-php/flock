@@ -1,0 +1,13 @@
+# Managed by Flock
+[Unit]
+Description=Flock local development environment for %i
+After=network.target
+
+[Service]
+User=%i
+AmbientCapabilities=CAP_NET_BIND_SERVICE
+Restart=always
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target
