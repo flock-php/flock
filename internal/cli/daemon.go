@@ -46,6 +46,7 @@ func newDaemonCommand() *cobra.Command {
 			defer stop()
 
 			cmd.Printf("flock daemon %s — API on %s\n", Version, paths.Socket(root))
+			refreshAfterUpgrade(cmd, root)
 
 			err = daemon.Run(ctx, daemon.Config{Root: root, Version: Version})
 			if errors.Is(err, daemon.ErrAlreadyRunning) {

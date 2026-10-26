@@ -1,3 +1,4 @@
+using Flock.Tray.Infrastructure;
 using Microsoft.UI;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
@@ -6,46 +7,78 @@ using Microsoft.Web.WebView2.Core;
 namespace Flock.Tray;
 
 /// <summary>
-/// Renders an HTML string in WebView2. Mail HTML runs with JavaScript off and remote loads blocked
-/// (no tracking pixels, no surprises); dumps need JavaScript for Symfony's collapsible output.
-/// Links open in the default browser (or editor, for dump sources) instead of inside the view.
+/// Renders HTML in WebView2. Mail HTML runs with JavaScript off and remote loads blocked; dumps
+/// enable JavaScript for their local collapsible output while still blocking remote loads.
 /// </summary>
 internal sealed class HtmlView : Grid
 {
-    // NavigateToString is limited to 2 MB; larger pages are written to a file first.
     private const int MaxInlineLength = 1_500_000;
 
     private readonly WebView2 web = new();
+    private readonly InfoBar shellError = Ui.ErrorBar();
     private readonly bool allowScripts;
     private readonly bool blockRemote;
+    private readonly HtmlPageFiles pages;
+    private readonly IShellLauncher shell;
+    private readonly IUiDispatcher? dispatcher;
+    private readonly Lock gate = new();
+    private readonly Task initialization;
+    private readonly HashSet<Task> loads = [];
     private string? loaded;
-    private string? pending;
-    private bool ready;
     private string? pageFile;
+    private long generation;
+    private bool ready;
+    private bool initialized;
+    private bool released;
+    private Task? releaseTask;
 
-    public HtmlView(bool allowScripts = false, bool blockRemote = true, bool whiteBackground = false)
+    public HtmlView(bool allowScripts, bool blockRemote, bool whiteBackground, IShellLauncher shell,
+        HtmlPageFiles? pages = null, IUiDispatcher? dispatcher = null)
     {
         this.allowScripts = allowScripts;
         this.blockRemote = blockRemote;
+        this.pages = pages ?? new HtmlPageFiles(log: error => App.Log(error));
+        this.shell = shell;
+        this.dispatcher = dispatcher;
         web.DefaultBackgroundColor = whiteBackground ? Colors.White : Colors.Transparent;
         Children.Add(web);
-        _ = InitializeAsync();
+        Children.Add(shellError);
+        initialization = InitializeAsync();
     }
 
-    public void Load(string html)
+    /// <summary>Starts a retained view load while keeping the task owned for release.</summary>
+    public Task LoadAsync(string html) => StartLoad(html);
+
+    private Task StartLoad(string html)
     {
-        if (html == loaded)
+        Task load;
+        lock (gate)
         {
-            return;
+            if (released || html == loaded)
+            {
+                return Task.CompletedTask;
+            }
+            loaded = html;
+            generation++;
+            load = LoadCoreAsync(html, generation);
+            loads.Add(load);
         }
-        loaded = html;
-        if (ready)
+        return load;
+    }
+
+    /// <summary>Stops initialization and writes, closes WebView2 on the UI dispatcher, then cleans files.</summary>
+    public Task ReleaseAsync()
+    {
+        lock (gate)
         {
-            Show(html);
-        }
-        else
-        {
-            pending = html;
+            if (releaseTask is not null)
+            {
+                return releaseTask;
+            }
+            released = true;
+            generation++;
+            releaseTask = ReleaseCoreAsync();
+            return releaseTask;
         }
     }
 
@@ -54,87 +87,226 @@ internal sealed class HtmlView : Grid
         try
         {
             await web.EnsureCoreWebView2Async();
-        }
-        catch (Exception e)
-        {
-            Children.Clear();
-            Children.Add(Ui.EmptyState(Ui.GlyphWarning, "Can't show HTML",
-                $"The Microsoft Edge WebView2 Runtime is missing or failed to start ({e.Message}). Install it from microsoft.com/edge/webview2."));
-            return;
-        }
-
-        var core = web.CoreWebView2;
-#if SCREENSHOTS
-        // WebView2 follows Windows' theme, the screenshots' app doesn't.
-        core.Profile.PreferredColorScheme = Screenshots.Current.WebViewColorScheme;
-#endif
-        core.Settings.IsScriptEnabled = allowScripts;
-        core.Settings.AreDevToolsEnabled = false;
-        core.Settings.IsStatusBarEnabled = false;
-        core.Settings.IsZoomControlEnabled = true;
-
-        if (blockRemote)
-        {
-            core.AddWebResourceRequestedFilter("*", CoreWebView2WebResourceContext.All);
-            core.WebResourceRequested += (_, e) =>
+            var core = web.CoreWebView2;
+            if (App.Current.Options.Theme is { } theme)
             {
-                if (e.Request.Uri.StartsWith("http:", StringComparison.OrdinalIgnoreCase) || e.Request.Uri.StartsWith("https:", StringComparison.OrdinalIgnoreCase))
+                core.Profile.PreferredColorScheme = theme == ApplicationTheme.Dark
+                    ? CoreWebView2PreferredColorScheme.Dark
+                    : CoreWebView2PreferredColorScheme.Light;
+            }
+            core.Settings.IsScriptEnabled = allowScripts;
+            core.Settings.AreDevToolsEnabled = false;
+            core.Settings.IsStatusBarEnabled = false;
+            core.Settings.IsZoomControlEnabled = true;
+
+            if (blockRemote)
+            {
+                core.AddWebResourceRequestedFilter("*", CoreWebView2WebResourceContext.All);
+                core.WebResourceRequested += (_, e) =>
                 {
-                    e.Response = core.Environment.CreateWebResourceResponse(null, 403, "Blocked by Flock", "");
+                    if (e.Request.Uri.StartsWith("http:", StringComparison.OrdinalIgnoreCase) ||
+                        e.Request.Uri.StartsWith("https:", StringComparison.OrdinalIgnoreCase))
+                    {
+                        e.Response = core.Environment.CreateWebResourceResponse(null, 403, "Blocked by Flock", "");
+                    }
+                };
+            }
+
+            core.NavigationStarting += (_, e) =>
+            {
+                if (!IsOwnPage(e.Uri))
+                {
+                    e.Cancel = true;
+                    if (!shell.Open(e.Uri).Succeeded)
+                    {
+                        ShowShellError();
+                    }
                 }
             };
-        }
-
-        core.NavigationStarting += (_, e) =>
-        {
-            if (!IsOwnPage(e.Uri))
+            core.NewWindowRequested += (_, e) =>
             {
-                e.Cancel = true;
-                Native.Open(e.Uri);
-            }
-        };
-        core.NewWindowRequested += (_, e) =>
-        {
-            e.Handled = true;
-            Native.Open(e.Uri);
-        };
+                e.Handled = true;
+                if (!shell.Open(e.Uri).Succeeded)
+                {
+                    ShowShellError();
+                }
+            };
 
-        ready = true;
-        if (pending is not null)
+            lock (gate)
+            {
+                initialized = true;
+                ready = !released;
+            }
+        }
+        catch (Exception error)
         {
-            Show(pending);
-            pending = null;
+            if (!IsReleased())
+            {
+                shellError.Message = "Can't show HTML. The Microsoft Edge WebView2 Runtime is missing or failed to start.";
+                shellError.IsOpen = true;
+                App.Log(error);
+            }
         }
     }
 
-    private bool IsOwnPage(string uri) =>
-        uri.StartsWith("data:", StringComparison.OrdinalIgnoreCase) ||
-        uri.StartsWith("about:", StringComparison.OrdinalIgnoreCase) ||
-        (pageFile is not null && uri.Equals(new Uri(pageFile).AbsoluteUri, StringComparison.OrdinalIgnoreCase));
-
-    private void Show(string html)
+    private async Task LoadCoreAsync(string html, long identity)
     {
-        if (html.Length <= MaxInlineLength)
+        try
         {
-            web.NavigateToString(html);
-            return;
-        }
-        // A new file per page: navigating to the same URI again would not reload it.
-        var dir = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "Flock");
-        Directory.CreateDirectory(dir);
-        var previous = pageFile;
-        pageFile = System.IO.Path.Combine(dir, $"page-{Guid.NewGuid():N}.html");
-        File.WriteAllText(pageFile, html);
-        web.Source = new Uri(pageFile);
-        if (previous is not null)
-        {
-            try
+            await initialization;
+            if (!IsCurrent(identity))
             {
-                File.Delete(previous);
+                return;
             }
-            catch (IOException)
+            if (html.Length <= MaxInlineLength)
             {
+                var previous = pageFile;
+                var navigated = await DispatchAsync(() =>
+                {
+                    if (!IsCurrent(identity))
+                    {
+                        return false;
+                    }
+                    pageFile = null;
+                    web.NavigateToString(html);
+                    return true;
+                });
+                if (navigated && previous is not null)
+                {
+                    await pages.ReleasePageAsync(previous);
+                }
+                return;
+            }
+
+            var file = await pages.WriteAsync(html, LifetimeToken());
+            var previousFile = pageFile;
+            var accepted = await DispatchAsync(() =>
+            {
+                if (!IsCurrent(identity))
+                {
+                    return false;
+                }
+                pageFile = file;
+                web.Source = new Uri(file);
+                return true;
+            });
+            if (accepted)
+            {
+                if (previousFile is not null)
+                {
+                    await pages.ReleasePageAsync(previousFile);
+                }
+            }
+            else
+            {
+                await pages.ReleasePageAsync(file);
+            }
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        catch (Exception error)
+        {
+            if (!IsReleased())
+            {
+                await ShowHtmlErrorAsync("Can't show this message.");
+                App.Log(error);
             }
         }
     }
+
+    private async Task ReleaseCoreAsync()
+    {
+        try
+        {
+            await initialization;
+            Task[] current;
+            lock (gate)
+            {
+                current = [.. loads];
+            }
+            if (current.Length > 0)
+            {
+                await Task.WhenAll(current);
+            }
+            await DispatchAsync(() =>
+            {
+                if (initialized)
+                {
+                    web.Close();
+                    initialized = false;
+                    ready = false;
+                }
+                return true;
+            });
+        }
+        finally
+        {
+            await pages.ReleaseAsync();
+        }
+    }
+
+    private CancellationToken LifetimeToken()
+    {
+        lock (gate)
+        {
+            return released ? new CancellationToken(canceled: true) : CancellationToken.None;
+        }
+    }
+
+    private bool IsCurrent(long identity)
+    {
+        lock (gate)
+        {
+            return !released && ready && identity == generation;
+        }
+    }
+
+    private bool IsReleased()
+    {
+        lock (gate)
+        {
+            return released;
+        }
+    }
+
+    private bool IsOwnPage(string uri)
+    {
+        lock (gate)
+        {
+            return uri.StartsWith("data:", StringComparison.OrdinalIgnoreCase) ||
+                uri.StartsWith("about:", StringComparison.OrdinalIgnoreCase) ||
+                (pageFile is not null && uri.Equals(new Uri(pageFile).AbsoluteUri, StringComparison.OrdinalIgnoreCase));
+        }
+    }
+
+    private async Task<T> DispatchAsync<T>(Func<T> callback)
+    {
+        if (dispatcher is null)
+        {
+            return callback();
+        }
+        T result = default!;
+        await dispatcher.InvokeAsync(() => result = callback());
+        return result;
+    }
+
+    private void ShowShellError()
+    {
+        if (!IsReleased())
+        {
+            shellError.Message = "Could not open this link.";
+            shellError.IsOpen = true;
+        }
+    }
+
+    private Task ShowHtmlErrorAsync(string message) => DispatchAsync(() =>
+    {
+        if (!IsReleased())
+        {
+            shellError.Message = message;
+            shellError.IsOpen = true;
+        }
+        return true;
+    });
 }

@@ -104,6 +104,20 @@ public class ServiceVersionsTests
     }
 
     [Fact]
+    public void CatalogJobsShareProgressBoundariesAndKeepCatalogFields()
+    {
+        var job = FlockJson.Decode<CatalogJob>("""
+            {"action":"install","state":"running","phase":"verifying","progress":1,"version":"8.2.1","line":"8.2"}
+            """);
+
+        Assert.True(job.IsRunning);
+        Assert.True(job.HasProgress);
+        Assert.Equal("Working…", job.PhaseText);
+        Assert.Equal(("8.2.1", "8.2"), (job.Version, job.Line));
+        Assert.False(FlockJson.Decode<CatalogJob>("""{"progress":1.1}""").HasProgress);
+    }
+
+    [Fact]
     public void DecodesTheServiceCatalog()
     {
         var catalog = FlockJson.Decode<ServiceCatalog>("""

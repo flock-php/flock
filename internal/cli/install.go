@@ -97,7 +97,7 @@ func newInstallCommand() *cobra.Command {
 			if err := installService(s.root, bin); err != nil {
 				return fmt.Errorf("install background service: %w", err)
 			}
-			cmd.Println("✓ daemon runs in the background and starts at login")
+			cmd.Println("✓ daemon runs in the background and starts " + serviceStarts)
 
 			if skipPrivileged || privilegedFirst {
 				return nil
@@ -136,7 +136,8 @@ func ensureCA(cmd *cobra.Command, s *state) (*certs.CA, error) {
 }
 
 // installBinary copies the running flock executable to <root>/bin so the shims and the service
-// keep working when the original moves (e.g. a rebuilt dev binary).
+// keep working when the original moves (e.g. a rebuilt dev binary). The one from the Linux
+// package is linked instead (linkPackaged).
 func installBinary(root string) (string, error) {
 	self, err := os.Executable()
 	if err != nil {
@@ -152,6 +153,9 @@ func installBinary(root string) (string, error) {
 	}
 	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
 		return "", err
+	}
+	if linked, err := linkPackaged(self, dst); linked || err != nil {
+		return dst, err
 	}
 
 	data, err := os.ReadFile(self)

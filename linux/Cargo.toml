@@ -1,0 +1,32 @@
+[package]
+name = "flock-app"
+description = "Flock's Linux app: status, sites, services and settings of the local daemon"
+version = "0.0.0"
+edition = "2024"
+license = "AGPL-3.0-only"
+publish = false
+
+[[bin]]
+name = "flock-app"
+path = "src/main.rs"
+
+# GTK 4.14 and libadwaita 1.5 are Ubuntu 24.04's, the oldest distribution Flock supports.
+[dependencies]
+adw = { version = "0.9.2", package = "libadwaita", features = ["v1_5"] }
+async-channel = "2.5.0"
+base64 = "0.23.1"
+gtk = { version = "0.11.5", package = "gtk4", features = ["v4_14"] }
+# The tray icon (StatusNotifierItem), on async-io rather than a tokio runtime of its own.
+ksni = { version = "0.3.7", default-features = false, features = ["blocking", "async-io"] }
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.154"
+ureq = "3.5.0"
+webkit6 = "0.6.1"
+
+[features]
+# The docs' screenshots on demo data (src/screenshots.rs), not in the package.
+screenshots = []
+
+[profile.release]
+lto = true
+strip = true

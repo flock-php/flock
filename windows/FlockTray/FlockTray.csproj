@@ -1,45 +1,58 @@
 <Project Sdk="Microsoft.NET.Sdk">
-  <!--
-    Flock's Windows tray app (WinUI 3, unpackaged, self-contained Windows App SDK).
-    The UI is built in C# rather than XAML markup, like the macOS app's SwiftUI: same controls,
-    and it compiles (and type-checks) on any OS — see windows/README.md.
-  -->
-  <PropertyGroup>
-    <OutputType>WinExe</OutputType>
-    <TargetFramework>net10.0-windows10.0.22621.0</TargetFramework>
-    <TargetPlatformMinVersion>10.0.19041.0</TargetPlatformMinVersion>
-    <SupportedOSPlatformVersion>10.0.19041.0</SupportedOSPlatformVersion>
-    <RootNamespace>Flock.Tray</RootNamespace>
-    <AssemblyName>FlockTray</AssemblyName>
-    <Product>Flock</Product>
-    <Company>Guava s.r.o.</Company>
-    <Copyright>Copyright © Guava s.r.o.</Copyright>
-    <Version>0.1.0</Version>
-    <Nullable>enable</Nullable>
-    <ImplicitUsings>enable</ImplicitUsings>
-    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
-    <UseWinUI>true</UseWinUI>
-    <WindowsPackageType>None</WindowsPackageType>
-    <!-- Generates FlockTray.pri (merging WinUI's resources) even without XAML files; without it,
-         XamlControlsResources cannot find ms-appx:///Microsoft.UI.Xaml/Themes/themeresources.xaml. -->
-    <EnableMsixTooling>true</EnableMsixTooling>
-    <WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
-    <SelfContained>true</SelfContained>
-    <DisableXamlGeneratedMain>true</DisableXamlGeneratedMain>
-    <EnableWindowsTargeting>true</EnableWindowsTargeting>
-    <Platforms>x64</Platforms>
-    <RuntimeIdentifiers>win-x64</RuntimeIdentifiers>
-    <ApplicationManifest>app.manifest</ApplicationManifest>
-    <ApplicationIcon>Assets\AppIcon.ico</ApplicationIcon>
-    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
-  </PropertyGroup>
-  <ItemGroup>
-    <PackageReference Include="Microsoft.WindowsAppSDK" Version="2.5.1" />
-  </ItemGroup>
-  <ItemGroup>
-    <ProjectReference Include="..\FlockKit\FlockKit.csproj" />
-  </ItemGroup>
-  <ItemGroup>
-    <Content Include="Assets\*.ico;Assets\*.png" CopyToOutputDirectory="PreserveNewest" />
-  </ItemGroup>
+    <!--
+      Flock's Windows tray app (WinUI 3, unpackaged, self-contained Windows App SDK).
+      The UI is built in C# rather than XAML markup, like the macOS app's SwiftUI: same controls,
+      and it compiles (and type-checks) on any OS — see windows/README.md.
+    -->
+    <PropertyGroup>
+        <OutputType>WinExe</OutputType>
+        <TargetFramework>net10.0-windows10.0.22621.0</TargetFramework>
+        <TargetPlatformMinVersion>10.0.19041.0</TargetPlatformMinVersion>
+        <SupportedOSPlatformVersion>10.0.19041.0</SupportedOSPlatformVersion>
+        <RootNamespace>Flock.Tray</RootNamespace>
+        <AssemblyName>FlockTray</AssemblyName>
+        <Product>Flock</Product>
+        <Company>Guava s.r.o.</Company>
+        <Copyright>Copyright © Guava s.r.o.</Copyright>
+        <Version>0.1.0</Version>
+        <Nullable>enable</Nullable>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+        <UseWinUI>true</UseWinUI>
+        <WindowsPackageType>None</WindowsPackageType>
+        <!-- Generates FlockTray.pri (merging WinUI's resources) even without XAML files; without it,
+             XamlControlsResources cannot find ms-appx:///Microsoft.UI.Xaml/Themes/themeresources.xaml. -->
+        <EnableMsixTooling>true</EnableMsixTooling>
+        <WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
+        <SelfContained>true</SelfContained>
+        <DisableXamlGeneratedMain>true</DisableXamlGeneratedMain>
+        <EnableWindowsTargeting>true</EnableWindowsTargeting>
+        <Platforms>x64</Platforms>
+        <RuntimeIdentifiers>win-x64</RuntimeIdentifiers>
+        <ApplicationManifest>app.manifest</ApplicationManifest>
+        <ApplicationIcon>Assets\AppIcon.ico</ApplicationIcon>
+        <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+        <CodeAnalysisTreatWarningsAsErrors>true</CodeAnalysisTreatWarningsAsErrors>
+        <UseWPF>false</UseWPF>
+        <UseWindowsForms>false</UseWindowsForms>
+    </PropertyGroup>
+    <ItemGroup>
+        <PackageReference Include="Microsoft.WindowsAppSDK" Version="2.5.1"/>
+        <PackageReference Include="Microsoft.Extensions.Hosting" Version="10.0.13"/>
+        <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.2"/>
+    </ItemGroup>
+    <ItemGroup>
+        <ProjectReference Include="..\FlockKit\FlockKit.csproj"/>
+        <InternalsVisibleTo Include="FlockScreenshots"/>
+        <InternalsVisibleTo Include="FlockTray.Tests"/>
+    </ItemGroup>
+    <ItemGroup>
+        <Content Include="Assets\*.ico;Assets\*.png" CopyToOutputDirectory="PreserveNewest"/>
+    </ItemGroup>
+    <!-- Hide SDK payload links in the IDE while keeping their output-copy metadata. -->
+    <Target Name="HideWindowsAppSDKPayloadLinks" AfterTargets="AddMicrosoftWindowsAppSDKPayloadFilesFromComponents">
+        <ItemGroup>
+            <None Update="@(MicrosoftWindowsAppSDKFiles)" Visible="false"/>
+        </ItemGroup>
+    </Target>
 </Project>

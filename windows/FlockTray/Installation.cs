@@ -1,6 +1,6 @@
 using System.Diagnostics;
 using System.Security.Cryptography;
-using System.Text;
+using Flock.Tray.Features.Preferences;
 using Flock.Kit;
 using Microsoft.Win32;
 
@@ -22,47 +22,25 @@ public static class Installation
     public static string? Uninstaller =>
         Path.Combine(AppContext.BaseDirectory, "unins000.exe") is var path && File.Exists(path) ? path : null;
 
-    /// <summary>The daemon is registered to start at sign-in (scheduled task, or the Run key fallback).</summary>
-    public static bool IsSetUp
-    {
-        get
-        {
-            if (!File.Exists(FlockPaths.FlockBinary))
-            {
-                return false;
-            }
-            using (var key = Registry.CurrentUser.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\Run"))
-            {
-                if (key?.GetValue("Flock Daemon") is string)
-                {
-                    return true;
-                }
-            }
-            return Run("schtasks", "/Query", "/TN", "Flock Daemon") == 0;
-        }
-    }
 
     /// <summary>
     /// The installed CLI should be replaced by the bundled one: it differs, and the installed one is
     /// what this app installed last time (or nothing is recorded yet). A CLI installed by hand from
     /// another build is left alone.
     /// </summary>
-    public static bool NeedsUpdate
+    public static bool NeedsUpdate(PreferenceData preferences)
     {
-        get
+        if (BundledFlock is not { } bundled || !File.Exists(FlockPaths.FlockBinary))
         {
-            if (BundledFlock is not { } bundled || !File.Exists(FlockPaths.FlockBinary))
-            {
-                return false;
-            }
-            var installed = Hash(FlockPaths.FlockBinary);
-            if (installed == Hash(bundled))
-            {
-                return false;
-            }
-            var recorded = Preferences.Shared.InstalledFlock;
-            return string.IsNullOrEmpty(recorded) || recorded == installed;
+            return false;
         }
+        var installed = Hash(FlockPaths.FlockBinary);
+        if (installed == Hash(bundled))
+        {
+            return false;
+        }
+        var recorded = preferences.InstalledFlock;
+        return string.IsNullOrEmpty(recorded) || recorded == installed;
     }
 
     /// <summary>
@@ -70,39 +48,26 @@ public static class Installation
     /// After every `flock install`, also a failed one: it copies the CLI first, so one that failed
     /// later (e.g. at a declined UAC prompt) still installed it.
     /// </summary>
-    public static void RecordInstalled()
+    public static string? InstalledHash()
     {
-        if (BundledFlock is { } bundled && File.Exists(FlockPaths.FlockBinary) && Hash(FlockPaths.FlockBinary) == Hash(bundled))
-        {
-            Preferences.Shared.InstalledFlock = Hash(FlockPaths.FlockBinary);
-            Preferences.Shared.Save();
-        }
-    }
-
-    /// <summary>Runs `flock install` from the bundled CLI, passing each output line to onLine.</summary>
-    public static Task<Result> InstallAsync(Action<string>? onLine = null)
-    {
-        if (BundledFlock is not { } bundled)
-        {
-            return Task.FromResult(new Result(false, "This build of Flock has no bundled CLI — run `flock install` in a terminal."));
-        }
-        return RunFlockAsync(bundled, ["install"], onLine);
+        return BundledFlock is { } bundled && File.Exists(FlockPaths.FlockBinary) && Hash(FlockPaths.FlockBinary) is { Length: > 0 } hash
+            && hash == Hash(bundled) ? hash : null;
     }
 
     /// <summary>
     /// Asks the bundled CLI which other programs use Flock's ports. Empty when there are none, and
     /// when the check itself fails: `flock install` checks again and reports them.
     /// </summary>
-    public static async Task<List<Conflict>> ConflictsAsync()
+    public static async Task<List<Conflict>> ConflictsAsync(Infrastructure.CliProcessRunner runner)
     {
         if (BundledFlock is not { } bundled)
         {
             return [];
         }
-        var result = await RunFlockAsync(bundled, ["conflicts", "--json"]);
+        var result = await runner.RunAsync(bundled, ["conflicts", "--json"], TimeSpan.FromSeconds(30));
         try
         {
-            return result.Ok ? FlockJson.Decode<ConflictList>(result.Output).Conflicts : [];
+            return result.Succeeded ? FlockJson.Decode<ConflictList>(result.Output).Conflicts : [];
         }
         catch (System.Text.Json.JsonException)
         {
@@ -111,69 +76,6 @@ public static class Installation
     }
 
     public sealed record Result(bool Ok, string Output);
-
-    /// <summary>Runs the flock CLI without a console window, streaming its output.</summary>
-    public static async Task<Result> RunFlockAsync(string binary, string[] args, Action<string>? onLine = null)
-    {
-        var start = new ProcessStartInfo(binary)
-        {
-            CreateNoWindow = true,
-            UseShellExecute = false,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            StandardOutputEncoding = Encoding.UTF8,
-            StandardErrorEncoding = Encoding.UTF8,
-        };
-        foreach (var arg in args)
-        {
-            start.ArgumentList.Add(arg);
-        }
-
-        var output = new StringBuilder();
-        var context = SynchronizationContext.Current;
-        void Line(string? line)
-        {
-            if (line is null)
-            {
-                return;
-            }
-            lock (output)
-            {
-                output.AppendLine(line);
-            }
-            if (onLine is not null)
-            {
-                // Output arrives on worker threads; the UI wants it on its own thread.
-                if (context is not null)
-                {
-                    context.Post(_ => onLine(line), null);
-                }
-                else
-                {
-                    onLine(line);
-                }
-            }
-        }
-
-        try
-        {
-            using var process = new Process { StartInfo = start };
-            process.OutputDataReceived += (_, e) => Line(e.Data);
-            process.ErrorDataReceived += (_, e) => Line(e.Data);
-            process.Start();
-            process.BeginOutputReadLine();
-            process.BeginErrorReadLine();
-            await process.WaitForExitAsync();
-            lock (output)
-            {
-                return new Result(process.ExitCode == 0, output.ToString().Trim());
-            }
-        }
-        catch (Exception e) when (e is System.ComponentModel.Win32Exception or InvalidOperationException)
-        {
-            return new Result(false, $"Could not run {binary}: {e.Message}");
-        }
-    }
 
     /// <summary>
     /// Starts uninstalling: the installer's uninstaller (which runs `flock uninstall`, then removes
@@ -204,22 +106,4 @@ public static class Installation
         }
     }
 
-    private static int Run(string file, params string[] args)
-    {
-        var start = new ProcessStartInfo(file) { CreateNoWindow = true, UseShellExecute = false };
-        foreach (var arg in args)
-        {
-            start.ArgumentList.Add(arg);
-        }
-        try
-        {
-            using var process = Process.Start(start)!;
-            process.WaitForExit();
-            return process.ExitCode;
-        }
-        catch (Exception e) when (e is System.ComponentModel.Win32Exception or InvalidOperationException)
-        {
-            return -1;
-        }
-    }
 }

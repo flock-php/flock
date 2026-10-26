@@ -1,20 +1,23 @@
 using System.Reflection;
 using Flock.Kit;
+using Flock.Tray.ViewModels;
+using Flock.Tray.Infrastructure;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 
 namespace Flock.Tray;
 
-internal sealed class MailPane(SettingsWindow window, AppModel model) : Pane(window, model)
+internal sealed class MailPane(SettingsWindow window, RuntimeService model) : Pane(window, model)
 {
+    private readonly MailSettingsViewModel viewModel = new(model);
     public override string Title => "Mail";
     public override string Subtitle => "Flock catches every email your apps send — nothing leaves your PC.";
 
     public override UIElement Build()
     {
-        var mail = Store.Services.FirstOrDefault(s => s.Id == "mail");
-        var port = Store.Config?.Ports.Smtp ?? mail?.Port ?? 0;
-        var running = mail?.Running ?? false;
+        var mail = viewModel.Mail;
+        var port = viewModel.Port;
+        var running = viewModel.Running;
 
         return Ui.Column(0,
             Ui.Section("SMTP server",
@@ -22,7 +25,7 @@ internal sealed class MailPane(SettingsWindow window, AppModel model) : Pane(win
                 Ui.Setting("Port", null, Ui.Text(port.ToString(System.Globalization.CultureInfo.InvariantCulture), foreground: Ui.SecondaryText, wrap: false)),
                 Ui.Setting("Status", null, Ui.Row(8, Ui.StatusDot(running), Ui.Text(running ? "Running" : "Stopped", wrap: false)))),
             Ui.Section("Environment variables",
-                Ui.Card(Ui.CodeBlock(mail?.Env ?? "")),
+                Ui.Card(Ui.CodeBlock(viewModel.Environment)),
                 GeneralPane.Footnote("MAIL_USERNAME picks the inbox, so every project gets its own.")),
             Ui.Section(null,
                 Ui.Setting("Caught emails", (Model.Status?.MailCount ?? 0).ToString(System.Globalization.CultureInfo.CurrentCulture),
@@ -30,51 +33,62 @@ internal sealed class MailPane(SettingsWindow window, AppModel model) : Pane(win
     }
 }
 
-internal sealed class DumpsPane(SettingsWindow window, AppModel model) : Pane(window, model)
+internal sealed class DumpsPane(SettingsWindow window, RuntimeService model) : Pane(window, model)
 {
+    private readonly DumpsViewModel viewModel = new(model);
     public override string Title => "Dumps";
     public override string Subtitle => "Send dump() and dd() output to Flock instead of the page or terminal — no changes to your projects.";
 
     public override UIElement Build()
     {
-        var capture = new ToggleSwitch { IsOn = Model.Status?.Dumps == true };
-        capture.Toggled += (_, _) => _ = Model.SetDumpsAsync(capture.IsOn);
+        var capture = new ToggleSwitch { IsOn = viewModel.Capturing };
+        capture.Toggled += (_, _) => _ = viewModel.SetDumpsAsync(capture.IsOn);
 
         var editor = new ComboBox { MinWidth = 160 };
         foreach (var e in EditorInfo.All)
         {
             editor.Items.Add(e.Name());
         }
-        editor.SelectedIndex = EditorInfo.All.ToList().IndexOf(Preferences.Shared.EditorChoice);
-        editor.SelectionChanged += (_, _) =>
+        editor.SelectedIndex = EditorInfo.All.ToList().IndexOf(EditorInfo.Parse(Model.Preferences.Snapshot.Editor));
+        editor.SelectionChanged += async (_, _) =>
         {
             if (editor.SelectedIndex >= 0)
             {
-                Preferences.Shared.EditorChoice = EditorInfo.All[editor.SelectedIndex];
+                try
+                {
+                    await Model.Preferences.UpdateAsync(value => value with { Editor = EditorInfo.All[editor.SelectedIndex].ToString() });
+                }
+                catch (OperationCanceledException)
+                {
+                }
+                catch (Exception error) when (error is IOException or UnauthorizedAccessException)
+                {
+                }
             }
         };
 
         return Ui.Column(0,
             Ui.Section(null,
                 Ui.Setting("Capture dumps", "Turn it off to see dumps in the page again.", capture),
-                Ui.Setting("Captured", (Model.Status?.DumpCount ?? 0).ToString(System.Globalization.CultureInfo.CurrentCulture),
+                Ui.Setting("Captured", viewModel.Count.ToString(System.Globalization.CultureInfo.CurrentCulture),
                     Ui.Button("Open Dumps", () => App.Current.Open(WindowKind.Dumps)))),
             Ui.Section("Sources", Ui.Setting("Open files in", "Used when clicking a dump's file and line.", editor)));
     }
 }
 
-internal sealed class DebuggerPane(SettingsWindow window, AppModel model) : Pane(window, model)
+internal sealed class DebuggerPane(SettingsWindow window, RuntimeService model) : Pane(window, model)
 {
+    private readonly DebuggerViewModel viewModel = new(model);
     public override string Title => "Debugger";
     public override string Subtitle => "Step through requests and commands with Xdebug.";
 
     public override UIElement Build()
     {
-        var enabled = Model.Status?.Xdebug == true;
+        var enabled = viewModel.Enabled;
         var detect = new ToggleSwitch { IsOn = enabled };
         detect.Toggled += (_, _) => _ = Model.SetXdebugAsync(detect.IsOn);
-        var breakpoints = new ToggleSwitch { IsOn = Model.Status?.XdebugBreakpoints == true, IsEnabled = enabled };
-        breakpoints.Toggled += (_, _) => _ = Model.SetXdebugBreakpointsAsync(breakpoints.IsOn);
+        var breakpoints = new ToggleSwitch { IsOn = viewModel.Breakpoints, IsEnabled = enabled };
+        breakpoints.Toggled += (_, _) => _ = viewModel.SetBreakpointsAsync(breakpoints.IsOn);
 
         var debugging = new List<UIElement>();
         if (enabled && breakpoints.IsOn)
@@ -89,7 +103,7 @@ internal sealed class DebuggerPane(SettingsWindow window, AppModel model) : Pane
         }
 
         var availability = new List<UIElement>();
-        foreach (var php in Store.Config?.Php ?? [])
+        foreach (var php in viewModel.Config?.Php ?? [])
         {
             UIElement state = php.XdebugAvailable
                 ? Ui.Row(6, Ui.Icon("\uE73E", 12, Ui.Success), Ui.Text("Available", wrap: false))
@@ -114,7 +128,7 @@ internal sealed class DebuggerPane(SettingsWindow window, AppModel model) : Pane
     }
 }
 
-internal sealed class AboutPane(SettingsWindow window, AppModel model) : Pane(window, model)
+internal sealed class AboutPane(SettingsWindow window, RuntimeService model) : Pane(window, model)
 {
     public override string Title => "About";
     public override string Subtitle => "A native local development environment for Laravel.";
@@ -136,10 +150,10 @@ internal sealed class AboutPane(SettingsWindow window, AppModel model) : Pane(wi
             Ui.Section(null,
                 Ui.Setting("App", null, Ui.Text(version.Split('+')[0], foreground: Ui.SecondaryText, wrap: false)),
                 Ui.Setting("Daemon", null, Ui.Text(Model.Status?.Version ?? "not running", foreground: Ui.SecondaryText, wrap: false)),
-                Ui.Setting("Data folder", FlockPaths.Root, Ui.Button("Show in Explorer", () => Native.Reveal(FlockPaths.Root))),
-                Ui.Setting("Flock documentation", null, Ui.Button("Open", () => Native.Open("https://flockphp.com/docs"))),
-                Ui.Setting("Found a bug?", "Opens a new GitHub issue with your versions filled in.", Ui.Button("Report an issue", () => Native.Open(IssueUrl(version.Split('+')[0])))),
-                Ui.Setting("License", "Copyright © Guava s.r.o. Licensed under the AGPL-3.0.", Ui.Button("View", () => Native.Open("https://github.com/flock-php/flock/blob/main/LICENSE")))),
+                Ui.Setting("Data folder", FlockPaths.Root, Ui.Button("Show in Explorer", () => Model.Reveal(FlockPaths.Root))),
+                Ui.Setting("Flock documentation", null, Ui.Button("Open", () => Model.Open("https://flockphp.com/docs"))),
+                Ui.Setting("Found a bug?", "Opens a new GitHub issue with your versions filled in.", Ui.Button("Report an issue", () => Model.Open(IssueUrl(version.Split('+')[0])))),
+                Ui.Setting("License", "Copyright © Guava s.r.o. Licensed under the AGPL-3.0.", Ui.Button("View", () => Model.Open("https://github.com/flock-php/flock/blob/main/LICENSE")))),
             Ui.Section("Uninstall",
                 Ui.Setting("Uninstall Flock", "Stops Flock and removes it from this PC. Your sites, databases and settings are kept.",
                     Ui.Button("Uninstall Flock…", () => _ = ConfirmUninstall()))));
@@ -156,7 +170,7 @@ internal sealed class AboutPane(SettingsWindow window, AppModel model) : Pane(wi
     {
         if (Installation.Uninstaller is null)
         {
-            Store.ShowError("This build of Flock wasn't installed with Flock-Setup.exe. Run `flock uninstall` in a terminal and delete the app's folder.");
+            Model.ShowRuntimeError("This build of Flock wasn't installed with Flock-Setup.exe. Run `flock uninstall` in a terminal and delete the app's folder.");
             return;
         }
         var purge = new CheckBox { Content = "Also delete my sites' settings and databases" };

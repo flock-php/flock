@@ -1,21 +1,25 @@
-using System.Net;
 using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
 
 namespace Flock.Kit;
 
-public class FlockException(string message) : Exception(message);
+public class FlockException(string message, Exception? innerException = null) : Exception(message, innerException);
 
 /// <summary>Nothing answers on the daemon's API.</summary>
-public sealed class FlockNotRunningException() : FlockException("Flock is not running");
+public sealed class FlockNotRunningException(Exception? innerException = null) : FlockException("Flock is not running", innerException);
 
 /// <summary>The daemon answered with an error.</summary>
-public sealed class FlockServerException(int status, string message)
-    : FlockException(message.Length == 0 ? $"Flock answered with HTTP {status}" : message)
+public sealed class FlockServerException(int status, string message, Exception? innerException = null)
+    : FlockException(message.Length == 0 ? $"Flock answered with HTTP {status}" : message, innerException)
 {
     public int StatusCode { get; } = status;
 }
+
+
+/// <summary>The daemon may have applied a write before the connection failed.</summary>
+public sealed class FlockRequestOutcomeUnknownException(Exception innerException)
+    : FlockException("The connection failed. The change may have completed; refresh its state before retrying.", innerException);
 
 /// <summary>Talks to the daemon's local HTTP API (the loopback listener described by api.json).</summary>
 public sealed class FlockClient : IDisposable
@@ -33,229 +37,228 @@ public sealed class FlockClient : IDisposable
     private static readonly TimeSpan BoostTimeout = TimeSpan.FromMinutes(2);
 
     private readonly HttpClient http;
+    private readonly TimeProvider timeProvider;
     private readonly SemaphoreSlim configLock = new(1, 1);
     private ApiConfig? config;
 
-    public FlockClient(string? configPath = null, HttpMessageHandler? handler = null)
+    /// <summary>Creates a client over an application-owned transport. The transport is not disposed by this client.</summary>
+    public FlockClient(HttpClient http, string? configPath = null, TimeProvider? timeProvider = null)
     {
+        ArgumentNullException.ThrowIfNull(http);
         this.configPath = configPath ?? FlockPaths.ApiJson;
-        // Never send localhost traffic through a proxy; timeouts are per request.
-        http = new HttpClient(handler ?? new SocketsHttpHandler { UseProxy = false }) { Timeout = Timeout.InfiniteTimeSpan };
+        this.http = http;
+        this.timeProvider = timeProvider ?? TimeProvider.System;
     }
 
-    public void Dispose() => http.Dispose();
+    /// <summary>Releases client-local configuration locking. The application-owned transport remains live.</summary>
+    public void Dispose() => configLock.Dispose();
 
     // Endpoints
 
-    public Task<Status> StatusAsync() => Get<Status>("/v1/status");
+    public Task<Status> StatusAsync(CancellationToken cancellationToken = default) => Get<Status>("/v1/status", cancellationToken: cancellationToken);
 
     /// <summary>Changes only the non-null settings and returns the new status.</summary>
-    public Task<Status> UpdateSettingsAsync(SettingsChange change) => Send<Status>(HttpMethod.Post, "/v1/settings", change);
+    public Task<Status> UpdateSettingsAsync(SettingsChange change, CancellationToken cancellationToken = default) => Send<Status>(HttpMethod.Post, "/v1/settings", change, cancellationToken: cancellationToken);
 
-    public Task<FlockConfig> ConfigAsync() => Get<FlockConfig>("/v1/config");
+    public Task<FlockConfig> ConfigAsync(CancellationToken cancellationToken = default) => Get<FlockConfig>("/v1/config", cancellationToken: cancellationToken);
 
-    public Task<List<Service>> ServicesAsync() => Get<List<Service>>("/v1/services");
+    public Task<List<Service>> ServicesAsync(CancellationToken cancellationToken = default) => Get<List<Service>>("/v1/services", cancellationToken: cancellationToken);
 
-    public Task<List<Service>> StartServiceAsync(string id) => Send<List<Service>>(HttpMethod.Post, $"/v1/services/{Escape(id)}/start");
+    public Task<List<Service>> StartServiceAsync(string id, CancellationToken cancellationToken = default) => Send<List<Service>>(HttpMethod.Post, $"/v1/services/{Escape(id)}/start", cancellationToken: cancellationToken);
 
-    public Task<List<Service>> StopServiceAsync(string id) => Send<List<Service>>(HttpMethod.Post, $"/v1/services/{Escape(id)}/stop");
+    public Task<List<Service>> StopServiceAsync(string id, CancellationToken cancellationToken = default) => Send<List<Service>>(HttpMethod.Post, $"/v1/services/{Escape(id)}/stop", cancellationToken: cancellationToken);
 
-    public Task<List<Service>> SetServicePortAsync(string id, int port) =>
-        Send<List<Service>>(HttpMethod.Patch, $"/v1/services/{Escape(id)}", new { port });
+    public Task<List<Service>> SetServicePortAsync(string id, int port, CancellationToken cancellationToken = default) =>
+        Send<List<Service>>(HttpMethod.Patch, $"/v1/services/{Escape(id)}", new { port }, cancellationToken: cancellationToken);
 
     /// <summary>Links a directory as a site (the name defaults to the directory name on the daemon side).</summary>
-    public Task<Status> LinkSiteAsync(string path, string? name = null, string? php = null, bool secured = false) =>
-        Send<Status>(HttpMethod.Post, "/v1/sites", new { path, name, php, secured });
+    public Task<Status> LinkSiteAsync(string path, string? name = null, string? php = null, bool secured = false, CancellationToken cancellationToken = default) =>
+        Send<Status>(HttpMethod.Post, "/v1/sites", new { path, name, php, secured }, cancellationToken: cancellationToken);
 
     /// <summary>Switching the server or worker mode reloads the web server and may start FrankenPHP, so it gets longer.</summary>
-    public Task<Status> UpdateSiteAsync(string name, SiteChange change) =>
+    public Task<Status> UpdateSiteAsync(string name, SiteChange change, CancellationToken cancellationToken = default) =>
         Send<Status>(HttpMethod.Patch, $"/v1/sites/{Escape(name)}", change,
-            timeout: change.Server is not null || change.Worker is not null ? ServerSwitchTimeout : null);
+            timeout: change.Server is not null || change.Worker is not null ? ServerSwitchTimeout : null, cancellationToken: cancellationToken);
 
     /// <summary>Restarts a FrankenPHP site's process, e.g. so Octane's workers load changed code.</summary>
-    public Task<Status> RestartSiteAsync(string name) => Send<Status>(HttpMethod.Post, $"/v1/sites/{Escape(name)}/restart", timeout: ServerSwitchTimeout);
+    public Task<Status> RestartSiteAsync(string name, CancellationToken cancellationToken = default) => Send<Status>(HttpMethod.Post, $"/v1/sites/{Escape(name)}/restart", timeout: ServerSwitchTimeout, cancellationToken: cancellationToken);
 
-    public Task<Status> UnlinkSiteAsync(string name) => Send<Status>(HttpMethod.Delete, $"/v1/sites/{Escape(name)}");
+    public Task<Status> UnlinkSiteAsync(string name, CancellationToken cancellationToken = default) => Send<Status>(HttpMethod.Delete, $"/v1/sites/{Escape(name)}", cancellationToken: cancellationToken);
 
     /// <summary>Adds an extra domain: a subdomain ("tenant1", "a.b") or an alias ("my-app-2.test").</summary>
-    public Task<Status> AddDomainAsync(string site, string domain) =>
-        Send<Status>(HttpMethod.Post, $"/v1/sites/{Escape(site)}/domains", new { domain });
+    public Task<Status> AddDomainAsync(string site, string domain, CancellationToken cancellationToken = default) =>
+        Send<Status>(HttpMethod.Post, $"/v1/sites/{Escape(site)}/domains", new { domain }, cancellationToken: cancellationToken);
 
     /// <summary>Removes an extra domain, given as SiteDomain.Entry (or its full name).</summary>
-    public Task<Status> RemoveDomainAsync(string site, string domain) =>
-        Send<Status>(HttpMethod.Delete, $"/v1/sites/{Escape(site)}/domains/{Escape(domain)}");
+    public Task<Status> RemoveDomainAsync(string site, string domain, CancellationToken cancellationToken = default) =>
+        Send<Status>(HttpMethod.Delete, $"/v1/sites/{Escape(site)}/domains/{Escape(domain)}", cancellationToken: cancellationToken);
 
     /// <summary>
     /// Writes a version ("php" or "node"; empty version: the one the site uses now) into the
     /// site's project files and lifts the site's isolation for that tool.
     /// </summary>
-    public Task<Status> PinAsync(string site, string tool, string version = "") =>
-        Send<Status>(HttpMethod.Post, $"/v1/sites/{Escape(site)}/pin", new { tool, version });
+    public Task<Status> PinAsync(string site, string tool, string version = "", CancellationToken cancellationToken = default) =>
+        Send<Status>(HttpMethod.Post, $"/v1/sites/{Escape(site)}/pin", new { tool, version }, cancellationToken: cancellationToken);
 
     /// <summary>Removes a tool's version from the site's project files.</summary>
-    public Task<Status> UnpinAsync(string site, string tool) => Send<Status>(HttpMethod.Delete, $"/v1/sites/{Escape(site)}/pin/{Escape(tool)}");
+    public Task<Status> UnpinAsync(string site, string tool, CancellationToken cancellationToken = default) => Send<Status>(HttpMethod.Delete, $"/v1/sites/{Escape(site)}/pin/{Escape(tool)}", cancellationToken: cancellationToken);
 
     /// <summary>
     /// Writes Flock's guideline into the site's Laravel Boost guidelines (.ai\guidelines\flock.md) and
     /// runs `php artisan boost:update`, so the agents' guideline files include it.
     /// </summary>
-    public Task<Status> AddBoostGuidelineAsync(string site) => Send<Status>(HttpMethod.Post, $"/v1/sites/{Escape(site)}/boost", timeout: BoostTimeout);
+    public Task<Status> AddBoostGuidelineAsync(string site, CancellationToken cancellationToken = default) => Send<Status>(HttpMethod.Post, $"/v1/sites/{Escape(site)}/boost", timeout: BoostTimeout, cancellationToken: cancellationToken);
 
     /// <summary>
     /// Shares a site at a temporary public URL; allow lists the emails (or *@domain) let in, none for
     /// anyone with the URL, and debug turns the app's debug mode on for visitors. It returns at once:
     /// the status follows the share until it runs.
     /// </summary>
-    public Task<Status.SiteShare> StartShareAsync(string site, IReadOnlyList<string> allow, bool debug = false) =>
-        Send<Status.SiteShare>(HttpMethod.Post, $"/v1/shares/{Escape(site)}", new { allow, debug });
+    public Task<Status.SiteShare> StartShareAsync(string site, IReadOnlyList<string> allow, bool debug = false, CancellationToken cancellationToken = default) =>
+        Send<Status.SiteShare>(HttpMethod.Post, $"/v1/shares/{Escape(site)}", new { allow, debug }, cancellationToken: cancellationToken);
 
     /// <summary>Builds a running share's assets again, so visitors see the latest changes when they reload.</summary>
-    public Task<Status.SiteShare> RebuildShareAsync(string site) => Send<Status.SiteShare>(HttpMethod.Post, $"/v1/shares/{Escape(site)}/rebuild");
+    public Task<Status.SiteShare> RebuildShareAsync(string site, CancellationToken cancellationToken = default) =>
+        Send<Status.SiteShare>(HttpMethod.Post, $"/v1/shares/{Escape(site)}/rebuild", cancellationToken: cancellationToken);
 
     /// <summary>Ends a site's share (and forgets a failed one).</summary>
-    public Task<List<Status.SiteShare>> StopShareAsync(string site) => Send<List<Status.SiteShare>>(HttpMethod.Delete, $"/v1/shares/{Escape(site)}");
+    public Task<List<Status.SiteShare>> StopShareAsync(string site, CancellationToken cancellationToken = default) =>
+        Send<List<Status.SiteShare>>(HttpMethod.Delete, $"/v1/shares/{Escape(site)}", cancellationToken: cancellationToken);
 
-    public Task<ExtensionReport> SiteExtensionsAsync(string site) => Get<ExtensionReport>($"/v1/sites/{Escape(site)}/extensions");
+    public Task<ExtensionReport> SiteExtensionsAsync(string site, CancellationToken cancellationToken = default) => Get<ExtensionReport>($"/v1/sites/{Escape(site)}/extensions", cancellationToken: cancellationToken);
 
     /// <summary>Adds the extension to the site's composer.json (ext-NAME) with Composer (up to 5 minutes).</summary>
-    public Task<ExtensionReport> RequireExtensionAsync(string site, string name) => Send<ExtensionReport>(HttpMethod.Post, $"/v1/sites/{Escape(site)}/extensions/{Escape(name)}/require", timeout: TimeSpan.FromMinutes(5));
+    public Task<ExtensionReport> RequireExtensionAsync(string site, string name, CancellationToken cancellationToken = default) => Send<ExtensionReport>(HttpMethod.Post, $"/v1/sites/{Escape(site)}/extensions/{Escape(name)}/require", timeout: TimeSpan.FromMinutes(5), cancellationToken: cancellationToken);
 
     /// <summary>The AI clients Flock's MCP server can be registered with.</summary>
-    public Task<McpState> McpAsync() => Get<McpState>("/v1/mcp");
+    public Task<McpState> McpAsync(CancellationToken cancellationToken = default) => Get<McpState>("/v1/mcp", cancellationToken: cancellationToken);
 
     /// <summary>Registers Flock's MCP server with a client ("claude-code", "cursor", "vscode", "windsurf", "codex").</summary>
-    public Task<McpState> RegisterMcpAsync(string client) => Send<McpState>(HttpMethod.Post, $"/v1/mcp/clients/{Escape(client)}", timeout: McpChangeTimeout);
+    public Task<McpState> RegisterMcpAsync(string client, CancellationToken cancellationToken = default) => Send<McpState>(HttpMethod.Post, $"/v1/mcp/clients/{Escape(client)}", timeout: McpChangeTimeout, cancellationToken: cancellationToken);
 
     /// <summary>Removes Flock's MCP server from a client; nothing else in its configuration changes.</summary>
-    public Task<McpState> UnregisterMcpAsync(string client) => Send<McpState>(HttpMethod.Delete, $"/v1/mcp/clients/{Escape(client)}", timeout: McpChangeTimeout);
+    public Task<McpState> UnregisterMcpAsync(string client, CancellationToken cancellationToken = default) => Send<McpState>(HttpMethod.Delete, $"/v1/mcp/clients/{Escape(client)}", timeout: McpChangeTimeout, cancellationToken: cancellationToken);
 
-    public Task<Status> ParkAsync(string path) => Send<Status>(HttpMethod.Post, "/v1/parked", new { path });
+    public Task<Status> ParkAsync(string path, CancellationToken cancellationToken = default) => Send<Status>(HttpMethod.Post, "/v1/parked", new { path }, cancellationToken: cancellationToken);
 
-    public Task<Status> UnparkAsync(string path) => Send<Status>(HttpMethod.Delete, "/v1/parked", new { path });
-
-    /// <summary>Downloads and installs a Node.js version ("20", "20.19" or exact); this can take a minute.</summary>
-    public async Task<string> InstallNodeAsync(string version)
-    {
-        var body = await Raw(HttpMethod.Post, "/v1/node/install", new { version }, timeout: TimeSpan.FromMinutes(5));
-        return JsonDocument.Parse(body).RootElement.GetProperty("version").GetString() ?? version;
-    }
+    public Task<Status> UnparkAsync(string path, CancellationToken cancellationToken = default) => Send<Status>(HttpMethod.Delete, "/v1/parked", new { path }, cancellationToken: cancellationToken);
 
     // Node.js versions
 
     /// <summary>The Node.js majors; the daemon may ask npm's registry first, which can take a while.</summary>
-    public Task<NodeCatalog> NodeVersionsAsync() => Send<NodeCatalog>(HttpMethod.Get, "/v1/node/versions", timeout: TimeSpan.FromMinutes(1));
+    public Task<NodeCatalog> NodeVersionsAsync(CancellationToken cancellationToken = default) => Send<NodeCatalog>(HttpMethod.Get, "/v1/node/versions", timeout: TimeSpan.FromMinutes(1), cancellationToken: cancellationToken);
 
     /// <summary>Installs the newest release of a major line, or updates it; a download of about 30 MB.</summary>
-    public Task<NodeCatalog> InstallNodeMajorAsync(string major) =>
-        Send<NodeCatalog>(HttpMethod.Post, $"/v1/node/versions/{Escape(major)}/install", timeout: TimeSpan.FromMinutes(10));
+    public Task<NodeCatalog> InstallNodeMajorAsync(string major, CancellationToken cancellationToken = default) =>
+        Send<NodeCatalog>(HttpMethod.Post, $"/v1/node/versions/{Escape(major)}/install", timeout: TimeSpan.FromMinutes(10), cancellationToken: cancellationToken);
 
     /// <summary>Updates a line's npm to the newest version that supports it; its global packages stay.</summary>
-    public Task<NodeCatalog> UpdateNpmAsync(string major) =>
-        Send<NodeCatalog>(HttpMethod.Post, $"/v1/node/versions/{Escape(major)}/npm", timeout: TimeSpan.FromMinutes(10));
+    public Task<NodeCatalog> UpdateNpmAsync(string major, CancellationToken cancellationToken = default) =>
+        Send<NodeCatalog>(HttpMethod.Post, $"/v1/node/versions/{Escape(major)}/npm", timeout: TimeSpan.FromMinutes(10), cancellationToken: cancellationToken);
 
-    public Task<NodeCatalog> UninstallNodeAsync(string major) => Send<NodeCatalog>(HttpMethod.Delete, $"/v1/node/versions/{Escape(major)}");
+    public Task<NodeCatalog> UninstallNodeAsync(string major, CancellationToken cancellationToken = default) => Send<NodeCatalog>(HttpMethod.Delete, $"/v1/node/versions/{Escape(major)}", cancellationToken: cancellationToken);
 
     /// <summary>Asks the daemon to fetch the package manifest now.</summary>
-    public Task<NodeCatalog> CheckNodeReleasesAsync() => Send<NodeCatalog>(HttpMethod.Post, "/v1/node/check", timeout: TimeSpan.FromMinutes(1));
+    public Task<NodeCatalog> CheckNodeReleasesAsync(CancellationToken cancellationToken = default) => Send<NodeCatalog>(HttpMethod.Post, "/v1/node/check", timeout: TimeSpan.FromMinutes(1), cancellationToken: cancellationToken);
 
     // PHP versions
 
-    public Task<PhpCatalog> PhpVersionsAsync() => Get<PhpCatalog>("/v1/php/versions");
+    public Task<PhpCatalog> PhpVersionsAsync(CancellationToken cancellationToken = default) => Get<PhpCatalog>("/v1/php/versions", cancellationToken: cancellationToken);
 
     /// <summary>Starts installing (or updating to) the channel's newest release of a version; follow it with PhpVersionsAsync.</summary>
-    public Task<PhpCatalog> InstallPhpAsync(string minor) => Send<PhpCatalog>(HttpMethod.Post, $"/v1/php/versions/{Escape(minor)}/install", timeout: PhpChangeTimeout);
+    public Task<PhpCatalog> InstallPhpAsync(string minor, CancellationToken cancellationToken = default) => Send<PhpCatalog>(HttpMethod.Post, $"/v1/php/versions/{Escape(minor)}/install", timeout: PhpChangeTimeout, cancellationToken: cancellationToken);
 
-    public Task<PhpCatalog> CancelPhpInstallAsync(string minor) => Send<PhpCatalog>(HttpMethod.Post, $"/v1/php/versions/{Escape(minor)}/cancel", timeout: PhpChangeTimeout);
+    public Task<PhpCatalog> CancelPhpInstallAsync(string minor, CancellationToken cancellationToken = default) => Send<PhpCatalog>(HttpMethod.Post, $"/v1/php/versions/{Escape(minor)}/cancel", timeout: PhpChangeTimeout, cancellationToken: cancellationToken);
 
     /// <summary>Forgets a failed install.</summary>
-    public Task<PhpCatalog> DismissPhpJobAsync(string minor) => Send<PhpCatalog>(HttpMethod.Delete, $"/v1/php/versions/{Escape(minor)}/job");
+    public Task<PhpCatalog> DismissPhpJobAsync(string minor, CancellationToken cancellationToken = default) => Send<PhpCatalog>(HttpMethod.Delete, $"/v1/php/versions/{Escape(minor)}/job", cancellationToken: cancellationToken);
 
-    public Task<PhpCatalog> UninstallPhpAsync(string minor) => Send<PhpCatalog>(HttpMethod.Delete, $"/v1/php/versions/{Escape(minor)}", timeout: PhpChangeTimeout);
+    public Task<PhpCatalog> UninstallPhpAsync(string minor, CancellationToken cancellationToken = default) => Send<PhpCatalog>(HttpMethod.Delete, $"/v1/php/versions/{Escape(minor)}", timeout: PhpChangeTimeout, cancellationToken: cancellationToken);
 
     /// <summary>Asks the daemon to fetch the binaries manifest now.</summary>
-    public Task<PhpCatalog> CheckPhpReleasesAsync() => Send<PhpCatalog>(HttpMethod.Post, "/v1/php/check", timeout: TimeSpan.FromMinutes(1));
+    public Task<PhpCatalog> CheckPhpReleasesAsync(CancellationToken cancellationToken = default) => Send<PhpCatalog>(HttpMethod.Post, "/v1/php/check", timeout: TimeSpan.FromMinutes(1), cancellationToken: cancellationToken);
 
-    public async Task<string> PhpInstallLogAsync(string minor) => await Text(HttpMethod.Get, $"/v1/php/versions/{Escape(minor)}/log");
+    public async Task<string> PhpInstallLogAsync(string minor, CancellationToken cancellationToken = default) => await Text(HttpMethod.Get, $"/v1/php/versions/{Escape(minor)}/log", cancellationToken);
 
     // FrankenPHP builds
 
     /// <summary>The builds per PHP minor; 501 (FlockServerException) when FrankenPHP isn't supported here.</summary>
-    public Task<FrankenPhpState> FrankenPhpAsync() => Get<FrankenPhpState>("/v1/frankenphp");
+    public Task<FrankenPhpState> FrankenPhpAsync(CancellationToken cancellationToken = default) => Get<FrankenPhpState>("/v1/frankenphp", cancellationToken: cancellationToken);
 
     /// <summary>Asks the daemon to fetch the list of builds now.</summary>
-    public Task<FrankenPhpState> CheckFrankenPhpAsync() => Send<FrankenPhpState>(HttpMethod.Post, "/v1/frankenphp/check", timeout: TimeSpan.FromMinutes(1));
+    public Task<FrankenPhpState> CheckFrankenPhpAsync(CancellationToken cancellationToken = default) => Send<FrankenPhpState>(HttpMethod.Post, "/v1/frankenphp/check", timeout: TimeSpan.FromMinutes(1), cancellationToken: cancellationToken);
 
     /// <summary>Starts installing, updating or retrying a minor's build in the background; poll FrankenPhpAsync.</summary>
-    public Task<FrankenPhpState> InstallFrankenPhpAsync(string minor) => Send<FrankenPhpState>(HttpMethod.Post, $"/v1/frankenphp/{Escape(minor)}/install");
+    public Task<FrankenPhpState> InstallFrankenPhpAsync(string minor, CancellationToken cancellationToken = default) => Send<FrankenPhpState>(HttpMethod.Post, $"/v1/frankenphp/{Escape(minor)}/install", cancellationToken: cancellationToken);
 
-    public Task<FrankenPhpState> CancelFrankenPhpJobAsync(string minor) => Send<FrankenPhpState>(HttpMethod.Post, $"/v1/frankenphp/{Escape(minor)}/cancel");
+    public Task<FrankenPhpState> CancelFrankenPhpJobAsync(string minor, CancellationToken cancellationToken = default) => Send<FrankenPhpState>(HttpMethod.Post, $"/v1/frankenphp/{Escape(minor)}/cancel", cancellationToken: cancellationToken);
 
     /// <summary>Forgets a failed install.</summary>
-    public Task<FrankenPhpState> DismissFrankenPhpJobAsync(string minor) => Send<FrankenPhpState>(HttpMethod.Delete, $"/v1/frankenphp/{Escape(minor)}/job");
+    public Task<FrankenPhpState> DismissFrankenPhpJobAsync(string minor, CancellationToken cancellationToken = default) => Send<FrankenPhpState>(HttpMethod.Delete, $"/v1/frankenphp/{Escape(minor)}/job", cancellationToken: cancellationToken);
 
     /// <summary>Removes a minor's build; 409 (FlockServerException) while a site runs on it.</summary>
-    public Task<FrankenPhpState> UninstallFrankenPhpAsync(string minor) =>
-        Send<FrankenPhpState>(HttpMethod.Delete, $"/v1/frankenphp/{Escape(minor)}", timeout: TimeSpan.FromMinutes(1));
+    public Task<FrankenPhpState> UninstallFrankenPhpAsync(string minor, CancellationToken cancellationToken = default) =>
+        Send<FrankenPhpState>(HttpMethod.Delete, $"/v1/frankenphp/{Escape(minor)}", timeout: TimeSpan.FromMinutes(1), cancellationToken: cancellationToken);
 
     /// <summary>The end of the current or last install's output; 404 (FlockServerException) when there is none.</summary>
-    public Task<string> FrankenPhpLogAsync(string minor) => Text(HttpMethod.Get, $"/v1/frankenphp/{Escape(minor)}/log");
+    public Task<string> FrankenPhpLogAsync(string minor, CancellationToken cancellationToken = default) => Text(HttpMethod.Get, $"/v1/frankenphp/{Escape(minor)}/log", cancellationToken);
 
     // PostgreSQL versions
 
     /// <summary>From the daemon's cached manifest, so it answers at once.</summary>
-    public Task<PostgresVersions> PostgresVersionsAsync() => Get<PostgresVersions>("/v1/postgres/versions");
+    public Task<PostgresVersions> PostgresVersionsAsync(CancellationToken cancellationToken = default) => Get<PostgresVersions>("/v1/postgres/versions", cancellationToken: cancellationToken);
 
     /// <summary>Asks the daemon to look for new PostgreSQL releases now.</summary>
-    public Task<PostgresVersions> CheckPostgresReleasesAsync() =>
-        Send<PostgresVersions>(HttpMethod.Post, "/v1/postgres/check", timeout: TimeSpan.FromMinutes(1));
+    public Task<PostgresVersions> CheckPostgresReleasesAsync(CancellationToken cancellationToken = default) =>
+        Send<PostgresVersions>(HttpMethod.Post, "/v1/postgres/check", timeout: TimeSpan.FromMinutes(1), cancellationToken: cancellationToken);
 
     /// <summary>Downloads and installs a major's newest release; the first one installed becomes active and starts.</summary>
-    public Task<PostgresVersions> InstallPostgresAsync(string major) =>
-        Send<PostgresVersions>(HttpMethod.Post, $"/v1/postgres/versions/{Escape(major)}/install", timeout: PostgresDownloadTimeout);
+    public Task<PostgresVersions> InstallPostgresAsync(string major, CancellationToken cancellationToken = default) =>
+        Send<PostgresVersions>(HttpMethod.Post, $"/v1/postgres/versions/{Escape(major)}/install", timeout: PostgresDownloadTimeout, cancellationToken: cancellationToken);
 
     /// <summary>Installs a major's newest release over the installed one; its databases stay, a running server restarts.</summary>
-    public Task<PostgresVersions> UpdatePostgresAsync(string major) =>
-        Send<PostgresVersions>(HttpMethod.Post, $"/v1/postgres/versions/{Escape(major)}/update", timeout: PostgresDownloadTimeout);
+    public Task<PostgresVersions> UpdatePostgresAsync(string major, CancellationToken cancellationToken = default) =>
+        Send<PostgresVersions>(HttpMethod.Post, $"/v1/postgres/versions/{Escape(major)}/update", timeout: PostgresDownloadTimeout, cancellationToken: cancellationToken);
 
     /// <summary>Stops the active major and starts this one with its own databases.</summary>
-    public Task<PostgresVersions> ActivatePostgresAsync(string major) =>
-        Send<PostgresVersions>(HttpMethod.Post, $"/v1/postgres/versions/{Escape(major)}/activate", timeout: TimeSpan.FromMinutes(2));
+    public Task<PostgresVersions> ActivatePostgresAsync(string major, CancellationToken cancellationToken = default) =>
+        Send<PostgresVersions>(HttpMethod.Post, $"/v1/postgres/versions/{Escape(major)}/activate", timeout: TimeSpan.FromMinutes(2), cancellationToken: cancellationToken);
 
     /// <summary>Removes a major's binaries; its data directory goes too only when asked.</summary>
-    public Task<PostgresVersions> UninstallPostgresAsync(string major, bool deleteData = false) =>
-        Send<PostgresVersions>(HttpMethod.Delete, $"/v1/postgres/versions/{Escape(major)}" + (deleteData ? "?delete_data=1" : ""), timeout: TimeSpan.FromMinutes(2));
+    public Task<PostgresVersions> UninstallPostgresAsync(string major, bool deleteData = false, CancellationToken cancellationToken = default) =>
+        Send<PostgresVersions>(HttpMethod.Delete, $"/v1/postgres/versions/{Escape(major)}" + (deleteData ? "?delete_data=1" : ""), timeout: TimeSpan.FromMinutes(2), cancellationToken: cancellationToken);
 
     // Catalog (MySQL, MariaDB, Redis, MongoDB, Meilisearch, Typesense, RustFS)
 
-    public Task<ServiceCatalog> CatalogAsync() => Get<ServiceCatalog>("/v1/catalog");
+    public Task<ServiceCatalog> CatalogAsync(CancellationToken cancellationToken = default) => Get<ServiceCatalog>("/v1/catalog", cancellationToken: cancellationToken);
 
-    public Task<ServiceCatalog> CheckCatalogAsync() =>
-        Send<ServiceCatalog>(HttpMethod.Post, "/v1/catalog/check", timeout: TimeSpan.FromMinutes(1));
+    public Task<ServiceCatalog> CheckCatalogAsync(CancellationToken cancellationToken = default) =>
+        Send<ServiceCatalog>(HttpMethod.Post, "/v1/catalog/check", timeout: TimeSpan.FromMinutes(1), cancellationToken: cancellationToken);
 
     /// <summary>
     /// Starts installing the newest release of a line on a port in the background (null: the
     /// installed line or the newest, and the configured or suggested port); poll CatalogAsync.
     /// </summary>
-    public Task<ServiceCatalog> InstallCatalogServiceAsync(string id, string? line = null, int? port = null) =>
-        Send<ServiceCatalog>(HttpMethod.Post, $"/v1/catalog/{Escape(id)}/install", new { line = line ?? "", port = port ?? 0 });
+    public Task<ServiceCatalog> InstallCatalogServiceAsync(string id, string? line = null, int? port = null, CancellationToken cancellationToken = default) =>
+        Send<ServiceCatalog>(HttpMethod.Post, $"/v1/catalog/{Escape(id)}/install", new { line = line ?? "", port = port ?? 0 }, cancellationToken: cancellationToken);
 
-    public Task<ServiceCatalog> CancelCatalogJobAsync(string id) => Send<ServiceCatalog>(HttpMethod.Post, $"/v1/catalog/{Escape(id)}/cancel");
+    public Task<ServiceCatalog> CancelCatalogJobAsync(string id, CancellationToken cancellationToken = default) => Send<ServiceCatalog>(HttpMethod.Post, $"/v1/catalog/{Escape(id)}/cancel", cancellationToken: cancellationToken);
 
     /// <summary>Forgets a failed install.</summary>
-    public Task<ServiceCatalog> DismissCatalogJobAsync(string id) => Send<ServiceCatalog>(HttpMethod.Delete, $"/v1/catalog/{Escape(id)}/job");
+    public Task<ServiceCatalog> DismissCatalogJobAsync(string id, CancellationToken cancellationToken = default) => Send<ServiceCatalog>(HttpMethod.Delete, $"/v1/catalog/{Escape(id)}/job", cancellationToken: cancellationToken);
 
     /// <summary>The end of the current or last install's output; 404 (FlockServerException) when there is none.</summary>
-    public Task<string> CatalogLogAsync(string id) => Text(HttpMethod.Get, $"/v1/catalog/{Escape(id)}/log");
+    public Task<string> CatalogLogAsync(string id, CancellationToken cancellationToken = default) => Text(HttpMethod.Get, $"/v1/catalog/{Escape(id)}/log", cancellationToken);
 
     /// <summary>Runs an installed line of a catalog service instead of the active one, on the service's port.</summary>
-    public Task<ServiceCatalog> ActivateCatalogServiceAsync(string id, string line) =>
-        Send<ServiceCatalog>(HttpMethod.Post, $"/v1/catalog/{Escape(id)}/activate", new { line }, timeout: TimeSpan.FromMinutes(1));
+    public Task<ServiceCatalog> ActivateCatalogServiceAsync(string id, string line, CancellationToken cancellationToken = default) =>
+        Send<ServiceCatalog>(HttpMethod.Post, $"/v1/catalog/{Escape(id)}/activate", new { line }, timeout: TimeSpan.FromMinutes(1), cancellationToken: cancellationToken);
 
     /// <summary>
     /// Removes a line of a catalog service (null: every line); its data goes too only when asked.
     /// When the active line goes, the newest other installed line takes over.
     /// </summary>
-    public Task<ServiceCatalog> UninstallCatalogServiceAsync(string id, string? line = null, bool deleteData = false)
+    public Task<ServiceCatalog> UninstallCatalogServiceAsync(string id, string? line = null, bool deleteData = false, CancellationToken cancellationToken = default)
     {
         var query = new List<string>();
         if (line is not null)
@@ -267,35 +270,35 @@ public sealed class FlockClient : IDisposable
             query.Add("delete_data=1");
         }
         var path = $"/v1/catalog/{Escape(id)}" + (query.Count > 0 ? "?" + string.Join("&", query) : "");
-        return Send<ServiceCatalog>(HttpMethod.Delete, path, timeout: TimeSpan.FromMinutes(1));
+        return Send<ServiceCatalog>(HttpMethod.Delete, path, timeout: TimeSpan.FromMinutes(1), cancellationToken: cancellationToken);
     }
 
     // Mail
 
-    public Task<List<MailSummary>> MailAsync() => Get<List<MailSummary>>("/v1/mail");
+    public Task<List<MailSummary>> MailAsync(CancellationToken cancellationToken = default) => Get<List<MailSummary>>("/v1/mail", cancellationToken: cancellationToken);
 
-    public Task<MailDetail> MailAsync(string id) => Get<MailDetail>($"/v1/mail/{Escape(id)}");
+    public Task<MailDetail> MailAsync(string id, CancellationToken cancellationToken = default) => Get<MailDetail>($"/v1/mail/{Escape(id)}", cancellationToken: cancellationToken);
 
-    public Task<string> RawMailAsync(string id) => Text(HttpMethod.Get, $"/v1/mail/{Escape(id)}/raw");
+    public Task<string> RawMailAsync(string id, CancellationToken cancellationToken = default) => Text(HttpMethod.Get, $"/v1/mail/{Escape(id)}/raw", cancellationToken);
 
-    public Task<byte[]> AttachmentAsync(string mailId, int index) => Raw(HttpMethod.Get, $"/v1/mail/{Escape(mailId)}/attachments/{index}");
+    public Task<byte[]> AttachmentAsync(string mailId, int index, CancellationToken cancellationToken = default) => Raw(HttpMethod.Get, $"/v1/mail/{Escape(mailId)}/attachments/{index}", cancellationToken: cancellationToken);
 
-    public async Task ClearMailAsync(string? inbox = null) =>
-        await Raw(HttpMethod.Delete, "/v1/mail" + (inbox is null ? "" : "?inbox=" + Uri.EscapeDataString(inbox)));
+    public async Task ClearMailAsync(string? inbox = null, CancellationToken cancellationToken = default) =>
+        await Raw(HttpMethod.Delete, "/v1/mail" + (inbox is null ? "" : "?inbox=" + Uri.EscapeDataString(inbox)), cancellationToken: cancellationToken);
 
     // Dumps
 
-    public Task<List<Dump>> DumpsAsync() => Get<List<Dump>>("/v1/dumps");
+    public Task<List<Dump>> DumpsAsync(CancellationToken cancellationToken = default) => Get<List<Dump>>("/v1/dumps", cancellationToken: cancellationToken);
 
     /// <summary>Symfony's dump &lt;script&gt;/&lt;style&gt; header, shared by all dump bodies.</summary>
-    public Task<string> DumpHeaderAsync() => Text(HttpMethod.Get, "/v1/dumps/header");
+    public Task<string> DumpHeaderAsync(CancellationToken cancellationToken = default) => Text(HttpMethod.Get, "/v1/dumps/header", cancellationToken);
 
-    public async Task ClearDumpsAsync() => await Raw(HttpMethod.Delete, "/v1/dumps");
+    public async Task ClearDumpsAsync(CancellationToken cancellationToken = default) => await Raw(HttpMethod.Delete, "/v1/dumps", cancellationToken: cancellationToken);
 
     // Events: queries, logs, views, jobs and requests captured next to the dumps
 
     /// <summary>Newest first; kinds (EventKind values) and limit narrow the list.</summary>
-    public Task<List<RuntimeEvent>> EventsAsync(IEnumerable<string>? kinds = null, int? limit = null)
+    public Task<List<RuntimeEvent>> EventsAsync(IEnumerable<string>? kinds = null, int? limit = null, CancellationToken cancellationToken = default)
     {
         var query = new List<string>();
         if (kinds?.ToList() is { Count: > 0 } list)
@@ -306,22 +309,22 @@ public sealed class FlockClient : IDisposable
         {
             query.Add($"limit={n}");
         }
-        return Get<List<RuntimeEvent>>("/v1/events" + (query.Count == 0 ? "" : "?" + string.Join("&", query)));
+        return Get<List<RuntimeEvent>>("/v1/events" + (query.Count == 0 ? "" : "?" + string.Join("&", query)), cancellationToken);
     }
 
-    public async Task ClearEventsAsync() => await Raw(HttpMethod.Delete, "/v1/events");
+    public async Task ClearEventsAsync(CancellationToken cancellationToken = default) => await Raw(HttpMethod.Delete, "/v1/events", cancellationToken: cancellationToken);
 
     // Logs
 
-    public Task<LogIndex> LogsAsync() => Get<LogIndex>("/v1/logs");
+    public Task<LogIndex> LogsAsync(CancellationToken cancellationToken = default) => Get<LogIndex>("/v1/logs", cancellationToken: cancellationToken);
 
-    public Task<string> ServiceLogAsync(string name, int lines = 300) =>
-        Text(HttpMethod.Get, $"/v1/logs/services/{Escape(name)}?lines={lines}");
+    public Task<string> ServiceLogAsync(string name, int lines = 300, CancellationToken cancellationToken = default) =>
+        Text(HttpMethod.Get, $"/v1/logs/services/{Escape(name)}?lines={lines}", cancellationToken);
 
-    public Task<List<LogEntry>> SiteLogAsync(string name, int limit = 200) =>
-        Get<List<LogEntry>>($"/v1/logs/sites/{Escape(name)}?limit={limit}");
+    public Task<List<LogEntry>> SiteLogAsync(string name, int limit = 200, CancellationToken cancellationToken = default) =>
+        Get<List<LogEntry>>($"/v1/logs/sites/{Escape(name)}?limit={limit}", cancellationToken: cancellationToken);
 
-    public async Task ClearSiteLogAsync(string name) => await Raw(HttpMethod.Delete, $"/v1/logs/sites/{Escape(name)}");
+    public async Task ClearSiteLogAsync(string name, CancellationToken cancellationToken = default) => await Raw(HttpMethod.Delete, $"/v1/logs/sites/{Escape(name)}", cancellationToken: cancellationToken);
 
     // Transport
 
@@ -330,11 +333,11 @@ public sealed class FlockClient : IDisposable
 
     private static readonly TimeSpan DefaultTimeout = TimeSpan.FromSeconds(5);
 
-    private Task<T> Get<T>(string path) => Send<T>(HttpMethod.Get, path);
+    private Task<T> Get<T>(string path, CancellationToken cancellationToken = default) => Send<T>(HttpMethod.Get, path, cancellationToken: cancellationToken);
 
-    private async Task<T> Send<T>(HttpMethod method, string path, object? body = null, TimeSpan? timeout = null)
+    private async Task<T> Send<T>(HttpMethod method, string path, object? body = null, TimeSpan? timeout = null, CancellationToken cancellationToken = default)
     {
-        var data = await Raw(method, path, body, timeout);
+        var data = await Raw(method, path, body, timeout, cancellationToken);
         // Go encodes nil slices as null; an empty list is what every caller wants then.
         if (data.Length == 0 || data.AsSpan().SequenceEqual("null"u8))
         {
@@ -346,40 +349,70 @@ public sealed class FlockClient : IDisposable
         }
         catch (JsonException e)
         {
-            throw new FlockException($"Unexpected answer from {path}: {e.Message}");
+            throw new FlockException($"Unexpected answer from {path}: {e.Message}", e);
         }
     }
 
-    private async Task<string> Text(HttpMethod method, string path) => Encoding.UTF8.GetString(await Raw(method, path));
+    private async Task<string> Text(HttpMethod method, string path, CancellationToken cancellationToken = default) => Encoding.UTF8.GetString(await Raw(method, path, cancellationToken: cancellationToken));
 
-    /// <summary>
-    /// Sends a request; on a connection failure it re-reads api.json once and retries, because a
-    /// restarted daemon listens on a new port with a new token.
-    /// </summary>
-    private async Task<byte[]> Raw(HttpMethod method, string path, object? body = null, TimeSpan? timeout = null)
+    /// <summary>Sends one request, with the bounded retry rules for daemon restarts.</summary>
+    private async Task<byte[]> Raw(HttpMethod method, string path, object? body = null, TimeSpan? timeout = null, CancellationToken cancellationToken = default)
     {
-        try
+        if (cancellationToken.IsCancellationRequested)
         {
-            return await Attempt(method, path, body, timeout, await LoadConfig(force: false));
+            throw new TaskCanceledException(null, null, cancellationToken);
         }
-        catch (HttpRequestException)
+        var retried = false;
+        while (true)
         {
             try
             {
-                return await Attempt(method, path, body, timeout, await LoadConfig(force: true));
+                return await ExecuteAttempt(method, path, body, timeout, force: retried, cancellationToken);
             }
-            catch (HttpRequestException)
+            catch (Exception error) when (!retried && CanRetry(method, error))
             {
-                throw new FlockNotRunningException();
+                retried = true;
+                if (error is HttpRequestException)
+                {
+                    await InvalidateConfig(cancellationToken);
+                }
             }
-        }
-        catch (FlockServerException e) when (e.StatusCode == (int)HttpStatusCode.Unauthorized)
-        {
-            return await Attempt(method, path, body, timeout, await LoadConfig(force: true));
+            catch (HttpRequestException error)
+            {
+                await InvalidateConfig(cancellationToken);
+                throw TerminalTransportFailure(method, error);
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                throw new TaskCanceledException(null, null, cancellationToken);
+            }
         }
     }
 
-    private async Task<byte[]> Attempt(HttpMethod method, string path, object? body, TimeSpan? timeout, ApiConfig api)
+    private static bool CanRetry(HttpMethod method, Exception error) => error switch
+    {
+        FlockServerException { StatusCode: 401 } => true,
+        HttpRequestException => method == HttpMethod.Get,
+        _ => false,
+    };
+
+    private async Task<byte[]> ExecuteAttempt(HttpMethod method, string path, object? body, TimeSpan? timeout, bool force, CancellationToken cancellationToken)
+    {
+        var limit = timeout ?? DefaultTimeout;
+        using var timeoutCts = new CancellationTokenSource(limit, timeProvider);
+        using var cts = CancellationTokenSource.CreateLinkedTokenSource(timeoutCts.Token, cancellationToken);
+        try
+        {
+            var api = await LoadConfig(force, cts.Token);
+            return await Attempt(method, path, body, api, limit, cts.Token);
+        }
+        catch (OperationCanceledException error) when (timeoutCts.IsCancellationRequested && !cancellationToken.IsCancellationRequested)
+        {
+            throw TimeoutFailure(method, path, error);
+        }
+    }
+
+    private async Task<byte[]> Attempt(HttpMethod method, string path, object? body, ApiConfig api, TimeSpan limit, CancellationToken cancellationToken)
     {
         using var request = new HttpRequestMessage(method, api.Url.TrimEnd('/') + path);
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", api.Token);
@@ -388,22 +421,12 @@ public sealed class FlockClient : IDisposable
             request.Content = new StringContent(JsonSerializer.Serialize(body, FlockJson.Options), Encoding.UTF8, "application/json");
         }
 
-        var limit = timeout ?? DefaultTimeout;
         request.Options.Set(TimeoutOption, limit);
-        using var cts = new CancellationTokenSource(limit);
-        HttpResponseMessage response;
-        try
-        {
-            response = await http.SendAsync(request, cts.Token);
-        }
-        catch (TaskCanceledException) when (cts.IsCancellationRequested)
-        {
-            throw new FlockException($"Flock did not answer {method} {path} in time");
-        }
+        HttpResponseMessage response = await http.SendAsync(request, cancellationToken);
 
         using (response)
         {
-            var data = await response.Content.ReadAsByteArrayAsync(CancellationToken.None);
+            var data = await response.Content.ReadAsByteArrayAsync(cancellationToken);
             if (!response.IsSuccessStatusCode)
             {
                 throw new FlockServerException((int)response.StatusCode, ErrorMessage(data));
@@ -411,6 +434,14 @@ public sealed class FlockClient : IDisposable
             return data;
         }
     }
+
+    private static Exception TimeoutFailure(HttpMethod method, string path, Exception cause) =>
+        method == HttpMethod.Get
+            ? new FlockException($"Flock did not answer {method} {path} in time", cause)
+            : new FlockRequestOutcomeUnknownException(cause);
+
+    private static Exception TerminalTransportFailure(HttpMethod method, Exception cause) =>
+        method == HttpMethod.Get ? new FlockNotRunningException(cause) : new FlockRequestOutcomeUnknownException(cause);
 
     private static string ErrorMessage(byte[] data)
     {
@@ -429,28 +460,54 @@ public sealed class FlockClient : IDisposable
         return text.Length > 500 ? text[..500] : text;
     }
 
-    private async Task<ApiConfig> LoadConfig(bool force)
+    private async Task<ApiConfig> LoadConfig(bool force, CancellationToken cancellationToken)
     {
-        await configLock.WaitAsync();
+        await configLock.WaitAsync(cancellationToken);
         try
         {
+            if (force)
+            {
+                config = null;
+            }
             if (config is not null && !force)
             {
                 return config;
             }
             try
             {
-                var loaded = FlockJson.Decode<ApiConfig>(await File.ReadAllTextAsync(configPath));
-                if (loaded.Url.Length == 0)
+                var loaded = FlockJson.Decode<ApiConfig>(await File.ReadAllTextAsync(configPath, cancellationToken));
+                if (string.IsNullOrWhiteSpace(loaded.Url) || string.IsNullOrWhiteSpace(loaded.Token)
+                    || !Uri.TryCreate(loaded.Url, UriKind.Absolute, out _))
                 {
-                    throw new FlockNotRunningException();
+                    throw new FlockNotRunningException(new InvalidDataException("api.json has no URL or token."));
+                }
+                try
+                {
+                    _ = new AuthenticationHeaderValue("Bearer", loaded.Token);
+                }
+                catch (FormatException e)
+                {
+                    throw new FlockNotRunningException(e);
                 }
                 return config = loaded;
             }
-            catch (Exception e) when (e is IOException or UnauthorizedAccessException or JsonException)
+            catch (Exception e) when (e is IOException or UnauthorizedAccessException or JsonException or InvalidDataException)
             {
-                throw new FlockNotRunningException();
+                throw new FlockNotRunningException(e);
             }
+        }
+        finally
+        {
+            configLock.Release();
+        }
+    }
+
+    private async Task InvalidateConfig(CancellationToken cancellationToken)
+    {
+        await configLock.WaitAsync(cancellationToken);
+        try
+        {
+            config = null;
         }
         finally
         {

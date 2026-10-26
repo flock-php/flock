@@ -1,0 +1,106 @@
+# The flockphp .deb and .rpm (linux/build-packages.sh): the CLI and daemon, and the app (linux/).
+# The command is flock, but util-linux owns /usr/bin/flock: the binary lives in /usr/libexec/flockphp
+# and only `flk` goes on PATH. `flk install` links it into the user's data dir, whose bin/ (first on
+# PATH) then has `flock` too. libexec, not lib: SELinux labels it bin_t, so systemd runs the daemon
+# unconfined (from lib_t it would stay init_t, which can't download anything).
+name: flockphp
+arch: ${NFPM_ARCH}
+platform: linux
+version: ${PKG_VERSION}
+section: devel
+priority: optional
+maintainer: Guava s.r.o.
+vendor: Guava s.r.o.
+homepage: https://flockphp.com
+license: AGPL-3.0-only
+description: |-
+  Native local development environment for Laravel and PHP.
+  PHP, Node.js, databases and *.test sites with trusted HTTPS, without Docker.
+
+contents:
+  - src: build/linux/flock
+    dst: /usr/libexec/flockphp/flock
+    file_info:
+      mode: 0755
+  - src: /usr/libexec/flockphp/flock
+    dst: /usr/bin/flk
+    type: symlink
+  # The app: its launcher (which also takes flock:// links), icons and what software centers show.
+  - src: build/linux/flock-app
+    dst: /usr/libexec/flockphp/flock-app
+    file_info:
+      mode: 0755
+  - src: linux/data/dev.flock.Flock.desktop
+    dst: /usr/share/applications/dev.flock.Flock.desktop
+  - src: linux/data/dev.flock.Flock.metainfo.xml
+    dst: /usr/share/metainfo/dev.flock.Flock.metainfo.xml
+  - src: linux/data/icons/hicolor/scalable/apps/dev.flock.Flock.svg
+    dst: /usr/share/icons/hicolor/scalable/apps/dev.flock.Flock.svg
+  - src: linux/data/icons/hicolor/symbolic/apps/dev.flock.Flock-symbolic.svg
+    dst: /usr/share/icons/hicolor/symbolic/apps/dev.flock.Flock-symbolic.svg
+  - src: linux/data/icons/hicolor/symbolic/apps/dev.flock.Flock-stopped-symbolic.svg
+    dst: /usr/share/icons/hicolor/symbolic/apps/dev.flock.Flock-stopped-symbolic.svg
+  - src: linux/data/icons/hicolor/symbolic/apps/dev.flock.Flock-warning-symbolic.svg
+    dst: /usr/share/icons/hicolor/symbolic/apps/dev.flock.Flock-warning-symbolic.svg
+  - src: linux/data/icons/hicolor/symbolic/apps/dev.flock.Flock-sites-symbolic.svg
+    dst: /usr/share/icons/hicolor/symbolic/apps/dev.flock.Flock-sites-symbolic.svg
+  # Each user's daemon is an instance of it, set up by `flk install` (per-user drop-in).
+  - src: linux/packaging/flock@.service
+    dst: /usr/lib/systemd/system/flock@.service
+  - src: linux/packaging/50-flock.rules
+    dst: /usr/share/polkit-1/rules.d/50-flock.rules
+  # The key Flock's repository is signed with; postinstall.sh adds the repository.
+  - src: build/linux/flockphp.asc
+    dst: /usr/share/keyrings/flockphp.asc
+    packager: deb
+    file_info:
+      mode: 0644
+  - src: build/linux/flockphp.asc
+    dst: /etc/pki/rpm-gpg/RPM-GPG-KEY-flockphp
+    packager: rpm
+    file_info:
+      mode: 0644
+  - src: LICENSE
+    dst: /usr/share/doc/flockphp/copyright
+    packager: deb
+  - src: LICENSE
+    dst: /usr/share/licenses/flockphp/LICENSE
+    packager: rpm
+
+scripts:
+  postinstall: linux/packaging/postinstall.sh
+  preremove: linux/packaging/preremove.sh
+  postremove: linux/packaging/postremove.sh
+
+overrides:
+  deb:
+    depends:
+      - systemd
+      - polkitd | policykit-1
+      - ca-certificates
+      - libnss3-tools
+      # The app; Ubuntu 24.04 has GTK 4.14 and libadwaita 1.5, the oldest it is built for.
+      - libgtk-4-1 (>= 4.14)
+      - libadwaita-1-0 (>= 1.5)
+      - libwebkitgtk-6.0-4
+    recommends:
+      # Services Flock downloads link these from the system: MongoDB (OpenSSL 3, libcurl), MySQL
+      # (libkeyutils, for its Kerberos plugin). See LINUX_SYSTEM_LIBS in flockphp-binaries.
+      - libssl3t64 | libssl3
+      - libcurl4t64 | libcurl4
+      - libkeyutils1
+  rpm:
+    depends:
+      - systemd
+      - polkit
+      - ca-certificates
+      - nss-tools
+      - gtk4 >= 4.14
+      - libadwaita >= 1.5
+      - webkitgtk6.0
+      # Under SELinux, the setup labels Flock's DNS port for systemd-resolved with semanage.
+      - (policycoreutils-python-utils if selinux-policy)
+    recommends:
+      - openssl-libs
+      - libcurl
+      - keyutils-libs

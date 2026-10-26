@@ -168,6 +168,12 @@ public class AppVersionTests
         Assert.True(AppVersion.Parse("1.1.0-beta.1")! > AppVersion.Parse("1.0.9")!);
         Assert.Equal(0, AppVersion.Parse("1.1.0")!.CompareTo(AppVersion.Parse("1.1.0")));
     }
+
+    [Fact]
+    public void StableSortsAboveTheLargestBetaNumber()
+    {
+        Assert.True(AppVersion.Parse("1.1.0")! > AppVersion.Parse("1.1.0-beta.2147483647")!);
+    }
 }
 
 public class UpdateLinkTests

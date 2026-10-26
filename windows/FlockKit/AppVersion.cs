@@ -51,8 +51,12 @@ public sealed partial record AppVersion(int Major, int Minor, int Patch, int? Be
         {
             return order;
         }
-        // The release itself is newer than every beta of it.
-        return (Beta ?? int.MaxValue).CompareTo(other.Beta ?? int.MaxValue);
+        // The release itself is newer than every beta of it, including beta.int.MaxValue.
+        if (Beta is null)
+        {
+            return other.Beta is null ? 0 : 1;
+        }
+        return other.Beta is null ? -1 : Beta.Value.CompareTo(other.Beta.Value);
     }
 
     public static bool operator >(AppVersion a, AppVersion b) => a.CompareTo(b) > 0;

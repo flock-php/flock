@@ -177,7 +177,7 @@ func redis(goos string) *Kind {
 	return &Kind{
 		ID: "redis", Name: "Redis", Category: "Cache & Queue", DefaultPort: 6379, Line: majorMinor,
 		Description: "The in-memory store for your cache, queues and sessions, from Redis Ltd.",
-		Unavailable: "Flock offers Valkey on Windows instead: the open-source Redis, which works with Laravel's Redis settings unchanged.",
+		Unavailable: "Flock offers Valkey here instead: the open-source Redis, which works with Laravel's Redis settings unchanged.",
 		Env:         RedisEnv,
 		URL:         func(port int) string { return fmt.Sprintf("redis://127.0.0.1:%d", port) },
 		Prepare:     needs(exe(goos, "redis-server"), exe(goos, "redis-cli")),

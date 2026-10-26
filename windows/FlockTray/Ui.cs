@@ -116,15 +116,9 @@ internal static class Ui
                 fe.VerticalAlignment = VerticalAlignment.Center;
             }
             panel.Children.Add(child);
-            owners.AddOrUpdate(child, panel);
         }
         return panel;
     }
-
-    // The panel Row/Column last put each element into. Once that panel has left the window (another
-    // pane is shown), FrameworkElement.Parent reports null, yet the element still belongs to it and
-    // can't be added anywhere else until it is removed.
-    private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<UIElement, Panel> owners = new();
 
     /// <summary>A grid row: content on the left (stretching), trailing elements on the right.</summary>
     public static Grid Spread(UIElement leading, params UIElement[] trailing)
@@ -155,6 +149,22 @@ internal static class Ui
             button.Style = Resource<Style>("AccentButtonStyle");
         }
         button.Click += (_, _) => onClick();
+        if (tooltip is not null)
+        {
+            ToolTipService.SetToolTip(button, tooltip);
+        }
+        return button;
+    }
+
+    public static Button AsyncButton(string text, Func<Task> onClick, bool accent = false, string? glyph = null, string? tooltip = null)
+    {
+        object content = glyph is null ? text : Row(8, Icon(glyph, 14), new TextBlock { Text = text });
+        var button = new Button { Content = content };
+        if (accent)
+        {
+            button.Style = Resource<Style>("AccentButtonStyle");
+        }
+        button.Click += async (_, _) => await onClick();
         if (tooltip is not null)
         {
             ToolTipService.SetToolTip(button, tooltip);
@@ -240,13 +250,14 @@ internal static class Ui
         VerticalAlignment = VerticalAlignment.Center,
     };
 
-    public enum Tone { Accent, Neutral, Caution, Critical }
+    public enum Tone { Accent, Neutral, Caution, Critical, Success }
 
     /// <summary>A small capsule label such as "Default".</summary>
     public static Border Badge(string text, Tone tone = Tone.Accent)
     {
         var (fg, bg) = tone switch
         {
+            Tone.Success => (Success, Brush("SystemFillColorSuccessBackgroundBrush")),
             Tone.Caution => (Caution, Brush("SystemFillColorCautionBackgroundBrush")),
             Tone.Critical => (Critical, Brush("SystemFillColorCriticalBackgroundBrush")),
             Tone.Neutral => (SecondaryText, Brush("ControlFillColorSecondaryBrush")),
@@ -289,21 +300,6 @@ internal static class Ui
             grid.Children.Add(copy);
         }
         return grid;
-    }
-
-    /// <summary>Removes a control from its panel so it can be placed in a newly rendered one.</summary>
-    public static T Detach<T>(T element) where T : FrameworkElement
-    {
-        if (owners.TryGetValue(element, out var owner))
-        {
-            owner.Children.Remove(element);
-            owners.Remove(element);
-        }
-        if (element.Parent is Panel panel)
-        {
-            panel.Children.Remove(element);
-        }
-        return element;
     }
 
     public static void Copy(string text)

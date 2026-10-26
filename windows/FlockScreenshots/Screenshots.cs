@@ -1,6 +1,4 @@
 using Microsoft.UI.Xaml;
-using Microsoft.UI.Xaml.Media;
-using Microsoft.Web.WebView2.Core;
 
 namespace Flock.Tray;
 
@@ -32,7 +30,7 @@ internal sealed class Screenshots(Screenshots.Options options)
     }
 
     /// <summary>One screenshot and how to show it.</summary>
-    private sealed record Shot(string Id, Func<App, Task<Window>> Show);
+    private sealed record Shot(string Id, Func<ScreenshotSession, Task<Window>> Show);
 
     private static readonly Shot[] All =
     [
@@ -52,40 +50,21 @@ internal sealed class Screenshots(Screenshots.Options options)
         new("panel-running", app => app.ShowPanelForScreenshot()),
     ];
 
-    /// <summary>Set by Program before the app starts.</summary>
-    public static Screenshots Current { get; set; } = null!;
-
     /// <summary>The number of shots that failed: the process's exit code.</summary>
     public int Failures { get; private set; }
 
     public ApplicationTheme Theme => options.Theme == "dark" ? ApplicationTheme.Dark : ApplicationTheme.Light;
 
-    public CoreWebView2PreferredColorScheme WebViewColorScheme => options.Theme == "dark"
-        ? CoreWebView2PreferredColorScheme.Dark
-        : CoreWebView2PreferredColorScheme.Light;
-
-    /// <summary>
-    /// Covers the windows' Mica or Acrylic, whose look depends on the wallpaper, with their solid
-    /// fallback. The backdrop itself stays: without one, the windows show up black.
-    /// </summary>
-    public static Brush WindowBackground => (Brush)Application.Current.Resources["SolidBackgroundFillColorBaseBrush"];
-
-    /// <summary>Takes over from App.OnLaunched: no tray icon, no polling, no updates.</summary>
-    public bool Start(App app)
+    public async Task RunAsync(App app)
     {
-        _ = RunAsync(app);
-        return true;
-    }
-
-    private async Task RunAsync(App app)
-    {
+        var session = new ScreenshotSession(app);
         foreach (var shot in All.Where(s => options.Only?.Contains(s.Id) ?? true))
         {
             var file = Path.Combine(options.Out, $"{shot.Id}-windows-{options.Theme}.png");
             try
             {
-                await app.Model.RefreshAsync();
-                var window = await shot.Show(app);
+                await app.State.RefreshAsync();
+                var window = await shot.Show(session);
                 var hwnd = Microsoft.UI.Win32Interop.GetWindowFromWindowId(window.AppWindow.Id);
                 Capture.Prepare(hwnd);
                 // Panes load their data, lists lay out, WebView2 navigates.
@@ -105,9 +84,9 @@ internal sealed class Screenshots(Screenshots.Options options)
             }
             finally
             {
-                app.CloseScreenshotWindows();
+                await session.CloseScreenshotWindowsAsync();
             }
         }
-        app.Exit();
+        await app.QuitAsync();
     }
 }

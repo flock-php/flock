@@ -1,44 +1,48 @@
 <Project Sdk="Microsoft.NET.Sdk">
-  <!--
-    Renders the tray app's windows with demo data into PNGs for the website's docs (how to run it:
-    windows/README.md). It compiles FlockTray's sources with SCREENSHOTS defined, its own Program instead of FlockTray's,
-    and a fake daemon serving tools/screenshots/fixtures. build.ps1 publishes FlockTray.csproj only,
-    so none of this reaches the installer; build.ps1 also checks that FlockTray.dll has no trace of it.
-  -->
-  <PropertyGroup>
-    <!-- A console program, so it can print what it renders (and why a shot failed) in CI. -->
-    <OutputType>Exe</OutputType>
-    <TargetFramework>net10.0-windows10.0.22621.0</TargetFramework>
-    <TargetPlatformMinVersion>10.0.19041.0</TargetPlatformMinVersion>
-    <SupportedOSPlatformVersion>10.0.19041.0</SupportedOSPlatformVersion>
-    <RootNamespace>Flock.Tray</RootNamespace>
-    <AssemblyName>FlockScreenshots</AssemblyName>
-    <Nullable>enable</Nullable>
-    <ImplicitUsings>enable</ImplicitUsings>
-    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
-    <UseWinUI>true</UseWinUI>
-    <WindowsPackageType>None</WindowsPackageType>
-    <EnableMsixTooling>true</EnableMsixTooling>
-    <WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
-    <SelfContained>true</SelfContained>
-    <DisableXamlGeneratedMain>true</DisableXamlGeneratedMain>
-    <EnableWindowsTargeting>true</EnableWindowsTargeting>
-    <Platforms>x64</Platforms>
-    <RuntimeIdentifiers>win-x64</RuntimeIdentifiers>
-    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
-    <ApplicationManifest>..\FlockTray\app.manifest</ApplicationManifest>
-    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
-    <DefineConstants>$(DefineConstants);SCREENSHOTS</DefineConstants>
-  </PropertyGroup>
-  <ItemGroup>
-    <PackageReference Include="Microsoft.WindowsAppSDK" Version="2.5.1" />
-  </ItemGroup>
-  <ItemGroup>
-    <ProjectReference Include="..\FlockKit\FlockKit.csproj" />
-  </ItemGroup>
-  <ItemGroup>
-    <Compile Include="..\FlockTray\**\*.cs" Exclude="..\FlockTray\Program.cs;..\FlockTray\bin\**;..\FlockTray\obj\**" LinkBase="FlockTray" />
-    <Content Include="..\FlockTray\Assets\*.ico;..\FlockTray\Assets\*.png" Link="Assets\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
-    <Content Include="..\..\tools\screenshots\fixtures\**\*" Link="fixtures\%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
-  </ItemGroup>
+    <!--
+      Renders the tray app's windows with demo data into PNGs for the website's docs (how to run it:
+      windows/README.md). It references the production tray assembly and runs its windows against a fake daemon.
+      build.ps1 publishes FlockTray.csproj only, so the capture runner and fixtures never reach the installer.
+    -->
+    <PropertyGroup>
+        <!-- A console program, so it can print what it renders (and why a shot failed) in CI. -->
+        <OutputType>Exe</OutputType>
+        <TargetFramework>net10.0-windows10.0.22621.0</TargetFramework>
+        <TargetPlatformMinVersion>10.0.19041.0</TargetPlatformMinVersion>
+        <SupportedOSPlatformVersion>10.0.19041.0</SupportedOSPlatformVersion>
+        <RootNamespace>Flock.Tray</RootNamespace>
+        <AssemblyName>FlockScreenshots</AssemblyName>
+        <Nullable>enable</Nullable>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+        <UseWinUI>true</UseWinUI>
+        <WindowsPackageType>None</WindowsPackageType>
+        <EnableMsixTooling>true</EnableMsixTooling>
+        <WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
+        <!-- FlockTray owns WinUI startup and its module initializes the Windows App SDK. -->
+        <WindowsAppSdkUndockedRegFreeWinRTInitialize>false</WindowsAppSdkUndockedRegFreeWinRTInitialize>
+        <SelfContained>true</SelfContained>
+        <DisableXamlGeneratedMain>true</DisableXamlGeneratedMain>
+        <EnableWindowsTargeting>true</EnableWindowsTargeting>
+        <Platforms>x64</Platforms>
+        <RuntimeIdentifiers>win-x64</RuntimeIdentifiers>
+        <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+        <ApplicationManifest>..\FlockTray\app.manifest</ApplicationManifest>
+        <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    </PropertyGroup>
+    <ItemGroup>
+        <PackageReference Include="Microsoft.WindowsAppSDK" Version="2.5.1" />
+    </ItemGroup>
+    <ItemGroup>
+        <ProjectReference Include="..\FlockTray\FlockTray.csproj" />
+    </ItemGroup>
+    <ItemGroup>
+        <Content Include="..\..\tools\screenshots\fixtures\**\*" TargetPath="fixtures\%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" Visible="false" />
+    </ItemGroup>
+    <!-- Hide SDK payload links in the IDE while keeping their output-copy metadata. -->
+    <Target Name="HideWindowsAppSDKPayloadLinks" AfterTargets="AddMicrosoftWindowsAppSDKPayloadFilesFromComponents">
+        <ItemGroup>
+            <None Update="@(MicrosoftWindowsAppSDKFiles)" Visible="false"/>
+        </ItemGroup>
+    </Target>
 </Project>

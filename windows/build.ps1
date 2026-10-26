@@ -18,14 +18,17 @@ if (-not $version) { $version = "dev" }
 dotnet test (Join-Path $PSScriptRoot "FlockKit.Tests")
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
+dotnet test (Join-Path $PSScriptRoot "FlockTray.Tests") -p:Platform=$platform
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
 dotnet publish (Join-Path $PSScriptRoot "FlockTray\FlockTray.csproj") -c Release -r "win-$Arch" -p:Platform=$platform `
     "-p:InformationalVersion=$version" -o $out
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
-# FlockScreenshots compiles the same sources with SCREENSHOTS defined (demo data, a fake daemon);
-# none of that may reach the shipped app.
-if (Select-String -Path (Join-Path $out "FlockTray.dll") -Pattern "Screenshots", "FakeDaemon" -SimpleMatch -Quiet) {
-    Write-Error "FlockTray.dll contains screenshot code: was it built with SCREENSHOTS defined?"
+# The capture runner references the tray, never the reverse. Keep its code and fixtures out of the shipped app.
+if ((Test-Path (Join-Path $out "FlockScreenshots.dll")) -or (Test-Path (Join-Path $out "fixtures")) -or
+    (Select-String -Path (Join-Path $out "FlockTray.dll") -Pattern "FakeDaemon" -SimpleMatch -Quiet)) {
+    Write-Error "The tray publication contains the capture runner or its fixtures."
     exit 1
 }
 

@@ -31,7 +31,7 @@ public static class EditorInfo
 
         return editor switch
         {
-            Editor.PhpStorm => $"phpstorm://open?file={path}" + (line > 0 ? $"&line={line}" : ""),
+            Editor.PhpStorm => $"phpstorm://open?file={EscapeQueryValue(file.Replace('\\', '/'))}" + (line > 0 ? $"&line={line}" : ""),
             Editor.VsCode => $"vscode://file{rooted}{at}",
             Editor.Cursor => $"cursor://file{rooted}{at}",
             Editor.Zed => $"zed://file{rooted}{at}",
@@ -47,6 +47,24 @@ public static class EditorInfo
         {
             var c = (char)by;
             if (by < 0x80 && (char.IsAsciiLetterOrDigit(c) || "-._~/:@!$&'()*+,;=".Contains(c)))
+            {
+                b.Append(c);
+            }
+            else
+            {
+                b.Append('%').Append(by.ToString("X2", CultureInfo.InvariantCulture));
+            }
+        }
+        return b.ToString();
+    }
+
+    private static string EscapeQueryValue(string value)
+    {
+        var b = new StringBuilder();
+        foreach (var by in Encoding.UTF8.GetBytes(value))
+        {
+            var c = (char)by;
+            if (by < 0x80 && (char.IsAsciiLetterOrDigit(c) || "-._~/:@!$'()*+,;".Contains(c)))
             {
                 b.Append(c);
             }

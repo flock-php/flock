@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- What App Center, GNOME Software and Discover show for the flockphp package. -->
+<component type="desktop-application">
+  <id>dev.flock.Flock</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>AGPL-3.0-only</project_license>
+  <name>Flock</name>
+  <summary>Local development environment for Laravel and PHP</summary>
+  <developer id="com.flockphp">
+    <name>Guava s.r.o.</name>
+  </developer>
+  <description>
+    <p>
+      Flock runs your Laravel and PHP sites on this computer, without Docker: every project
+      folder is a site under .test, served over HTTPS with a trusted certificate.
+    </p>
+    <ul>
+      <li>PHP, Composer and Node.js versions per site</li>
+      <li>PostgreSQL, MySQL, Redis and more on 127.0.0.1</li>
+      <li>Mail, dumps and logs of your sites in one place</li>
+    </ul>
+  </description>
+  <launchable type="desktop-id">dev.flock.Flock.desktop</launchable>
+  <url type="homepage">https://flockphp.com</url>
+  <url type="bugtracker">https://github.com/flock-php/flock/issues</url>
+  <categories>
+    <category>Development</category>
+  </categories>
+  <provides>
+    <binary>flk</binary>
+  </provides>
+  <content_rating type="oars-1.1"/>
+</component>

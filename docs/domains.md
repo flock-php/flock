@@ -10,9 +10,9 @@ api.acme.test
 eu.tenant1.acme.test
 ```
 
-This works for multi-tenant apps and subdomain routing without any configuration, on Windows too.
+This works for multi-tenant apps and subdomain routing without any configuration, on every platform.
 
-On Windows, a group policy or a VPN can override the rule that sends `*.test` to Flock. Then only the site names and the extra domains you add (below) resolve, through the hosts file, and Flock tells you so.
+On Windows, a group policy or a VPN can override the rule that sends `*.test` to Flock. Then only the site names and the extra domains you add (below) resolve, through the hosts file, and Flock tells you so. Linux has no such fallback: if a VPN or another resolver takes over `.test` lookups, sites don't open until it's fixed, and Flock tells you that too.
 
 ## Extra domains and aliases
 
@@ -44,9 +44,10 @@ Flock runs its own small DNS server, so new sites resolve instantly without chan
 
 - **macOS:** `/etc/resolver/test` sends `.test` lookups to Flock's DNS server on port 53535. Because the port is unprivileged, the DNS server doesn't need root.
 - **Windows:** a name-resolution policy rule sends `*.test` to Flock. A small helper service also writes your sites into a `# BEGIN Flock` block in the hosts file as a fallback.
+- **Linux:** a systemd-resolved drop-in, `/etc/systemd/resolved.conf.d/flock.conf`, sends only `.test` lookups to Flock's DNS server on port 53535.
 
 :::app
-Flock checks every minute that resolution still works. The **Services** section of the Flock panel shows it with the other services.
+Flock checks every minute that resolution still works. The **Services** section of the Flock panel shows it with the other services. On Linux, it's under **Network** in **General**.
 :::
 
 :::cli

@@ -30,7 +30,7 @@ A secured site redirects plain `http://` requests to `https://`. If you open a s
 
 ## The local certificate authority
 
-When you install Flock, it creates its own certificate authority (CA) and adds it to your system's trust store: your login keychain on macOS, Trusted Root on Windows.
+When you install Flock, it creates its own certificate authority (CA) and adds it to your system's trust store: your login keychain on macOS, Trusted Root on Windows. On Linux, it goes into the system's trust store, into Firefox through a policy, and into the certificate databases of Chrome and other Chromium browsers, Snap and Flatpak versions included.
 
 The CA's root certificate is **name-constrained** to your local TLD and `localhost`. Even if its private key ever leaked, it could not be used to issue certificates for real websites.
 

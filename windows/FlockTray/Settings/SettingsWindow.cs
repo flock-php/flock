@@ -1,5 +1,7 @@
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Flock.Tray.ViewModels;
+using Flock.Tray.Infrastructure;
 
 namespace Flock.Tray;
 
@@ -11,16 +13,21 @@ public enum SettingsPane { General, Sites, Php, Node, Services, Mail, Dumps, Deb
 /// whenever the daemon's state changes, so it must not keep state in the controls it creates
 /// (panes that need some, like a text field being typed in, keep those controls in fields).
 /// </summary>
-internal abstract class Pane(SettingsWindow window, AppModel model)
+internal abstract class Pane(SettingsWindow window, RuntimeService model)
 {
     protected SettingsWindow Window { get; } = window;
-    protected AppModel Model { get; } = model;
-    protected SettingsStore Store => Model.Settings;
+    protected RuntimeService Model { get; } = model;
 
     public abstract string Title { get; }
     public abstract string Subtitle { get; }
 
     public abstract UIElement Build();
+
+    public virtual bool RetainsRoot => false;
+
+    private UIElement? root;
+
+    public UIElement GetRoot() => RetainsRoot ? root ??= Build() : Build();
 
     /// <summary>
     /// The pane fills the window's height and scrolls its parts itself (Services: the list and the
@@ -33,7 +40,23 @@ internal abstract class Pane(SettingsWindow window, AppModel model)
     {
     }
 
-    protected Task Perform(Func<Kit.FlockClient, Task> change) => Store.PerformAsync(change);
+    public virtual Task ActivateAsync(CancellationToken hidden)
+    {
+        Shown(hidden);
+        return Task.CompletedTask;
+    }
+
+    public virtual Task ReleaseAsync() => Task.CompletedTask;
+
+    public virtual void Hidden()
+    {
+    }
+
+    protected async Task PerformAsync(Func<Kit.FlockClient, Task> change)
+    {
+        await change(Model.Client);
+        await Model.Configuration.RefreshAsync();
+    }
 
     protected Panel Rerender() => Window.Rerender();
 }
@@ -41,7 +64,7 @@ internal abstract class Pane(SettingsWindow window, AppModel model)
 /// <summary>Settings in the Windows 11 style: navigation on the left, the selected pane as cards on the right.</summary>
 internal sealed partial class SettingsWindow : FlockWindow
 {
-    private readonly AppModel model;
+    private readonly RuntimeService model;
     private readonly NavigationView navigation = new()
     {
         PaneDisplayMode = NavigationViewPaneDisplayMode.Left,
@@ -56,26 +79,42 @@ internal sealed partial class SettingsWindow : FlockWindow
     private readonly ScrollViewer scroller = new() { VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
     private readonly InfoBar error;
     private readonly Dictionary<SettingsPane, Pane> panes = [];
+    internal SitesPane Sites => (SitesPane)panes[SettingsPane.Sites];
     private SettingsPane current = SettingsPane.General;
-    private CancellationTokenSource? shown;
+    private readonly SettingsWindowViewModel viewModel;
+    private readonly Action<Features.Preferences.PreferenceData> preferencesChanged;
+    private readonly Action preferencesErrorChanged;
 
-    public SettingsWindow(AppModel model) : base("Flock Settings", 980, 680, minWidth: 820, minHeight: 520)
+    public SettingsWindow(RuntimeService model, DeepLinkCoordinator? deepLinks = null) : base("Flock Settings", 980, 680, minWidth: 820, minHeight: 520)
     {
         this.model = model;
+        viewModel = new SettingsWindowViewModel(ActivatePaneAsync);
+        preferencesChanged = _ => Rerender_();
+        preferencesErrorChanged = Rerender_;
         // The Settings store's errors, and the model's (Xdebug and dumps toggles, restarts).
         error = Ui.ErrorBar(() =>
         {
             model.DismissError();
-            model.Settings.DismissError();
+            model.Preferences.DismissError();
+            model.Configuration.DismissError();
+            model.Php.DismissError();
+            model.FrankenPhp.DismissError();
+            model.Node.DismissError();
+            model.Services.DismissError();
+            model.Postgres.DismissError();
+            model.Catalog.DismissError();
+            model.Mcp.DismissError();
+            model.Sites.DismissError();
         });
         error.Margin = new Thickness(36, 0, 36, 16);
         error.MaxWidth = PageWidth - 72;
 
         panes[SettingsPane.General] = new GeneralPane(this, model);
-        panes[SettingsPane.Sites] = new SitesPane(this, model);
+        deepLinks ??= new DeepLinkCoordinator(model);
+        panes[SettingsPane.Sites] = new SitesPane(this, model, deepLinks);
         panes[SettingsPane.Php] = new PhpPane(this, model);
         panes[SettingsPane.Node] = new NodePane(this, model);
-        panes[SettingsPane.Services] = new ServicesPane(this, model);
+        panes[SettingsPane.Services] = new ServicesPane(this, model, deepLinks);
         panes[SettingsPane.Mail] = new MailPane(this, model);
         panes[SettingsPane.Dumps] = new DumpsPane(this, model);
         panes[SettingsPane.Debugger] = new DebuggerPane(this, model);
@@ -93,9 +132,9 @@ internal sealed partial class SettingsWindow : FlockWindow
         }
         navigation.SelectionChanged += (_, e) =>
         {
-            if (e.SelectedItem is NavigationViewItem { Tag: SettingsPane pane } && pane != current)
+            if (e.SelectedItem is NavigationViewItem { Tag: SettingsPane pane })
             {
-                Show(pane);
+                StartActivation(pane);
             }
         };
 
@@ -118,27 +157,47 @@ internal sealed partial class SettingsWindow : FlockWindow
         Body = navigation;
 
         model.Changed += Rerender_;
-        model.Settings.Changed += Rerender_;
-        Preferences.Shared.Changed += Rerender_;
-        model.Settings.IsVisible = true;
+        model.Configuration.Changed += Rerender_;
+        model.Php.Changed += Rerender_;
+        model.FrankenPhp.Changed += Rerender_;
+        model.Node.Changed += Rerender_;
+        model.Services.Changed += Rerender_;
+        model.Postgres.Changed += Rerender_;
+        model.Catalog.Changed += Rerender_;
+        model.Dumps.Changed += Rerender_;
+        model.Preferences.Changed += preferencesChanged;
+        model.Preferences.ErrorChanged += preferencesErrorChanged;
+        model.Sites.Changed += Rerender_;
         Closed += (_, _) =>
         {
-            shown?.Cancel();
-            model.Settings.IsVisible = false;
             model.Changed -= Rerender_;
-            model.Settings.Changed -= Rerender_;
-            Preferences.Shared.Changed -= Rerender_;
+            model.Configuration.Changed -= Rerender_;
+            model.Php.Changed -= Rerender_;
+            model.FrankenPhp.Changed -= Rerender_;
+            model.Node.Changed -= Rerender_;
+            model.Services.Changed -= Rerender_;
+            model.Postgres.Changed -= Rerender_;
+            model.Catalog.Changed -= Rerender_;
+            model.Dumps.Changed -= Rerender_;
+            model.Preferences.Changed -= preferencesChanged;
+            model.Preferences.ErrorChanged -= preferencesErrorChanged;
+            model.Sites.Changed -= Rerender_;
         };
 
-        Select(SettingsPane.General);
-        _ = model.Settings.RefreshAsync();
+        navigation.SelectedItem = navigation.MenuItems.OfType<NavigationViewItem>().First(i => (SettingsPane)i.Tag == SettingsPane.General);
+        _ = viewModel.Navigation.ActivateAsync(SettingsPane.General);
+        _ = model.Configuration.RefreshAsync();
+        _ = model.Services.RefreshAsync();
     }
 
     /// <summary>Shows a pane (from the tray menu or another window).</summary>
     public void Select(SettingsPane pane)
     {
+        if (viewModel.Navigation.Selected == pane)
+        {
+            return;
+        }
         navigation.SelectedItem = navigation.MenuItems.OfType<NavigationViewItem>().First(i => (SettingsPane)i.Tag == pane);
-        Show(pane);
     }
 
     /// <summary>Shows a service's details in the Services pane.</summary>
@@ -148,25 +207,44 @@ internal sealed partial class SettingsWindow : FlockWindow
         ((ServicesPane)panes[SettingsPane.Services]).Select(id);
     }
 
-    private void Show(SettingsPane pane)
+    private async Task ActivatePaneAsync(SettingsPane pane, CancellationToken hidden)
     {
+        if (current != pane)
+        {
+            panes[current].Hidden();
+        }
         current = pane;
-        shown?.Cancel();
-        shown = new CancellationTokenSource();
         title.Text = panes[pane].Title;
         subtitle.Text = panes[pane].Subtitle;
         subtitle.Foreground = Ui.SecondaryText;
         Rerender();
         scroller.ChangeView(null, 0, null, disableAnimation: true);
-        panes[pane].Shown(shown.Token);
+        await panes[pane].ActivateAsync(hidden);
     }
 
-    private void Rerender_() => Rerender();
+    private void Rerender_()
+    {
+        if (current != SettingsPane.Ai)
+        {
+            Rerender();
+        }
+    }
+
+    private void StartActivation(SettingsPane pane) => _ = viewModel.Navigation.ActivateAsync(pane);
 
     /// <summary>Renders the current pane again from the latest state.</summary>
     public Panel Rerender()
     {
-        Ui.ShowError(error, model.Settings.Error ?? model.ActionError);
+        if (scroller.Content is Grid previousHost)
+        {
+            foreach (var previousContainer in previousHost.Children.OfType<Panel>())
+            {
+                previousContainer.Children.Clear();
+            }
+        }
+        Ui.ShowError(error, model.RuntimeError ?? model.Preferences.Error ?? model.Configuration.Error ?? model.Php.Error ?? model.FrankenPhp.Error ??
+            model.Node.Error ?? model.Services.Error ?? model.Postgres.Error ?? model.Catalog.Error ?? model.Mcp.Error ??
+             model.Sites.Error ?? model.Dumps.Error ?? model.ActionError);
         // A pane that scrolls itself gets the viewport's height: a Grid passes it on, a StackPanel doesn't.
         var fills = panes[current].ScrollsItself && model.Status is not null;
         scroller.VerticalScrollMode = fills ? ScrollMode.Disabled : ScrollMode.Auto;
@@ -183,7 +261,8 @@ internal sealed partial class SettingsWindow : FlockWindow
         {
             try
             {
-                container.Children.Add(panes[current].Build());
+                var paneRoot = panes[current].GetRoot();
+                container.Children.Add(paneRoot);
             }
             catch (Exception e)
             {
@@ -258,4 +337,14 @@ internal sealed partial class SettingsWindow : FlockWindow
     }
 
     public XamlRoot XamlRoot => Content.XamlRoot;
+
+    public override async Task ReleaseAsync()
+    {
+        await viewModel.DisposeAsync();
+        foreach (var pane in panes.Values)
+        {
+            await pane.ReleaseAsync();
+        }
+        await base.ReleaseAsync();
+    }
 }

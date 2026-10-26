@@ -27,13 +27,13 @@ internal sealed partial class SitesPane
         if (share is null)
         {
             section.Children.Add(Ui.Caption("Show the site at a temporary public address to preview work in progress, never for production. Visitors don't get debug pages, dumps or the dev tools."));
-            var start = Ui.Button("Share…", () => _ = StartShare(site));
+            var start = Ui.Button("Share…", () => Start(site.Name, () => StartShare(site)));
             start.IsEnabled = site.Url is not null;
             section.Children.Add(start);
             return section;
         }
 
-        var stop = Ui.Button(share.IsRunning ? "Stop sharing" : share.IsFailed ? "Dismiss" : "Stop", () => _ = Perform(c => c.StopShareAsync(site.Name)));
+        var stop = Ui.Button(share.IsRunning ? "Stop sharing" : share.IsFailed ? "Dismiss" : "Stop", () => Start(site.Name, () => Model.Sites.StopShareAsync(site.Name)));
         switch (share.State)
         {
             case Status.ShareState.Building or Status.ShareState.Starting:
@@ -42,7 +42,7 @@ internal sealed partial class SitesPane
                 section.Children.Add(stop);
                 break;
             case Status.ShareState.Running when share.Url is { } url:
-                var link = Ui.Link(url, () => Native.Open(url));
+                var link = Ui.Link(url, () => Model.Open(url));
                 link.Padding = new Thickness(0);
                 var copy = Ui.IconButton(Ui.GlyphCopy, "Copy", () => Ui.Copy(url));
                 copy.Padding = new Thickness(4);
@@ -74,7 +74,7 @@ internal sealed partial class SitesPane
                 var buttons = Ui.Row(8);
                 if (share.CanRebuild)
                 {
-                    var rebuild = Ui.Button(share.Rebuilding ? "Rebuilding…" : "Rebuild assets", () => _ = Perform(c => c.RebuildShareAsync(site.Name)),
+                    var rebuild = Ui.Button(share.Rebuilding ? "Rebuilding…" : "Rebuild assets", () => Start(site.Name, () => Model.Sites.RebuildShareAsync(site.Name)),
                         tooltip: "Build the assets again (npm run build), so visitors see your latest changes when they reload");
                     rebuild.IsEnabled = !share.Rebuilding;
                     buttons.Children.Add(rebuild);
@@ -86,7 +86,7 @@ internal sealed partial class SitesPane
                 section.Children.Add(Warning(share.Error ?? "The share stopped."));
                 var allow = share.Allow.ToList();
                 var debug = share.Debug;
-                section.Children.Add(Ui.Row(8, Ui.Button("Try again", () => _ = Perform(c => c.StartShareAsync(site.Name, allow, debug))), stop));
+                section.Children.Add(Ui.Row(8, Ui.Button("Try again", () => Start(site.Name, () => Model.Sites.StartShareAsync(site.Name, allow, debug))), stop));
                 break;
         }
         return section;
@@ -116,7 +116,7 @@ internal sealed partial class SitesPane
         }
         var allow = box.Text.Split([',', ' ', ';', '\t', '\r', '\n'], StringSplitOptions.RemoveEmptyEntries);
         var withDebug = debug.IsChecked == true;
-        await Perform(c => c.StartShareAsync(site.Name, allow, withDebug));
+        await Model.Sites.StartShareAsync(site.Name, allow, withDebug);
     }
 
     /// <summary>

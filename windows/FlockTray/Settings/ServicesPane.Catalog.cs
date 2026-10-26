@@ -1,4 +1,5 @@
 using Flock.Kit;
+using Flock.Tray.Infrastructure;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 
@@ -11,19 +12,13 @@ namespace Flock.Tray;
 /// </summary>
 internal sealed partial class ServicesPane
 {
-    // Catalog services with a request of this window in flight (installs return quickly; the job follows).
-    private readonly HashSet<string> pendingCatalog = [];
-    // The line and port picked for a service that isn't installed yet, kept across re-renders.
-    private readonly Dictionary<string, string> pickedLine = [];
-    private readonly Dictionary<string, double> pickedPort = [];
+    private bool CatalogWorking(string id) => Model.Catalog.IsRunning(id) || Model.Catalog.Current?[id]?.Job?.IsRunning == true;
 
-    private bool CatalogWorking(string id) => pendingCatalog.Contains(id) || Store.Catalog?[id]?.Job?.IsRunning == true;
-
-    private bool CatalogFailed(Service service) => Store.Catalog?[service.Id]?.Job?.IsFailed == true;
+    private bool CatalogFailed(Service service) => Model.Catalog.Current?[service.Id]?.Job?.IsFailed == true;
 
     private void CatalogDetail(StackPanel panel, Service service)
     {
-        if (Store.Catalog is not { } catalog)
+        if (Model.Catalog.Current is not { } catalog)
         {
             panel.Children.Add(Loading("Loading…"));
             return;
@@ -33,14 +28,13 @@ internal sealed partial class ServicesPane
             panel.Children.Add(Ui.Caption($"This Flock daemon doesn't offer {service.Name}. Update Flock, then try again."));
             return;
         }
-
         if (entry.Job is { } job)
         {
             panel.Children.Add(CatalogJobCard(entry, job));
         }
         if (!entry.Lines.Any(l => l.Installed))
         {
-            if (entry.Job is not { IsRunning: true } && !pendingCatalog.Contains(entry.Id))
+            if (entry.Job is not { IsRunning: true } && !Model.Catalog.IsRunning(entry.Id))
             {
                 panel.Children.Add(CatalogInstallCard(entry));
             }
@@ -57,7 +51,7 @@ internal sealed partial class ServicesPane
         InstallCard(entry.Id, entry.Name, entry.Description.Length > 0 ? entry.Description : "Runs on 127.0.0.1 for your sites.",
             entry.Lines.Select(l => (l.Id, l.Latest.Length > 0 ? $"{l.Label} ({l.Latest})" : l.Label, l.Latest)).ToList(), entry.PreferredLine?.Id,
             entry.Port, entry.Port != entry.DefaultPort ? $"Port {entry.DefaultPort} is taken, so Flock suggests {entry.Port}." : null, entry.Estimate,
-            (line, port) => RunCatalog(entry.Id, c => c.InstallCatalogServiceAsync(entry.Id, line, port)));
+            (line, port) => RunCatalogAsync(entry.Id, () => Model.Catalog.InstallAsync(entry.Id, line, port)));
 
     /// <summary>A running or failed install.</summary>
     private Border CatalogJobCard(CatalogService entry, CatalogJob job)
@@ -74,8 +68,8 @@ internal sealed partial class ServicesPane
             content.Children.Add(new ProgressBar { Minimum = 0, Maximum = 1, Value = job.HasProgress ? job.Progress : 0, IsIndeterminate = !job.HasProgress });
             var phase = job.PhaseText + (job.StartedAt is { Year: > 2000 } started ? $" · started {Ui.Relative(started)}" : "");
             actions.Children.Add(Ui.Link("Show Log", () => _ = ShowCatalogLog(entry)));
-            actions.Children.Add(Ui.Button("Cancel", () => _ = RunCatalog(id, c => c.CancelCatalogJobAsync(id))));
-            Ui.SetEnabled(actions, !pendingCatalog.Contains(id));
+            actions.Children.Add(Ui.Button("Cancel", () => _ = RunCatalogAsync(id, () => Model.Catalog.CancelAsync(id))));
+            Ui.SetEnabled(actions, !Model.Catalog.IsRunning(id));
             content.Children.Add(Ui.Spread(Ui.Caption(phase), actions));
             return Inner(content);
         }
@@ -88,10 +82,10 @@ internal sealed partial class ServicesPane
         ToolTipService.SetToolTip(error, job.Error);
         content.Children.Add(error);
         var line = job.Line.Length > 0 ? job.Line : null;
-        actions.Children.Add(Ui.Button("Try Again", () => _ = RunCatalog(id, c => c.InstallCatalogServiceAsync(id, line)), accent: true, glyph: Ui.GlyphRefresh));
-        actions.Children.Add(Ui.Button("Dismiss", () => _ = RunCatalog(id, c => c.DismissCatalogJobAsync(id))));
+        actions.Children.Add(Ui.Button("Try Again", () => _ = RunCatalogAsync(id, () => Model.Catalog.InstallAsync(id, line)), accent: true, glyph: Ui.GlyphRefresh));
+        actions.Children.Add(Ui.Button("Dismiss", () => _ = RunCatalogAsync(id, () => Model.Catalog.DismissAsync(id))));
         actions.Children.Add(Ui.Link("Show Log", () => _ = ShowCatalogLog(entry)));
-        Ui.SetEnabled(actions, !pendingCatalog.Contains(id));
+        Ui.SetEnabled(actions, !Model.Catalog.IsRunning(id));
         content.Children.Add(actions);
         return Inner(content);
     }
@@ -123,14 +117,14 @@ internal sealed partial class ServicesPane
                 var tip = (line.Latest.Length > 0 ? $"Downloads {entry.Name} {line.Latest}." : "Downloads the newest release.")
                     + (entry.IsInstalled ? $" {entry.Name} {entry.Line} keeps running until you switch." : "")
                     + (line.HasData ? " Its data is still here and comes back." : "");
-                actions.Children.Add(Ui.Button("Install", () => _ = RunCatalog(id, c => c.InstallCatalogServiceAsync(id, target.Id)), glyph: Ui.GlyphDownload, tooltip: tip));
+                actions.Children.Add(Ui.Button("Install", () => _ = RunCatalogAsync(id, () => Model.Catalog.InstallAsync(id, target.Id)), glyph: Ui.GlyphDownload, tooltip: tip));
             }
             else
             {
                 if (line.Update)
                 {
                     var restart = line.Active ? $"; {entry.Name} restarts for a moment" : "";
-                    actions.Children.Add(Ui.Button($"Update to {line.Latest}", () => _ = RunCatalog(id, c => c.InstallCatalogServiceAsync(id, target.Id)), glyph: Ui.GlyphDownload,
+                    actions.Children.Add(Ui.Button($"Update to {line.Latest}", () => _ = RunCatalogAsync(id, () => Model.Catalog.InstallAsync(id, target.Id)), glyph: Ui.GlyphDownload,
                         tooltip: $"Installs {line.Latest} in place of {line.Version}. Your data stays{restart}."));
                 }
                 if (!line.Active)
@@ -141,7 +135,7 @@ internal sealed partial class ServicesPane
                 var more = new MenuFlyout();
                 if (!line.Update)
                 {
-                    more.Items.Add(Item($"Reinstall {line.Version}", () => _ = RunCatalog(id, c => c.InstallCatalogServiceAsync(id, target.Id))));
+                    more.Items.Add(Item($"Reinstall {line.Version}", () => _ = RunCatalogAsync(id, () => Model.Catalog.InstallAsync(id, target.Id))));
                 }
                 more.Items.Add(Item("Show Last Log", () => _ = ShowCatalogLog(entry)));
                 more.Items.Add(new MenuFlyoutSeparator());
@@ -184,7 +178,7 @@ internal sealed partial class ServicesPane
         if (!entry.IsInstalled || await Window.Confirm($"Switch to {entry.Name} {target.Label}?",
                 $"{entry.Name} {entry.Line} stops; its data stays but isn't used until you switch back. {own}", "Switch"))
         {
-            await RunCatalog(entry.Id, c => c.ActivateCatalogServiceAsync(entry.Id, target.Id));
+            await RunCatalogAsync(entry.Id, () => Model.Catalog.ActivateAsync(entry.Id, target.Id));
         }
     }
 
@@ -213,26 +207,16 @@ internal sealed partial class ServicesPane
         if (await Window.Confirm($"Uninstall {entry.Name} {line.Label}?", details, "Uninstall", destructive: true, extra: extra))
         {
             var deleteData = delete?.IsChecked == true;
-            await RunCatalog(entry.Id, c => c.UninstallCatalogServiceAsync(entry.Id, line.Id, deleteData));
+            await RunCatalogAsync(entry.Id, () => Model.Catalog.UninstallAsync(entry.Id, line.Id, deleteData));
         }
     }
 
-    private async Task RunCatalog(string id, Func<FlockClient, Task<ServiceCatalog>> action)
+    private async Task RunCatalogAsync(string id, Func<Task<OperationOutcome>> action)
     {
-        pendingCatalog.Add(id);
-        Rerender();
-        try
-        {
-            await Store.PerformOnCatalogAsync(action);
-        }
-        finally
-        {
-            pendingCatalog.Remove(id);
-            Rerender();
-            Kick();
-        }
+        await action();
+        Kick();
     }
 
     private Task ShowCatalogLog(CatalogService entry) =>
-        ShowLog($"{entry.Name} install log", () => Store.CatalogLogAsync(entry.Id), () => CatalogWorking(entry.Id));
+        JobLogDialog.ShowAsync(Window, $"{entry.Name} install log", token => Model.Catalog.ReadLogAsync(entry.Id, token), () => CatalogWorking(entry.Id));
 }

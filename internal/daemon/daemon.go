@@ -50,6 +50,10 @@ type Config struct {
 // retryInterval is how often a degraded daemon tries to start what failed.
 var retryInterval = 15 * time.Second
 
+// trustInBrowsers adds the CA to the browsers' own trust stores (Linux). Tests replace it: it
+// writes to the user's home.
+var trustInBrowsers = certs.TrustInBrowsers
+
 // ErrAlreadyRunning is returned when another daemon owns the socket.
 var ErrAlreadyRunning = errors.New("flock daemon is already running")
 
@@ -498,6 +502,10 @@ func (d *daemon) reload() error {
 	}
 
 	var warnings []string
+	// Linux browsers keep their own trust stores, and one installed since `flock install` lacks the CA.
+	if err := trustInBrowsers(ca.CertPath()); err != nil {
+		warnings = append(warnings, "browsers don't trust Flock's HTTPS certificates: "+err.Error())
+	}
 	for _, ensure := range []func(*config.Config) error{d.ensureDNS, d.ensureMail, d.ensureCollector} {
 		if err := ensure(cfg); err != nil {
 			warnings = append(warnings, err.Error())
@@ -829,6 +837,11 @@ func (d *daemon) applyWeb(cfg *config.Config, bind string, sites []web.Site, wai
 	for _, port := range []int{cfg.Ports.HTTP, cfg.Ports.HTTPS} {
 		if !owned[port] && !ports.Free(bind, port) {
 			return errors.New(ports.Describe(port))
+		}
+		// On Linux the service gives the daemon the capability for ports below 1024; one started
+		// some other way (`flock daemon` in a terminal) lacks it.
+		if !owned[port] && runtime.GOOS == "linux" && ports.Denied(bind, port) {
+			return fmt.Errorf("the daemon may not use port %d: it needs the CAP_NET_BIND_SERVICE capability, which it has when systemd starts it — run `flock restart` instead of `flock daemon`", port)
 		}
 	}
 

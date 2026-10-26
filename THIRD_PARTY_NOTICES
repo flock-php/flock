@@ -4189,6 +4189,21 @@ github.com/prometheus/otlptranslator v1.0.0
 
 LICENSE: the same text as for cel.dev/expr v0.25.3 above.
 
+github.com/prometheus/procfs v0.22.0
+------------------------------------
+
+LICENSE: the same text as for cel.dev/expr v0.25.3 above.
+
+NOTICE:
+
+procfs provides functions to retrieve system, kernel and process
+metrics from the pseudo-filesystem proc.
+
+Copyright 2014-2015 The Prometheus Authors
+
+This product includes software developed at
+SoundCloud Ltd. (http://soundcloud.com/).
+
 github.com/quic-go/qpack v0.6.0
 -------------------------------
 

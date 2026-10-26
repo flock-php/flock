@@ -1,6 +1,9 @@
 using Flock.Kit;
+using Flock.Tray.ViewModels;
+using Flock.Tray.Infrastructure;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Dispatching;
 
 namespace Flock.Tray;
 
@@ -10,7 +13,7 @@ namespace Flock.Tray;
 /// the catalog services (MySQL, Redis, Meilisearch, ...) are installed and updated from their
 /// details (see ServicesPane.Installs.cs and ServicesPane.Catalog.cs).
 /// </summary>
-internal sealed partial class ServicesPane(SettingsWindow window, AppModel model) : Pane(window, model)
+internal sealed partial class ServicesPane(SettingsWindow window, RuntimeService model, DeepLinkCoordinator deepLinks) : Pane(window, model)
 {
     private static readonly string[] CategoryOrder = ["Core", "Database", "Cache & Queue", "Search", "Storage", "Mail", "Debugging"];
     // Show every service, or only the installed ones (and those installing). Kept while the app runs.
@@ -18,26 +21,36 @@ internal sealed partial class ServicesPane(SettingsWindow window, AppModel model
     private string? selection;
     // The list and the details scroll separately, like on macOS. Kept across re-renders, which
     // only swap their content, so they keep their place.
-    private readonly KeptScroller listScroller = new(window.DispatcherQueue);
-    private readonly KeptScroller detailScroller = new(window.DispatcherQueue);
+    private readonly ServicesPaneViewModel rows = new(model.Services, model.Postgres, model.Catalog);
+    private readonly ScrollViewer listScroller = new() { VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
+    private readonly ScrollViewer detailScroller = new() { VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
+    private readonly ContentControl filterHost = new();
+    private Grid? layout;
+    private bool installConfirmationQueued;
 
     public override string Title => "Services";
     public override string Subtitle => "Databases, caches, search and the tools around your sites. Everything listens on 127.0.0.1 only.";
     public override bool ScrollsItself => true;
 
-    public override void Shown(CancellationToken hidden)
+    public override Task ReleaseAsync()
     {
-        Store.WatchesServices = true;
-        hidden.Register(() => Store.WatchesServices = false);
-        _ = Poll(hidden);
+        rows.Dispose();
+        return base.ReleaseAsync();
     }
 
+    public override async Task ActivateAsync(CancellationToken hidden)
+    {
+        while (!hidden.IsCancellationRequested)
+        {
+            await PollAsync(hidden);
+        }
+    }
     /// <summary>Shows a service's details, e.g. to install it.</summary>
     public void Select(string id)
     {
         if (id != selection)
         {
-            detailScroller.ToTop(); // another service's details start at the top
+            detailScroller.ChangeView(null, 0, null, disableAnimation: true); // another service's details start at the top
         }
         selection = id;
         Rerender();
@@ -50,39 +63,52 @@ internal sealed partial class ServicesPane(SettingsWindow window, AppModel model
     /// </summary>
     private void ConfirmPendingLink()
     {
-        if (Model.PendingInstall is not { Service: not (InstallLink.Php or InstallLink.Node) } link
-            || link.Resolve(Store.Services, Store.Catalog, Store.Postgres) is not { } request)
+        if (Model.PendingInstall is null || installConfirmationQueued)
         {
             return;
         }
-        Model.PendingInstall = null;
+        installConfirmationQueued = true;
         // Not while building the pane: a dialog needs the window's content in place.
-        Window.DispatcherQueue.TryEnqueue(async () =>
+        if (!Window.DispatcherQueue.TryEnqueue(async () =>
         {
-            if (request.Target is not { } target)
+            try
             {
-                await Ui.Inform(Window.Content.XamlRoot, request.Title, request.Message);
-                return;
+                var request = await deepLinks.ConsumeInstallAsync();
+                if (request is null)
+                {
+                    return;
+                }
+                if (request.Target is not { } target)
+                {
+                    await Ui.Inform(Window.Content.XamlRoot, request.Title, request.Message);
+                    return;
+                }
+                if (!await Window.Confirm(request.Title, request.Message, "Install"))
+                {
+                    return;
+                }
+                if (target.Service == "postgres")
+                {
+                    await Model.Postgres.InstallAsync(target.Line);
+                }
+                else
+                {
+                    await Model.Catalog.InstallAsync(target.Service, target.Line);
+                }
             }
-            if (!await Window.Confirm(request.Title, request.Message, "Install"))
+            finally
             {
-                return;
+                installConfirmationQueued = false;
             }
-            var line = target.Line;
-            if (target.Service == "postgres")
-            {
-                await Run(line, "Installing…", c => c.InstallPostgresAsync(line));
-            }
-            else
-            {
-                await RunCatalog(target.Service, c => c.InstallCatalogServiceAsync(target.Service, line));
-            }
-        });
+        }))
+        {
+            installConfirmationQueued = false;
+        }
     }
 
     public override UIElement Build()
     {
-        var all = Store.Services;
+        var all = Model.Services.Current;
         if (all.Count == 0)
         {
             return Ui.EmptyState(Ui.GlyphServer, "No services");
@@ -136,22 +162,41 @@ internal sealed partial class ServicesPane(SettingsWindow window, AppModel model
 
         // A fixed list and the details in the rest, as on macOS: neither moves when another
         // service is selected.
-        var grid = new Grid { ColumnSpacing = 16 };
-        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(320) });
-        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star), MinWidth = 300 });
+        var listOffset = listScroller.VerticalOffset;
+        var detailOffset = detailScroller.VerticalOffset;
         // The filter stays put above the list. Room on the right keeps the scroll bars off the cards.
         list.Margin = new Thickness(0, 0, 14, 8);
-        var left = new Grid();
-        left.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-        left.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
-        left.Children.Add(filter);
-        Grid.SetRow(listScroller.Place(left, list), 1);
+        if (layout is null)
+        {
+            layout = new Grid { ColumnSpacing = 16 };
+            layout.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(320) });
+            layout.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star), MinWidth = 300 });
+            var left = new Grid();
+            left.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+            left.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
+            left.Children.Add(filterHost);
+            Grid.SetRow(listScroller, 1);
+            left.Children.Add(listScroller);
+            layout.Children.Add(left);
+            Grid.SetColumn(detailScroller, 1);
+            layout.Children.Add(detailScroller);
+        }
+        filterHost.Content = filter;
+        listScroller.Content = list;
 
+        if (detailScroller.Content is Border { Child: Panel previousDetail })
+        {
+            previousDetail.Children.Clear();
+        }
         var detail = Detail(selected);
         detail.Margin = new Thickness(0, 0, 14, 8);
-        grid.Children.Add(left);
-        Grid.SetColumn(detailScroller.Place(grid, detail), 1);
-        return grid;
+        detailScroller.Content = detail;
+        Window.DispatcherQueue.TryEnqueue(DispatcherQueuePriority.Low, () =>
+        {
+            listScroller.ChangeView(null, listOffset, null, disableAnimation: true);
+            detailScroller.ChangeView(null, detailOffset, null, disableAnimation: true);
+        });
+        return layout;
     }
 
     private Button Row(Service service, bool isSelected)
@@ -191,15 +236,29 @@ internal sealed partial class ServicesPane(SettingsWindow window, AppModel model
                 {
                     if (!service.Running)
                     {
-                        await Store.PerformOnServicesAsync(c => c.StartServiceAsync(service.Id));
+                        if (service.Id == "postgres")
+                        {
+                            await Model.Postgres.StartAsync();
+                        }
+                        else
+                        {
+                            await Model.Services.StartAsync(service.Id);
+                        }
                     }
                     else if (await Window.Confirm($"Stop {service.Name}?", "Apps that use it can't connect until you start it again.", "Stop", destructive: true))
                     {
-                        await Store.PerformOnServicesAsync(c => c.StopServiceAsync(service.Id));
+                        if (service.Id == "postgres")
+                        {
+                            await Model.Postgres.StopAsync();
+                        }
+                        else
+                        {
+                            await Model.Services.StopAsync(service.Id);
+                        }
                     }
                 });
                 // Not while PostgreSQL switches or a service installs: the daemon (re)starts them itself.
-                toggle.IsEnabled = !Store.IsBusy && !(service.Id == "postgres" ? PostgresWorking : CatalogWorking(service.Id));
+                toggle.IsEnabled = !(service.Id == "postgres" ? PostgresWorking : CatalogWorking(service.Id));
                 actions.Children.Add(toggle);
             }
         }
@@ -332,7 +391,7 @@ internal sealed partial class ServicesPane(SettingsWindow window, AppModel model
             if (service.IsDatabase && TablePlus() is { } tablePlus)
             {
                 panel.Children.Add(Ui.Spread(Ui.Text("TablePlus", "BodyStrongTextBlockStyle"), Ui.Button("Open", () =>
-                    System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(tablePlus, service.Url) { UseShellExecute = false }))));
+                    Model.OpenConnection(tablePlus, service.Url))));
             }
             if (service.Env.Length > 0)
             {
@@ -340,7 +399,7 @@ internal sealed partial class ServicesPane(SettingsWindow window, AppModel model
             }
             if (service.Log.Length > 0)
             {
-                panel.Children.Add(Ui.Spread(Ui.Text("Logs", "BodyStrongTextBlockStyle"), Ui.Button("Open", () => Native.Open(FlockPaths.LogFile(service.Log)))));
+                panel.Children.Add(Ui.Spread(Ui.Text("Logs", "BodyStrongTextBlockStyle"), Ui.Button("Open", () => Model.Open(FlockPaths.LogFile(service.Log)))));
             }
             if (service.Url.Length > 0)
             {
@@ -389,7 +448,14 @@ internal sealed partial class ServicesPane(SettingsWindow window, AppModel model
         var port = (int)box.Value;
         if (port != service.Port && port is >= 1024 and <= 65535)
         {
-            await Store.PerformOnServicesAsync(c => c.SetServicePortAsync(service.Id, port));
+            if (service.Id == "postgres")
+            {
+                await Model.Postgres.SetPortAsync(port);
+            }
+            else
+            {
+                await Model.Services.SetPortAsync(service.Id, port);
+            }
         }
     }
 }

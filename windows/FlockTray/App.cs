@@ -1,4 +1,7 @@
 using Flock.Kit;
+using Flock.Tray.Infrastructure;
+using Flock.Tray.ViewModels;
+using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Markup;
@@ -12,28 +15,68 @@ public enum WindowKind { Mail, Dumps, Logs, Settings, Setup }
 /// The tray app: a notification area icon with a panel (the macOS menu bar extra), plus the
 /// Mail, Dumps, Logs and Settings windows. It keeps running with no window open.
 /// </summary>
-public sealed partial class App : Application, IXamlMetadataProvider
+public sealed class App : Application, IXamlMetadataProvider
 {
     // Without XAML markup there is no generated type info; WinUI's own provider covers its controls.
     private readonly XamlControlsXamlMetaDataProvider metadata = new();
-    private readonly Dictionary<WindowKind, Window> windows = [];
-    private Native.TrayIcon? tray;
-    private PanelWindow? panel;
+    private ITrayIcon? tray;
+    private IPanelWindow? panel;
 
-    public static new App Current => (App)Application.Current;
+    public new static App Current => (App)Application.Current;
 
-    public AppModel Model { get; } = new();
+    private AppHost? host;
+    private Task? launchTask;
+    private Task? updateTask;
+    private Task? quitTask;
+    private bool updatingTray;
+    private DispatcherQueue? dispatcher;
+    private WindowManager? windowManager;
+    private IUiDispatcher? uiDispatcher;
+    private ITrayIconFactory? trayFactory;
+    private IPanelWindowFactory? panelFactory;
 
-    public App()
+    public RuntimeService State => host?.RuntimeService ?? throw new InvalidOperationException("The application has not launched.");
+
+    public ApplicationRuntime Runtime => host?.Runtime ?? throw new InvalidOperationException("The application has not launched.");
+
+    internal static void Run(AppOptions options)
     {
-#if SCREENSHOTS
-        RequestedTheme = Screenshots.Current.Theme;
-#endif
-        UnhandledException += (_, e) =>
+        WinRT.ComWrappersSupport.InitializeComWrappers();
+        Application.Start(callback =>
         {
-            // A tray app must not disappear because one view failed; keep a trace for bug reports.
-            Log(e.Exception);
-            e.Handled = true;
+            SynchronizationContext.SetSynchronizationContext(new DispatcherQueueSynchronizationContext(DispatcherQueue.GetForCurrentThread()));
+            _ = new App(options);
+        });
+    }
+
+    internal AppOptions Options { get; }
+
+    internal WindowManager Windows => windowManager ?? throw new InvalidOperationException("The application has not launched.");
+
+    public App() : this(new AppOptions())
+    {
+    }
+
+    internal App(AppOptions options)
+    {
+        Options = options;
+        if (options.Theme is { } theme)
+        {
+            RequestedTheme = theme;
+        }
+        UnhandledException += (_, args) =>
+        {
+            Log(args.Exception);
+            if (host is not null)
+            {
+                Runtime.RequestQuit();
+            }
+            else
+            {
+                Native.ShowError("Flock could not start", $"{args.Exception.Message}\n\nDetails are in %LocalAppData%\\Flock\\tray.log.");
+            }
+            // An unowned WinUI exception is fatal. Do not mark it handled just to keep the tray alive.
+            args.Handled = false;
         };
     }
 
@@ -45,37 +88,47 @@ public sealed partial class App : Application, IXamlMetadataProvider
 
     protected override void OnLaunched(LaunchActivatedEventArgs args)
     {
+        if (launchTask is null)
+        {
+            launchTask = StartAsync(DispatcherQueue.GetForCurrentThread());
+        }
+    }
+
+    private async Task StartAsync(DispatcherQueue dispatcher)
+    {
         try
         {
+            this.dispatcher = dispatcher;
             Resources.MergedDictionaries.Add(new XamlControlsResources());
             DispatcherShutdownMode = DispatcherShutdownMode.OnExplicitShutdown;
-#if SCREENSHOTS
-            if (Screenshots.Current.Start(this))
+            host = AppHost.Create(dispatcher, ReleaseUiAsync, Options);
+            await host.StartAsync();
+            windowManager = host.GetService<WindowManager>();
+            uiDispatcher = host.GetService<IUiDispatcher>();
+            trayFactory = host.GetService<ITrayIconFactory>();
+            panelFactory = host.GetService<IPanelWindowFactory>();
+            if (Options.OnStarted is { } onStarted)
             {
+                await onStarted(this);
                 return;
             }
-#endif
 
-            tray = new Native.TrayIcon(IconPath(), "Flock");
+            tray = trayFactory is null
+                ? throw new InvalidOperationException("The tray icon factory is unavailable.")
+                : await trayFactory.CreateAsync(IconPath(), Options.Identity.DisplayName);
             tray.Clicked += TogglePanel;
             tray.ShowRequested += ShowMain;
             tray.LinkReceived += OpenLink;
             tray.MenuRequested += ShowMenu;
             tray.ThemeChanged += UpdateTray;
+            tray.Failure += TrayFailure;
+            State.Changed += UpdateTray;
+            State.NeedsSetup = State.Installation.BundledFlock is not null && !await State.Installation.IsSetUpAsync();
 
-            Model.Changed += UpdateTray;
-            Model.NeedsSetup = Installation.BundledFlock is not null && !Installation.IsSetUp;
-            Model.StartPolling();
-            Model.Updater.StartSchedule();
-
-            if (!Model.NeedsSetup && Installation.NeedsUpdate)
+            if (!Options.Identity.IsDevelopment && !State.NeedsSetup && await State.Installation.NeedsUpdateAsync())
             {
-                _ = Model.UpdateInstallationAsync();
+                host.StartUpdateInstallation();
             }
-            // Started by hand (e.g. from the Start menu): open the main window, so it is clear the
-            // app runs (Windows 11 hides new notification area icons). The panel belongs to the
-            // tray icon. The sign-in autostart passes --background and stays quiet. A flock://
-            // link that starts the app opens Settings → Services or Sites instead.
             var arguments = Environment.GetCommandLineArgs();
             if (arguments.FirstOrDefault(SecureLink.IsFlockLink) is { } link)
             {
@@ -86,23 +139,22 @@ public sealed partial class App : Application, IXamlMetadataProvider
                 ShowMain();
             }
         }
-        catch (Exception e)
+        catch (Exception error)
         {
-            Log(e);
-            Native.ShowError("Flock could not start", $"{e.Message}\n\nDetails are in %LocalAppData%\\Flock\\tray.log.");
-            tray?.Dispose();
-            Exit();
+            Log(error);
+            Native.ShowError("Flock could not start", $"{error.Message}\n\nDetails are in %LocalAppData%\\Flock\\tray.log.");
+            await QuitAsync();
         }
     }
 
     /// <summary>Command line argument of the sign-in autostart.</summary>
     public const string BackgroundArgument = "--background";
 
-    private string IconPath() => TrayIconPath(Model, Native.TaskbarIsLight);
+    private string IconPath() => TrayIconPath(State, Native.TaskbarIsLight);
 
     /// <summary>The logomark for the daemon's state, colored for a light or a dark background.</summary>
     /// <param name="extension">.ico for the notification area; .png inside windows (WinUI scales up an .ico's smallest image).</param>
-    public static string TrayIconPath(AppModel model, bool light, string extension = ".ico")
+    public static string TrayIconPath(RuntimeService model, bool light, string extension = ".ico")
     {
         var state = !model.IsRunning || model.NeedsSetup ? "TrayStopped" : model.IsDegraded ? "TrayWarning" : "Tray";
         return Path.Combine(AppContext.BaseDirectory, "Assets", $"{state}.{(light ? "Light" : "Dark")}{extension}");
@@ -110,8 +162,25 @@ public sealed partial class App : Application, IXamlMetadataProvider
 
     private void UpdateTray()
     {
-        var tooltip = "Flock — " + Model.Headline;
-        if (Model.Status is { Warnings.Count: > 0 } status && !Model.NeedsSetup)
+        if (updatingTray)
+        {
+            return;
+        }
+        updatingTray = true;
+        try
+        {
+            UpdateTrayCore();
+        }
+        finally
+        {
+            updatingTray = false;
+        }
+    }
+
+    private void UpdateTrayCore()
+    {
+        var tooltip = Options.Identity.DisplayName + " — " + State.Headline;
+        if (State.Status is { Warnings.Count: > 0 } status && !State.NeedsSetup)
         {
             tooltip += "\n" + status.Warnings[0];
         }
@@ -120,18 +189,18 @@ public sealed partial class App : Application, IXamlMetadataProvider
 
     private void TogglePanel()
     {
-        panel ??= new PanelWindow(Model);
+        panel ??= panelFactory?.Create() ?? throw new InvalidOperationException("The panel window factory is unavailable.");
         panel.Toggle();
     }
 
     public void ShowPanel()
     {
-        panel ??= new PanelWindow(Model);
+        panel ??= panelFactory?.Create() ?? throw new InvalidOperationException("The panel window factory is unavailable.");
         panel.ShowNearTray();
     }
 
     /// <summary>Opens the app from outside the tray (a start by hand): the setup until Flock is set up, then Settings.</summary>
-    private void ShowMain() => Open(Model.NeedsSetup ? WindowKind.Setup : WindowKind.Settings);
+    private void ShowMain() => Open(State.NeedsSetup ? WindowKind.Setup : WindowKind.Settings);
 
     /// <summary>
     /// A flock:// link (registered by the installer). flock://install, e.g. from the website's
@@ -149,9 +218,9 @@ public sealed partial class App : Application, IXamlMetadataProvider
             InstallUpdate(check: true);
             return;
         }
-        if (SecureLink.Parse(text) is { } secure && !Model.NeedsSetup)
+        if (SecureLink.Parse(text) is { } secure && !State.NeedsSetup)
         {
-            Model.PendingSecure = secure;
+            State.PendingSecure = secure;
             Open(WindowKind.Settings, SettingsPane.Sites);
             return;
         }
@@ -160,8 +229,8 @@ public sealed partial class App : Application, IXamlMetadataProvider
             ShowMain();
             return;
         }
-        Model.PendingInstall = link;
-        if (Model.NeedsSetup)
+        State.PendingInstall = link;
+        if (State.NeedsSetup)
         {
             Open(WindowKind.Setup);
             return;
@@ -185,7 +254,7 @@ public sealed partial class App : Application, IXamlMetadataProvider
                 break;
             default:
                 Open(WindowKind.Settings, SettingsPane.Services);
-                (windows[WindowKind.Settings] as SettingsWindow)?.ShowService(link.Service);
+                windowManager?.Get<SettingsWindow>(WindowKind.Settings)?.ShowService(link.Service);
                 break;
         }
     }
@@ -197,11 +266,11 @@ public sealed partial class App : Application, IXamlMetadataProvider
             return;
         }
         // While an update is available it follows the first item; the rest keep their order.
-        var update = Model.Updater.Available is { } available && Model.Updater.State == Updater.Phase.Idle ? $"Update to {available.Version}…" : null;
+        var update = State.UpdateService.Available is { } available && !State.UpdateService.IsBusy ? $"Update to {available.Version}…" : null;
         // Before the setup there is nothing to open yet: Mail, Dumps, Logs and Settings all need the daemon.
-        List<string?> items = Model.NeedsSetup
+        List<string?> items = State.NeedsSetup
             ? ["Set Up Flock…", null, "Quit Flock"]
-            : ["Open Flock", null, "Mail", "Dumps", "Logs", "Settings…", null, Model.IsRunning ? "Restart Flock" : "Start Flock", "Quit Flock"];
+            : ["Open Flock", null, "Mail", "Dumps", "Logs", "Settings…", null, State.IsRunning ? "Restart Flock" : "Start Flock", "Quit Flock"];
         if (update is not null)
         {
             items.Insert(1, update);
@@ -216,7 +285,7 @@ public sealed partial class App : Application, IXamlMetadataProvider
             }
             choice--;
         }
-        if (Model.NeedsSetup)
+        if (State.NeedsSetup)
         {
             switch (choice)
             {
@@ -232,7 +301,7 @@ public sealed partial class App : Application, IXamlMetadataProvider
             case 3: Open(WindowKind.Dumps); break;
             case 4: Open(WindowKind.Logs); break;
             case 5: Open(WindowKind.Settings); break;
-            case 7: _ = Model.RestartAsync(); break;
+            case 7: _ = State.RestartAsync(); break;
             case 8: Quit(); break;
         }
     }
@@ -243,33 +312,46 @@ public sealed partial class App : Application, IXamlMetadataProvider
     /// </summary>
     public void InstallUpdate(bool check = false)
     {
-        if (!Model.NeedsSetup)
+        if (updateTask is { IsCompleted: false })
+        {
+            return;
+        }
+        if (!State.NeedsSetup)
         {
             Open(WindowKind.Settings, SettingsPane.General);
         }
-        _ = check ? Model.Updater.CheckAndInstallAsync() : Model.Updater.InstallAsync();
+        updateTask = ObserveUpdateAsync(check);
+    }
+
+    private async Task ObserveUpdateAsync(bool check)
+    {
+        try
+        {
+            await (check ? State.UpdateService.CheckAndInstallAsync() : State.UpdateService.InstallAsync());
+        }
+        catch (Exception error)
+        {
+            Log(error);
+        }
     }
 
     /// <summary>Opens a window, or brings it to the front when it is already open. Until Flock is set up, that is the setup.</summary>
     public void Open(WindowKind kind, SettingsPane? pane = null)
     {
         panel?.Hide();
-        if (Model.NeedsSetup)
+        if (kind == WindowKind.Logs && windowManager is not null)
+        {
+            _ = OpenLogsCoreAsync();
+            return;
+        }
+        if (State.NeedsSetup)
         {
             kind = WindowKind.Setup;
         }
-        if (!windows.TryGetValue(kind, out var window))
+        var window = windowManager?.Open(kind);
+        if (window is null)
         {
-            window = kind switch
-            {
-                WindowKind.Mail => new MailWindow(Model),
-                WindowKind.Dumps => new DumpsWindow(Model),
-                WindowKind.Logs => new LogsWindow(Model),
-                WindowKind.Setup => new SetupWindow(Model),
-                _ => new SettingsWindow(Model),
-            };
-            windows[kind] = window;
-            window.Closed += (_, _) => windows.Remove(kind);
+            return;
         }
         if (pane is { } p && window is SettingsWindow settings)
         {
@@ -279,38 +361,112 @@ public sealed partial class App : Application, IXamlMetadataProvider
     }
 
     /// <summary>Opens the Logs window on one log.</summary>
-    public void OpenLog(LogStore.Source source)
+    public void OpenLog(LogsViewModel.Source source)
     {
-        Open(WindowKind.Logs);
-        if (windows.GetValueOrDefault(WindowKind.Logs) is LogsWindow logs)
+        _ = OpenLogsCoreAsync(source);
+    }
+
+    private async Task OpenLogsCoreAsync(LogsViewModel.Source? source = null)
+    {
+        try
         {
-            _ = logs.ShowSource(source);
+            panel?.Hide();
+            var kind = State.NeedsSetup ? WindowKind.Setup : WindowKind.Logs;
+            var window = windowManager is null ? null : await windowManager.OpenAsync(kind);
+            if (source is not null && window is LogsWindow logs)
+            {
+                await logs.ShowSourceAsync(source);
+            }
+            if (window is FlockWindow flockWindow)
+            {
+                flockWindow.Present();
+            }
+        }
+        catch (Exception error)
+        {
+            Log(error);
         }
     }
 
-    public void Quit()
+    public void Quit() => _ = QuitAsync();
+
+    public Task QuitAsync()
     {
-        foreach (var window in windows.Values.ToList())
+        if (quitTask is not null)
         {
-            window.Close();
+            return quitTask;
         }
-        panel?.Close();
-        tray?.Dispose();
-        tray = null;
-        Exit();
+        return quitTask = QuitCoreAsync();
+    }
+
+    private async Task QuitCoreAsync()
+    {
+        try
+        {
+            if (host is not null)
+            {
+                await host.QuitAsync();
+            }
+            else
+            {
+                await ReleaseUiAsync();
+            }
+        }
+        catch (Exception error)
+        {
+            Log(error);
+        }
+        if (dispatcher is { HasThreadAccess: true })
+        {
+            Exit();
+        }
+        else
+        {
+            dispatcher?.TryEnqueue(Exit);
+        }
     }
 
     /// <summary>Appends an unexpected error to %LocalAppData%\Flock\tray.log.</summary>
     public static void Log(Exception e)
     {
-        try
+        if (Application.Current is App { host: { } appHost } && appHost.GetService<FileLogSink>() is { } sink)
         {
-            var dir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Flock");
-            Directory.CreateDirectory(dir);
-            File.AppendAllText(Path.Combine(dir, "tray.log"), $"{DateTimeOffset.Now:O} {e}\n\n");
+            sink.TryWrite($"{DateTimeOffset.Now:O} fatal: {e}");
+            return;
         }
-        catch (IOException)
-        {
-        }
+        FileLogSink.WriteEmergency(e);
     }
+
+    private async Task ReleaseUiAsync()
+    {
+        if (uiDispatcher is not null)
+        {
+            await uiDispatcher.InvokeAsync(ReleaseUiOnDispatcherAsync, CancellationToken.None);
+            return;
+        }
+        await ReleaseUiOnDispatcherAsync();
+    }
+
+    private async Task ReleaseUiOnDispatcherAsync()
+    {
+        if (windowManager is not null)
+        {
+            await windowManager.CloseAllAsync();
+        }
+        panel?.Close();
+        panel = null;
+        if (tray is not null)
+        {
+            tray.Clicked -= TogglePanel;
+            tray.ShowRequested -= ShowMain;
+            tray.LinkReceived -= OpenLink;
+            tray.MenuRequested -= ShowMenu;
+            tray.ThemeChanged -= UpdateTray;
+            tray.Failure -= TrayFailure;
+        }
+        tray?.Dispose();
+        tray = null;
+    }
+
+    private void TrayFailure(string message) => State.ShowRuntimeError(message);
 }

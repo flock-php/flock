@@ -1,4 +1,6 @@
 using Flock.Kit;
+using Flock.Tray.ViewModels;
+using Flock.Tray.Infrastructure;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 
@@ -8,45 +10,24 @@ namespace Flock.Tray;
 /// Node.js majors from the package manifest, like the PHP pane: install, update, make default and uninstall
 /// them. Exact versions a project pins (.nvmrc) are offered by `node` in the terminal instead.
 /// </summary>
-internal sealed class NodePane(SettingsWindow window, AppModel model) : Pane(window, model)
+internal sealed class NodePane(SettingsWindow window, RuntimeService model) : Pane(window, model)
 {
-    // Majors with an install or uninstall in flight (and what to show meanwhile); the daemon answers when it's done.
-    private readonly Dictionary<string, string> busy = [];
-    private bool checking;
-    // The major the first run installs as the default, as last seen in the status (see Build).
+    private readonly NodePaneViewModel rows = new(model.Node);
     private string? installingDefault;
-
-    public override string Title => "Node";
-    public override string Subtitle => "node, npm and npx follow the project's .nvmrc / .node-version, then the site's version, then the default.";
-
-    public override void Shown(CancellationToken hidden) => _ = Store.RefreshNodeAsync();
-
-    /// <summary>
-    /// The major the daemon installs as the default on its first run. The Node.js versions don't
-    /// show that install, only the status does; its row shows it like an install started here.
-    /// </summary>
     private string? DefaultInstalling =>
         Model.Status?.Defaults?.Node is { IsInstalling: true, Version.Length: > 0 } node ? node.Version : null;
 
-    /// <summary>What a major's row shows while a request or the default's install runs; null when nothing does.</summary>
-    private string? Step(NodeRelease release) =>
-        busy.TryGetValue(release.Major, out var step) ? step
-        : release.Major == DefaultInstalling && !release.IsInstalled ? $"Downloading Node.js {release.Latest}…"
-        : null;
+    private string? Step(NodeRelease release) => Model.Node.IsRunning(release.Major) ? "Working…"
+        : release.Major == DefaultInstalling && !release.IsInstalled ? $"Downloading Node.js {release.Latest}…" : null;
 
-    /// <summary>
-    /// Asks about a pending flock://install/node link (App.OpenLink) once the versions are loaded,
-    /// like Services does for services.
-    /// </summary>
     private void ConfirmPendingLink()
     {
-        List<string> installing = DefaultInstalling is { } byDefault ? [.. busy.Keys, byDefault] : [.. busy.Keys];
-        if (Model.PendingInstall is not { Service: InstallLink.Node } link || link.ResolveNode(Store.Node, installing) is not { } request)
+        var installing = (Model.Node.Current?.Versions ?? []).Where(release => Step(release) is not null).Select(release => release.Major).ToList();
+        if (Model.PendingInstall is not { Service: InstallLink.Node } link || link.ResolveNode(Model.Node.Current, installing) is not { } request)
         {
             return;
         }
         Model.PendingInstall = null;
-        // Not while building the pane: a dialog needs the window's content in place.
         Window.DispatcherQueue.TryEnqueue(async () =>
         {
             if (request.Target is not { } target)
@@ -56,47 +37,59 @@ internal sealed class NodePane(SettingsWindow window, AppModel model) : Pane(win
             }
             if (await Window.Confirm(request.Title, request.Message, "Install"))
             {
-                var major = target.Line;
-                await Run(major, $"Downloading Node.js {target.Version}…", c => c.InstallNodeMajorAsync(major));
+                await Model.Node.InstallAsync(target.Line);
             }
         });
     }
+    public override string Title => "Node";
+    public override string Subtitle => "node, npm and npx follow the project's .nvmrc / .node-version, then the site's version, then the default.";
 
+    public override async Task ActivateAsync(CancellationToken hidden)
+    {
+        while (!hidden.IsCancellationRequested)
+        {
+            await Model.Node.RefreshAsync(hidden);
+            try
+            {
+                await Task.Delay(TimeSpan.FromSeconds(30), Model.TimeProvider, hidden);
+            }
+            catch (OperationCanceledException) when (hidden.IsCancellationRequested)
+            {
+                return;
+            }
+        }
+    }
     public override UIElement Build()
     {
         // The default's install is done (or failed): the versions show the result.
         var installing = DefaultInstalling;
         if (installingDefault is not null && installing != installingDefault)
         {
-            _ = Store.RefreshNodeAsync();
+            _ = Model.Node.RefreshAsync();
         }
         installingDefault = installing;
 
-        if (Store.Node is not { } catalog)
+        if (Model.Node.Current is not { } catalog)
         {
             return Ui.Row(10, new ProgressRing { Width = 16, Height = 16 }, Ui.Text("Loading Node.js versions…", foreground: Ui.SecondaryText));
         }
         ConfirmPendingLink();
 
         var checkedText = catalog.CheckedAt is { } at ? $"Checked {Ui.Relative(at)}" : "Not checked yet";
-        UIElement check = checking
+        UIElement check = Model.Node.IsChecking
             ? new ProgressRing { Width = 14, Height = 14 }
             : Ui.Link("Check now", async () =>
             {
-                checking = true;
-                Rerender();
-                await Store.PerformOnNodeAsync(c => c.CheckNodeReleasesAsync());
-                checking = false;
-                Rerender();
+                await Model.Node.CheckAsync();
             });
         var header = Ui.Spread(Ui.Text("Versions", "BodyStrongTextBlockStyle"), Ui.Row(6, Ui.Caption(checkedText, wrap: false), check));
         header.Margin = new Thickness(1, 0, 0, 6);
 
         var versions = new StackPanel { Spacing = 4, Margin = new Thickness(0, 0, 0, 24) };
         versions.Children.Add(header);
-        foreach (var release in catalog.Versions)
+        foreach (var release in rows.Versions)
         {
-            versions.Children.Add(Row(release));
+            versions.Children.Add(Row(release.Value));
         }
         if (catalog.Versions.Count == 0)
         {
@@ -165,23 +158,23 @@ internal sealed class NodePane(SettingsWindow window, AppModel model) : Pane(win
         var actions = Ui.Row(8);
         if (!release.IsInstalled)
         {
-            actions.Children.Add(Ui.Button("Install", () => _ = Run(release.Major, $"Downloading Node.js {release.Latest}…", c => c.InstallNodeMajorAsync(release.Major)),
+            actions.Children.Add(Ui.Button("Install", () => _ = RunAsync(release.Major, () => Model.Node.InstallAsync(release.Major)),
                 glyph: Ui.GlyphDownload, tooltip: $"Downloads Node.js {release.Latest}"));
             return actions;
         }
         if (release.Update)
         {
-            actions.Children.Add(Ui.Button($"Update to {release.Latest}", () => _ = Run(release.Major, $"Downloading Node.js {release.Latest}…", c => c.InstallNodeMajorAsync(release.Major)),
+            actions.Children.Add(Ui.Button($"Update to {release.Latest}", () => _ = RunAsync(release.Major, () => Model.Node.InstallAsync(release.Major)),
                 accent: true, glyph: Ui.GlyphDownload, tooltip: $"Downloads Node.js {release.Latest}, then removes {release.Installed}. Global packages stay."));
         }
         if (release.NpmLatest.Length > 0)
         {
-            actions.Children.Add(Ui.Button($"Update npm", () => _ = Run(release.Major, $"Updating npm to {release.NpmLatest}…", c => c.UpdateNpmAsync(release.Major)),
+            actions.Children.Add(Ui.Button($"Update npm", () => _ = RunAsync(release.Major, () => Model.Node.UpdateNpmAsync(release.Major)),
                 glyph: Ui.GlyphDownload, tooltip: $"Installs npm {release.NpmLatest}, the newest npm that supports Node.js {release.Installed}, for Node {release.Major}"));
         }
         if (!release.IsDefault)
         {
-            actions.Children.Add(Ui.Button("Make Default", () => _ = MakeDefault(release.Major)));
+            actions.Children.Add(Ui.Button("Make Default", () => _ = MakeDefaultAsync(release.Major)));
         }
         actions.Children.Add(More(release));
         return actions;
@@ -195,7 +188,7 @@ internal sealed class NodePane(SettingsWindow window, AppModel model) : Pane(win
             if (await Window.Confirm($"Uninstall Node {release.Major}?",
                     $"Its global npm packages are removed too. Projects and sites that use Node {release.Major} fall back to the default version until you install it again.", "Uninstall"))
             {
-                await Run(release.Major, "Uninstalling…", c => c.UninstallNodeAsync(release.Major));
+                await RunAsync(release.Major, () => Model.Node.UninstallAsync(release.Major));
             }
         };
         var menu = new MenuFlyout();
@@ -205,34 +198,35 @@ internal sealed class NodePane(SettingsWindow window, AppModel model) : Pane(win
         return button;
     }
 
-    private async Task Run(string major, string step, Func<FlockClient, Task<NodeCatalog>> action)
+    private async Task RunAsync(string major, Func<Task> action)
     {
-        busy[major] = step;
         Rerender();
         try
         {
-            await Store.PerformOnNodeAsync(action);
+            await action();
         }
         finally
         {
-            busy.Remove(major);
             Rerender();
         }
     }
 
-    private async Task MakeDefault(string major)
+    private async Task MakeDefaultAsync(string major)
     {
-        busy[major] = "Making it the default…";
         Rerender();
         try
         {
-            await Perform(c => c.UpdateSettingsAsync(new SettingsChange(DefaultNode: major)));
-            await Store.RefreshNodeAsync();
+            await Model.Node.SetDefaultAsync(major);
         }
         finally
         {
-            busy.Remove(major);
             Rerender();
         }
+    }
+
+    public override Task ReleaseAsync()
+    {
+        rows.Dispose();
+        return base.ReleaseAsync();
     }
 }

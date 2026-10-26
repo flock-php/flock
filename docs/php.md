@@ -25,6 +25,7 @@ flock php list
 Every version is a download: Flock checks the checksum and the signature of the list it comes from before installing it. Nothing is compiled on your machine.
 
 - **macOS:** builds for Apple silicon made by Flock, with PHP-FPM.
+- **Linux:** builds for x64 and arm64 made by Flock, with PHP-FPM. They don't use or change the PHP your distribution installs.
 - **Windows:** the official thread-safe x64 builds from windows.php.net, plus Flock's pack of extensions the official builds don't include. Each version runs a small pool of `php-cgi` workers, and requests go to the least busy one.
 
 Updating installs the newest patch release, and keeps your `php.ini`. When a build turns out to be broken and is withdrawn, Flock replaces it with a fixed one by itself.
@@ -55,7 +56,7 @@ readline  redis  session  shmop  simplexml  soap  sockets  sodium  sqlite3
 tokenizer  xml  xmlreader  xmlwriter  xsl  zip  zlib
 ```
 
-- On macOS, `sysvmsg`, `sysvsem` and `sysvshm` are included too, and on Windows `gettext`.
+- On macOS and Linux, `sysvmsg`, `sysvsem` and `sysvshm` are included too, and on Windows `gettext`.
 - **pcov** is on for the command line only (`php`, `composer`, `php artisan test`), so your tests can measure code coverage while web requests stay fast.
 - **Xdebug** loads only for requests that ask for it. See [Xdebug](xdebug.md).
 - On Windows, `memcached`, `pcntl` and `posix` aren't available, and `mongodb` needs PHP 8.1 or newer.

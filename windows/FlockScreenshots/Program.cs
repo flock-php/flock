@@ -1,7 +1,5 @@
 using System.Diagnostics;
 using System.Globalization;
-using Microsoft.UI.Dispatching;
-using Microsoft.UI.Xaml;
 
 namespace Flock.Tray;
 
@@ -10,7 +8,7 @@ namespace Flock.Tray;
 /// tools/screenshots/fixtures into &lt;dir&gt;\{id}-windows-{light|dark}.png. WinUI fixes an app's theme
 /// when it starts, so each theme runs in a process of its own (--theme).
 /// </summary>
-public static class Program
+public static class ScreenshotProgram
 {
     [STAThread]
     private static int Main(string[] args)
@@ -35,13 +33,16 @@ public static class Program
         Environment.SetEnvironmentVariable("FLOCK_HOME", home.FullName);
         Environment.SetEnvironmentVariable("WEBVIEW2_USER_DATA_FOLDER", Path.Combine(home.FullName, "WebView2"));
         using var daemon = new FakeDaemon(Path.Combine(AppContext.BaseDirectory, "fixtures"), home.FullName);
-        Screenshots.Current = new Screenshots(options);
+        var screenshots = new Screenshots(options);
 
-        WinRT.ComWrappersSupport.InitializeComWrappers();
-        Application.Start(callback =>
+        App.Run(new AppOptions
         {
-            SynchronizationContext.SetSynchronizationContext(new DispatcherQueueSynchronizationContext(DispatcherQueue.GetForCurrentThread()));
-            _ = new App();
+            Theme = screenshots.Theme,
+            UseSolidBackground = true,
+            KeepPanelOpen = true,
+            EnableBackgroundServices = false,
+            PreferencesPath = Path.Combine(home.FullName, "tray.json"),
+            OnStarted = screenshots.RunAsync,
         });
 
         try
@@ -52,7 +53,7 @@ public static class Program
         {
             // WebView2 may still hold its profile for a moment; the temp folder gets cleaned up eventually.
         }
-        return Screenshots.Current.Failures;
+        return screenshots.Failures;
     }
 
     /// <summary>Runs this program once per theme with the same arguments.</summary>

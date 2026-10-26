@@ -1,7 +1,6 @@
 package cli
 
 import (
-	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -19,6 +18,9 @@ import (
 	"flock/internal/node"
 )
 
+// serviceStarts says when the LaunchAgent starts the daemon.
+const serviceStarts = "at login"
+
 const (
 	launchLabel   = "dev.flock.daemon"
 	profileMarker = "# Flock (added by `flock install`)"
@@ -29,19 +31,6 @@ const (
 
 // shellProfiles are the profiles addToShellPath writes to (~/.zshrc always, ~/.bash_profile if present).
 var shellProfiles = []string{".zshrc", ".bash_profile"}
-
-func exeName(name string) string { return name }
-
-func writeShims(root, bin string) error {
-	dir := filepath.Join(root, "bin")
-	for _, tool := range tools {
-		script := fmt.Sprintf("#!/bin/sh\nexec %q exec %s \"$@\"\n", bin, tool)
-		if err := os.WriteFile(filepath.Join(dir, tool), []byte(script), 0o755); err != nil {
-			return err
-		}
-	}
-	return nil
-}
 
 // addToShellPath prepends dirs, in this order, in ~/.zshrc (and ~/.bash_profile if present): a
 // marked export line, appended once and rewritten when the directories change.
@@ -235,9 +224,6 @@ func uninstallService() error {
 // privilegedFirst: `flock install` runs ensurePrivileged last, as the installed flock binary.
 const privilegedFirst = false
 
-// installHelperBinary: macOS has no hosts helper.
-func installHelperBinary(string) error { return nil }
-
 // ensurePrivileged checks the resolver file and the CA's trust and fixes what is missing: the
 // resolver file as root (re-running flock under sudo), the trust as the user (see trustCA).
 func ensurePrivileged(cmd *cobra.Command, s *state, bin string, ca *certs.CA) error {
@@ -260,9 +246,6 @@ func ensurePrivileged(cmd *cobra.Command, s *state, bin string, ca *certs.CA) er
 	cmd.Println("✓ Flock CA is trusted")
 	return nil
 }
-
-// errDeclined is what the app looks for to tell a cancelled password dialog from a failure.
-var errDeclined = errors.New("administrator permission was declined")
 
 // loginKeychain is the user's login keychain, where trustCA puts the CA.
 func loginKeychain() string {
@@ -353,11 +336,6 @@ func administratorScript(prompt, exe string, args ...string) []string {
 		"-e", "end run",
 		strings.Join(words, " ") + " 2>&1", prompt,
 	}
-}
-
-// shellQuote quotes s for /bin/sh.
-func shellQuote(s string) string {
-	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
 }
 
 func newPrivilegedSetupCommand() *cobra.Command {
@@ -508,9 +486,6 @@ func appDirs() []string {
 		filepath.Join(library, "Saved Application State", appBundleID+".savedState"),
 	}
 }
-
-// removeAfterExit is never needed: macOS deletes running programs.
-func removeAfterExit(string) bool { return false }
 
 // restartService makes launchd kill and relaunch the daemon.
 func restartService() error {

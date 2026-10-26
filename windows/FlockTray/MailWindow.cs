@@ -1,14 +1,15 @@
 using Flock.Kit;
+using Flock.Tray.Infrastructure;
+using Flock.Tray.ViewModels;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
-using Windows.Storage.Pickers;
 
 namespace Flock.Tray;
 
 /// <summary>Caught mail: the list on the left, the selected message on the right.</summary>
 internal sealed partial class MailWindow : FlockWindow
 {
-    private readonly MailStore store;
+    private readonly MailViewModel viewModel;
     private readonly ListView list = new() { SelectionMode = ListViewSelectionMode.Single };
     private readonly ContentControl detail = new()
     {
@@ -18,28 +19,30 @@ internal sealed partial class MailWindow : FlockWindow
     private readonly Grid listArea = new();
     private readonly InfoBar error = Ui.ErrorBar();
     private readonly AppBarButton clear;
-    private List<MailSummary> shown = [];
-    private string? shownEnv;
-    private string? selected;
+    private MailDetailView? detailView;
+    private bool rendering;
 
-    public MailWindow(AppModel model) : base("Mail", 1000, 660)
+    private readonly Task initialRefresh;
+
+    internal void SelectFirst() => list.SelectedIndex = 0;
+
+    public MailWindow(MailViewModel viewModel) : base("Mail", 1000, 660)
     {
-        store = model.Mail;
+        this.viewModel = viewModel;
 
         var refresh = new AppBarButton { Icon = new SymbolIcon(Symbol.Refresh), Label = "Refresh" };
-        refresh.Click += (_, _) => _ = store.RefreshAsync();
+        refresh.Click += async (_, _) => await viewModel.RefreshAsync();
         clear = new AppBarButton { Icon = new SymbolIcon(Symbol.Delete), Label = "Clear All" };
-        clear.Click += async (_, _) => await ConfirmClear();
+        clear.Click += async (_, _) => await ConfirmClearAsync();
         var toolbar = new CommandBar { DefaultLabelPosition = CommandBarDefaultLabelPosition.Right, HorizontalAlignment = HorizontalAlignment.Right };
         toolbar.PrimaryCommands.Add(refresh);
         toolbar.PrimaryCommands.Add(clear);
 
-        list.SelectionChanged += (_, _) =>
+        list.SelectionChanged += async (_, _) =>
         {
-            if (list.SelectedIndex >= 0 && list.SelectedIndex < shown.Count && shown[list.SelectedIndex].Id != selected)
+            if (!rendering)
             {
-                selected = shown[list.SelectedIndex].Id;
-                ShowDetail(selected);
+                await ShowDetailAsync((list.SelectedItem as ListViewItem)?.Tag as string);
             }
         };
         listArea.Children.Add(list);
@@ -72,49 +75,35 @@ internal sealed partial class MailWindow : FlockWindow
         Body = root;
         Ui.SettingsShortcut(root);
 
-        store.Changed += Render;
-        store.IsVisible = true;
-        Closed += (_, _) =>
-        {
-            store.IsVisible = false;
-            store.Changed -= Render;
-        };
+        viewModel.Changed += Render;
+        Closed += (_, _) => viewModel.Changed -= Render;
         Render();
-        _ = store.RefreshAsync();
+        initialRefresh = viewModel.RefreshAsync();
     }
 
     private void Render()
     {
-        Ui.ShowError(error, store.Error);
-        clear.IsEnabled = store.Messages.Count > 0;
+        Ui.ShowError(error, viewModel.Error);
+        clear.IsEnabled = viewModel.CanClear;
 
-        if (!Json.Same(shown, store.Messages))
+        rendering = true;
+        list.Items.Clear();
+        foreach (var message in viewModel.Messages)
         {
-            shown = store.Messages;
-            list.Items.Clear();
-            foreach (var message in shown)
-            {
-                list.Items.Add(Row(message));
-            }
-            var index = shown.FindIndex(m => m.Id == selected);
-            list.SelectedIndex = index;
-            if (index < 0 && selected is not null)
-            {
-                selected = null;
-                detail.Content = NoSelection();
-            }
+            list.Items.Add(new ListViewItem { Content = Row(message), Tag = message.Id });
         }
-        // The .env lines arrive with the first refresh, or change with the port.
-        if (selected is null && store.Env != shownEnv)
+        list.SelectedItem = list.Items.Cast<ListViewItem>().FirstOrDefault(row => (string)row.Tag == viewModel.SelectedId);
+        rendering = false;
+        if (viewModel.SelectedId is null)
         {
             detail.Content = NoSelection();
         }
 
         listArea.Children.Clear();
         listArea.Children.Add(list);
-        if (shown.Count == 0)
+        if (viewModel.Messages.Count == 0)
         {
-            listArea.Children.Add(Ui.EmptyState(Ui.GlyphMail, "No mail"));
+            listArea.Children.Add(Ui.EmptyState(Ui.GlyphMail, "No mail", $"Send mail to {viewModel.SmtpAddress}. MAIL_USERNAME picks the inbox."));
         }
     }
 
@@ -124,18 +113,17 @@ internal sealed partial class MailWindow : FlockWindow
     /// </summary>
     private StackPanel NoSelection()
     {
-        shownEnv = store.Env;
-        if (store.Env.Length == 0)
+        if (viewModel.Env.Length == 0)
         {
             return Ui.EmptyState(Ui.GlyphMail, "No message selected");
         }
         var note = Ui.Caption("MAIL_USERNAME picks the inbox, so every project gets its own.");
         note.TextAlignment = TextAlignment.Center;
         return Ui.EmptyState(Ui.GlyphMail, "Catch your app's mail", "Add these lines to your project's .env:",
-            Ui.Column(8, Ui.CodeBlock(store.Env), note));
+            Ui.Column(8, Ui.CodeBlock(viewModel.Env), note));
     }
 
-    private static StackPanel Row(MailSummary message)
+    private static StackPanel Row(MailViewModel.MailRow message)
     {
         var from = Ui.Text(message.From, "BodyStrongTextBlockStyle", wrap: false);
         var header = Ui.Spread(from, Ui.Caption(Ui.Relative(message.Date), wrap: false));
@@ -149,7 +137,7 @@ internal sealed partial class MailWindow : FlockWindow
         };
     }
 
-    private async Task ConfirmClear()
+    private async Task ConfirmClearAsync()
     {
         var dialog = new ContentDialog
         {
@@ -161,81 +149,80 @@ internal sealed partial class MailWindow : FlockWindow
         };
         if (await dialog.ShowAsync() == ContentDialogResult.Primary)
         {
-            selected = null;
+            await viewModel.SelectAsync(null);
             detail.Content = NoSelection();
-            await store.ClearAsync();
+            await viewModel.ClearCommand.ExecuteAsync(null);
         }
     }
 
-    private async void ShowDetail(string id)
+    private async Task ShowDetailAsync(string? id)
     {
+        var selection = viewModel.SelectAsync(id);
         detail.Content = new ProgressRing { Width = 32, Height = 32 };
-        try
+        if (detailView is not null)
         {
-            var message = await store.DetailAsync(id);
-            if (selected == id)
-            {
-                detail.Content = new MailDetailView(this, store, message);
-            }
+            await detailView.DisposeAsync();
+            detailView = null;
         }
-        catch (FlockException e)
+        await selection;
+        if (id is null || viewModel.SelectedId != id)
         {
-            if (selected == id)
+            if (viewModel.SelectedId == id)
             {
-                detail.Content = Ui.EmptyState(Ui.GlyphWarning, "Could not load message", e.Message);
+                detail.Content = NoSelection();
             }
-        }
-    }
-
-    /// <summary>Asks where to save an attachment, then downloads it there.</summary>
-    public async Task SaveAttachment(MailDetail message, MailDetail.Attachment attachment)
-    {
-        var picker = new FileSavePicker { SuggestedFileName = attachment.Filename.Length == 0 ? "attachment" : attachment.Filename };
-        var extension = System.IO.Path.GetExtension(attachment.Filename);
-        picker.FileTypeChoices.Add(extension.Length > 0 ? extension.TrimStart('.').ToUpperInvariant() + " file" : "File",
-            [extension.Length > 0 ? extension : ".bin"]);
-        WinRT.Interop.InitializeWithWindow.Initialize(picker, Hwnd);
-        var file = await picker.PickSaveFileAsync();
-        if (file is null)
-        {
             return;
         }
-        try
+        if (viewModel.Detail.Current is null)
         {
-            var data = await store.AttachmentAsync(message.Id, attachment.Index);
-            await File.WriteAllBytesAsync(file.Path, data);
+            detail.Content = Ui.EmptyState(Ui.GlyphWarning, "Could not load message", viewModel.Detail.Error);
+            return;
         }
-        catch (Exception e) when (e is FlockException or IOException or UnauthorizedAccessException)
+        detailView = new MailDetailView(Hwnd, viewModel.Detail, viewModel.Detail.Current, viewModel.Model.Shell);
+        detail.Content = detailView;
+    }
+
+    public override async Task ReleaseAsync()
+    {
+        if (detailView is not null)
         {
-            store.Error = e.Message;
-            Render();
+            await detailView.DisposeAsync();
+            detailView = null;
         }
+        await initialRefresh;
+        await viewModel.DisposeAsync();
     }
 }
 
 /// <summary>One message: headers, attachments and the HTML / Text / Raw / Headers views.</summary>
-internal sealed partial class MailDetailView : Grid
+internal sealed partial class MailDetailView : Grid, IAsyncDisposable
 {
-    private readonly MailStore store;
+    private readonly IntPtr owner;
+    private readonly MailDetailViewModel viewModel;
+    private readonly IShellLauncher shell;
     private readonly MailDetail message;
     private readonly ContentControl content = new()
     {
         HorizontalContentAlignment = HorizontalAlignment.Stretch,
         VerticalContentAlignment = VerticalAlignment.Stretch,
     };
+    private readonly SelectorBar modes = new();
     private HtmlView? html;
-    private string? raw;
+    private Task htmlLoad = Task.CompletedTask;
+    private bool released;
 
-    public MailDetailView(MailWindow window, MailStore store, MailDetail message)
+    public MailDetailView(IntPtr owner, MailDetailViewModel viewModel, MailDetail message, IShellLauncher shell)
     {
-        this.store = store;
+        this.owner = owner;
+        this.viewModel = viewModel;
         this.message = message;
+        this.shell = shell;
+        viewModel.PropertyChanged += ViewModelChanged;
         RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
 
         var head = new StackPanel { Spacing = 8, Padding = new Thickness(20, 16, 20, 12) };
-        var subject = Ui.Text(message.Subject.Length == 0 ? "(no subject)" : message.Subject, "SubtitleTextBlockStyle", selectable: true);
-        head.Children.Add(subject);
+        head.Children.Add(Ui.Text(message.Subject.Length == 0 ? "(no subject)" : message.Subject, "SubtitleTextBlockStyle", selectable: true));
 
         var fields = new Grid { ColumnSpacing = 12, RowSpacing = 2 };
         fields.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
@@ -265,8 +252,8 @@ internal sealed partial class MailDetailView : Grid
             var attachments = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
             foreach (var attachment in message.Attachments)
             {
-                attachments.Children.Add(Ui.Button($"{attachment.Filename} ({Ui.Bytes(attachment.Size)})",
-                    () => _ = window.SaveAttachment(message, attachment), glyph: Ui.GlyphAttach, tooltip: "Save…"));
+                attachments.Children.Add(Ui.AsyncButton($"{attachment.Filename} ({Ui.Bytes(attachment.Size)})",
+                    () => viewModel.SaveAttachmentAsync(attachment, owner), glyph: Ui.GlyphAttach, tooltip: "Save…"));
             }
             head.Children.Add(new ScrollViewer
             {
@@ -276,12 +263,17 @@ internal sealed partial class MailDetailView : Grid
             });
         }
 
-        var modes = new SelectorBar();
         foreach (var mode in new[] { "HTML", "Text", "Raw", "Headers" })
         {
             modes.Items.Add(new SelectorBarItem { Text = mode, Tag = mode });
         }
-        modes.SelectionChanged += (_, _) => Show((string)modes.SelectedItem.Tag);
+        modes.SelectionChanged += async (_, _) =>
+        {
+            if (modes.SelectedItem is SelectorBarItem item && item.Tag is string mode)
+            {
+                await SetModeAsync(mode);
+            }
+        };
         head.Children.Add(modes);
 
         Children.Add(head);
@@ -295,43 +287,22 @@ internal sealed partial class MailDetailView : Grid
         Children.Add(body);
 
         modes.SelectedItem = modes.Items[message.Html.Length == 0 ? 1 : 0];
+        RenderMode();
     }
 
-    private async void Show(string mode)
+    public async ValueTask DisposeAsync()
     {
-        switch (mode)
+        if (released)
         {
-            case "HTML":
-                if (message.Html.Length == 0)
-                {
-                    content.Content = Ui.EmptyState(Ui.GlyphDocument, "No HTML part");
-                    break;
-                }
-                html ??= new HtmlView(allowScripts: false, blockRemote: true, whiteBackground: true);
-                html.Load(message.Html);
-                content.Content = html;
-                break;
-            case "Text":
-                content.Content = Monospaced(message.Text.Length == 0 ? "(no text part)" : message.Text);
-                break;
-            case "Raw":
-                if (raw is null)
-                {
-                    content.Content = new ProgressRing { Width = 32, Height = 32 };
-                    try
-                    {
-                        raw = await store.RawAsync(message.Id);
-                    }
-                    catch (FlockException e)
-                    {
-                        raw = e.Message;
-                    }
-                }
-                content.Content = Monospaced(raw);
-                break;
-            default:
-                content.Content = Headers();
-                break;
+            return;
+        }
+        released = true;
+        viewModel.PropertyChanged -= ViewModelChanged;
+        if (html is not null)
+        {
+            await htmlLoad;
+            await html.ReleaseAsync();
+            html = null;
         }
     }
 
@@ -349,6 +320,63 @@ internal sealed partial class MailDetailView : Grid
         HorizontalScrollBarVisibility = ScrollBarVisibility.Auto,
         HorizontalScrollMode = ScrollMode.Auto,
     };
+
+    private async Task SetModeAsync(string mode)
+    {
+        await viewModel.SetModeAsync(mode);
+        RenderMode();
+    }
+
+    private void ViewModelChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs args)
+    {
+        if (args.PropertyName is nameof(MailDetailViewModel.Raw) or nameof(MailDetailViewModel.RawError) or
+            nameof(MailDetailViewModel.IsRawLoading) or nameof(MailDetailViewModel.Error))
+        {
+            RenderMode();
+        }
+    }
+
+    private void RenderMode()
+    {
+        if (released)
+        {
+            return;
+        }
+        switch (viewModel.Mode)
+        {
+            case "HTML":
+                if (message.Html.Length == 0)
+                {
+                    content.Content = Ui.EmptyState(Ui.GlyphDocument, "No HTML part");
+                    break;
+                }
+                html ??= new HtmlView(allowScripts: false, blockRemote: true, whiteBackground: true, shell: shell);
+                htmlLoad = html.LoadAsync(message.Html);
+                content.Content = html;
+                break;
+            case "Text":
+                content.Content = Monospaced(message.Text.Length == 0 ? "(no text part)" : message.Text);
+                break;
+            case "Raw":
+                if (viewModel.IsRawLoading)
+                {
+                    content.Content = new ProgressRing { Width = 32, Height = 32 };
+                }
+                else if (viewModel.RawError is { } error)
+                {
+                    content.Content = Ui.EmptyState(Ui.GlyphWarning, "Could not load raw message", error,
+                        Ui.AsyncButton("Retry", () => SetModeAsync("Raw"), accent: true));
+                }
+                else
+                {
+                    content.Content = Monospaced(viewModel.Raw ?? "(empty)");
+                }
+                break;
+            default:
+                content.Content = Headers();
+                break;
+        }
+    }
 
     private ScrollViewer Headers()
     {

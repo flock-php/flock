@@ -1,5 +1,6 @@
 using System.Globalization;
 using Flock.Kit;
+using Flock.Tray.Infrastructure;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Documents;
@@ -13,14 +14,13 @@ namespace Flock.Tray;
 /// </summary>
 internal sealed partial class ServicesPane
 {
-    // PostgreSQL majors with a request of this window in flight, and what to show meanwhile.
-    private readonly Dictionary<string, string> pendingMajors = [];
     private bool checking;
+    private readonly Dictionary<string, Border> installCards = [];
     // The poll loop's wait; cancelled to look again right away after starting something.
     private CancellationTokenSource? nap;
 
     /// <summary>Some PostgreSQL operation runs: other PostgreSQL actions wait for it.</summary>
-    private bool PostgresWorking => pendingMajors.Count > 0 || Store.Postgres?.AnyBusy == true;
+    private bool PostgresWorking => Model.Postgres.IsRunning || Model.Postgres.Current?.AnyBusy == true;
 
 
     private static bool IsInstallable(Service service) => service.Id == "postgres" || service.IsOnRequest;
@@ -29,18 +29,17 @@ internal sealed partial class ServicesPane
     /// Polls every 2 s while something installs; otherwise the store reloads when the service list
     /// changes, and a slow poll catches jobs that the CLI started.
     /// </summary>
-    private async Task Poll(CancellationToken hidden)
+    private async Task PollAsync(CancellationToken hidden)
     {
         while (!hidden.IsCancellationRequested)
         {
-            await Store.RefreshServiceVersionsAsync();
-            var fast = PostgresWorking
-                || pendingCatalog.Count > 0 || Store.Catalog?.HasRunningJob == true;
+            await rows.RefreshAsync(hidden);
+            var fast = PostgresWorking || Model.Catalog.Current?.HasRunningJob == true;
             using var wake = CancellationTokenSource.CreateLinkedTokenSource(hidden);
             nap = wake;
             try
             {
-                await Task.Delay(TimeSpan.FromSeconds(fast ? 2 : 30), wake.Token);
+                await Task.Delay(TimeSpan.FromSeconds(fast ? 2 : 30), Model.TimeProvider, wake.Token);
             }
             catch (TaskCanceledException)
             {
@@ -51,7 +50,6 @@ internal sealed partial class ServicesPane
             }
         }
     }
-
     private void Kick() => nap?.Cancel();
 
     /// <summary>The tooltip of a service row's update hint; null when there is nothing to update.</summary>
@@ -59,12 +57,12 @@ internal sealed partial class ServicesPane
     {
         if (service.Id == "postgres")
         {
-            if (Store.Postgres?.Majors.FirstOrDefault(m => m.Update) is { } major)
+            if (Model.Postgres.Current?.Majors.FirstOrDefault(m => m.Update) is { } major)
             {
                 return major.Latest == major.Installed ? $"A new build of PostgreSQL {major.Latest} is available" : $"PostgreSQL {major.Latest} is available";
             }
         }
-        if (Store.Catalog?[service.Id] is { } entry && entry.Lines.FirstOrDefault(l => l.Update) is { } line)
+        if (Model.Catalog.Current?[service.Id] is { } entry && entry.Lines.FirstOrDefault(l => l.Update) is { } line)
         {
             return $"{entry.Name} {line.Latest} is available";
         }
@@ -76,18 +74,14 @@ internal sealed partial class ServicesPane
     {
         if (service.Id == "postgres")
         {
-            if (pendingMajors.Count > 0)
-            {
-                return pendingMajors.First().Value;
-            }
-            if (Store.Postgres?.Majors.FirstOrDefault(m => m.IsBusy) is { } busy)
+            if (Model.Postgres.Current?.Majors.FirstOrDefault(m => m.IsBusy) is { } busy)
             {
                 return busy.BusyText;
             }
         }
         if (CatalogWorking(service.Id))
         {
-            return Store.Catalog?[service.Id]?.Job?.PhaseText ?? "Working…";
+            return Model.Catalog.Current?[service.Id]?.Job?.PhaseText ?? "Working…";
         }
         return null;
     }
@@ -96,7 +90,7 @@ internal sealed partial class ServicesPane
 
     private void PostgresDetail(StackPanel panel)
     {
-        if (Store.Postgres is not { } versions)
+        if (Model.Postgres.Current is not { } versions)
         {
             panel.Children.Add(Loading("Loading PostgreSQL versions…"));
             return;
@@ -145,21 +139,14 @@ internal sealed partial class ServicesPane
     /// <summary>The first install: the port belongs to PostgreSQL, not to a version, so it is set first.</summary>
     private async Task InstallFirst(PostgresVersions versions, string? major, int? port)
     {
-        if (port is { } chosen && chosen != versions.Port)
-        {
-            await Store.PerformOnServicesAsync(c => c.SetServicePortAsync("postgres", chosen));
-            if (Store.Error is not null)
-            {
-                return;
-            }
-        }
-        await Install(versions, versions.Majors.FirstOrDefault(m => m.Major == major) ?? versions.Majors[0]);
+        var chosen = versions.Majors.FirstOrDefault(m => m.Major == major) ?? versions.Majors[0];
+        await Model.Postgres.InstallFirstAsync(chosen.Major, port, versions.Port);
     }
 
     /// <summary>The very first install: it downloads, creates the cluster and starts it.</summary>
     private Border FirstInstall(PostgresVersions versions)
     {
-        var major = versions.Majors.FirstOrDefault(m => m.IsBusy) ?? versions.Majors.FirstOrDefault(m => pendingMajors.ContainsKey(m.Major));
+        var major = versions.Majors.FirstOrDefault(m => m.IsBusy);
         var name = major is null ? "PostgreSQL" : $"PostgreSQL {(major.Latest.Length > 0 ? major.Latest : major.Major)}";
         var verb = major is { Busy: PostgresBusy.Uninstalling } ? "Uninstalling" : "Installing";
         return Inner(Ui.Column(10,
@@ -207,7 +194,7 @@ internal sealed partial class ServicesPane
             Ui.Caption("Installed versions stay side by side. One runs at a time; each keeps its own databases, and updates within a version keep them."));
 
     private string? BusyText(PostgresMajor major) =>
-        pendingMajors.TryGetValue(major.Major, out var pending) ? (major.IsBusy ? major.BusyText : pending) : major.IsBusy ? major.BusyText : null;
+        major.IsBusy ? major.BusyText : null;
 
     /// <summary>A major with its actions on the right, laid out like a catalog service's line.</summary>
     private Grid MajorRow(PostgresVersions versions, PostgresMajor major)
@@ -229,19 +216,19 @@ internal sealed partial class ServicesPane
             var tip = (major.Latest.Length > 0 ? $"Downloads PostgreSQL {major.Latest}." : "Downloads the newest release.")
                 + (versions.Active.Length > 0 ? $" PostgreSQL {versions.Active} stays active until you switch." : "")
                 + (major.HasData ? " Its databases are still here and come back." : "");
-            actions.Children.Add(Ui.Button("Install", () => _ = Install(versions, major), glyph: Ui.GlyphDownload, tooltip: tip));
+            actions.Children.Add(Ui.Button("Install", () => _ = InstallAsync(versions, major), glyph: Ui.GlyphDownload, tooltip: tip));
         }
         else
         {
             if (major.Update)
             {
                 var restart = major.Active && versions.Running ? "; PostgreSQL restarts for a moment" : "";
-                actions.Children.Add(Ui.Button($"Update to {major.Latest}", () => _ = Run(major.Major, "Updating…", c => c.UpdatePostgresAsync(major.Major)),
-                    glyph: Ui.GlyphDownload, tooltip: $"Installs {major.Latest} in place of {major.Installed}. Your databases stay{restart}."));
+                actions.Children.Add(Ui.Button($"Update to {major.Latest}", () => _ = RunAsync(major.Major, "Updating…", () => Model.Postgres.UpdateAsync(major.Major)),
+                glyph: Ui.GlyphDownload, tooltip: $"Installs {major.Latest} in place of {major.Installed}. Your databases stay{restart}."));
             }
             if (!major.Active)
             {
-                actions.Children.Add(Ui.Button("Switch…", () => _ = Switch(versions, major),
+                actions.Children.Add(Ui.Button("Switch…", () => _ = SwitchAsync(versions, major),
                     tooltip: versions.Active.Length > 0 ? $"Stops PostgreSQL {versions.Active} and starts {major.Major} with its own databases" : $"Starts PostgreSQL {major.Major}"));
             }
             actions.Children.Add(More(versions, major));
@@ -294,17 +281,17 @@ internal sealed partial class ServicesPane
     private Button More(PostgresVersions versions, PostgresMajor major)
     {
         var menu = new MenuFlyout();
-        menu.Items.Add(Item("Uninstall…", () => _ = Uninstall(versions, major)));
+        menu.Items.Add(Item("Uninstall…", () => _ = UninstallAsync(versions, major)));
         var button = Ui.IconButton(Ui.GlyphMore, "More", () => { });
         button.Flyout = menu;
         button.IsEnabled = !PostgresWorking;
         return button;
     }
 
-    private Task Install(PostgresVersions versions, PostgresMajor major) =>
-        Run(major.Major, versions.AnyInstalled ? "Downloading and installing…" : "Installing…", c => c.InstallPostgresAsync(major.Major));
+    private Task InstallAsync(PostgresVersions versions, PostgresMajor major) =>
+        RunAsync(major.Major, versions.AnyInstalled ? "Downloading and installing…" : "Installing…", () => Model.Postgres.InstallAsync(major.Major));
 
-    private async Task Switch(PostgresVersions versions, PostgresMajor major)
+    private async Task SwitchAsync(PostgresVersions versions, PostgresMajor major)
     {
         if (versions.Active.Length > 0 && !await Window.Confirm($"Switch to PostgreSQL {major.Major}?",
                 $"PostgreSQL {versions.Active} stops; its databases stay but aren't available until you switch back. {major.Major} uses its own databases."
@@ -313,10 +300,10 @@ internal sealed partial class ServicesPane
         {
             return;
         }
-        await Run(major.Major, "Switching…", c => c.ActivatePostgresAsync(major.Major));
+        await RunAsync(major.Major, "Switching…", () => Model.Postgres.ActivateAsync(major.Major));
     }
 
-    private async Task Uninstall(PostgresVersions versions, PostgresMajor major)
+    private async Task UninstallAsync(PostgresVersions versions, PostgresMajor major)
     {
         var next = versions.Majors.FirstOrDefault(m => m.IsInstalled && m.Major != major.Major);
         var details = !major.Active ? ""
@@ -341,88 +328,11 @@ internal sealed partial class ServicesPane
         if (await Window.Confirm($"Uninstall PostgreSQL {major.Major}?", details, "Uninstall", destructive: true, extra: extra))
         {
             var deleteData = delete?.IsChecked == true;
-            await Run(major.Major, "Uninstalling…", c => c.UninstallPostgresAsync(major.Major, deleteData));
+            await RunAsync(major.Major, "Uninstalling…", () => Model.Postgres.UninstallAsync(major.Major, deleteData));
         }
     }
 
-    private async Task Run(string major, string step, Func<FlockClient, Task<PostgresVersions>> action)
-    {
-        pendingMajors[major] = step;
-        Rerender();
-        Kick();
-        try
-        {
-            await Store.PerformOnPostgresAsync(action);
-        }
-        finally
-        {
-            pendingMajors.Remove(major);
-            Rerender();
-            Kick();
-        }
-    }
-
-    /// <summary>The tail of an install's output, followed while working() holds.</summary>
-    private async Task ShowLog(string title, Func<Task<string>> load, Func<bool> working)
-    {
-        var text = new TextBlock { FontFamily = Ui.Mono, FontSize = 12, IsTextSelectionEnabled = true, Text = "Loading…" };
-        var scroller = new ScrollViewer
-        {
-            Content = text,
-            Width = 680,
-            Height = 380,
-            HorizontalScrollBarVisibility = ScrollBarVisibility.Auto,
-        };
-        var dialog = new ContentDialog
-        {
-            Title = title,
-            Content = scroller,
-            PrimaryButtonText = "Copy",
-            CloseButtonText = "Done",
-            DefaultButton = ContentDialogButton.Close,
-            XamlRoot = Window.XamlRoot,
-        };
-        dialog.Resources["ContentDialogMaxWidth"] = 760.0;
-        dialog.IsPrimaryButtonEnabled = false;
-        dialog.PrimaryButtonClick += (_, e) =>
-        {
-            e.Cancel = true; // copying keeps the dialog open
-            Ui.Copy(text.Text);
-        };
-
-        using var closed = new CancellationTokenSource();
-        dialog.Closed += (_, _) => closed.Cancel();
-        _ = Follow();
-        await dialog.ShowAsync();
-
-        async Task Follow()
-        {
-            while (!closed.IsCancellationRequested)
-            {
-                var log = (await load()).TrimEnd();
-                var shown = log.Length == 0 ? "No log yet." : log;
-                if (shown != text.Text)
-                {
-                    text.Text = shown;
-                    dialog.IsPrimaryButtonEnabled = log.Length > 0;
-                    scroller.UpdateLayout();
-                    scroller.ChangeView(null, scroller.ScrollableHeight, null, disableAnimation: true);
-                }
-                if (!working())
-                {
-                    return;
-                }
-                try
-                {
-                    await Task.Delay(TimeSpan.FromSeconds(2), closed.Token);
-                }
-                catch (TaskCanceledException)
-                {
-                    return;
-                }
-            }
-        }
-    }
+    private static async Task RunAsync(string major, string step, Func<Task<OperationOutcome>> action) => await action();
 
     // Shared pieces
 
@@ -440,11 +350,11 @@ internal sealed partial class ServicesPane
                 {
                     if (postgres)
                     {
-                        await Store.PerformOnPostgresAsync(c => c.CheckPostgresReleasesAsync());
+                        await Model.Postgres.CheckAsync();
                     }
                     else
                     {
-                        await Store.PerformOnCatalogAsync(c => c.CheckCatalogAsync());
+                        await Model.Catalog.CheckAsync();
                     }
                 }
                 finally
@@ -471,19 +381,31 @@ internal sealed partial class ServicesPane
     private Border InstallCard(string id, string name, string description, List<(string Id, string Label, string Latest)> versions, string? preferred,
         int port, string? portNote, string estimate, Func<string?, int?, Task> install)
     {
+        if (installCards.TryGetValue(id, out var existing))
+        {
+            return existing;
+        }
         var form = Ui.Column(10);
         var picker = new ComboBox { Header = "Version", MinWidth = 220 };
         foreach (var (version, label, _) in versions)
         {
             picker.Items.Add(new ComboBoxItem { Content = label, Tag = version });
         }
-        var picked = pickedLine.GetValueOrDefault(id) ?? preferred;
+        var catalogDraft = rows.CatalogServices.FirstOrDefault(service => service.Id == id);
+        var picked = id == "postgres" ? rows.PostgresDraftMajor : catalogDraft?.DraftLine ?? preferred;
         picker.SelectedItem = picker.Items.OfType<ComboBoxItem>().FirstOrDefault(i => (string)i.Tag == picked) ?? picker.Items.FirstOrDefault();
         picker.SelectionChanged += (_, _) =>
         {
             if (picker.SelectedItem is ComboBoxItem { Tag: string version })
             {
-                pickedLine[id] = version;
+                if (id == "postgres")
+                {
+                    rows.PostgresDraftMajor = version;
+                }
+                else if (catalogDraft is not null)
+                {
+                    catalogDraft.DraftLine = version;
+                }
             }
         };
         // With one version there's nothing to pick, but the box still says what installs.
@@ -493,28 +415,47 @@ internal sealed partial class ServicesPane
         var portBox = new NumberBox
         {
             Header = "Port",
-            Value = pickedPort.GetValueOrDefault(id, port),
+            Value = id == "postgres" ? rows.PostgresDraftPort : catalogDraft?.DraftPort ?? port,
             Minimum = 1024,
             Maximum = 65535,
             SpinButtonPlacementMode = NumberBoxSpinButtonPlacementMode.Compact,
             MinWidth = 140,
             HorizontalAlignment = HorizontalAlignment.Left,
         };
-        portBox.ValueChanged += (_, _) => pickedPort[id] = portBox.Value;
+        portBox.ValueChanged += (_, _) =>
+        {
+            if (double.IsNaN(portBox.Value))
+            {
+                return;
+            }
+            if (id == "postgres")
+            {
+                rows.PostgresDraftPort = (int)portBox.Value;
+            }
+            else if (catalogDraft is not null)
+            {
+                catalogDraft.DraftPort = (int)portBox.Value;
+            }
+        };
         form.Children.Add(portBox);
         if (portNote is not null)
         {
             form.Children.Add(Ui.Caption(portNote));
         }
 
-        var button = Ui.Button($"Install {name}", () =>
+        var buttonText = Ui.Text($"Install {name}");
+        var button = new Button
+        {
+            Content = Ui.Row(8, Ui.Icon(Ui.GlyphDownload, 14), buttonText),
+            Style = Ui.Resource<Style>("AccentButtonStyle"),
+        };
+        button.Click += (_, _) =>
         {
             var version = (picker.SelectedItem as ComboBoxItem)?.Tag as string;
             int? chosen = double.IsNaN(portBox.Value) ? null : (int)portBox.Value;
             _ = install(version, chosen);
-        }, accent: true, glyph: Ui.GlyphDownload);
+        };
         // "Install MySQL 8.4.7": the release the picked version downloads.
-        var buttonText = ((Panel)button.Content).Children.OfType<TextBlock>().Last();
         void Label()
         {
             var latest = versions.FirstOrDefault(v => v.Id == (picker.SelectedItem as ComboBoxItem)?.Tag as string).Latest;
@@ -523,7 +464,9 @@ internal sealed partial class ServicesPane
         Label();
         picker.SelectionChanged += (_, _) => Label();
         UIElement[] actions = estimate.Length > 0 ? [form, button, Ui.Caption(Capitalize(estimate), wrap: false)] : [form, button];
-        return Hero(Ui.GlyphServer, $"Install {name}", description, actions);
+        var card = Hero(Ui.GlyphServer, $"Install {name}", description, actions);
+        installCards.Add(id, card);
+        return card;
     }
 
     /// <summary>Version rows in one surface, divided like the macOS list.</summary>

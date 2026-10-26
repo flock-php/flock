@@ -1,0 +1,25 @@
+# packages.flockphp.com, Flock's apt and dnf repository: these locations go into the Ploi site's
+# server block (HTTPS only). Every file is a GitHub release asset; nginx only redirects, and apt
+# and dnf follow. See repository.md.
+
+# The index of a suite (stable or beta), from the "updates" release.
+location ~ ^/apt/(stable|beta)/(Packages|Packages\.gz|Release|InRelease|Release\.gpg)$ {
+    return 302 https://github.com/flock-php/flock/releases/download/updates/apt-$1-$2;
+}
+location ~ ^/rpm/(stable|beta)/repodata/([A-Za-z0-9._-]+)$ {
+    return 302 https://github.com/flock-php/flock/releases/download/updates/rpm-$1-repodata-$2;
+}
+
+# The packages, from their version's release (the tag).
+location ~ ^/(apt|rpm)/(stable|beta)/(v[0-9][A-Za-z0-9.-]*)/(flockphp[A-Za-z0-9._-]+\.(deb|rpm))$ {
+    return 302 https://github.com/flock-php/flock/releases/download/$3/$4;
+}
+
+# The key, for setting the repository up by hand.
+location = /flockphp.asc {
+    return 302 https://github.com/flock-php/flock/releases/download/updates/flockphp.asc;
+}
+
+location / {
+    return 404;
+}

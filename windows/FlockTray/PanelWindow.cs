@@ -1,9 +1,12 @@
-using System.Text.RegularExpressions;
 using Flock.Kit;
+using Flock.Tray.Infrastructure;
+using Flock.Tray.ViewModels;
+using System.ComponentModel;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
+using Microsoft.UI.Xaml.Shapes;
 using Windows.Foundation;
 using Windows.Graphics;
 
@@ -17,22 +20,65 @@ internal sealed partial class PanelWindow : Window
 {
     private const int Width = 360;
 
-    private readonly AppModel model;
+    private readonly RuntimeService model;
+    private readonly PanelViewModel viewModel;
     private readonly IntPtr hwnd;
     private readonly ScrollViewer scroller = new() { VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
+    private readonly StackPanel root = new() { Spacing = 12, Padding = new Thickness(16) };
+    private readonly ContentControl headerSlot = new() { HorizontalContentAlignment = HorizontalAlignment.Stretch };
+    private readonly ContentControl updateSlot = new() { HorizontalContentAlignment = HorizontalAlignment.Stretch };
+    private readonly ContentControl errorSlot = new() { HorizontalContentAlignment = HorizontalAlignment.Stretch };
+    private readonly ContentControl contentSlot = new() { HorizontalContentAlignment = HorizontalAlignment.Stretch };
+    private readonly ContentControl footerSlot = new() { HorizontalContentAlignment = HorizontalAlignment.Stretch };
+    private readonly StackPanel serviceRows = Ui.Column(5);
+    private readonly StackPanel siteRows = Ui.Column(2);
+    private readonly StackPanel togglesRows = Ui.Column(2);
+    private readonly ScrollViewer sitesScroller = new() { MaxHeight = 240, VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
+    private readonly StackPanel statusContent = Ui.Column(12);
+    private readonly ContentControl warningsSlot = new() { HorizontalContentAlignment = HorizontalAlignment.Stretch };
+    private readonly StackPanel servicesSection = Ui.Column(5);
+    private readonly StackPanel sitesSection = Ui.Column(4);
+    private readonly ContentControl sitesEmptySlot = new() { HorizontalContentAlignment = HorizontalAlignment.Stretch };
+    private readonly ContentControl shortcutsSlot = new() { HorizontalContentAlignment = HorizontalAlignment.Stretch };
+    private readonly KeyedRowsBinding<string, PanelServiceRow> serviceBinding;
+    private readonly KeyedRowsBinding<string, PanelSiteRow> siteBinding;
+    private ToggleSwitch? xdebugToggle;
+    private ToggleSwitch? captureToggle;
     private DateTime hiddenAt;
     private Native.POINT anchor;
     private bool dirty = true;
+    private Task? refreshTask;
 
-    public PanelWindow(AppModel model)
+    public PanelWindow(PanelViewModel viewModel)
     {
-        this.model = model;
+        this.viewModel = viewModel;
+        model = viewModel.Model;
+        serviceBinding = new KeyedRowsBinding<string, PanelServiceRow>(serviceRows, row => row.Id,
+            row => new ServiceRowControl(row), (_, element) => ((ServiceRowControl)element).Dispose());
+        siteBinding = new KeyedRowsBinding<string, PanelSiteRow>(siteRows, row => row.Domain,
+            row => new SiteRowControl(row, model), (_, element) => ((SiteRowControl)element).Dispose());
+        sitesScroller.Content = siteRows;
+        servicesSection.Children.Add(SectionTitle("Services"));
+        servicesSection.Children.Add(serviceRows);
+        sitesSection.Children.Add(SectionTitle("Sites"));
+        sitesSection.Children.Add(sitesEmptySlot);
+        sitesSection.Children.Add(sitesScroller);
+        statusContent.Children.Add(warningsSlot);
+        statusContent.Children.Add(Divider());
+        statusContent.Children.Add(servicesSection);
+        statusContent.Children.Add(Divider());
+        statusContent.Children.Add(sitesSection);
+        statusContent.Children.Add(Divider());
+        statusContent.Children.Add(togglesRows);
+        statusContent.Children.Add(Divider());
+        statusContent.Children.Add(shortcutsSlot);
         hwnd = Microsoft.UI.Win32Interop.GetWindowFromWindowId(AppWindow.Id);
-        Title = "Flock";
+        Title = App.Current.Options.Identity.DisplayName;
         SystemBackdrop = new DesktopAcrylicBackdrop();
-#if SCREENSHOTS
-        scroller.Background = Screenshots.WindowBackground;
-#endif
+        if (App.Current.Options.UseSolidBackground)
+        {
+            scroller.Background = Ui.Brush("SolidBackgroundFillColorBaseBrush");
+        }
 
         var presenter = OverlappedPresenter.Create();
         presenter.SetBorderAndTitleBar(hasBorder: true, hasTitleBar: false);
@@ -43,29 +89,50 @@ internal sealed partial class PanelWindow : Window
         AppWindow.SetPresenter(presenter);
         AppWindow.IsShownInSwitchers = false;
 
+        root.Children.Add(headerSlot);
+        root.Children.Add(updateSlot);
+        root.Children.Add(errorSlot);
+        root.Children.Add(contentSlot);
+        root.Children.Add(Divider());
+        root.Children.Add(footerSlot);
         Content = scroller;
+        scroller.Content = root;
+        root.Loaded += (_, _) =>
+        {
+            if (AppWindow.IsVisible)
+            {
+                Fit();
+            }
+        };
         Ui.Shortcut(scroller, Windows.System.VirtualKey.Escape, Windows.System.VirtualKeyModifiers.None, Hide);
         Ui.SettingsShortcut(scroller);
-#if !SCREENSHOTS
-        // Screenshots keep the panel open whichever window has the focus.
         Activated += (_, e) =>
         {
-            if (e.WindowActivationState == WindowActivationState.Deactivated)
+            if (!App.Current.Options.KeepPanelOpen && e.WindowActivationState == WindowActivationState.Deactivated)
             {
                 Hide();
             }
         };
-#endif
         scroller.ActualThemeChanged += (_, _) => dirty = true;
-        model.Changed += () =>
+        viewModel.PropertyChanged += ViewModelChanged;
+        Closed += (_, _) => viewModel.PropertyChanged -= ViewModelChanged;
+    }
+
+    public void Release()
+    {
+        serviceBinding.Release();
+        siteBinding.Release();
+        viewModel.Dispose();
+    }
+
+    private void ViewModelChanged(object? sender, PropertyChangedEventArgs args)
+    {
+        dirty = true;
+        if (AppWindow.IsVisible)
         {
-            dirty = true;
-            if (AppWindow.IsVisible)
-            {
-                Render();
-                Fit();
-            }
-        };
+            Render();
+            Fit();
+        }
     }
 
     public void Toggle()
@@ -92,7 +159,7 @@ internal sealed partial class PanelWindow : Window
         AppWindow.Show();
         Activate();
         Native.SetForegroundWindow(hwnd);
-        _ = model.RefreshAsync();
+        refreshTask = model.RefreshAsync();
         _ = model.RefreshSetupAsync();
     }
 
@@ -148,54 +215,43 @@ internal sealed partial class PanelWindow : Window
     private void Render()
     {
         dirty = false;
-        // Fills the window's client area rather than a fixed width, so the right padding matches the left.
-        var root = new StackPanel { Spacing = 12, Padding = new Thickness(16) };
-        root.Children.Add(Header());
-        if (model.Updater.Available is { } update)
-        {
-            root.Children.Add(UpdateRow(update));
-        }
-        if (model.ActionError is { } failure)
+        headerSlot.Content = Header();
+        updateSlot.Content = model.UpdateService.Available is { } update ? UpdateRow(update) : null;
+        if (viewModel.ActionError is { } failure)
         {
             // Shown whether or not the daemon runs (a failed restart, a toggle the daemon refused).
-            var banner = Ui.ErrorBar(model.DismissError);
+            var banner = Ui.ErrorBar(viewModel.DismissError);
             banner.Margin = new Thickness(0);
             Ui.ShowError(banner, failure);
-            root.Children.Add(banner);
+            errorSlot.Content = banner;
+        }
+        else
+        {
+            errorSlot.Content = null;
         }
 
         // Before the setup is done, a daemon that answers is the setup's (it may still fail).
         if (model.Status is { } status && !model.NeedsSetup)
         {
-            if (status.Warnings.Count > 0)
-            {
-                root.Children.Add(Warnings(status.Warnings));
-            }
-            root.Children.Add(Divider());
-            root.Children.Add(Services(status));
-            root.Children.Add(Divider());
-            root.Children.Add(Sites(status.Sites));
-            root.Children.Add(Divider());
-            root.Children.Add(Toggles(status));
-            root.Children.Add(Divider());
-            root.Children.Add(Shortcuts(status));
+            warningsSlot.Content = status.Warnings.Count > 0 ? Warnings(status.Warnings) : null;
+            Services();
+            Sites();
+            Toggles(status);
+            shortcutsSlot.Content = Shortcuts(status);
+            contentSlot.Content = statusContent;
         }
         else
         {
-            root.Children.Add(NotRunning());
+            serviceBinding.Synchronize([]);
+            siteBinding.Synchronize([]);
+            warningsSlot.Content = null;
+            sitesEmptySlot.Content = null;
+            sitesScroller.Visibility = Visibility.Collapsed;
+            shortcutsSlot.Content = null;
+            contentSlot.Content = NotRunning();
         }
 
-        root.Children.Add(Divider());
-        root.Children.Add(Footer());
-        scroller.Content = root;
-        // Fit again once the content has really been laid out (the first measure can come too early).
-        root.Loaded += (_, _) =>
-        {
-            if (AppWindow.IsVisible)
-            {
-                Fit();
-            }
-        };
+        footerSlot.Content = Footer();
     }
 
     private Grid Header()
@@ -208,7 +264,7 @@ internal sealed partial class PanelWindow : Window
             Width = 26,
             Height = 26,
         };
-        var title = Ui.Column(0, Ui.Text("Flock", "BodyStrongTextBlockStyle"), Ui.Caption(model.Headline));
+        var title = Ui.Column(0, Ui.Text(App.Current.Options.Identity.DisplayName, "BodyStrongTextBlockStyle"), Ui.Caption(model.Headline));
         var leading = Ui.Row(10, icon, title);
         return model.IsRestarting ? Ui.Spread(leading, new ProgressRing { Width = 16, Height = 16 }) : Ui.Spread(leading);
     }
@@ -216,8 +272,8 @@ internal sealed partial class PanelWindow : Window
     /// <summary>A newer version of the app; Update installs it (Settings → General shows the progress).</summary>
     private Grid UpdateRow(UpdateFeed.Item update)
     {
-        var updater = model.Updater;
-        var idle = updater.State == Updater.Phase.Idle;
+        var updater = model.UpdateService;
+        var idle = !updater.IsBusy;
         var text = Ui.Caption(idle ? $"Flock {update.Version} is available" : updater.Summary);
         var button = Ui.Button("Update", () => App.Current.InstallUpdate(), accent: true);
         button.IsEnabled = idle;
@@ -227,166 +283,59 @@ internal sealed partial class PanelWindow : Window
     private static StackPanel Warnings(List<string> warnings)
     {
         var panel = Ui.Column(4);
-        foreach (var warning in warnings)
+        foreach (var text in warnings.Select(warning => Ui.Caption(warning, Ui.Caution)))
         {
-            var text = Ui.Caption(warning, Ui.Caution);
             panel.Children.Add(Ui.Row(6, Ui.Icon(Ui.GlyphWarning, 12, Ui.Caution), text));
             text.MaxWidth = Width - 54;
         }
         return panel;
     }
 
-    private static StackPanel Services(Status status)
+    private StackPanel Services()
     {
-        var panel = Ui.Column(5, SectionTitle("Services"));
-        panel.Children.Add(ServiceRow("Web", $"http :{status.HttpPort} · https :{status.HttpsPort}", true));
-        if (status.Dns.Wildcard)
-        {
-            panel.Children.Add(ServiceRow("DNS", $"*.{status.Dns.Tld}", true));
-        }
-        else if (status.Dns.Tld.Length > 0)
-        {
-            // Wildcard DNS is overridden or not set up: only the hosts file's names resolve.
-            var helperDown = status.Warnings.Any(w => w.Contains("hosts helper", StringComparison.Ordinal));
-            panel.Children.Add(ServiceRow("Hosts", "site domains only", !helperDown));
-        }
-        panel.Children.Add(ServiceRow("Mail", status.Mail.Length == 0 ? "stopped" : $"smtp {status.Mail}", status.Mail.Length > 0));
-        if (status.Postgres is { } postgres)
-        {
-            panel.Children.Add(ServiceRow("PostgreSQL", postgres, status.Processes.FirstOrDefault(p => p.Name == "postgres")?.Up ?? false));
-        }
-        if (status.Valkey is { } valkey)
-        {
-            panel.Children.Add(ServiceRow("Valkey", valkey, status.Processes.FirstOrDefault(p => p.Name == "valkey")?.Up ?? false));
-        }
-        foreach (var extra in status.Extras)
-        {
-            panel.Children.Add(ServiceRow(extra.Name, extra.Enabled ? $"{extra.Version} on 127.0.0.1:{extra.Port}" : "stopped", extra.Up));
-        }
-
-        // PHP pools: one FPM process on macOS, several php-cgi workers (php8.4-cgi-1, -2, ...) on Windows.
-        foreach (var pool in status.Processes.Where(p => p.Name.StartsWith("php", StringComparison.Ordinal)).GroupBy(p => PoolName(p.Name)))
-        {
-            var workers = pool.ToList();
-            var up = workers.Count(w => w.Up);
-            var restarts = workers.Sum(w => w.Restarts);
-            string detail;
-            if (up == 0)
-            {
-                detail = workers.FirstOrDefault(w => w.LastError is not null)?.LastError ?? "down";
-            }
-            else
-            {
-                detail = workers.Count > 1 ? $"{up} of {workers.Count} workers up" : "up";
-                if (restarts > 0)
-                {
-                    detail += $" (restarted {restarts}×)";
-                }
-            }
-            panel.Children.Add(ServiceRow(pool.Key, detail, up > 0));
-        }
-
-        foreach (var process in status.Processes.Where(p => !p.Up && !p.Name.StartsWith("php", StringComparison.Ordinal)))
-        {
-            var error = Ui.Caption($"{process.Name}: {process.LastError ?? "down"}", Ui.Critical);
-            error.MaxLines = 3;
-            panel.Children.Add(error);
-        }
-        return panel;
+        serviceBinding.Synchronize(viewModel.Services);
+        return servicesSection;
     }
 
-    private static string PoolName(string process)
+    private StackPanel Sites()
     {
-        var m = Regex.Match(process, @"^php(\d+\.\d+)-(?:cgi|fpm)");
-        return m.Success ? $"PHP {m.Groups[1].Value}" : process;
-    }
-
-    private static Grid ServiceRow(string name, string detail, bool up)
-    {
-        var text = Ui.Caption(detail, wrap: false);
-        text.MaxWidth = 210;
-        return Ui.Spread(Ui.Row(8, Ui.StatusDot(up), Ui.Text(name, wrap: false)), text);
-    }
-
-    private StackPanel Sites(List<Status.Site> sites)
-    {
-        var panel = Ui.Column(4, SectionTitle("Sites"));
-        if (sites.Count == 0)
+        if (viewModel.Sites.Count == 0)
         {
-            panel.Children.Add(Ui.Caption("No sites yet — run `flock link` or `flock park`, or add a site in Settings."));
-            return panel;
+            siteBinding.Synchronize([]);
+            sitesEmptySlot.Content = Ui.Caption("No sites yet — run `flock link` or `flock park`, or add a site in Settings.");
+            sitesScroller.Visibility = Visibility.Collapsed;
         }
-
-        var list = Ui.Column(2);
-        foreach (var site in sites)
+        else
         {
-            list.Children.Add(SiteRow(site));
+            sitesEmptySlot.Content = null;
+            sitesScroller.Visibility = Visibility.Visible;
+            siteBinding.Synchronize(viewModel.Sites);
         }
-        panel.Children.Add(new ScrollViewer { Content = list, MaxHeight = 240, VerticalScrollBarVisibility = ScrollBarVisibility.Auto });
-        return panel;
-    }
-
-    private static Button SiteRow(Status.Site site)
-    {
-        var name = Ui.Column(0, Ui.Text(site.Domain, wrap: false));
-        if (site.Problem is { } problem)
-        {
-            name.Children.Add(Ui.Caption(problem, Ui.Critical));
-        }
-        else if (site.Notice is { } notice)
-        {
-            name.Children.Add(Ui.Row(4, Ui.Icon(Ui.GlyphWarning, 10, Ui.Caution), Ui.Caption(notice, Ui.Caution)));
-        }
-        var icon = Ui.Icon(site.Secured ? Ui.GlyphLock : Ui.GlyphGlobe, 12, site.Secured ? Ui.Success : Ui.SecondaryText);
-        UIElement php = Ui.Caption($"PHP {site.Php}", wrap: false);
-        if (site.Debugging)
-        {
-            var bug = Ui.Icon(Ui.GlyphBug, 12, Ui.Caution);
-            Ui.AutomationName(bug, "Debugging");
-            php = Ui.Row(6, bug, php);
-        }
-        if (site.IsFrankenPhp)
-        {
-            php = Ui.Row(6, Ui.Badge(site.Worker == Status.SiteServer.Octane ? "Octane" : "FrankenPHP", Ui.Tone.Neutral), php);
-        }
-        if (site.IsShared)
-        {
-            var shared = Ui.Badge("Shared");
-            ToolTipService.SetToolTip(shared, $"Shared at {site.Share!.Url}");
-            php = Ui.Row(6, shared, php);
-        }
-        var row = Ui.Spread(Ui.Row(8, icon, name), php);
-
-        var button = new Button
-        {
-            Content = row,
-            HorizontalAlignment = HorizontalAlignment.Stretch,
-            HorizontalContentAlignment = HorizontalAlignment.Stretch,
-            Background = new SolidColorBrush(Microsoft.UI.Colors.Transparent),
-            BorderThickness = new Thickness(0),
-            Padding = new Thickness(6, 4, 6, 4),
-            IsEnabled = site.Url is not null,
-        };
-        // A site without a document root: say where it's fixed.
-        ToolTipService.SetToolTip(button, site.RootState == Status.DocumentRootState.NotFound
-            ? $"No public\\, www\\, web\\ or webroot\\ with an index.php in {site.Path}. Choose the document root in Settings → Sites."
-            : site.Url ?? site.Problem ?? site.Path);
-        button.Click += (_, _) => AppModel.Open(site);
-        return button;
+        return sitesSection;
     }
 
     private StackPanel Toggles(Status status)
     {
-        return Ui.Column(2,
-            Toggle(Ui.GlyphBug, "Xdebug", status.Xdebug, on => model.SetXdebugAsync(on)),
-            Toggle(Ui.GlyphDownload, "Capture dumps", status.Dumps, on => model.SetDumpsAsync(on)));
+        if (togglesRows.Children.Count == 0)
+        {
+            var xdebugRow = Toggle(Ui.GlyphBug, "Xdebug", status.Xdebug, on => model.SetXdebugAsync(on));
+            var captureRow = Toggle(Ui.GlyphDownload, "Capture dumps", status.Dumps, on => viewModel.SetDumpsAsync(on), !viewModel.IsCaptureBusy);
+            xdebugToggle = xdebugRow.Children.OfType<ToggleSwitch>().Single();
+            captureToggle = captureRow.Children.OfType<ToggleSwitch>().Single();
+            togglesRows.Children.Add(xdebugRow);
+            togglesRows.Children.Add(captureRow);
+        }
+        xdebugToggle!.IsOn = status.Xdebug;
+        captureToggle!.IsOn = status.Dumps;
+        captureToggle.IsEnabled = !viewModel.IsCaptureBusy;
+        return togglesRows;
     }
 
-    private static Grid Toggle(string glyph, string label, bool isOn, Func<bool, Task> change)
+    private static Grid Toggle(string glyph, string label, bool isOn, Func<bool, Task> change, bool enabled = true)
     {
-        var toggle = new ToggleSwitch { IsOn = isOn, OnContent = "", OffContent = "", MinWidth = 0 };
+        var toggle = new ToggleSwitch { IsOn = isOn, IsEnabled = enabled, OnContent = "", OffContent = "", MinWidth = 0 };
         Ui.AutomationName(toggle, label);
-        toggle.Toggled += (_, _) => _ = change(toggle.IsOn); // attached after IsOn, so rendering doesn't fire it
+        toggle.Toggled += async (_, _) => await change(toggle.IsOn); // attached after IsOn, so rendering doesn't fire it
         return Ui.Spread(Ui.Row(8, Ui.Icon(glyph, 14), Ui.Text(label, wrap: false)), toggle);
     }
 
@@ -440,7 +389,7 @@ internal sealed partial class PanelWindow : Window
         {
             return Ui.Column(8, Ui.Text("Updating Flock…", foreground: Ui.SecondaryText), new ProgressBar { IsIndeterminate = true });
         }
-        var start = Ui.Button("Start Flock", () => _ = model.RestartAsync(), accent: true);
+        var start = Ui.AsyncButton("Start Flock", model.RestartAsync, accent: true);
         start.IsEnabled = !model.IsRestarting;
         return Ui.Column(8, Ui.Text(model.Error ?? "Flock is not running", foreground: Ui.SecondaryText), start);
     }
@@ -453,7 +402,8 @@ internal sealed partial class PanelWindow : Window
             // Restart and Settings need the daemon; the panel's Set Up button is the way on.
             return Ui.Spread(Ui.Row(4), quit);
         }
-        var restart = Ui.Link("Restart", () => _ = model.RestartAsync());
+        var restart = new HyperlinkButton { Content = "Restart", Padding = new Thickness(4, 2, 4, 2) };
+        restart.Click += async (_, _) => await model.RestartAsync();
         restart.IsEnabled = model.IsRunning && !model.IsRestarting;
         var settings = Ui.Link("Settings…", () => App.Current.Open(WindowKind.Settings));
         return Ui.Spread(Ui.Row(4, restart, settings), quit);
@@ -473,4 +423,102 @@ internal sealed partial class PanelWindow : Window
         Background = Ui.Brush("DividerStrokeColorDefaultBrush"),
         Margin = new Thickness(-16, 0, -16, 0),
     };
+
+    private sealed class ServiceRowControl : Grid, IDisposable
+    {
+        private readonly PanelServiceRow row;
+        private readonly TextBlock name = Ui.Text("", wrap: false);
+        private readonly TextBlock detail = Ui.Caption("", wrap: false);
+        private readonly Ellipse dot = Ui.StatusDot(false);
+
+        public ServiceRowControl(PanelServiceRow row)
+        {
+            this.row = row;
+            detail.MaxWidth = 210;
+            Children.Add(Ui.Spread(Ui.Row(8, dot, name), detail));
+            row.PropertyChanged += RowChanged;
+            Update();
+        }
+
+        public void Dispose() => row.PropertyChanged -= RowChanged;
+
+        private void RowChanged(object? sender, PropertyChangedEventArgs args) => Update();
+
+        private void Update()
+        {
+            name.Text = row.Name;
+            detail.Text = row.Detail;
+            dot.Fill = row.Up ? Ui.Success : Ui.Brush("ControlStrongFillColorDisabledBrush");
+        }
+    }
+
+    private sealed class SiteRowControl : Grid, IDisposable
+    {
+        private readonly PanelSiteRow row;
+        private readonly RuntimeService model;
+        private readonly Button button = new()
+        {
+            HorizontalAlignment = HorizontalAlignment.Stretch,
+            HorizontalContentAlignment = HorizontalAlignment.Stretch,
+            Background = new SolidColorBrush(Microsoft.UI.Colors.Transparent),
+            BorderThickness = new Thickness(0),
+            Padding = new Thickness(6, 4, 6, 4),
+        };
+
+        public SiteRowControl(PanelSiteRow row, RuntimeService model)
+        {
+            this.row = row;
+            this.model = model;
+            Children.Add(button);
+            row.PropertyChanged += RowChanged;
+            button.Click += Clicked;
+            Update();
+        }
+
+        public void Dispose()
+        {
+            row.PropertyChanged -= RowChanged;
+            button.Click -= Clicked;
+        }
+
+        private void Clicked(object sender, RoutedEventArgs args)
+        {
+            if (row.Url is { Length: > 0 } url)
+            {
+                model.Open(url);
+            }
+        }
+
+        private void RowChanged(object? sender, PropertyChangedEventArgs args) => Update();
+
+        private void Update()
+        {
+            var name = Ui.Column(0, Ui.Text(row.Domain, wrap: false));
+            if (row.Problem is { } problem)
+            {
+                name.Children.Add(Ui.Caption(problem, Ui.Critical));
+            }
+            var icon = Ui.Icon(row.Secured ? Ui.GlyphLock : Ui.GlyphGlobe, 12, row.Secured ? Ui.Success : Ui.SecondaryText);
+            UIElement php = Ui.Caption($"PHP {row.Php}", wrap: false);
+            if (row.Debugging)
+            {
+                var bug = Ui.Icon(Ui.GlyphBug, 12, Ui.Caution);
+                Ui.AutomationName(bug, "Debugging");
+                php = Ui.Row(6, bug, php);
+            }
+            if (row.IsFrankenPhp)
+            {
+                php = Ui.Row(6, Ui.Badge(row.Worker == Status.SiteServer.Octane ? "Octane" : "FrankenPHP", Ui.Tone.Neutral), php);
+            }
+            if (row.IsShared)
+            {
+                var shared = Ui.Badge("Shared", Ui.Tone.Success);
+                ToolTipService.SetToolTip(shared, $"Shared at {row.ShareUrl}");
+                php = Ui.Row(6, shared, php);
+            }
+            button.Content = Ui.Spread(Ui.Row(8, icon, name), php);
+            button.IsEnabled = row.Url is not null;
+            ToolTipService.SetToolTip(button, row.Url ?? row.Problem ?? row.Path);
+        }
+    }
 }

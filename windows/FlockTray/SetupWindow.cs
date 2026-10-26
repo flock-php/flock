@@ -1,4 +1,5 @@
 using Flock.Kit;
+using Flock.Tray.Infrastructure;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 
@@ -13,7 +14,7 @@ internal sealed class SetupWindow : FlockWindow
 {
     private enum Stage { Intro, Checking, Conflicts, Running, Done, Failed }
 
-    private readonly AppModel model;
+    private readonly RuntimeService model;
     private readonly TextBlock log = Ui.MonoText("", 12);
     // Applied once setup succeeds; Settings → General changes it later.
     private readonly CheckBox startup = new() { Content = "Open Flock when I sign in", IsChecked = true, Margin = new Thickness(0, 12, 0, 0) };
@@ -28,7 +29,7 @@ internal sealed class SetupWindow : FlockWindow
     private string defaultPhp = "", defaultNode = "";
     private bool sawDefaults;
 
-    public SetupWindow(AppModel model) : base("Set up Flock", 620, 600, minWidth: 480, minHeight: 480)
+    public SetupWindow(RuntimeService model) : base("Set up Flock", 620, 600, minWidth: 480, minHeight: 480)
     {
         this.model = model;
         model.Changed += ShowDefaults;
@@ -119,16 +120,16 @@ internal sealed class SetupWindow : FlockWindow
                 page.Children.Add(Log());
                 page.Children.Add(Buttons(
                     Ui.Button("Close", Close),
-                    Ui.Button("Try Again", () => _ = RunAsync(), accent: true)));
+                    Ui.Button("Try Again", () => _ = RunAsync(retry: true), accent: true)));
                 break;
         }
         Body = new ScrollViewer { Content = page };
     }
 
-    private async Task RunAsync()
+    private async Task RunAsync(bool retry = false)
     {
         Render(Stage.Checking);
-        conflicts = ConflictingApp.Group(await Installation.ConflictsAsync());
+        conflicts = ConflictingApp.Group(await model.Installation.ConflictsAsync());
         if (conflicts.Count > 0)
         {
             Render(Stage.Conflicts);
@@ -139,14 +140,15 @@ internal sealed class SetupWindow : FlockWindow
         log.Text = "";
         Render(Stage.Running);
 
-        var result = await model.SetUpAsync(line =>
+        var result = await model.Installation.InstallAsync(line =>
         {
             output += line + "\n";
             log.Text = output.TrimEnd();
-        });
+        }, retry: retry);
         output = result.Output;
         log.Text = output;
 
+        model.NeedsSetup = !await model.Installation.IsSetUpAsync();
         if (result.Ok)
         {
             try
@@ -158,6 +160,7 @@ internal sealed class SetupWindow : FlockWindow
                 startupProblem = $"Could not change the startup setting: {e.Message}. Settings → General has it too.";
             }
         }
+        model.NotifyChanged();
         Render(result.Ok ? Stage.Done : Stage.Failed);
         await model.RefreshAsync();
     }

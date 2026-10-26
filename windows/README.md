@@ -8,6 +8,7 @@ notification area icon, and the Mail, Dumps, Logs and Settings windows.
 windows/
   FlockKit/         models + API client (net10.0, no UI — the macOS app's FlockKit)
   FlockKit.Tests/   xUnit tests, run anywhere: dotnet test windows/FlockKit.Tests
+  FlockTray.Tests/  tray state tests, run on Windows: dotnet test windows/FlockTray.Tests -p:Platform=x64
   FlockTray/        the WinUI 3 app (unpackaged, self-contained Windows App SDK)
   FlockScreenshots/ the app's windows with demo data, as PNGs for the docs (never shipped)
   installer/        the Inno Setup script for Flock-Setup-x64.exe
@@ -84,6 +85,24 @@ fails, or a service hasn't exited after 10 seconds, it is killed. php-cgi worker
    `.\windows\build.ps1` and start `windows\dist\FlockTray-x64\FlockTray.exe`.
    `FlockTray.exe --selftest` checks every API call against the running daemon.
 
+### Running the development tray alongside an installed copy
+
+Run `dotnet run --project windows/FlockTray -p:Platform=x64` from the repository root, or launch the executable produced by `windows/build.ps1`.
+An executable without the installer's adjacent `unins000.exe` runs as **Flock Dev**, in Debug or Release. Use `--dev` to force this mode when testing
+from an installed directory.
+
+Each local executable path has its own single-instance mutex and activation window. Starting that executable again opens its existing dev window;
+it never hands the launch to the installed production tray. Windows show `[Dev]`, and the tray tooltip and panel header show **Flock Dev**.
+
+Dev builds use separate tray preferences and WebView2 data under `%LocalAppData%\Flock\Flock.Tray.Dev.<path-hash>`. Versioned dev builds support the
+same update checks, signature verification, and installer launch as production. The downloaded installer updates the installed app, not the local build output.
+Automatic bundled CLI replacement is disabled. The dev tray still connects to the installed daemon by default: its sites, services, and daemon version are real,
+and actions in the dev UI affect that daemon. `FLOCK_HOME` still selects a different daemon data folder when needed.
+
+Rider's default build uses version `0.1.0`, so updates can be tested directly. To test from a specific version, build with
+`dotnet build windows/FlockTray -p:Platform=x64 -p:InformationalVersion=1.0.0`. For `windows/build.ps1`, set `FLOCK_VERSION=1.0.0` first;
+its default Git description may not be a version the updater can compare.
+
 ### First-run checklist
 
 - [ ] `flock install` finishes; Task Scheduler shows "Flock Daemon"; `flock status` answers
@@ -133,6 +152,6 @@ The windows open on screen, on top of everything, for a few seconds each; the PN
 screen shows, at the display's scale. `tools/screenshots/make-dumps.php` regenerates the Dumps
 fixtures with the dump server's VarDumper. The **Screenshots** workflow does the same in CI.
 
-The project compiles FlockTray's sources with `SCREENSHOTS` defined, plus its own `Program`. The
-few hooks in FlockTray are inside `#if SCREENSHOTS`, so the app that ships has none of it;
-`build.ps1` checks that before the installer is made.
+The project references `FlockTray` through `ProjectReference`, so it renders the same assembly that ships. Its own entry point supplies the theme,
+isolated preferences, and startup callback, with background polling and update checks disabled. Assets flow through the project reference; fixtures
+belong only to the capture runner. `build.ps1` checks that the published tray contains neither the capture runner nor its fixtures.

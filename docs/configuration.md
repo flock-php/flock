@@ -19,9 +19,10 @@ Flock keeps PHP and Node builds, service data, certificates, caught mail and log
 | --- | --- |
 | Windows | `%AppData%\Flock` |
 | macOS | `~/Library/Application Support/Flock` |
+| Linux | `~/.local/share/flock` (or `$XDG_DATA_HOME/flock`) |
 
 :::app
-**Settings → General** shows the exact path under **Data**, and **Show in Finder** (macOS) or **Show in Explorer** (Windows) opens it.
+**Settings → General** shows the exact path under **Data**, and **Show in Finder** (macOS), **Show in Explorer** (Windows) or **Open** (Linux) opens it.
 :::
 
 ## config.json
@@ -39,7 +40,7 @@ Global settings live in `config.json` in the data directory. Edit them through t
 | Port | Used for |
 | --- | --- |
 | 80 / 443 | Web server (HTTP / HTTPS) |
-| 53535 | DNS for `.test` (macOS; Windows uses 53) |
+| 53535 | DNS for `.test` (macOS and Linux; Windows uses 53) |
 | 2525 | Mail catcher (SMTP) |
 | 9912 | Dump server |
 | 9003 | Xdebug client (your editor) |

@@ -41,6 +41,8 @@ func valid(t *testing.T) string {
 		"images/panel-macos-dark.png":    "png",
 		"images/panel-windows-light.png": "png",
 		"images/panel-windows-dark.png":  "png",
+		"images/panel-linux-light.png":   "png",
+		"images/panel-linux-dark.png":    "png",
 	})
 	return root
 }
@@ -78,7 +80,7 @@ func TestProblems(t *testing.T) {
 		{"unknown scheme", map[string]string{"sites.md": "![Sites](shot:sites)\n"}, "shot:sites: link to a file in docs/"},
 		{"screenshot as link", map[string]string{"sites.md": "[Sites](screenshot:sites)\n"}, "screenshot:sites is for images"},
 		{"bad screenshot id", map[string]string{"sites.md": "![Sites](screenshot:Sites_1)\n"}, "screenshot:Sites_1: an id may only"},
-		{"partial screenshot", map[string]string{"sites.md": "![Sites](screenshot:sites)\n", "images/sites-macos-light.png": "png"}, "screenshot:sites is missing images/sites-macos-dark.png, images/sites-windows-light.png, images/sites-windows-dark.png"},
+		{"partial screenshot", map[string]string{"sites.md": "![Sites](screenshot:sites)\n", "images/sites-macos-light.png": "png"}, "screenshot:sites is missing images/sites-macos-dark.png, images/sites-windows-light.png, images/sites-windows-dark.png, images/sites-linux-light.png, images/sites-linux-dark.png"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

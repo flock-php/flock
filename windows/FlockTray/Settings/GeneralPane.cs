@@ -1,15 +1,20 @@
 using Flock.Kit;
+using Flock.Tray.ViewModels;
+using Flock.Tray.Infrastructure;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 
 namespace Flock.Tray;
 
-internal sealed class GeneralPane(SettingsWindow window, AppModel model) : Pane(window, model)
+internal sealed class GeneralPane(SettingsWindow window, RuntimeService model) : Pane(window, model)
 {
+    private readonly GeneralViewModel viewModel = new(model);
     private string? selectedParked;
 
     public override string Title => "General";
     public override string Subtitle => "The Flock daemon runs your sites, PHP and services in the background.";
+
+    public override Task ActivateAsync(CancellationToken hidden) => viewModel.RefreshAsync(hidden);
 
     public override UIElement Build()
     {
@@ -27,13 +32,18 @@ internal sealed class GeneralPane(SettingsWindow window, AppModel model) : Pane(
         daemon.Add(Ui.Setting("Restart", "Restarts the daemon and every service it runs.", restart));
         page.Children.Add(Ui.Section("Daemon", [.. daemon]));
 
-        if (Store.Config is { } config)
+        if (viewModel.Config is { } config)
         {
             var network = new List<UIElement>
             {
                 Ui.Setting("Domain", Model.Status?.Dns is { Wildcard: true }
                         ? "Every name, any subdomain included, is resolved by Flock's DNS server. Site domains are also in the hosts file."
-                        : $"Only site domains and the domains added to sites resolve (the hosts file){(Model.Status?.Dns.WildcardProblem is { Length: > 0 } p ? $": {p}" : "")}.",
+                        : $"Only site domains and the domains added to sites resolve (the hosts file)" +
+                          $"{
+                            (Model.Status?.Dns?.WildcardProblem is { Length: > 0 } p
+                                ? $": {p}"
+                                : string.Empty)
+                        }.",
                     Value($"*.{config.Tld}")),
             };
             // Sites are served on 80 and 443; other ports are only set by editing config.json.
@@ -46,7 +56,7 @@ internal sealed class GeneralPane(SettingsWindow window, AppModel model) : Pane(
             var path = Ui.Text(config.Root, foreground: Ui.SecondaryText, wrap: false);
             path.MaxWidth = 420;
             page.Children.Add(Ui.Section("Data",
-                Ui.Setting("Folder", null, Ui.Row(12, path, Ui.Button("Show in Explorer", () => Native.Reveal(config.Root))))));
+                Ui.Setting("Folder", null, Ui.Row(12, path, Ui.Button("Show in Explorer", () => Model.Reveal(config.Root))))));
         }
 
         var startup = new ToggleSwitch { IsOn = Native.StartsAtSignIn };
@@ -58,21 +68,21 @@ internal sealed class GeneralPane(SettingsWindow window, AppModel model) : Pane(
             }
             catch (Exception e) when (e is UnauthorizedAccessException or System.Security.SecurityException or IOException)
             {
-                Store.ShowError($"Could not change the startup setting: {e.Message}");
+                Model.ShowRuntimeError($"Could not change the startup setting: {e.Message}");
             }
         };
         page.Children.Add(Ui.Section("Startup",
             Ui.Setting("Open Flock at sign-in", "Shows the Flock icon in the notification area when you sign in. The daemon itself always starts at sign-in.", startup)));
 
         var updates = new List<UIElement> { AppUpdate() };
-        if (Store.Config is { } channelConfig)
+        if (viewModel.Config is { } channelConfig)
         {
             var experimental = channelConfig.Channel == "experimental";
             var beta = new ToggleSwitch { IsOn = channelConfig.Channel == "beta", IsEnabled = !experimental };
             beta.Toggled += async (_, _) =>
             {
-                await Perform(c => c.UpdateSettingsAsync(new SettingsChange(Channel: beta.IsOn ? "beta" : "stable")));
-                await Model.Updater.CheckAsync(userInitiated: false);
+                await viewModel.SetChannelAsync(beta.IsOn ? "beta" : "stable");
+                await Model.UpdateService.CheckAsync(userInitiated: false);
             };
             updates.Add(Ui.Setting("Beta versions", "Get new versions of Flock, PHP and services earlier, including pre-releases. They may not work yet.", beta));
             if (experimental)
@@ -83,7 +93,7 @@ internal sealed class GeneralPane(SettingsWindow window, AppModel model) : Pane(
         }
         page.Children.Add(Ui.Section("Updates", [.. updates]));
 
-        if (Store.Config is { } cfg)
+        if (viewModel.Config is { } cfg)
         {
             page.Children.Add(Parked(cfg));
         }
@@ -93,12 +103,12 @@ internal sealed class GeneralPane(SettingsWindow window, AppModel model) : Pane(
     /// <summary>The app's version and its update: what the last check found, a download in progress, or why it failed.</summary>
     private Border AppUpdate()
     {
-        var updater = Model.Updater;
-        if (Updater.Current is not { } current)
+        var updater = Model.UpdateService;
+        if (!updater.IsEnabled || Features.Update.UpdateService.Current is not { } current)
         {
-            return Ui.Setting("Flock", "Updates are off in development builds.", null);
+            return Ui.Setting("Flock", "Updates need a version such as 1.0.0. Set InformationalVersion when building to test updates.", null);
         }
-        var idle = updater.State == Updater.Phase.Idle;
+        var idle = !updater.IsBusy;
         var summary = updater.Summary;
         var description = summary.Length > 0 ? $"Version {current} · {summary}" : $"Version {current}";
         var button = updater.Available is { } update
@@ -108,15 +118,15 @@ internal sealed class GeneralPane(SettingsWindow window, AppModel model) : Pane(
         var control = idle ? (UIElement)button : Ui.Row(12, new ProgressRing { Width = 16, Height = 16 }, button);
         if (updater.Available is { } available && (available.Notes.Length > 0 || available.NotesUrl is not null) && idle)
         {
-            control = Ui.Row(12, Ui.Link("Release Notes", () =>
+            control = Ui.Row(12, Ui.Link("Release Notes", async () =>
             {
                 if (available.Notes.Length > 0)
                 {
-                    _ = ReleaseNotesAsync(available);
+                    await ReleaseNotesAsync(available);
                 }
-                else
+                else if (available.NotesUrl is { } url)
                 {
-                    Native.Open(available.NotesUrl!);
+                    Model.Open(url);
                 }
             }), button);
         }
@@ -126,8 +136,8 @@ internal sealed class GeneralPane(SettingsWindow window, AppModel model) : Pane(
     /// <summary>An update's release notes, like Sparkle's update window on macOS: install it from here, or read it on GitHub.</summary>
     private async Task ReleaseNotesAsync(UpdateFeed.Item update)
     {
-        var notes = new HtmlView(blockRemote: false) { Width = 500, Height = 380 };
-        notes.Load(ReleaseNotesPage(update.Notes));
+        var notes = new HtmlView(allowScripts: false, blockRemote: false, whiteBackground: false, shell: Model.Shell) { Width = 500, Height = 380 };
+        var load = notes.LoadAsync(ReleaseNotesPage(update.Notes));
         var dialog = new ContentDialog
         {
             Title = $"Flock {update.Version}",
@@ -140,13 +150,23 @@ internal sealed class GeneralPane(SettingsWindow window, AppModel model) : Pane(
         };
         // Wide enough for the notes; the default caps the dialog at 548 pixels.
         dialog.Resources["ContentDialogMaxWidth"] = 600.0;
-        switch (await dialog.ShowAsync())
+        ContentDialogResult result;
+        try
+        {
+            result = await dialog.ShowAsync();
+        }
+        finally
+        {
+            await load;
+            await notes.ReleaseAsync();
+        }
+        switch (result)
         {
             case ContentDialogResult.Primary:
-                await Model.Updater.InstallAsync();
+                await Model.UpdateService.InstallAsync();
                 break;
             case ContentDialogResult.Secondary:
-                Native.Open(update.NotesUrl!);
+                Model.Open(update.NotesUrl!);
                 break;
         }
     }
@@ -192,7 +212,7 @@ internal sealed class GeneralPane(SettingsWindow window, AppModel model) : Pane(
                 && await Window.Confirm($"Remove {path} from project folders?", "Its folders stop being served as sites. Nothing is deleted from disk.", "Remove", destructive: true))
             {
                 selectedParked = null;
-                await Perform(c => c.UnparkAsync(path));
+                await PerformAsync(c => c.UnparkAsync(path));
             }
         });
         remove.IsEnabled = selectedParked is not null;
@@ -206,7 +226,7 @@ internal sealed class GeneralPane(SettingsWindow window, AppModel model) : Pane(
             var paths = await Window.PickFolders("Add Project Folders");
             if (paths.Count > 0)
             {
-                await Perform(async c =>
+                await PerformAsync(async c =>
                 {
                     foreach (var path in paths)
                     {

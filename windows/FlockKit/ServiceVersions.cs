@@ -103,8 +103,8 @@ public sealed class PostgresMajor
     };
 }
 
-/// <summary>An install or update running in the daemon (PHP, FrankenPHP, a catalog service), or a failed one.</summary>
-public sealed class ComponentJob
+/// <summary>Shared state and progress rules for daemon jobs.</summary>
+public abstract class JobState
 {
     /// <summary>"install" or "update".</summary>
     public string Action { get; init; } = "";
@@ -134,6 +134,11 @@ public sealed class ComponentJob
         "installing" => "Installing…",
         _ => Action == "update" ? "Updating…" : "Working…",
     };
+}
+
+/// <summary>An install or update running in the daemon (PHP or FrankenPHP), or a failed one.</summary>
+public sealed class ComponentJob : JobState
+{
 }
 
 /// <summary>
@@ -212,32 +217,9 @@ public sealed class CatalogLine
 }
 
 /// <summary>An install of a catalog service, running or failed.</summary>
-public sealed class CatalogJob
+public sealed class CatalogJob : JobState
 {
-    public string Action { get; init; } = "";
-    public string State { get; init; } = "";
-    public string Phase { get; init; } = "";
-    public double Progress { get; init; } = -1;
-    public string Error { get; init; } = "";
-    public DateTimeOffset? StartedAt { get; init; }
     /// <summary>What it installs; empty until the newest release is known.</summary>
     public string Version { get; init; } = "";
     public string Line { get; init; } = "";
-
-    [JsonIgnore]
-    public bool IsRunning => State == "running";
-
-    [JsonIgnore]
-    public bool IsFailed => State == "failed";
-
-    [JsonIgnore]
-    public bool HasProgress => Progress is >= 0 and <= 1;
-
-    [JsonIgnore]
-    public string PhaseText => Phase switch
-    {
-        "downloading" => "Downloading…",
-        "installing" => "Installing…",
-        _ => Action == "update" ? "Updating…" : "Working…",
-    };
 }

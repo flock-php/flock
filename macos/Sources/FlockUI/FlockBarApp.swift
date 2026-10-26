@@ -64,15 +64,26 @@ public struct FlockBarApp: App {
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     static let reopen = Notification.Name("dev.flock.reopen")
+    static let launched = Notification.Name("dev.flock.launched")
 
-    /// Whether this launch is the login item's, read from the launch's Apple event.
-    private(set) static var launchedAtLogin = false
+    /// Whether the launch asked for the main window, until the menu bar label takes it. Decided here
+    /// and kept, because the label can appear before or after the launch's Apple event arrives.
+    private(set) static var pendingMain = false
+
+    static func takePendingMain() -> Bool {
+        defer { pendingMain = false }
+        return pendingMain
+    }
 
     /// The launch's Apple event only arrives by now; in applicationWillFinishLaunching it is nil.
+    /// The login item's launch carries 'prdt':'lgit' and stays quiet.
     func applicationDidFinishLaunching(_ notification: Notification) {
         let event = NSAppleEventManager.shared().currentAppleEvent
-        Self.launchedAtLogin = event?.eventID == kAEOpenApplication
+        let launchedAtLogin = event?.eventID == kAEOpenApplication
             && event?.paramDescriptor(forKeyword: keyAEPropData)?.enumCodeValue == keyAELaunchedAsLogInItem
+        guard !launchedAtLogin else { return }
+        Self.pendingMain = true
+        NotificationCenter.default.post(name: Self.launched, object: nil)
     }
 
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
@@ -109,20 +120,27 @@ private struct MenuBarLabel: View {
     var body: some View {
         LogoMark(mode: model.logoMark)
             .task {
-                if let link = AppDelegate.takePendingLink() {
-                    open(link)
-                } else if !AppDelegate.launchedAtLogin {
-                    openMain()
-                }
+                openPending()
+            }
+            .onReceive(NotificationCenter.default.publisher(for: AppDelegate.launched)) { _ in
+                openPending()
             }
             .onReceive(NotificationCenter.default.publisher(for: AppDelegate.reopen)) { _ in
                 openMain()
             }
             .onReceive(NotificationCenter.default.publisher(for: AppDelegate.openLink)) { _ in
-                if let link = AppDelegate.takePendingLink() {
-                    open(link)
-                }
+                openPending()
             }
+    }
+
+    /// A pending link opens what it points to, otherwise the main window if the launch asked for it.
+    private func openPending() {
+        let main = AppDelegate.takePendingMain()
+        if let link = AppDelegate.takePendingLink() {
+            open(link)
+        } else if main {
+            openMain()
+        }
     }
 
     /// The setup until Flock is set up, then Settings.
