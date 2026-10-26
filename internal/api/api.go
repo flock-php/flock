@@ -349,10 +349,11 @@ func (c *Client) Status(ctx context.Context) (Status, error) {
 	return status, err
 }
 
-// Reload asks the daemon to apply config.json and returns the resulting status.
+// Reload asks the daemon to apply config.json and returns the resulting status. It may start a
+// site's FrankenPHP or Reverb and wait for it (Octane up to 20 s), so it gets UpdateSite's minute.
 func (c *Client) Reload(ctx context.Context) (Status, error) {
 	var status Status
-	err := c.do(ctx, http.MethodPost, "/v1/reload", &status)
+	err := c.timeout(time.Minute).do(ctx, http.MethodPost, "/v1/reload", &status)
 
 	return status, err
 }

@@ -59,7 +59,11 @@ needs the REVERB_HOST, REVERB_PORT and REVERB_SCHEME lines ` + "`flock reverb`" 
 				cmd.Printf("stopped %s's Reverb server\n", site.Name)
 				return nil
 			}
-			return showReverb(cmd, s, site.Name)
+			// commit has already said that a stopped daemon applies the change when it starts.
+			if err := showReverb(cmd, s, site.Name); !errors.Is(err, api.ErrDaemonNotRunning) {
+				return err
+			}
+			return nil
 		}
 	}
 	on := &cobra.Command{Use: "on [site]", Short: "Run a site's Reverb server", Args: cobra.MaximumNArgs(1), RunE: toggle(true)}
@@ -97,9 +101,6 @@ needs the REVERB_HOST, REVERB_PORT and REVERB_SCHEME lines ` + "`flock reverb`" 
 // showReverb prints the site's Reverb server as the daemon reports it.
 func showReverb(cmd *cobra.Command, s *state, name string) error {
 	st, err := s.client().Status(cmd.Context())
-	if errors.Is(err, api.ErrDaemonNotRunning) {
-		return nil // commit said so
-	}
 	if err != nil {
 		return err
 	}

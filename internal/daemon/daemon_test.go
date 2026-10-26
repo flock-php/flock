@@ -161,6 +161,28 @@ func TestReloadReportsSitesWithMissingPHP(t *testing.T) {
 	}
 }
 
+func TestReloadSaysWhyAnEnabledReverbServerCantRun(t *testing.T) {
+	root, cfg := testRoot(t, nil)
+	client := startDaemon(t, root)
+
+	cfg.Upsert(config.Site{Name: "app", Path: t.TempDir(), PHP: "7.0", Reverb: true, ReverbPort: freePort(t)})
+	if err := cfg.Save(root); err != nil {
+		t.Fatal(err)
+	}
+
+	status, err := client.Reload(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(status.Sites) != 1 {
+		t.Fatalf("unexpected sites: %+v", status.Sites)
+	}
+	// Without it `flock reverb` read the missing status as "Reverb is off" and suggested turning it on.
+	if r := status.Sites[0].Reverb; r == nil || r.State != api.ReverbUnavailable || r.Problem != "PHP 7.0 is not installed" {
+		t.Fatalf("reverb status: %+v", r)
+	}
+}
+
 func TestTheFirstRunWaitsForTheDefaultsAndSaysSo(t *testing.T) {
 	root, cfg := testRoot(t, func(cfg *config.Config) { cfg.DefaultPHP, cfg.DefaultNode = "", "" })
 	cfg.Upsert(config.Site{Name: "app", Path: t.TempDir()})

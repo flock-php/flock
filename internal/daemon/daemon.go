@@ -629,6 +629,7 @@ func (d *daemon) reload() error {
 			// Its names get a page that says what's missing instead of the site (see web.Waiting).
 			w := d.waitingFor(site, phpVersion, domain, aliases)
 			status.Problem = waitingProblem(w)
+			status.Reverb = reverbBlocked(cfg, site, scheme, status.Problem)
 			waiting = append(waiting, w)
 			domains = append(append(domains, domain), served...)
 			statuses = append(statuses, status)
@@ -646,6 +647,7 @@ func (d *daemon) reload() error {
 			if root.State == project.RootMissing {
 				status.Problem = rootProblem(root)
 			}
+			status.Reverb = reverbBlocked(cfg, site, scheme, "the site has no usable document root")
 			rootless = append(rootless, r)
 			status.URL = scheme + "://" + domain + portSuffix(scheme, cfg)
 			domains = append(append(domains, domain), served...)
@@ -698,6 +700,8 @@ func (d *daemon) reload() error {
 					rs.State, rs.Problem = api.ReverbFailed, fmt.Sprintf("Reverb did not start — see `flock logs %s`", spec.Name)
 					warnings = append(warnings, fmt.Sprintf("reverb: %s did not start — see `flock logs %s`", site.Name, spec.Name))
 				}
+			} else if w := reverbPreflightWarning(site.Name, rs); w != "" {
+				warnings = append(warnings, w)
 			}
 			status.Reverb = &rs
 		}
@@ -1039,12 +1043,29 @@ func (d *daemon) ReleasePHP(minor string) {
 	d.reloadMu.Lock()
 	defer d.reloadMu.Unlock()
 
-	keep := map[string]bool{}
-	for _, name := range d.procs.Running() {
-		usesPHP := name == "dump-server" || strings.HasPrefix(name, "php"+minor)
-		keep[name] = !usesPHP
+	d.mu.Lock()
+	cfg := d.cfg
+	d.mu.Unlock()
+	d.procs.Retain(notUsingPHP(cfg, minor, d.procs.Running()))
+}
+
+// notUsingPHP marks which of the running processes don't run PHP minor: the dump server, the
+// version's pools and the Reverb servers of the sites on it do.
+func notUsingPHP(cfg *config.Config, minor string, running []string) map[string]bool {
+	// A site's Reverb server is a php.exe of the site's version, named after the site.
+	reverbs := map[string]bool{}
+	if cfg != nil {
+		for _, site := range cfg.AllSites() {
+			if site.Reverb && project.PHPFor(cfg, &site, site.Path).Version == minor {
+				reverbs[config.ReverbPortID(site.Name)] = true
+			}
+		}
 	}
-	d.procs.Retain(keep)
+	keep := map[string]bool{}
+	for _, name := range running {
+		keep[name] = !(name == "dump-server" || strings.HasPrefix(name, "php"+minor) || reverbs[name])
+	}
+	return keep
 }
 
 // Services implements api.Backend.
