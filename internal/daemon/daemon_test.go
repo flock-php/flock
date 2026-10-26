@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -159,6 +160,43 @@ func TestReloadReportsSitesWithMissingPHP(t *testing.T) {
 	if len(status.Sites) != 1 || status.Sites[0].Problem != "PHP 7.0 is not installed" {
 		t.Fatalf("unexpected sites: %+v", status.Sites)
 	}
+}
+
+func TestReloadReadsTheMachinesAddressesOnce(t *testing.T) {
+	var reads atomic.Int32
+	old := interfaceAddrs
+	interfaceAddrs = func() ([]net.Addr, error) {
+		reads.Add(1)
+		return []net.Addr{&net.IPNet{IP: net.ParseIP("127.0.0.1"), Mask: net.CIDRMask(8, 32)}}, nil
+	}
+	t.Cleanup(func() { interfaceAddrs = old })
+
+	root, _ := testRoot(t, func(c *config.Config) { c.Listen = []string{"100.64.0.9"} })
+	client := startDaemon(t, root)
+
+	before := reads.Load()
+	status, err := client.Reload(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	// DNS, web, the warnings and the status come from one reading: read separately, a VPN address
+	// appearing in between was served by web but not DNS, with no warning to make the daemon retry.
+	if n := reads.Load() - before; n != 1 {
+		t.Errorf("a reload read the addresses %d times, want 1", n)
+	}
+	if n := countContaining(status.Warnings, "100.64.0.9 isn't an address of this machine"); n != 1 {
+		t.Errorf("warning reported %d times: %q", n, status.Warnings)
+	}
+}
+
+func countContaining(list []string, part string) int {
+	n := 0
+	for _, s := range list {
+		if strings.Contains(s, part) {
+			n++
+		}
+	}
+	return n
 }
 
 func TestTheFirstRunWaitsForTheDefaultsAndSaysSo(t *testing.T) {

@@ -68,6 +68,7 @@ type daemon struct {
 	reloadMu sync.Mutex
 	mutateMu sync.Mutex
 	dns      *dns.Server // written under reloadMu and mu
+	listen   []string    // the listen addresses the last reload served on (see listenAddresses)
 	dnsErr   error       // why the DNS server isn't running (Windows, where it is optional)
 	mail     *mail.Server
 	// collector receives the PHP agent's dumps and events while capture is on.
@@ -177,14 +178,13 @@ var windowsDNSPort = dns.Port
 // ensureDNS (re)starts the DNS server when its address or TLD changed. On Windows it is optional:
 // the hosts file still resolves every site's domains when port 53 is taken, so a failure there is
 // reported through the wildcard check instead of as a warning.
-func (d *daemon) ensureDNS(cfg *config.Config) error {
+func (d *daemon) ensureDNS(cfg *config.Config, also []string) error {
 	port := cfg.Ports.DNS
 	if runtime.GOOS == "windows" {
 		port = windowsDNSPort
 	}
 
 	addr := fmt.Sprintf("127.0.0.1:%d", port)
-	also, _ := listenAddresses(cfg)
 	if d.dns != nil && d.dns.Addr() == addr && d.dns.TLD() == cfg.TLD && slices.Equal(d.dns.Also(), also) {
 		return nil
 	}
@@ -507,7 +507,15 @@ func (d *daemon) reload() error {
 	if err := trustInBrowsers(ca.CertPath()); err != nil {
 		warnings = append(warnings, "browsers don't trust Flock's HTTPS certificates: "+err.Error())
 	}
-	for _, ensure := range []func(*config.Config) error{d.ensureDNS, d.ensureMail, d.ensureCollector} {
+	// One reading of the machine's addresses for DNS, web and the warnings. Reading them for each
+	// could see a VPN address appear in between: web would serve it, DNS wouldn't, and with no
+	// warning the daemon wouldn't retry.
+	listen, listenProblems := listenAddresses(cfg)
+	warnings = append(warnings, listenProblems...)
+	if err := d.ensureDNS(cfg, listen); err != nil {
+		warnings = append(warnings, err.Error())
+	}
+	for _, ensure := range []func(*config.Config) error{d.ensureMail, d.ensureCollector} {
 		if err := ensure(cfg); err != nil {
 			warnings = append(warnings, err.Error())
 		}
@@ -793,14 +801,12 @@ func (d *daemon) reload() error {
 		bind = ""
 	}
 
-	listen, listenProblems := listenAddresses(cfg)
-	warnings = append(warnings, listenProblems...)
 	if err := d.applyWeb(cfg, bind, listen, webSites, waiting, rootless, shares, ca); err != nil {
 		warnings = append(warnings, "web: "+err.Error())
 	}
 
 	d.mu.Lock()
-	d.cfg, d.sites, d.warnings, d.problems, d.breakpointSites = cfg, statuses, warnings, problems, breakpoints
+	d.cfg, d.sites, d.warnings, d.problems, d.breakpointSites, d.listen = cfg, statuses, warnings, problems, breakpoints, listen
 	d.mu.Unlock()
 
 	go d.checkWildcard()
@@ -985,7 +991,7 @@ func (d *daemon) Status() api.Status {
 	}
 	if d.cfg != nil {
 		st.HTTPPort, st.HTTPSPort = d.cfg.Ports.HTTP, d.cfg.Ports.HTTPS
-		st.Listen, _ = listenAddresses(d.cfg)
+		st.Listen = d.listen
 		if d.cfg.Services.Postgres != "" {
 			st.Postgres = fmt.Sprintf("%s on 127.0.0.1:%d", postgres.VersionOf(d.cfg.Services.Postgres), d.cfg.Ports.Postgres)
 		}

@@ -33,3 +33,17 @@ func TestListenAddressesKeepsThisMachinesIPv4Addresses(t *testing.T) {
 		}
 	}
 }
+
+func TestListenAddressesListsEachAddressOnce(t *testing.T) {
+	old := interfaceAddrs
+	interfaceAddrs = func() ([]net.Addr, error) {
+		return []net.Addr{&net.IPNet{IP: net.ParseIP("100.64.0.7"), Mask: net.CIDRMask(32, 32)}}, nil
+	}
+	t.Cleanup(func() { interfaceAddrs = old })
+
+	// The DNS server would bind a repeated address twice and lose every listener on the failure.
+	hosts, problems := listenAddresses(&config.Config{Listen: []string{"100.64.0.7", "::ffff:100.64.0.7", "100.64.0.7"}})
+	if !slices.Equal(hosts, []string{"100.64.0.7"}) || problems != nil {
+		t.Fatalf("hosts %v, problems %v", hosts, problems)
+	}
+}
