@@ -221,7 +221,11 @@ struct WorktreeDetail: View {
 
     private var switchTitle: String {
         guard let mode = switching else { return "" }
-        return mode == .shared ? "Use \(parent)'s database?" : "Give \(worktree.worktreeLabel) \(mode.title.lowercased()) database?"
+        switch mode {
+        case .shared: return "Use \(parent)'s database?"
+        case .copy: return "Give \(worktree.worktreeLabel) a copy of \(parent)'s database?"
+        case .fresh: return "Give \(worktree.worktreeLabel) a new, empty database?"
+        }
     }
 
     private func switchMessage(_ mode: DatabaseMode) -> String {
