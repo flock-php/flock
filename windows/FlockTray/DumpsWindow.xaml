@@ -4,11 +4,33 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:local="using:Flock.Tray">
     <Grid x:Name="WindowRoot">
-        <Grid.RowDefinitions><RowDefinition Height="48" /><RowDefinition Height="*" /></Grid.RowDefinitions>
-        <Grid x:Name="WindowTitleBar" Grid.Row="0" Height="48" Padding="16,0,0,0"><StackPanel Orientation="Horizontal" Spacing="12" VerticalAlignment="Center"><Image x:Name="WindowIcon" Width="16" Height="16" /><TextBlock x:Name="WindowCaption" Style="{StaticResource CaptionTextBlockStyle}" TextTrimming="CharacterEllipsis" /></StackPanel></Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="48" /><RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+        <Grid x:Name="WindowTitleBar" Grid.Row="0" Height="48" Padding="16,0,0,0">
+            <StackPanel Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
+                <Image x:Name="WindowIcon" Width="16" Height="16" />
+                <TextBlock x:Name="WindowCaption" Style="{StaticResource CaptionTextBlockStyle}" TextTrimming="CharacterEllipsis" />
+            </StackPanel>
+        </Grid>
         <Grid x:Name="WindowBody" Grid.Row="1">
-            <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="*" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
-            <Grid ColumnSpacing="12" Padding="16,0,16,0"><Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions><AutoSuggestBox x:Name="Search" Grid.Column="0" HorizontalAlignment="Left" PlaceholderText="Search dumps" QueryIcon="Find" Width="280" VerticalAlignment="Center" TextChanged="SearchChanged" /><CommandBar x:Name="Toolbar" Grid.Column="1" DefaultLabelPosition="Right" HorizontalAlignment="Right"><AppBarToggleButton x:Name="Capture" Icon="Download" Label="Capture Dumps" Click="CaptureClicked" /><AppBarButton x:Name="CaptureKinds" Icon="Filter" Label="Capture" /><AppBarToggleButton x:Name="LatestOnly" Icon="Clock" Label="Latest Request Only" Click="LatestOnlyClicked" /><AppBarButton x:Name="EditorButton" Icon="Edit" Label="Editor" /><AppBarButton x:Name="ClearButton" Icon="Delete" Label="Clear" Click="ClearClicked" /></CommandBar></Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" /><RowDefinition Height="*" /><RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+            <Grid ColumnSpacing="12" Padding="16,0,16,0">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <AutoSuggestBox x:Name="Search" Grid.Column="0" HorizontalAlignment="Left" PlaceholderText="Search dumps" QueryIcon="Find" Width="280"
+                                VerticalAlignment="Center" TextChanged="SearchChanged" />
+                <CommandBar x:Name="Toolbar" Grid.Column="1" DefaultLabelPosition="Right" HorizontalAlignment="Right">
+                    <AppBarToggleButton x:Name="Capture" Icon="Download" Label="Capture Dumps" Click="CaptureClicked" />
+                    <AppBarButton x:Name="CaptureKinds" Icon="Filter" Label="Capture" />
+                    <AppBarToggleButton x:Name="LatestOnly" Icon="Clock" Label="Latest Request Only" Click="LatestOnlyClicked" />
+                    <AppBarButton x:Name="EditorButton" Icon="Edit" Label="Editor" />
+                    <AppBarButton x:Name="ClearButton" Icon="Delete" Label="Clear" Click="ClearClicked" />
+                </CommandBar>
+            </Grid>
             <ContentControl x:Name="ContentHost" Grid.Row="1" HorizontalContentAlignment="Stretch" VerticalContentAlignment="Stretch" />
             <InfoBar x:Name="ErrorBar" Grid.Row="2" Severity="Error" IsClosable="True" CloseButtonClick="DismissError" />
         </Grid>

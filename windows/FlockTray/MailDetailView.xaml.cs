@@ -1,18 +1,19 @@
+using System.ComponentModel;
+using System.Globalization;
 using Flock.Kit;
 using Flock.Tray.Infrastructure;
 using Flock.Tray.ViewModels;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
-
 namespace Flock.Tray;
 
 /// <summary>One message's headers, attachments, and content modes.</summary>
 internal sealed partial class MailDetailView : Grid, IAsyncDisposable
 {
-    private readonly IntPtr owner;
-    private readonly MailDetailViewModel viewModel;
-    private readonly IShellLauncher shell;
     private readonly MailDetail message;
+    private readonly IntPtr owner;
+    private readonly IShellLauncher shell;
+    private readonly MailDetailViewModel viewModel;
     private HtmlView? html;
     private Task htmlLoad = Task.CompletedTask;
     private bool released;
@@ -27,7 +28,7 @@ internal sealed partial class MailDetailView : Grid, IAsyncDisposable
         Subject.Text = message.Subject.Length == 0 ? "(no subject)" : message.Subject;
         From.Text = message.From;
         To.Text = string.Join(", ", message.To);
-        Date.Text = message.Date.ToLocalTime().ToString("f", System.Globalization.CultureInfo.CurrentCulture);
+        Date.Text = message.Date.ToLocalTime().ToString("f", CultureInfo.CurrentCulture);
         Inbox.Text = message.Inbox;
         if (message.Cc.Count > 0)
         {
@@ -37,7 +38,8 @@ internal sealed partial class MailDetailView : Grid, IAsyncDisposable
         }
         foreach (var attachment in message.Attachments)
         {
-            Attachments.Children.Add(Ui.AsyncButton($"{attachment.Filename} ({Ui.Bytes(attachment.Size)})", () => viewModel.SaveAttachmentAsync(attachment, owner), glyph: Ui.GlyphAttach, tooltip: "Save…"));
+            Attachments.Children.Add(Ui.AsyncButton($"{attachment.Filename} ({Ui.Bytes(attachment.Size)})", () => viewModel.SaveAttachmentAsync(attachment, owner),
+                glyph: Ui.GlyphAttach, tooltip: "Save…"));
         }
         AttachmentsScroll.Visibility = message.Attachments.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
         this.viewModel.PropertyChanged += ViewModelChanged;
@@ -58,12 +60,15 @@ internal sealed partial class MailDetailView : Grid, IAsyncDisposable
         }
     }
 
-    public static ScrollViewer Monospaced(string text) => new()
+    public static ScrollViewer Monospaced(string text)
     {
-        Content = new TextBlock { Text = text, FontFamily = Ui.Mono, FontSize = 13, IsTextSelectionEnabled = true, Margin = new Thickness(16, 12, 16, 12) },
-        HorizontalScrollBarVisibility = ScrollBarVisibility.Auto,
-        HorizontalScrollMode = ScrollMode.Auto,
-    };
+        return new ScrollViewer
+        {
+            Content = new TextBlock { Text = text, FontFamily = Ui.Mono, FontSize = 13, IsTextSelectionEnabled = true, Margin = new Thickness(16, 12, 16, 12) },
+            HorizontalScrollBarVisibility = ScrollBarVisibility.Auto,
+            HorizontalScrollMode = ScrollMode.Auto
+        };
+    }
 
     private async void ModeChanged(SelectorBar sender, SelectorBarSelectionChangedEventArgs args)
     {
@@ -74,9 +79,10 @@ internal sealed partial class MailDetailView : Grid, IAsyncDisposable
         }
     }
 
-    private void ViewModelChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs args)
+    private void ViewModelChanged(object? sender, PropertyChangedEventArgs args)
     {
-        if (args.PropertyName is nameof(MailDetailViewModel.Raw) or nameof(MailDetailViewModel.RawError) or nameof(MailDetailViewModel.IsRawLoading) or nameof(MailDetailViewModel.Error)) RenderMode();
+        if (args.PropertyName is nameof(MailDetailViewModel.Raw) or nameof(MailDetailViewModel.RawError) or nameof(MailDetailViewModel.IsRawLoading)
+            or nameof(MailDetailViewModel.Error)) RenderMode();
     }
 
     private void RenderMode()
@@ -85,22 +91,30 @@ internal sealed partial class MailDetailView : Grid, IAsyncDisposable
         switch (viewModel.Mode)
         {
             case "HTML":
-                if (message.Html.Length == 0) { ContentHost.Content = Ui.EmptyState(Ui.GlyphDocument, "No HTML part"); break; }
-                html ??= new HtmlView(allowScripts: false, blockRemote: true, whiteBackground: true, shell: shell);
+                if (message.Html.Length == 0)
+                {
+                    ContentHost.Content = Ui.EmptyState(Ui.GlyphDocument, "No HTML part");
+                    break;
+                }
+                html ??= new HtmlView(false, true, true, shell);
                 htmlLoad = html.LoadAsync(message.Html);
                 ContentHost.Content = html;
                 break;
             case "Text": ContentHost.Content = Monospaced(message.Text.Length == 0 ? "(no text part)" : message.Text); break;
             case "Raw":
                 if (viewModel.IsRawLoading) ContentHost.Content = new ProgressRing { Width = 32, Height = 32 };
-                else if (viewModel.RawError is { } error) ContentHost.Content = Ui.EmptyState(Ui.GlyphWarning, "Could not load raw message", error, Ui.AsyncButton("Retry", () => SetModeAsync("Raw"), accent: true));
+                else if (viewModel.RawError is { } error)
+                    ContentHost.Content = Ui.EmptyState(Ui.GlyphWarning, "Could not load raw message", error, Ui.AsyncButton("Retry", () => SetModeAsync("Raw"), true));
                 else ContentHost.Content = Monospaced(viewModel.Raw ?? "(empty)");
                 break;
             default: ContentHost.Content = Headers(); break;
         }
     }
 
-    private Task SetModeAsync(string mode) => SetModeAndRenderAsync(mode);
+    private Task SetModeAsync(string mode)
+    {
+        return SetModeAndRenderAsync(mode);
+    }
 
     private async Task SetModeAndRenderAsync(string mode)
     {
@@ -118,7 +132,11 @@ internal sealed partial class MailDetailView : Grid, IAsyncDisposable
             grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
             var name = Ui.Text(message.Headers[i].Name, foreground: Ui.SecondaryText, selectable: true);
             var value = Ui.Text(message.Headers[i].Value, selectable: true);
-            Grid.SetRow(name, i); Grid.SetRow(value, i); Grid.SetColumn(value, 1); grid.Children.Add(name); grid.Children.Add(value);
+            SetRow(name, i);
+            SetRow(value, i);
+            SetColumn(value, 1);
+            grid.Children.Add(name);
+            grid.Children.Add(value);
         }
         return new ScrollViewer { Content = grid };
     }

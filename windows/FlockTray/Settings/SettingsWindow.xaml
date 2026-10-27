@@ -24,16 +24,56 @@
             OpenPaneLength="220"
             SelectionChanged="NavigationSelectionChanged">
             <NavigationView.MenuItems>
-                <NavigationViewItem Content="General" Tag="General"><NavigationViewItem.Icon><FontIcon Glyph="&#xE713;" FontFamily="{StaticResource SymbolsFont}" /></NavigationViewItem.Icon></NavigationViewItem>
-                <NavigationViewItem Content="Sites" Tag="Sites"><NavigationViewItem.Icon><FontIcon Glyph="&#xE774;" FontFamily="{StaticResource SymbolsFont}" /></NavigationViewItem.Icon></NavigationViewItem>
-                <NavigationViewItem Content="PHP" Tag="Php"><NavigationViewItem.Icon><FontIcon Glyph="&#xE943;" FontFamily="{StaticResource SymbolsFont}" /></NavigationViewItem.Icon></NavigationViewItem>
-                <NavigationViewItem Content="Node" Tag="Node"><NavigationViewItem.Icon><FontIcon Glyph="&#xE756;" FontFamily="{StaticResource SymbolsFont}" /></NavigationViewItem.Icon></NavigationViewItem>
-                <NavigationViewItem Content="Services" Tag="Services"><NavigationViewItem.Icon><FontIcon Glyph="&#xE968;" FontFamily="{StaticResource SymbolsFont}" /></NavigationViewItem.Icon></NavigationViewItem>
-                <NavigationViewItem Content="Mail" Tag="Mail"><NavigationViewItem.Icon><FontIcon Glyph="&#xE715;" FontFamily="{StaticResource SymbolsFont}" /></NavigationViewItem.Icon></NavigationViewItem>
-                <NavigationViewItem Content="Dumps" Tag="Dumps"><NavigationViewItem.Icon><FontIcon Glyph="&#xE896;" FontFamily="{StaticResource SymbolsFont}" /></NavigationViewItem.Icon></NavigationViewItem>
-                <NavigationViewItem Content="Debugger" Tag="Debugger"><NavigationViewItem.Icon><FontIcon Glyph="&#xEBE8;" FontFamily="{StaticResource SymbolsFont}" /></NavigationViewItem.Icon></NavigationViewItem>
-                <NavigationViewItem Content="AI" Tag="Ai"><NavigationViewItem.Icon><FontIcon Glyph="&#xE99A;" FontFamily="{StaticResource SymbolsFont}" /></NavigationViewItem.Icon></NavigationViewItem>
-                <NavigationViewItem Content="About" Tag="About"><NavigationViewItem.Icon><FontIcon Glyph="&#xE946;" FontFamily="{StaticResource SymbolsFont}" /></NavigationViewItem.Icon></NavigationViewItem>
+                <NavigationViewItem Content="General" Tag="General">
+                    <NavigationViewItem.Icon>
+                        <FontIcon Glyph="&#xE713;" FontFamily="{StaticResource SymbolsFont}" />
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
+                <NavigationViewItem Content="Sites" Tag="Sites">
+                    <NavigationViewItem.Icon>
+                        <FontIcon Glyph="&#xE774;" FontFamily="{StaticResource SymbolsFont}" />
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
+                <NavigationViewItem Content="PHP" Tag="Php">
+                    <NavigationViewItem.Icon>
+                        <FontIcon Glyph="&#xE943;" FontFamily="{StaticResource SymbolsFont}" />
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
+                <NavigationViewItem Content="Node" Tag="Node">
+                    <NavigationViewItem.Icon>
+                        <FontIcon Glyph="&#xE756;" FontFamily="{StaticResource SymbolsFont}" />
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
+                <NavigationViewItem Content="Services" Tag="Services">
+                    <NavigationViewItem.Icon>
+                        <FontIcon Glyph="&#xE968;" FontFamily="{StaticResource SymbolsFont}" />
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
+                <NavigationViewItem Content="Mail" Tag="Mail">
+                    <NavigationViewItem.Icon>
+                        <FontIcon Glyph="&#xE715;" FontFamily="{StaticResource SymbolsFont}" />
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
+                <NavigationViewItem Content="Dumps" Tag="Dumps">
+                    <NavigationViewItem.Icon>
+                        <FontIcon Glyph="&#xE896;" FontFamily="{StaticResource SymbolsFont}" />
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
+                <NavigationViewItem Content="Debugger" Tag="Debugger">
+                    <NavigationViewItem.Icon>
+                        <FontIcon Glyph="&#xEBE8;" FontFamily="{StaticResource SymbolsFont}" />
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
+                <NavigationViewItem Content="AI" Tag="Ai">
+                    <NavigationViewItem.Icon>
+                        <FontIcon Glyph="&#xE99A;" FontFamily="{StaticResource SymbolsFont}" />
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
+                <NavigationViewItem Content="About" Tag="About">
+                    <NavigationViewItem.Icon>
+                        <FontIcon Glyph="&#xE946;" FontFamily="{StaticResource SymbolsFont}" />
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
             </NavigationView.MenuItems>
             <NavigationView.Content>
                 <Grid x:Name="Page">
@@ -44,9 +84,11 @@
                     </Grid.RowDefinitions>
                     <StackPanel x:Name="PaneHeading" Grid.Row="0" Margin="36,0,36,20" Spacing="2">
                         <TextBlock x:Name="PaneTitle" Style="{StaticResource TitleTextBlockStyle}" />
-                        <TextBlock x:Name="Subtitle" Style="{StaticResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
+                        <TextBlock x:Name="Subtitle" Style="{StaticResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                   TextWrapping="Wrap" />
                     </StackPanel>
-                    <ScrollViewer x:Name="Scroller" Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollMode="Disabled" HorizontalScrollBarVisibility="Disabled">
+                    <ScrollViewer x:Name="Scroller" Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollMode="Disabled"
+                                  HorizontalScrollBarVisibility="Disabled">
                         <Grid x:Name="PaneHost" Padding="36,0,36,24" HorizontalAlignment="Stretch" />
                     </ScrollViewer>
                     <InfoBar

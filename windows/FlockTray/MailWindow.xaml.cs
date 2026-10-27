@@ -1,20 +1,16 @@
-using Flock.Kit;
-using Flock.Tray.Infrastructure;
+using System.ComponentModel;
 using Flock.Tray.ViewModels;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
-
 namespace Flock.Tray;
 
 /// <summary>Caught mail: the list on the left, the selected message on the right.</summary>
 internal sealed partial class MailWindow : FlockWindow
 {
+    private readonly Task initialRefresh;
     private readonly MailViewModel viewModel;
     private MailDetailView? detailView;
     private bool rendering;
-    private readonly Task initialRefresh;
-
-    internal void SelectFirst() => MailList.SelectedIndex = 0;
 
     public MailWindow(MailViewModel viewModel) : base("Mail", 1000, 660)
     {
@@ -30,7 +26,15 @@ internal sealed partial class MailWindow : FlockWindow
         Ui.SettingsShortcut(WindowRoot);
     }
 
-    private void ViewModelChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs args) => Render();
+    internal void SelectFirst()
+    {
+        MailList.SelectedIndex = 0;
+    }
+
+    private void ViewModelChanged(object? sender, PropertyChangedEventArgs args)
+    {
+        Render();
+    }
 
     private void Render()
     {
@@ -38,7 +42,9 @@ internal sealed partial class MailWindow : FlockWindow
         ClearButton.IsEnabled = viewModel.CanClear;
         rendering = true;
         MailList.SelectedItem = viewModel.SelectedId is { } id ? viewModel.Messages.FirstOrDefault(message => message.Id == id) : null;
-        EmptyStateHost.Content = viewModel.Messages.Count == 0 ? Ui.EmptyState(Ui.GlyphMail, "No mail", $"Send mail to {viewModel.SmtpAddress}. MAIL_USERNAME picks the inbox.") : null;
+        EmptyStateHost.Content = viewModel.Messages.Count == 0
+            ? Ui.EmptyState(Ui.GlyphMail, "No mail", $"Send mail to {viewModel.SmtpAddress}. MAIL_USERNAME picks the inbox.")
+            : null;
         rendering = false;
         if (viewModel.SelectedId is null)
         {
@@ -73,7 +79,7 @@ internal sealed partial class MailWindow : FlockWindow
             PrimaryButtonText = "Delete All",
             CloseButtonText = "Cancel",
             DefaultButton = ContentDialogButton.Close,
-            XamlRoot = WindowRoot.XamlRoot,
+            XamlRoot = WindowRoot.XamlRoot
         };
         if (await dialog.ShowAsync() == ContentDialogResult.Primary)
         {

@@ -9,10 +9,15 @@
         <local:StringVisibilityConverter x:Key="StringVisibilityConverter" />
     </UserControl.Resources>
     <Grid ColumnSpacing="16">
-        <Grid.ColumnDefinitions><ColumnDefinition Width="240" /><ColumnDefinition Width="*" MinWidth="360" /></Grid.ColumnDefinitions>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="240" /><ColumnDefinition Width="*" MinWidth="360" />
+        </Grid.ColumnDefinitions>
         <Grid Grid.Column="0" RowSpacing="4">
-            <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="*" /></Grid.RowDefinitions>
-            <SelectorBar x:Name="Filter" SelectionChanged="FilterChanged" ToolTipService.ToolTip="Show only installed services, or every service Flock offers" Margin="-4,-8,0,4">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" /><RowDefinition Height="*" />
+            </Grid.RowDefinitions>
+            <SelectorBar x:Name="Filter" SelectionChanged="FilterChanged" ToolTipService.ToolTip="Show only installed services, or every service Flock offers"
+                         Margin="-4,-8,0,4">
                 <SelectorBarItem Text="Installed" />
                 <SelectorBarItem Text="All" />
             </SelectorBar>
@@ -27,10 +32,21 @@
                                         <DataTemplate>
                                             <Button Click="ServiceSelected" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch" Padding="12,10">
                                                 <Grid ColumnSpacing="8">
-                                                    <Grid.ColumnDefinitions><ColumnDefinition Width="Auto" /><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
-                                                    <Ellipse Style="{StaticResource StatusDotStyle}" Fill="{Binding Running, Converter={StaticResource StatusBrushConverter}}" />
-                                                    <StackPanel Grid.Column="1" Spacing="2"><TextBlock Text="{Binding Name}" Style="{StaticResource BodyStrongTextBlockStyle}" /><TextBlock Text="{Binding ListDetail}" Visibility="{Binding ListDetail, Converter={StaticResource StringVisibilityConverter}}" Style="{StaticResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" /></StackPanel>
-                                                    <TextBlock Grid.Column="2" Text="Install…" VerticalAlignment="Center" Visibility="{Binding Installed, Converter={StaticResource InverseBooleanVisibilityConverter}}" Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}" />
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="Auto" /><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" />
+                                                    </Grid.ColumnDefinitions>
+                                                    <Ellipse Style="{StaticResource StatusDotStyle}"
+                                                             Fill="{Binding Running, Converter={StaticResource StatusBrushConverter}}" />
+                                                    <StackPanel Grid.Column="1" Spacing="2">
+                                                        <TextBlock Text="{Binding Name}" Style="{StaticResource BodyStrongTextBlockStyle}" />
+                                                        <TextBlock Text="{Binding ListDetail}"
+                                                                   Visibility="{Binding ListDetail, Converter={StaticResource StringVisibilityConverter}}"
+                                                                   Style="{StaticResource CaptionTextBlockStyle}"
+                                                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                                    </StackPanel>
+                                                    <TextBlock Grid.Column="2" Text="Install…" VerticalAlignment="Center"
+                                                               Visibility="{Binding Installed, Converter={StaticResource InverseBooleanVisibilityConverter}}"
+                                                               Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}" />
                                                 </Grid>
                                             </Button>
                                         </DataTemplate>

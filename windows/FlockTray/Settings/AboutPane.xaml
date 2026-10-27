@@ -5,19 +5,91 @@
     <StackPanel Spacing="0">
         <StackPanel Orientation="Horizontal" Spacing="20" Margin="0,0,0,24">
             <Image Source="Assets/AppIcon.png" Width="72" Height="72" />
-            <StackPanel Spacing="2" VerticalAlignment="Center"><TextBlock Text="Flock" Style="{StaticResource TitleLargeTextBlockStyle}" /><TextBlock Text="A native local development environment for Laravel." Style="{StaticResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" /></StackPanel>
+            <StackPanel Spacing="2" VerticalAlignment="Center">
+                <TextBlock Text="Flock" Style="{StaticResource TitleLargeTextBlockStyle}" />
+                <TextBlock Text="A native local development environment for Laravel." Style="{StaticResource CaptionTextBlockStyle}"
+                           Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+            </StackPanel>
         </StackPanel>
         <StackPanel Spacing="4" Margin="0,0,0,24">
-            <Border Style="{StaticResource CardStyle}"><Grid Style="{StaticResource SettingRowStyle}"><Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions><TextBlock Text="App" /><TextBlock x:Name="AppVersion" Grid.Column="1" Foreground="{ThemeResource TextFillColorSecondaryBrush}" /></Grid></Border>
-            <Border Style="{StaticResource CardStyle}"><Grid Style="{StaticResource SettingRowStyle}"><Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions><TextBlock Text="Daemon" /><TextBlock Text="{Binding DaemonVersion}" Grid.Column="1" Foreground="{ThemeResource TextFillColorSecondaryBrush}" /></Grid></Border>
-            <Border Style="{StaticResource CardStyle}"><Grid Style="{StaticResource SettingRowStyle}"><Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions><StackPanel Spacing="1"><TextBlock Text="Data folder" /><TextBlock Text="{Binding DataFolder}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextTrimming="CharacterEllipsis" /></StackPanel><Button Grid.Column="1" Content="Show in Explorer" Click="ShowDataFolder" /></Grid></Border>
-            <Border Style="{StaticResource CardStyle}"><Grid Style="{StaticResource SettingRowStyle}"><Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions><TextBlock Text="Flock documentation" /><Button Grid.Column="1" Content="Open" Click="OpenDocumentation" /></Grid></Border>
-            <Border Style="{StaticResource CardStyle}"><Grid Style="{StaticResource SettingRowStyle}"><Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions><StackPanel Spacing="1"><TextBlock Text="Found a bug?" /><TextBlock Text="Opens a new GitHub issue with your versions filled in." Style="{StaticResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" /></StackPanel><Button Grid.Column="1" Content="Report an issue" Click="ReportIssue" /></Grid></Border>
-            <Border Style="{StaticResource CardStyle}"><Grid Style="{StaticResource SettingRowStyle}"><Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions><StackPanel Spacing="1"><TextBlock Text="License" /><TextBlock Text="Copyright © Guava s.r.o. Licensed under the AGPL-3.0." Style="{StaticResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" /></StackPanel><Button Grid.Column="1" Content="View" Click="OpenLicense" /></Grid></Border>
+            <Border Style="{StaticResource CardStyle}">
+                <Grid Style="{StaticResource SettingRowStyle}">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Text="App" /><TextBlock x:Name="AppVersion" Grid.Column="1" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                </Grid>
+            </Border>
+            <Border Style="{StaticResource CardStyle}">
+                <Grid Style="{StaticResource SettingRowStyle}">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Text="Daemon" /><TextBlock Text="{Binding DaemonVersion}" Grid.Column="1" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                </Grid>
+            </Border>
+            <Border Style="{StaticResource CardStyle}">
+                <Grid Style="{StaticResource SettingRowStyle}">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <StackPanel Spacing="1">
+                        <TextBlock Text="Data folder" />
+                        <TextBlock Text="{Binding DataFolder}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextTrimming="CharacterEllipsis" />
+                    </StackPanel>
+                    <Button Grid.Column="1" Content="Show in Explorer" Click="ShowDataFolder" />
+                </Grid>
+            </Border>
+            <Border Style="{StaticResource CardStyle}">
+                <Grid Style="{StaticResource SettingRowStyle}">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Text="Flock documentation" /><Button Grid.Column="1" Content="Open" Click="OpenDocumentation" />
+                </Grid>
+            </Border>
+            <Border Style="{StaticResource CardStyle}">
+                <Grid Style="{StaticResource SettingRowStyle}">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <StackPanel Spacing="1">
+                        <TextBlock Text="Found a bug?" />
+                        <TextBlock Text="Opens a new GitHub issue with your versions filled in." Style="{StaticResource CaptionTextBlockStyle}"
+                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
+                    </StackPanel>
+                    <Button Grid.Column="1" Content="Report an issue" Click="ReportIssue" />
+                </Grid>
+            </Border>
+            <Border Style="{StaticResource CardStyle}">
+                <Grid Style="{StaticResource SettingRowStyle}">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <StackPanel Spacing="1">
+                        <TextBlock Text="License" />
+                        <TextBlock Text="Copyright © Guava s.r.o. Licensed under the AGPL-3.0." Style="{StaticResource CaptionTextBlockStyle}"
+                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
+                    </StackPanel>
+                    <Button Grid.Column="1" Content="View" Click="OpenLicense" />
+                </Grid>
+            </Border>
         </StackPanel>
         <StackPanel Spacing="4" Margin="0,0,0,24">
             <TextBlock Text="Uninstall" Style="{StaticResource BodyStrongTextBlockStyle}" Margin="1,0,0,6" />
-            <Border Style="{StaticResource CardStyle}"><Grid Style="{StaticResource SettingRowStyle}"><Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions><StackPanel Spacing="1"><TextBlock Text="Uninstall Flock" /><TextBlock Text="Stops Flock and removes it from this PC. Your sites, databases and settings are kept." Style="{StaticResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" /></StackPanel><Button Grid.Column="1" Content="Uninstall Flock…" Click="ConfirmUninstallClicked" /></Grid></Border>
+            <Border Style="{StaticResource CardStyle}">
+                <Grid Style="{StaticResource SettingRowStyle}">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <StackPanel Spacing="1">
+                        <TextBlock Text="Uninstall Flock" />
+                        <TextBlock Text="Stops Flock and removes it from this PC. Your sites, databases and settings are kept."
+                                   Style="{StaticResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
+                    </StackPanel>
+                    <Button Grid.Column="1" Content="Uninstall Flock…" Click="ConfirmUninstallClicked" />
+                </Grid>
+            </Border>
         </StackPanel>
     </StackPanel>
 </UserControl>

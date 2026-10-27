@@ -3,14 +3,13 @@ using Flock.Tray.Infrastructure;
 using Flock.Tray.ViewModels;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
-
 namespace Flock.Tray;
 
 internal sealed partial class NodePane : UserControl, ISettingsPane
 {
-    private readonly SettingsWindow window;
     private readonly RuntimeService model;
     private readonly NodePaneViewModel rows;
+    private readonly SettingsWindow window;
 
     public NodePane(SettingsWindow window, RuntimeService model)
     {
@@ -51,7 +50,10 @@ internal sealed partial class NodePane : UserControl, ISettingsPane
 
     public void Hidden() { }
 
-    private void CheckNode(object sender, RoutedEventArgs args) => _ = rows.CheckAsync();
+    private void CheckNode(object sender, RoutedEventArgs args)
+    {
+        _ = rows.CheckAsync();
+    }
 
     private void OpenNodeActions(object sender, RoutedEventArgs args)
     {
@@ -79,7 +81,8 @@ internal sealed partial class NodePane : UserControl, ISettingsPane
     private async Task UninstallNodeAsync(NodeVersionViewModel row)
     {
         if (!await window.Confirm($"Uninstall Node {row.Major}?",
-                $"Its global npm packages are removed too. Projects and sites that use Node {row.Major} fall back to the default version until you install it again.", "Uninstall"))
+                $"Its global npm packages are removed too. Projects and sites that use Node {row.Major} fall back to the default version until you install it again.",
+                "Uninstall"))
         {
             return;
         }
@@ -114,5 +117,4 @@ internal sealed partial class NodePane : UserControl, ISettingsPane
             }
         });
     }
-
 }

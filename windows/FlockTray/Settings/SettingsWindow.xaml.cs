@@ -1,8 +1,11 @@
+using System.Runtime.InteropServices;
+using Windows.Storage.Pickers;
+using Windows.System;
 using Flock.Tray.Infrastructure;
 using Flock.Tray.ViewModels;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
-
+using WinRT.Interop;
 namespace Flock.Tray;
 
 /// <summary>The panes of the Settings window, in navigation order.</summary>
@@ -26,12 +29,10 @@ internal sealed partial class SettingsWindow : FlockWindow
     private readonly Dictionary<SettingsPane, ISettingsPane> panes = [];
     private readonly SettingsWindowViewModel viewModel;
     private SettingsPane current = SettingsPane.General;
-    private bool initialized;
+    private readonly bool initialized;
     private bool unsubscribed;
 
-    internal SitesPane Sites => (SitesPane)panes[SettingsPane.Sites];
-
-    public SettingsWindow(RuntimeService model, DeepLinkCoordinator? deepLinks = null) : base("Flock Settings", 980, 680, minWidth: 820, minHeight: 520)
+    public SettingsWindow(RuntimeService model, DeepLinkCoordinator? deepLinks = null) : base("Flock Settings", 980, 680, 820, 520)
     {
         this.model = model;
         InitializeComponent();
@@ -63,11 +64,16 @@ internal sealed partial class SettingsWindow : FlockWindow
         Closed += ClosedWindow;
 
         initialized = true;
-        Navigation.SelectedItem = Navigation.MenuItems.OfType<NavigationViewItem>().First(i => (SettingsPane)Enum.Parse(typeof(SettingsPane), (string)i.Tag) == SettingsPane.General);
+        Navigation.SelectedItem = Navigation.MenuItems.OfType<NavigationViewItem>()
+            .First(i => (SettingsPane)Enum.Parse(typeof(SettingsPane), (string)i.Tag) == SettingsPane.General);
         _ = viewModel.Navigation.ActivateAsync(SettingsPane.General);
         _ = model.Configuration.RefreshAsync();
         _ = model.Services.RefreshAsync();
     }
+
+    internal SitesPane Sites => (SitesPane)panes[SettingsPane.Sites];
+
+    public XamlRoot XamlRoot => Content.XamlRoot;
 
     /// <summary>Shows a pane (from the tray menu or another window).</summary>
     public void Select(SettingsPane pane)
@@ -95,7 +101,7 @@ internal sealed partial class SettingsWindow : FlockWindow
         current = pane;
         PaneTitle.Text = panes[pane].Title;
         Subtitle.Text = panes[pane].Subtitle;
-        Scroller.ChangeView(null, 0, null, disableAnimation: true);
+        Scroller.ChangeView(null, 0, null, true);
         ShowPane();
         await panes[pane].ActivateAsync(hidden);
     }
@@ -127,7 +133,8 @@ internal sealed partial class SettingsWindow : FlockWindow
         if (model.Status is null && current != SettingsPane.About)
         {
             PaneHost.Children.Clear();
-            PaneHost.Children.Add(Ui.EmptyState(Ui.GlyphWarning, "Flock is not running", model.Error ?? "Start the daemon to change its settings.", Ui.Button("Start Flock", () => _ = model.RestartAsync(), accent: true)));
+            PaneHost.Children.Add(Ui.EmptyState(Ui.GlyphWarning, "Flock is not running", model.Error ?? "Start the daemon to change its settings.",
+                Ui.Button("Start Flock", () => _ = model.RestartAsync(), true)));
             return;
         }
         if (PaneHost.Children.Count == 1 && ReferenceEquals(PaneHost.Children[0], pane.Root))
@@ -141,7 +148,8 @@ internal sealed partial class SettingsWindow : FlockWindow
     private void UpdateError()
     {
         Ui.ShowError(ErrorBar, model.RuntimeError ?? model.Preferences.Error ?? model.Configuration.Error ?? model.Php.Error ?? model.FrankenPhp.Error ??
-            model.Node.Error ?? model.Services.Error ?? model.Postgres.Error ?? model.Catalog.Error ?? model.Mcp.Error ?? model.Sites.Error ?? model.Dumps.Error ?? model.ActionError);
+            model.Node.Error ?? model.Services.Error ??
+            model.Postgres.Error ?? model.Catalog.Error ?? model.Mcp.Error ?? model.Sites.Error ?? model.Dumps.Error ?? model.ActionError);
     }
 
     private void DismissError(InfoBar sender, object args)
@@ -188,9 +196,9 @@ internal sealed partial class SettingsWindow : FlockWindow
     // Pickers need the window they belong to (unpackaged apps have no implicit owner).
     public async Task<string?> PickFolder()
     {
-        var picker = new Windows.Storage.Pickers.FolderPicker();
+        var picker = new FolderPicker();
         picker.FileTypeFilter.Add("*");
-        WinRT.Interop.InitializeWithWindow.Initialize(picker, Hwnd);
+        InitializeWithWindow.Initialize(picker, Hwnd);
         var folder = await picker.PickSingleFolderAsync();
         return folder?.Path;
     }
@@ -202,7 +210,7 @@ internal sealed partial class SettingsWindow : FlockWindow
         {
             return Native.PickFolders(Hwnd, title);
         }
-        catch (Exception e) when (e is System.Runtime.InteropServices.COMException or InvalidCastException)
+        catch (Exception e) when (e is COMException or InvalidCastException)
         {
             App.Log(e);
         }
@@ -223,11 +231,11 @@ internal sealed partial class SettingsWindow : FlockWindow
             PrimaryButtonText = action,
             CloseButtonText = "Cancel",
             DefaultButton = ContentDialogButton.Primary,
-            XamlRoot = Content.XamlRoot,
+            XamlRoot = Content.XamlRoot
         };
         box.KeyDown += (_, e) =>
         {
-            if (e.Key == Windows.System.VirtualKey.Enter)
+            if (e.Key == VirtualKey.Enter)
             {
                 box.Tag = "submitted";
                 dialog.Hide();
@@ -237,8 +245,6 @@ internal sealed partial class SettingsWindow : FlockWindow
         var text = box.Text.Trim();
         return (result == ContentDialogResult.Primary || box.Tag is "submitted") && text.Length > 0 ? text : null;
     }
-
-    public XamlRoot XamlRoot => Content.XamlRoot;
 
     public override async Task ReleaseAsync()
     {

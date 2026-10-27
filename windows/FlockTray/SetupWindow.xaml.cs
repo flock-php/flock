@@ -1,24 +1,23 @@
+using System.Security;
 using Flock.Kit;
 using Flock.Tray.Infrastructure;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
-
 namespace Flock.Tray;
 
 /// <summary>First-run setup and installation progress.</summary>
 internal sealed partial class SetupWindow : FlockWindow
 {
-    private enum Stage { Intro, Checking, Conflicts, Running, Done, Failed }
 
     private readonly RuntimeService model;
-    private string output = "";
     private List<ConflictingApp> conflicts = [];
-    private string? startupProblem;
-    private Stage stage;
     private string defaultPhp = "", defaultNode = "";
+    private string output = "";
     private bool sawDefaults;
+    private Stage stage;
+    private string? startupProblem;
 
-    public SetupWindow(RuntimeService model) : base("Set up Flock", 620, 600, minWidth: 480, minHeight: 480)
+    public SetupWindow(RuntimeService model) : base("Set up Flock", 620, 600, 480, 480)
     {
         this.model = model;
         InitializeComponent();
@@ -85,7 +84,7 @@ internal sealed partial class SetupWindow : FlockWindow
             {
                 Native.StartsAtSignIn = Startup.IsChecked == true;
             }
-            catch (Exception e) when (e is UnauthorizedAccessException or System.Security.SecurityException or IOException)
+            catch (Exception e) when (e is UnauthorizedAccessException or SecurityException or IOException)
             {
                 startupProblem = $"Could not change the startup setting: {e.Message}. Settings → General has it too.";
             }
@@ -141,16 +140,29 @@ internal sealed partial class SetupWindow : FlockWindow
         }
         if (Defaults.Children.Count == 0 && sawDefaults)
         {
-            Defaults.Children.Add(Ui.Card(Ui.Row(10, Ui.Icon(Ui.GlyphCheck, 14, Ui.Success), Ui.Text($"{Named("PHP", defaultPhp)} and {Named("Node.js", defaultNode)} are installed"))));
+            Defaults.Children.Add(Ui.Card(Ui.Row(10, Ui.Icon(Ui.GlyphCheck, 14, Ui.Success),
+                Ui.Text($"{Named("PHP", defaultPhp)} and {Named("Node.js", defaultNode)} are installed"))));
         }
         Defaults.Visibility = Defaults.Children.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
 
-        static string Named(string product, string version) => version.Length > 0 ? $"{product} {version}" : product;
+        static string Named(string product, string version)
+        {
+            return version.Length > 0 ? $"{product} {version}" : product;
+        }
     }
 
-    private void CloseClicked(object sender, RoutedEventArgs args) => Close();
-    private void RunClicked(object sender, RoutedEventArgs args) => _ = RunAsync();
-    private void RetryClicked(object sender, RoutedEventArgs args) => _ = RunAsync(retry: true);
+    private void CloseClicked(object sender, RoutedEventArgs args)
+    {
+        Close();
+    }
+    private void RunClicked(object sender, RoutedEventArgs args)
+    {
+        _ = RunAsync();
+    }
+    private void RetryClicked(object sender, RoutedEventArgs args)
+    {
+        _ = RunAsync(retry: true);
+    }
 
     private void OpenSettingsClicked(object sender, RoutedEventArgs args)
     {
@@ -165,4 +177,6 @@ internal sealed partial class SetupWindow : FlockWindow
             App.Current.Open(WindowKind.Settings, firstRun?.Php.IsFailed == true ? SettingsPane.Php : firstRun?.Node.IsFailed == true ? SettingsPane.Node : null);
         }
     }
+
+    private enum Stage { Intro, Checking, Conflicts, Running, Done, Failed }
 }

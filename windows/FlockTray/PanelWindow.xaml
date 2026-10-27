@@ -33,10 +33,12 @@
                     <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
                 <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
-                    <FontIcon Glyph="{StaticResource GlyphDownload}" FontFamily="{StaticResource SymbolsFont}" FontSize="14" Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}" />
+                    <FontIcon Glyph="{StaticResource GlyphDownload}" FontFamily="{StaticResource SymbolsFont}" FontSize="14"
+                              Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}" />
                     <TextBlock Text="{Binding UpdateMessage}" Style="{StaticResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                 </StackPanel>
-                <Button Grid.Column="1" Content="Update" Command="{Binding InstallUpdateCommand}" Style="{StaticResource AccentButtonStyle}" IsEnabled="{Binding CanInstallUpdate}" />
+                <Button Grid.Column="1" Content="Update" Command="{Binding InstallUpdateCommand}" Style="{StaticResource AccentButtonStyle}"
+                        IsEnabled="{Binding CanInstallUpdate}" />
             </Grid>
 
             <InfoBar
@@ -53,8 +55,10 @@
                         <ItemsControl.ItemTemplate>
                             <DataTemplate>
                                 <StackPanel Orientation="Horizontal" Spacing="6">
-                                    <FontIcon Glyph="{StaticResource GlyphWarning}" FontFamily="{StaticResource SymbolsFont}" FontSize="12" Foreground="{ThemeResource SystemFillColorCautionBrush}" />
-                                    <TextBlock Text="{Binding}" Style="{StaticResource CaptionTextBlockStyle}" Foreground="{ThemeResource SystemFillColorCautionBrush}" TextWrapping="Wrap" />
+                                    <FontIcon Glyph="{StaticResource GlyphWarning}" FontFamily="{StaticResource SymbolsFont}" FontSize="12"
+                                              Foreground="{ThemeResource SystemFillColorCautionBrush}" />
+                                    <TextBlock Text="{Binding}" Style="{StaticResource CaptionTextBlockStyle}" Foreground="{ThemeResource SystemFillColorCautionBrush}"
+                                               TextWrapping="Wrap" />
                                 </StackPanel>
                             </DataTemplate>
                         </ItemsControl.ItemTemplate>
@@ -64,7 +68,8 @@
                 <Border Height="1" Background="{ThemeResource DividerStrokeColorDefaultBrush}" Margin="-16,0" />
 
                 <StackPanel Spacing="5">
-                    <TextBlock Text="SERVICES" Style="{StaticResource CaptionTextBlockStyle}" FontSize="11" FontWeight="SemiBold" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                    <TextBlock Text="SERVICES" Style="{StaticResource CaptionTextBlockStyle}" FontSize="11" FontWeight="SemiBold"
+                               Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                     <ItemsControl ItemsSource="{Binding Services}">
                         <ItemsControl.ItemTemplate>
                             <DataTemplate>
@@ -77,7 +82,8 @@
                                         <Ellipse Style="{StaticResource StatusDotStyle}" Fill="{Binding StatusBrush}" />
                                         <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis" />
                                     </StackPanel>
-                                    <TextBlock Grid.Column="1" Text="{Binding Detail}" Style="{StaticResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextTrimming="CharacterEllipsis" MaxWidth="210" />
+                                    <TextBlock Grid.Column="1" Text="{Binding Detail}" Style="{StaticResource CaptionTextBlockStyle}"
+                                               Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextTrimming="CharacterEllipsis" MaxWidth="210" />
                                 </Grid>
                             </DataTemplate>
                         </ItemsControl.ItemTemplate>
@@ -87,7 +93,8 @@
                 <Border Height="1" Background="{ThemeResource DividerStrokeColorDefaultBrush}" Margin="-16,0" />
 
                 <StackPanel Spacing="4">
-                    <TextBlock Text="SITES" Style="{StaticResource CaptionTextBlockStyle}" FontSize="11" FontWeight="SemiBold" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                    <TextBlock Text="SITES" Style="{StaticResource CaptionTextBlockStyle}" FontSize="11" FontWeight="SemiBold"
+                               Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                     <TextBlock
                         Text="No sites yet — run `flock link` or `flock park`, or add a site in Settings."
                         Foreground="{ThemeResource TextFillColorSecondaryBrush}"
@@ -112,21 +119,28 @@
                                                 <ColumnDefinition Width="Auto" />
                                             </Grid.ColumnDefinitions>
                                             <StackPanel Orientation="Horizontal" Spacing="8">
-                                                <FontIcon Glyph="{Binding SecurityGlyph}" FontFamily="{StaticResource SymbolsFont}" FontSize="12" Foreground="{Binding SecurityBrush}" />
+                                                <FontIcon Glyph="{Binding SecurityGlyph}" FontFamily="{StaticResource SymbolsFont}" FontSize="12"
+                                                          Foreground="{Binding SecurityBrush}" />
                                                 <StackPanel Spacing="0">
                                                     <TextBlock Text="{Binding Domain}" TextTrimming="CharacterEllipsis" />
-                                                    <TextBlock Text="{Binding Problem}" Foreground="{ThemeResource SystemFillColorCriticalBrush}" TextTrimming="CharacterEllipsis" Visibility="{Binding ProblemVisibility}" />
+                                                    <TextBlock Text="{Binding Problem}" Foreground="{ThemeResource SystemFillColorCriticalBrush}"
+                                                               TextTrimming="CharacterEllipsis" Visibility="{Binding ProblemVisibility}" />
                                                 </StackPanel>
                                             </StackPanel>
                                             <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
-                                                <FontIcon Glyph="{StaticResource GlyphBug}" FontFamily="{StaticResource SymbolsFont}" FontSize="12" Foreground="{ThemeResource SystemFillColorCautionBrush}" Visibility="{Binding DebuggingVisibility}" />
-                                                <Border Background="{ThemeResource ControlFillColorSecondaryBrush}" CornerRadius="8" Padding="7,1,7,2" Visibility="{Binding FrankenPhpVisibility}">
-                                                    <TextBlock Text="{Binding WorkerLabel}" FontSize="11" FontWeight="SemiBold" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                                <FontIcon Glyph="{StaticResource GlyphBug}" FontFamily="{StaticResource SymbolsFont}" FontSize="12"
+                                                          Foreground="{ThemeResource SystemFillColorCautionBrush}" Visibility="{Binding DebuggingVisibility}" />
+                                                <Border Background="{ThemeResource ControlFillColorSecondaryBrush}" CornerRadius="8" Padding="7,1,7,2"
+                                                        Visibility="{Binding FrankenPhpVisibility}">
+                                                    <TextBlock Text="{Binding WorkerLabel}" FontSize="11" FontWeight="SemiBold"
+                                                               Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                                                 </Border>
-                                                <Border Background="{ThemeResource SystemFillColorSuccessBackgroundBrush}" CornerRadius="8" Padding="7,1,7,2" Visibility="{Binding SharedVisibility}" ToolTipService.ToolTip="{Binding ShareTooltip}">
+                                                <Border Background="{ThemeResource SystemFillColorSuccessBackgroundBrush}" CornerRadius="8" Padding="7,1,7,2"
+                                                        Visibility="{Binding SharedVisibility}" ToolTipService.ToolTip="{Binding ShareTooltip}">
                                                     <TextBlock Text="Shared" FontSize="11" FontWeight="SemiBold" Foreground="{ThemeResource SystemFillColorSuccessBrush}" />
                                                 </Border>
-                                                <TextBlock Text="{Binding PhpLabel}" Style="{StaticResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                                <TextBlock Text="{Binding PhpLabel}" Style="{StaticResource CaptionTextBlockStyle}"
+                                                           Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                                             </StackPanel>
                                         </Grid>
                                     </Button>
@@ -159,7 +173,8 @@
                             <FontIcon Glyph="{StaticResource GlyphDownload}" FontFamily="{StaticResource SymbolsFont}" FontSize="14" />
                             <TextBlock Text="Capture dumps" />
                         </StackPanel>
-                        <ToggleSwitch Grid.Column="1" IsOn="{Binding Status.Dumps}" IsEnabled="{Binding CaptureEnabled}" OnContent="" OffContent="" MinWidth="0" Toggled="DumpsToggled" />
+                        <ToggleSwitch Grid.Column="1" IsOn="{Binding Status.Dumps}" IsEnabled="{Binding CaptureEnabled}" OnContent="" OffContent="" MinWidth="0"
+                                      Toggled="DumpsToggled" />
                     </Grid>
                 </StackPanel>
 
@@ -176,7 +191,10 @@
                             <FontIcon Glyph="{StaticResource GlyphMail}" FontFamily="{StaticResource SymbolsFont}" FontSize="18" />
                             <StackPanel Orientation="Horizontal" Spacing="4" HorizontalAlignment="Center">
                                 <TextBlock Text="Mail" FontSize="12" />
-                                <Border Background="{ThemeResource SubtleFillColorSecondaryBrush}" CornerRadius="8" Padding="6,1" Visibility="{Binding MailCountVisibility}"><TextBlock Text="{Binding MailCount}" FontSize="11" /></Border>
+                                <Border Background="{ThemeResource SubtleFillColorSecondaryBrush}" CornerRadius="8" Padding="6,1"
+                                        Visibility="{Binding MailCountVisibility}">
+                                    <TextBlock Text="{Binding MailCount}" FontSize="11" />
+                                </Border>
                             </StackPanel>
                         </StackPanel>
                     </Button>
@@ -185,7 +203,10 @@
                             <FontIcon Glyph="{StaticResource GlyphBug}" FontFamily="{StaticResource SymbolsFont}" FontSize="18" />
                             <StackPanel Orientation="Horizontal" Spacing="4" HorizontalAlignment="Center">
                                 <TextBlock Text="Dumps" FontSize="12" />
-                                <Border Background="{ThemeResource SubtleFillColorSecondaryBrush}" CornerRadius="8" Padding="6,1" Visibility="{Binding DumpCountVisibility}"><TextBlock Text="{Binding DumpCount}" FontSize="11" /></Border>
+                                <Border Background="{ThemeResource SubtleFillColorSecondaryBrush}" CornerRadius="8" Padding="6,1"
+                                        Visibility="{Binding DumpCountVisibility}">
+                                    <TextBlock Text="{Binding DumpCount}" FontSize="11" />
+                                </Border>
                             </StackPanel>
                         </StackPanel>
                     </Button>
@@ -220,7 +241,8 @@
                     <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
                 <StackPanel Orientation="Horizontal" Spacing="4">
-                     <HyperlinkButton Content="Restart" Command="{Binding RestartCommand}" Padding="4,2" Visibility="{Binding FooterVisibility}" IsEnabled="{Binding RestartEnabled}" />
+                    <HyperlinkButton Content="Restart" Command="{Binding RestartCommand}" Padding="4,2" Visibility="{Binding FooterVisibility}"
+                                     IsEnabled="{Binding RestartEnabled}" />
                     <HyperlinkButton Content="Settings…" Command="{Binding OpenSettingsCommand}" Padding="4,2" Visibility="{Binding FooterVisibility}" />
                 </StackPanel>
                 <HyperlinkButton Grid.Column="1" Content="Quit Flock" Command="{Binding QuitCommand}" Padding="4,2" />

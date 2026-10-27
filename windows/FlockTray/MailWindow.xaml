@@ -4,31 +4,59 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:local="using:Flock.Tray">
     <Grid x:Name="WindowRoot">
-        <Grid.RowDefinitions><RowDefinition Height="48" /><RowDefinition Height="*" /></Grid.RowDefinitions>
-        <Grid x:Name="WindowTitleBar" Grid.Row="0" Height="48" Padding="16,0,0,0"><StackPanel Orientation="Horizontal" Spacing="12" VerticalAlignment="Center"><Image x:Name="WindowIcon" Width="16" Height="16" /><TextBlock x:Name="WindowCaption" Style="{StaticResource CaptionTextBlockStyle}" TextTrimming="CharacterEllipsis" /></StackPanel></Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="48" /><RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+        <Grid x:Name="WindowTitleBar" Grid.Row="0" Height="48" Padding="16,0,0,0">
+            <StackPanel Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
+                <Image x:Name="WindowIcon" Width="16" Height="16" />
+                <TextBlock x:Name="WindowCaption" Style="{StaticResource CaptionTextBlockStyle}" TextTrimming="CharacterEllipsis" />
+            </StackPanel>
+        </Grid>
         <Grid x:Name="WindowBody" Grid.Row="1">
-            <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="*" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" /><RowDefinition Height="*" /><RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
             <CommandBar DefaultLabelPosition="Right" HorizontalAlignment="Right">
                 <AppBarButton Icon="Refresh" Label="Refresh" Command="{Binding RefreshCommand}" />
                 <AppBarButton x:Name="ClearButton" Icon="Delete" Label="Clear All" Click="ClearClicked" />
             </CommandBar>
             <Grid Grid.Row="1" ColumnSpacing="0">
-                <Grid.ColumnDefinitions><ColumnDefinition Width="330" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="330" /><ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
                 <Grid x:Name="ListArea" Grid.Column="0">
                     <ListView x:Name="MailList" ItemsSource="{Binding Messages}" SelectionMode="Single" SelectionChanged="SelectionChanged" Padding="8,0,8,8">
                         <ListView.ItemTemplate>
                             <DataTemplate>
                                 <StackPanel Spacing="2" Padding="0,6">
-                                    <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions><TextBlock Text="{Binding From}" Style="{StaticResource BodyStrongTextBlockStyle}" TextTrimming="CharacterEllipsis" /><TextBlock Grid.Column="1" Text="{Binding DateLabel}" Style="{StaticResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" /></Grid>
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Text="{Binding From}" Style="{StaticResource BodyStrongTextBlockStyle}" TextTrimming="CharacterEllipsis" />
+                                        <TextBlock Grid.Column="1" Text="{Binding DateLabel}" Style="{StaticResource CaptionTextBlockStyle}"
+                                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                    </Grid>
                                     <TextBlock Text="{Binding SubjectLabel}" TextTrimming="CharacterEllipsis" />
-                                    <StackPanel Orientation="Horizontal" Spacing="6"><Border Background="{ThemeResource ControlFillColorSecondaryBrush}" CornerRadius="8" Padding="7,1,7,2"><TextBlock Text="{Binding Inbox}" FontSize="11" FontWeight="SemiBold" Foreground="{ThemeResource TextFillColorSecondaryBrush}" /></Border><TextBlock Text="{Binding Recipients}" Style="{StaticResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextTrimming="CharacterEllipsis" /></StackPanel>
+                                    <StackPanel Orientation="Horizontal" Spacing="6">
+                                        <Border Background="{ThemeResource ControlFillColorSecondaryBrush}" CornerRadius="8" Padding="7,1,7,2">
+                                            <TextBlock Text="{Binding Inbox}" FontSize="11" FontWeight="SemiBold"
+                                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                        </Border>
+                                        <TextBlock Text="{Binding Recipients}" Style="{StaticResource CaptionTextBlockStyle}"
+                                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextTrimming="CharacterEllipsis" />
+                                    </StackPanel>
                                 </StackPanel>
                             </DataTemplate>
                         </ListView.ItemTemplate>
                     </ListView>
                     <ContentControl x:Name="EmptyStateHost" IsTabStop="False" />
                 </Grid>
-                <Border Grid.Column="1" Background="{ThemeResource LayerFillColorDefaultBrush}" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1,1,0,0" CornerRadius="8,0,0,0"><ContentControl x:Name="DetailHost" HorizontalContentAlignment="Stretch" VerticalContentAlignment="Stretch" /></Border>
+                <Border Grid.Column="1" Background="{ThemeResource LayerFillColorDefaultBrush}" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                        BorderThickness="1,1,0,0" CornerRadius="8,0,0,0">
+                    <ContentControl x:Name="DetailHost" HorizontalContentAlignment="Stretch" VerticalContentAlignment="Stretch" />
+                </Border>
             </Grid>
             <InfoBar x:Name="ErrorBar" Grid.Row="2" Severity="Error" IsClosable="False" />
         </Grid>

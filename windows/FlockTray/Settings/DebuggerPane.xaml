@@ -4,22 +4,103 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
     <StackPanel Spacing="0">
         <StackPanel Spacing="4" Margin="0,0,0,24">
-            <Border Style="{StaticResource CardStyle}"><Grid Style="{StaticResource SettingRowStyle}"><Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions><StackPanel Spacing="1"><TextBlock Text="Detect Xdebug requests" /><TextBlock Text="Xdebug loads only for requests that ask for it, so everything else stays fast." Style="{StaticResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" /></StackPanel><ToggleSwitch Grid.Column="1" MinWidth="0" IsOn="{Binding Enabled}" Toggled="XdebugToggled" OnContent="" OffContent="" /></Grid></Border>
-            <Border Style="{StaticResource CardStyle}"><Grid Style="{StaticResource SettingRowStyle}"><Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions><StackPanel Spacing="1"><TextBlock Text="Detect PhpStorm breakpoints" /><TextBlock Text="While a project has breakpoints in PhpStorm, every request to its site is debugged." Style="{StaticResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" /></StackPanel><ToggleSwitch x:Name="Breakpoints" Grid.Column="1" MinWidth="0" IsOn="{Binding Breakpoints}" IsEnabled="{Binding Enabled}" Toggled="BreakpointsToggled" OnContent="" OffContent="" /></Grid></Border>
+            <Border Style="{StaticResource CardStyle}">
+                <Grid Style="{StaticResource SettingRowStyle}">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <StackPanel Spacing="1">
+                        <TextBlock Text="Detect Xdebug requests" />
+                        <TextBlock Text="Xdebug loads only for requests that ask for it, so everything else stays fast." Style="{StaticResource CaptionTextBlockStyle}"
+                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
+                    </StackPanel>
+                    <ToggleSwitch Grid.Column="1" MinWidth="0" IsOn="{Binding Enabled}" Toggled="XdebugToggled" OnContent="" OffContent="" />
+                </Grid>
+            </Border>
+            <Border Style="{StaticResource CardStyle}">
+                <Grid Style="{StaticResource SettingRowStyle}">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <StackPanel Spacing="1">
+                        <TextBlock Text="Detect PhpStorm breakpoints" />
+                        <TextBlock Text="While a project has breakpoints in PhpStorm, every request to its site is debugged."
+                                   Style="{StaticResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
+                    </StackPanel>
+                    <ToggleSwitch x:Name="Breakpoints" Grid.Column="1" MinWidth="0" IsOn="{Binding Breakpoints}" IsEnabled="{Binding Enabled}"
+                                  Toggled="BreakpointsToggled" OnContent="" OffContent="" />
+                </Grid>
+            </Border>
         </StackPanel>
         <StackPanel Spacing="4" Margin="0,0,0,24" Visibility="{Binding DebuggingVisibility}">
             <TextBlock Text="Debugging now" Style="{StaticResource BodyStrongTextBlockStyle}" Margin="1,0,0,6" />
-            <ItemsControl ItemsSource="{Binding DebuggingSites}"><ItemsControl.ItemTemplate><DataTemplate><Border Style="{StaticResource CardStyle}"><Grid Style="{StaticResource SettingRowStyle}"><Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions><TextBlock Text="{Binding}" /><StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6"><FontIcon Glyph="&#xEBE8;" FontFamily="{StaticResource SymbolsFont}" /><TextBlock Text="Breakpoints in PhpStorm" Style="{StaticResource CaptionTextBlockStyle}" /></StackPanel></Grid></Border></DataTemplate></ItemsControl.ItemTemplate></ItemsControl>
+            <ItemsControl ItemsSource="{Binding DebuggingSites}">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate>
+                        <Border Style="{StaticResource CardStyle}">
+                            <Grid Style="{StaticResource SettingRowStyle}">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="{Binding}" />
+                                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6">
+                                    <FontIcon Glyph="&#xEBE8;" FontFamily="{StaticResource SymbolsFont}" />
+                                    <TextBlock Text="Breakpoints in PhpStorm" Style="{StaticResource CaptionTextBlockStyle}" />
+                                </StackPanel>
+                            </Grid>
+                        </Border>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
         </StackPanel>
         <StackPanel Spacing="4" Margin="0,0,0,24">
             <TextBlock Text="Connect your IDE" Style="{StaticResource BodyStrongTextBlockStyle}" Margin="1,0,0,6" />
-            <Border Style="{StaticResource CardStyle}"><Grid Style="{StaticResource SettingRowStyle}"><Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions><TextBlock Text="Client port" /><TextBlock Grid.Column="1" Text="9003" Foreground="{ThemeResource TextFillColorSecondaryBrush}" /></Grid></Border>
-            <Border Style="{StaticResource CardStyle}"><Grid Style="{StaticResource SettingRowStyle}"><Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions><TextBlock Text="Mode" /><TextBlock Grid.Column="1" Text="debug, develop" Foreground="{ThemeResource TextFillColorSecondaryBrush}" /></Grid></Border>
-            <Border Style="{StaticResource CardStyle}"><StackPanel><TextBlock Text="Start a session" /><TextBlock Text="Set a breakpoint in PhpStorm and listen for debug connections, use the Xdebug browser extension, or add ?XDEBUG_TRIGGER=1 to the URL. On the command line, run `flock debug artisan …`." Style="{StaticResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" Margin="0,4,0,0" /></StackPanel></Border>
+            <Border Style="{StaticResource CardStyle}">
+                <Grid Style="{StaticResource SettingRowStyle}">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Text="Client port" /><TextBlock Grid.Column="1" Text="9003" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                </Grid>
+            </Border>
+            <Border Style="{StaticResource CardStyle}">
+                <Grid Style="{StaticResource SettingRowStyle}">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Text="Mode" /><TextBlock Grid.Column="1" Text="debug, develop" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                </Grid>
+            </Border>
+            <Border Style="{StaticResource CardStyle}">
+                <StackPanel>
+                    <TextBlock Text="Start a session" />
+                    <TextBlock
+                        Text="Set a breakpoint in PhpStorm and listen for debug connections, use the Xdebug browser extension, or add ?XDEBUG_TRIGGER=1 to the URL. On the command line, run `flock debug artisan …`."
+                        Style="{StaticResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" Margin="0,4,0,0" />
+                </StackPanel>
+            </Border>
         </StackPanel>
         <StackPanel Spacing="4" Margin="0,0,0,24">
             <TextBlock Text="Availability" Style="{StaticResource BodyStrongTextBlockStyle}" Margin="1,0,0,6" />
-            <ItemsControl ItemsSource="{Binding PhpVersions}"><ItemsControl.ItemTemplate><DataTemplate><Border Style="{StaticResource CardStyle}"><Grid Style="{StaticResource SettingRowStyle}"><Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions><TextBlock Text="{Binding Version}" /><StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6"><TextBlock Text="Available" Visibility="{Binding AvailableVisibility}" Foreground="{ThemeResource SystemFillColorSuccessBrush}" /><TextBlock Text="Not in this build" Visibility="{Binding UnavailableVisibility}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" /></StackPanel></Grid></Border></DataTemplate></ItemsControl.ItemTemplate></ItemsControl>
+            <ItemsControl ItemsSource="{Binding PhpVersions}">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate>
+                        <Border Style="{StaticResource CardStyle}">
+                            <Grid Style="{StaticResource SettingRowStyle}">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="{Binding Version}" />
+                                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6">
+                                    <TextBlock Text="Available" Visibility="{Binding AvailableVisibility}" Foreground="{ThemeResource SystemFillColorSuccessBrush}" />
+                                    <TextBlock Text="Not in this build" Visibility="{Binding UnavailableVisibility}"
+                                               Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                </StackPanel>
+                            </Grid>
+                        </Border>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
         </StackPanel>
     </StackPanel>
 </UserControl>

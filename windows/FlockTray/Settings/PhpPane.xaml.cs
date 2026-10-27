@@ -1,19 +1,19 @@
+using System.Collections.ObjectModel;
+using System.ComponentModel;
+using CommunityToolkit.Mvvm.ComponentModel;
 using Flock.Kit;
 using Flock.Tray.Infrastructure;
 using Flock.Tray.ViewModels;
-using CommunityToolkit.Mvvm.ComponentModel;
-using System.Collections.ObjectModel;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
-
 namespace Flock.Tray;
 
 internal sealed partial class PhpPane : UserControl, ISettingsPane
 {
-    private readonly SettingsWindow window;
+    private readonly FrankenPhpPaneViewModel frankenRows;
     private readonly RuntimeService model;
     private readonly PhpPaneViewModel phpRows;
-    private readonly FrankenPhpPaneViewModel frankenRows;
+    private readonly SettingsWindow window;
 
     public PhpPane(SettingsWindow window, RuntimeService model)
     {
@@ -57,8 +57,14 @@ internal sealed partial class PhpPane : UserControl, ISettingsPane
 
     public void Hidden() { }
 
-    private void CheckPhp(object sender, RoutedEventArgs args) => _ = phpRows.CheckAsync();
-    private void CheckFranken(object sender, RoutedEventArgs args) => _ = frankenRows.CheckAsync();
+    private void CheckPhp(object sender, RoutedEventArgs args)
+    {
+        _ = phpRows.CheckAsync();
+    }
+    private void CheckFranken(object sender, RoutedEventArgs args)
+    {
+        _ = frankenRows.CheckAsync();
+    }
 
     private void ConfirmPendingLink(CancellationToken token)
     {
@@ -110,7 +116,10 @@ internal sealed partial class PhpPane : UserControl, ISettingsPane
         }
     }
 
-    private void MakePhpDefault(PhpVersionViewModel row) => _ = RunAsync(row.Minor, () => model.Configuration.SetDefaultPhpAsync(row.Minor));
+    private void MakePhpDefault(PhpVersionViewModel row)
+    {
+        _ = RunAsync(row.Minor, () => model.Configuration.SetDefaultPhpAsync(row.Minor));
+    }
 
     private void UninstallPhp(object sender, RoutedEventArgs args)
     {
@@ -123,7 +132,7 @@ internal sealed partial class PhpPane : UserControl, ISettingsPane
     private async Task UninstallPhpAsync(PhpVersionViewModel row)
     {
         if (!await window.Confirm($"Uninstall PHP {row.Minor}?",
-            $"Its php.ini is removed too. Sites pinned to PHP {row.Minor} stop working until you pick another version.", "Uninstall"))
+                $"Its php.ini is removed too. Sites pinned to PHP {row.Minor} stop working until you pick another version.", "Uninstall"))
         {
             return;
         }
@@ -164,8 +173,11 @@ internal sealed partial class PhpPane : UserControl, ISettingsPane
         }
     }
 
-    private void ShowFrankenLog(FrankenPhpVersionViewModel row) => _ = JobLogDialog.ShowAsync(window, $"FrankenPHP {row.Php} log", token => model.FrankenPhp.ReadLogAsync(row.Php, token),
-        () => model.FrankenPhp.Current?.Builds.FirstOrDefault(v => v.Php == row.Php)?.Job?.IsRunning == true);
+    private void ShowFrankenLog(FrankenPhpVersionViewModel row)
+    {
+        _ = JobLogDialog.ShowAsync(window, $"FrankenPHP {row.Php} log", token => model.FrankenPhp.ReadLogAsync(row.Php, token),
+            () => model.FrankenPhp.Current?.Builds.FirstOrDefault(v => v.Php == row.Php)?.Job?.IsRunning == true);
+    }
 
     private static MenuFlyoutItem Item(string text, Action action)
     {
@@ -174,7 +186,10 @@ internal sealed partial class PhpPane : UserControl, ISettingsPane
         return item;
     }
 
-    private PhpVersionViewModel? Row(object sender) => (sender as FrameworkElement)?.DataContext as PhpVersionViewModel;
+    private PhpVersionViewModel? Row(object sender)
+    {
+        return (sender as FrameworkElement)?.DataContext as PhpVersionViewModel;
+    }
 
     private async Task RunAsync(string key, Func<Task> action)
     {
@@ -189,8 +204,8 @@ internal sealed partial class PhpPane : UserControl, ISettingsPane
 
     private sealed class PhpBindingViewModel : ObservableObject
     {
-        private readonly PhpPaneViewModel php;
         private readonly FrankenPhpPaneViewModel franken;
+        private readonly PhpPaneViewModel php;
 
         public PhpBindingViewModel(PhpPaneViewModel php, FrankenPhpPaneViewModel franken)
         {
@@ -208,7 +223,7 @@ internal sealed partial class PhpPane : UserControl, ISettingsPane
         public bool IsFrankenChecking => franken.IsChecking;
         public Visibility FrankenPhpVisibility => franken.Current?.Available == true ? Visibility.Visible : Visibility.Collapsed;
 
-        private void Changed(object? sender, System.ComponentModel.PropertyChangedEventArgs args)
+        private void Changed(object? sender, PropertyChangedEventArgs args)
         {
             if (ReferenceEquals(sender, franken))
             {

@@ -4,13 +4,12 @@ using Flock.Tray.Features.Services;
 using Flock.Tray.Infrastructure;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
-
 namespace Flock.Tray;
 
 /// <summary>
-/// Installing, updating and switching PostgreSQL versions, and installing catalog services
-/// (downloads; the daemon runs them as jobs). State that other windows or the
-/// CLI start shows up too: the daemon reports PostgreSQL's busy majors and the component jobs.
+///     Installing, updating and switching PostgreSQL versions, and installing catalog services
+///     (downloads; the daemon runs them as jobs). State that other windows or the
+///     CLI start shows up too: the daemon reports PostgreSQL's busy majors and the component jobs.
 /// </summary>
 internal sealed partial class ServicesPane
 {
@@ -21,11 +20,14 @@ internal sealed partial class ServicesPane
     private bool PostgresWorking => Model.Postgres.IsRunning || Model.Postgres.Current?.AnyBusy == true;
 
 
-    private static bool IsInstallable(Service service) => service.Id == "postgres" || service.IsOnRequest;
+    private static bool IsInstallable(Service service)
+    {
+        return service.Id == "postgres" || service.IsOnRequest;
+    }
 
     /// <summary>
-    /// Polls every 2 s while something installs; otherwise the store reloads when the service list
-    /// changes, and a slow poll catches jobs that the CLI started.
+    ///     Polls every 2 s while something installs; otherwise the store reloads when the service list
+    ///     changes, and a slow poll catches jobs that the CLI started.
     /// </summary>
     private async Task PollAsync(CancellationToken hidden)
     {
@@ -48,7 +50,10 @@ internal sealed partial class ServicesPane
             }
         }
     }
-    private void Kick() => nap?.Cancel();
+    private void Kick()
+    {
+        nap?.Cancel();
+    }
 
     /// <summary>The tooltip of a service row's update hint; null when there is nothing to update.</summary>
     private string? UpdateHint(Service service)
@@ -103,7 +108,8 @@ internal sealed partial class ServicesPane
             panel.Children.Add(VersionList(versions, rows.ReleaseActions.ResolveRow("postgres")));
         }
         panel.Children.Add(CheckFooter("postgres", rows.ReleaseActions.Resolve("postgres")));
-        panel.Children.Add(Ui.Caption("psql, pg_dump and the other command-line tools come with PostgreSQL. In a terminal, Flock uses those of the newest installed version, which work with every version above and with remote servers."));
+        panel.Children.Add(Ui.Caption(
+            "psql, pg_dump and the other command-line tools come with PostgreSQL. In a terminal, Flock uses those of the newest installed version, which work with every version above and with remote servers."));
     }
 
     /// <summary>Nothing installed yet: the version and port, and Install, as for the catalog services.</summary>
@@ -133,9 +139,9 @@ internal sealed partial class ServicesPane
         var name = major is null ? "PostgreSQL" : $"PostgreSQL {(major.Latest.Length > 0 ? major.Latest : major.Major)}";
         var verb = major is { Busy: PostgresBusy.Uninstalling } ? "Uninstalling" : "Installing";
         return Inner(Ui.Column(10,
-            Ui.Text($"{verb} {name}…", "BodyStrongTextBlockStyle"),
-            new ProgressBar { IsIndeterminate = true },
-            Ui.Caption("Downloading the server and creating its database cluster. This takes a minute or two; you can close this window meanwhile.")),
+                Ui.Text($"{verb} {name}…", "BodyStrongTextBlockStyle"),
+                new ProgressBar { IsIndeterminate = true },
+                Ui.Caption("Downloading the server and creating its database cluster. This takes a minute or two; you can close this window meanwhile.")),
             new Thickness(16, 14, 16, 14));
     }
 
@@ -172,12 +178,17 @@ internal sealed partial class ServicesPane
         return Inner(Ui.Row(14, icon, text), new Thickness(16, 14, 16, 14));
     }
 
-    private StackPanel VersionList(PostgresVersions versions, ServiceReleaseRow row) =>
-        Ui.Column(6, Ui.Text("Versions", "BodyStrongTextBlockStyle"), VersionRows(versions.Majors.Zip(row.Lines).Select(pair => MajorRow(versions, pair.First, pair.Second))),
+    private StackPanel VersionList(PostgresVersions versions, ServiceReleaseRow row)
+    {
+        return Ui.Column(6, Ui.Text("Versions", "BodyStrongTextBlockStyle"),
+            VersionRows(versions.Majors.Zip(row.Lines).Select(pair => MajorRow(versions, pair.First, pair.Second))),
             Ui.Caption("Installed versions stay side by side. One runs at a time; each keeps its own databases, and updates within a version keep them."));
+    }
 
-    private string? BusyText(PostgresMajor major) =>
-        major.IsBusy ? major.BusyText : null;
+    private string? BusyText(PostgresMajor major)
+    {
+        return major.IsBusy ? major.BusyText : null;
+    }
 
     /// <summary>A major with its actions on the right, laid out like a catalog service's line.</summary>
     private Grid MajorRow(PostgresVersions versions, PostgresMajor major, ServiceReleaseLine line)
@@ -210,17 +221,21 @@ internal sealed partial class ServicesPane
         return VersionRow(info, actions);
     }
 
-    private Button PostgresCommandButton(PostgresVersions versions, PostgresMajor major, ServiceReleaseLine line, ServiceRowCommandKind command) => command switch
+    private Button PostgresCommandButton(PostgresVersions versions, PostgresMajor major, ServiceReleaseLine line, ServiceRowCommandKind command)
     {
-        ServiceRowCommandKind.Install => Ui.Button("Install", () => _ = RunAsync(() => rows.ReleaseActions.RunAsync(line.Target, command)), glyph: Ui.GlyphDownload,
-            tooltip: (major.Latest.Length > 0 ? $"Downloads PostgreSQL {major.Latest}." : "Downloads the newest release.")
-                + (versions.Active.Length > 0 ? $" PostgreSQL {versions.Active} stays active until you switch." : "")
-                + (major.HasData ? " Its databases are still here and come back." : "")),
-        ServiceRowCommandKind.Update => Ui.Button($"Update to {major.Latest}", () => _ = RunAsync(() => rows.ReleaseActions.RunAsync(line.Target, command)), accent: true,
-            glyph: Ui.GlyphDownload, tooltip: $"Installs {major.Latest} in place of {major.Installed}. Your databases stay{(major.Active && versions.Running ? "; PostgreSQL restarts for a moment" : "")}."),
-        ServiceRowCommandKind.Uninstall => Ui.Button("Uninstall…", () => _ = UninstallAsync(versions, major, line.Target)),
-        _ => throw new ArgumentOutOfRangeException(nameof(command), command, null),
-    };
+        return command switch
+        {
+            ServiceRowCommandKind.Install => Ui.Button("Install", () => _ = RunAsync(() => rows.ReleaseActions.RunAsync(line.Target, command)), glyph: Ui.GlyphDownload,
+                tooltip: (major.Latest.Length > 0 ? $"Downloads PostgreSQL {major.Latest}." : "Downloads the newest release.")
+                         + (versions.Active.Length > 0 ? $" PostgreSQL {versions.Active} stays active until you switch." : "")
+                         + (major.HasData ? " Its databases are still here and come back." : "")),
+            ServiceRowCommandKind.Update => Ui.Button($"Update to {major.Latest}", () => _ = RunAsync(() => rows.ReleaseActions.RunAsync(line.Target, command)), true,
+                Ui.GlyphDownload,
+                $"Installs {major.Latest} in place of {major.Installed}. Your databases stay{(major.Active && versions.Running ? "; PostgreSQL restarts for a moment" : "")}."),
+            ServiceRowCommandKind.Uninstall => Ui.Button("Uninstall…", () => _ = UninstallAsync(versions, major, line.Target)),
+            _ => throw new ArgumentOutOfRangeException(nameof(command), command, null)
+        };
+    }
 
     private Button More(PostgresVersions versions, PostgresMajor major, ServiceReleaseLine line)
     {
@@ -277,14 +292,17 @@ internal sealed partial class ServicesPane
             delete.Unchecked += (_, _) => warning.Visibility = Visibility.Collapsed;
             extra = Ui.Column(4, delete, warning);
         }
-        if (await Window.Confirm($"Uninstall PostgreSQL {major.Major}?", details, "Uninstall", destructive: true, extra: extra))
+        if (await Window.Confirm($"Uninstall PostgreSQL {major.Major}?", details, "Uninstall", true, extra))
         {
             var deleteData = delete?.IsChecked == true;
             await RunAsync(() => rows.ReleaseActions.RunAsync(target, ServiceRowCommandKind.Uninstall, deleteData));
         }
     }
 
-    private static async Task RunAsync(Func<Task<OperationOutcome>> action) => await action();
+    private static async Task RunAsync(Func<Task<OperationOutcome>> action)
+    {
+        await action();
+    }
 
     // Shared pieces
 
@@ -296,10 +314,10 @@ internal sealed partial class ServicesPane
         {
             ServiceReleaseActionKind.Check => Ui.Link(action.AccessibleLabel, () => _ = RunReleaseActionAsync(serviceId, action)),
             ServiceReleaseActionKind.Install or ServiceReleaseActionKind.Update or ServiceReleaseActionKind.UpdateAll => Ui.Button(action.AccessibleLabel,
-                () => _ = RunReleaseActionAsync(serviceId, action), accent: true, glyph: Ui.GlyphDownload),
+                () => _ = RunReleaseActionAsync(serviceId, action), true, Ui.GlyphDownload),
             ServiceReleaseActionKind.Busy => Ui.Row(6, new ProgressRing { Width = 14, Height = 14 }, Ui.Caption(action.BusyText ?? action.AccessibleLabel, wrap: false)),
             ServiceReleaseActionKind.Loading => new ProgressRing { Width = 14, Height = 14 },
-            _ => Ui.Caption(action.AccessibleLabel, wrap: false),
+            _ => Ui.Caption(action.AccessibleLabel, wrap: false)
         };
         if (!action.IsEnabled && release is Control control)
         {
@@ -370,8 +388,8 @@ internal sealed partial class ServicesPane
     }
 
     /// <summary>
-    /// Installing a service that isn't installed yet, the same for PostgreSQL and the catalog
-    /// services: the version (when there is a choice) and the port, then Install.
+    ///     Installing a service that isn't installed yet, the same for PostgreSQL and the catalog
+    ///     services: the version (when there is a choice) and the port, then Install.
     /// </summary>
     private Border InstallCard(string id, string name, string description, IReadOnlyList<ServiceReleaseTarget> targets, int port, string? portNote, string estimate)
     {
@@ -410,7 +428,7 @@ internal sealed partial class ServicesPane
             Maximum = 65535,
             SpinButtonPlacementMode = NumberBoxSpinButtonPlacementMode.Compact,
             MinWidth = 140,
-            HorizontalAlignment = HorizontalAlignment.Left,
+            HorizontalAlignment = HorizontalAlignment.Left
         };
         portBox.ValueChanged += (_, _) =>
         {
@@ -467,15 +485,18 @@ internal sealed partial class ServicesPane
     }
 
     /// <summary>A surface inside the detail card.</summary>
-    private static Border Inner(UIElement content, Thickness? padding = null) => new()
+    private static Border Inner(UIElement content, Thickness? padding = null)
     {
-        Child = content,
-        Padding = padding ?? new Thickness(14, 12, 14, 12),
-        Background = Ui.Brush("CardBackgroundFillColorSecondaryBrush"),
-        BorderBrush = Ui.Brush("CardStrokeColorDefaultBrush"),
-        BorderThickness = new Thickness(1),
-        CornerRadius = new CornerRadius(6),
-    };
+        return new Border
+        {
+            Child = content,
+            Padding = padding ?? new Thickness(14, 12, 14, 12),
+            Background = Ui.Brush("CardBackgroundFillColorSecondaryBrush"),
+            BorderBrush = Ui.Brush("CardStrokeColorDefaultBrush"),
+            BorderThickness = new Thickness(1),
+            CornerRadius = new CornerRadius(6)
+        };
+    }
 
     /// <summary>A centered call to action for something not installed yet.</summary>
     private static Border Hero(string glyph, string title, string description, params UIElement[] actions)
@@ -499,8 +520,10 @@ internal sealed partial class ServicesPane
         return Inner(panel, new Thickness(20, 20, 20, 18));
     }
 
-    private static StackPanel LoadingRow(string text) =>
-        Ui.Row(10, new ProgressRing { Width = 16, Height = 16 }, Ui.Caption(text, wrap: false));
+    private static StackPanel LoadingRow(string text)
+    {
+        return Ui.Row(10, new ProgressRing { Width = 16, Height = 16 }, Ui.Caption(text, wrap: false));
+    }
 
     private static MenuFlyoutItem Item(string text, Action click)
     {
@@ -509,5 +532,8 @@ internal sealed partial class ServicesPane
         return item;
     }
 
-    private static string Capitalize(string text) => text.Length == 0 ? text : char.ToUpper(text[0], CultureInfo.CurrentCulture) + text[1..];
+    private static string Capitalize(string text)
+    {
+        return text.Length == 0 ? text : char.ToUpper(text[0], CultureInfo.CurrentCulture) + text[1..];
+    }
 }

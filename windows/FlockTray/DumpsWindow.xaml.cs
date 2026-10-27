@@ -1,23 +1,23 @@
 using System.ComponentModel;
+using System.Text.Json;
 using Flock.Kit;
 using Flock.Tray.ViewModels;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
-
 namespace Flock.Tray;
 
 /// <summary>A terminal-like timeline of dumps, queries, logs, views, and jobs.</summary>
 internal sealed partial class DumpsWindow : FlockWindow
 {
-    private readonly DumpsViewModel viewModel;
-    private readonly HtmlView timeline;
-    private Task timelineLoad = Task.CompletedTask;
+    private readonly ToggleMenuFlyoutItem dumpsInPage = new() { Text = "Show dump() in the Page Too" };
+    private readonly MenuFlyout editors = new();
     private readonly Task initialRefresh;
     private readonly Dictionary<string, ToggleMenuFlyoutItem> kindItems = [];
-    private readonly ToggleMenuFlyoutItem dumpsInPage = new() { Text = "Show dump() in the Page Too" };
+    private readonly HtmlView timeline;
     private readonly MenuFlyoutItem unsupported = new() { IsEnabled = false, Visibility = Visibility.Collapsed };
-    private readonly MenuFlyout editors = new();
+    private readonly DumpsViewModel viewModel;
     private bool released;
+    private Task timelineLoad = Task.CompletedTask;
 
     public DumpsWindow(DumpsViewModel viewModel) : base("Dumps", 920, 620)
     {
@@ -25,7 +25,7 @@ internal sealed partial class DumpsWindow : FlockWindow
         InitializeComponent();
         InitializeChrome(WindowRoot, WindowTitleBar, WindowCaption, WindowIcon);
         WindowBody.DataContext = viewModel;
-        timeline = new HtmlView(allowScripts: true, blockRemote: true, whiteBackground: false, shell: viewModel.Model.Shell);
+        timeline = new HtmlView(true, true, false, viewModel.Model.Shell);
         CaptureKinds.Flyout = BuildCaptureMenu();
         EditorButton.Flyout = BuildEditorMenu();
         ToolTipService.SetToolTip(Capture, "Intercept dump() and dd() output from your sites and artisan commands");
@@ -66,14 +66,17 @@ internal sealed partial class DumpsWindow : FlockWindow
             {
                 try { await viewModel.SetEditorAsync(editor); }
                 catch (OperationCanceledException) { }
-                catch (Exception error) when (error is IOException or UnauthorizedAccessException or System.Text.Json.JsonException) { }
+                catch (Exception error) when (error is IOException or UnauthorizedAccessException or JsonException) { }
             };
             editors.Items.Add(item);
         }
         return editors;
     }
 
-    private void SearchChanged(AutoSuggestBox sender, AutoSuggestBoxTextChangedEventArgs args) => viewModel.Query = Search.Text ?? "";
+    private void SearchChanged(AutoSuggestBox sender, AutoSuggestBoxTextChangedEventArgs args)
+    {
+        viewModel.Query = Search.Text ?? "";
+    }
 
     private async void CaptureClicked(object sender, RoutedEventArgs args)
     {
@@ -84,22 +87,32 @@ internal sealed partial class DumpsWindow : FlockWindow
     {
         try { await viewModel.SetLatestOnlyAsync(LatestOnly.IsChecked == true); }
         catch (OperationCanceledException) { }
-        catch (Exception error) when (error is IOException or UnauthorizedAccessException or System.Text.Json.JsonException) { }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException or JsonException) { }
     }
 
     private async void ClearClicked(object sender, RoutedEventArgs args)
     {
-        if (await Confirm("Clear all dumps?", "Every captured dump, query, log, view and job is deleted, from all sites and commands.", "Clear", destructive: true))
+        if (await Confirm("Clear all dumps?", "Every captured dump, query, log, view and job is deleted, from all sites and commands.", "Clear", true))
         {
             await viewModel.ClearCommand.ExecuteAsync(null);
         }
     }
 
-    private void DismissError(InfoBar sender, object args) => viewModel.DismissError();
+    private void DismissError(InfoBar sender, object args)
+    {
+        viewModel.DismissError();
+    }
 
-    private void ViewModelChanged(object? sender, PropertyChangedEventArgs args) => Render(RequiresTimelineReload(args.PropertyName));
+    private void ViewModelChanged(object? sender, PropertyChangedEventArgs args)
+    {
+        Render(RequiresTimelineReload(args.PropertyName));
+    }
 
-    private static bool RequiresTimelineReload(string? propertyName) => propertyName is nameof(DumpsViewModel.VisibleDumps) or nameof(DumpsViewModel.VisibleEvents) or nameof(DumpsViewModel.Header) or nameof(DumpsViewModel.Editor);
+    private static bool RequiresTimelineReload(string? propertyName)
+    {
+        return propertyName is nameof(DumpsViewModel.VisibleDumps) or nameof(DumpsViewModel.VisibleEvents) or nameof(DumpsViewModel.Header)
+            or nameof(DumpsViewModel.Editor);
+    }
 
     private void Render(bool reloadTimeline)
     {
@@ -131,7 +144,11 @@ internal sealed partial class DumpsWindow : FlockWindow
         Heading = count == 0 ? "Dumps" : $"Dumps ({count})";
         if (count == 0)
         {
-            ContentHost.Content = Ui.EmptyState(Ui.GlyphBug, viewModel.Dumps.Count == 0 && viewModel.Events.Count == 0 ? "No dumps yet" : "No matching dumps", capturing ? "dump() and dd() output, queries, logs, views and jobs from your sites and artisan commands appear here." : "Capture is off — turn it on to collect dump() and dd() output here.", capturing ? null : Ui.AsyncButton("Start Capturing", () => viewModel.SetDumpsAsync(true), accent: true));
+            ContentHost.Content = Ui.EmptyState(Ui.GlyphBug, viewModel.Dumps.Count == 0 && viewModel.Events.Count == 0 ? "No dumps yet" : "No matching dumps",
+                capturing
+                    ? "dump() and dd() output, queries, logs, views and jobs from your sites and artisan commands appear here."
+                    : "Capture is off — turn it on to collect dump() and dd() output here.",
+                capturing ? null : Ui.AsyncButton("Start Capturing", () => viewModel.SetDumpsAsync(true), true));
             return;
         }
         if (reloadTimeline)
@@ -141,7 +158,10 @@ internal sealed partial class DumpsWindow : FlockWindow
         ContentHost.Content = timeline;
     }
 
-    private void Unsubscribe() => viewModel.PropertyChanged -= ViewModelChanged;
+    private void Unsubscribe()
+    {
+        viewModel.PropertyChanged -= ViewModelChanged;
+    }
 
     public override async Task ReleaseAsync()
     {

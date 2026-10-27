@@ -12,7 +12,9 @@
     <StackPanel Spacing="0">
         <StackPanel Spacing="4" Margin="0,0,0,24">
             <Grid Margin="1,0,0,6">
-                <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
                 <TextBlock Text="PHP-CGI" Style="{StaticResource BodyStrongTextBlockStyle}" />
                 <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8">
                     <TextBlock Text="{Binding Current.CheckedAt}" Style="{StaticResource CaptionTextBlockStyle}" />
@@ -25,44 +27,105 @@
                     <DataTemplate>
                         <Border Style="{StaticResource CardStyle}">
                             <Grid ColumnSpacing="12">
-                                <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
                                 <StackPanel Spacing="2">
                                     <StackPanel Orientation="Horizontal" Spacing="8">
                                         <TextBlock Text="{Binding Minor}" Style="{StaticResource BodyStrongTextBlockStyle}" />
                                         <TextBlock Text="{Binding Installed}" />
                                         <TextBlock Text="Default" Visibility="{Binding IsDefault, Converter={StaticResource BooleanVisibilityConverter}}" />
                                     </StackPanel>
-                                    <TextBlock Text="{Binding Latest}" Style="{StaticResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                                    <StackPanel Spacing="4" Visibility="{Binding HasRunningJob, Converter={StaticResource BooleanVisibilityConverter}}"><StackPanel Orientation="Horizontal" Spacing="6"><ProgressRing Width="14" Height="14" IsActive="True" /><TextBlock Text="{Binding JobProgressText}" Style="{StaticResource CaptionTextBlockStyle}" VerticalAlignment="Center" /></StackPanel><ProgressBar Minimum="0" Maximum="1" Value="{Binding JobProgress}" IsIndeterminate="{Binding IsJobProgressIndeterminate}" /></StackPanel>
+                                    <TextBlock Text="{Binding Latest}" Style="{StaticResource CaptionTextBlockStyle}"
+                                               Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                    <StackPanel Spacing="4" Visibility="{Binding HasRunningJob, Converter={StaticResource BooleanVisibilityConverter}}">
+                                        <StackPanel Orientation="Horizontal" Spacing="6">
+                                            <ProgressRing Width="14" Height="14" IsActive="True" />
+                                            <TextBlock Text="{Binding JobProgressText}" Style="{StaticResource CaptionTextBlockStyle}" VerticalAlignment="Center" />
+                                        </StackPanel>
+                                        <ProgressBar Minimum="0" Maximum="1" Value="{Binding JobProgress}" IsIndeterminate="{Binding IsJobProgressIndeterminate}" />
+                                    </StackPanel>
                                 </StackPanel>
-                                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center"><Button Content="Install" Command="{Binding InstallCommand}" Visibility="{Binding ShowPrimaryInstall, Converter={StaticResource BooleanVisibilityConverter}}" /><Button Content="Update" Style="{StaticResource AccentButtonStyle}" Command="{Binding InstallCommand}" Visibility="{Binding ShowPrimaryUpdate, Converter={StaticResource BooleanVisibilityConverter}}" /><Button Content="Uninstall…" Click="UninstallPhp" Visibility="{Binding ShowPrimaryUninstall, Converter={StaticResource BooleanVisibilityConverter}}" /><Button Content="Cancel" Command="{Binding CancelCommand}" Visibility="{Binding ShowPrimaryCancel, Converter={StaticResource BooleanVisibilityConverter}}" /><Button Content="Retry" Command="{Binding InstallCommand}" Visibility="{Binding ShowPrimaryRetry, Converter={StaticResource BooleanVisibilityConverter}}" /><Button Click="OpenPhpActions" Padding="8,6" ToolTipService.ToolTip="More actions" automation:AutomationProperties.Name="More actions" Visibility="{Binding HasMoreActions, Converter={StaticResource BooleanVisibilityConverter}}"><FontIcon Glyph="&#xE712;" FontFamily="{StaticResource SymbolsFont}" FontSize="14" /></Button></StackPanel>
+                                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                                    <Button Content="Install" Command="{Binding InstallCommand}"
+                                            Visibility="{Binding ShowPrimaryInstall, Converter={StaticResource BooleanVisibilityConverter}}" />
+                                    <Button Content="Update" Style="{StaticResource AccentButtonStyle}" Command="{Binding InstallCommand}"
+                                            Visibility="{Binding ShowPrimaryUpdate, Converter={StaticResource BooleanVisibilityConverter}}" />
+                                    <Button Content="Uninstall…" Click="UninstallPhp"
+                                            Visibility="{Binding ShowPrimaryUninstall, Converter={StaticResource BooleanVisibilityConverter}}" />
+                                    <Button Content="Cancel" Command="{Binding CancelCommand}"
+                                            Visibility="{Binding ShowPrimaryCancel, Converter={StaticResource BooleanVisibilityConverter}}" />
+                                    <Button Content="Retry" Command="{Binding InstallCommand}"
+                                            Visibility="{Binding ShowPrimaryRetry, Converter={StaticResource BooleanVisibilityConverter}}" />
+                                    <Button Click="OpenPhpActions" Padding="8,6" ToolTipService.ToolTip="More actions"
+                                            automation:AutomationProperties.Name="More actions"
+                                            Visibility="{Binding HasMoreActions, Converter={StaticResource BooleanVisibilityConverter}}">
+                                        <FontIcon Glyph="&#xE712;" FontFamily="{StaticResource SymbolsFont}" FontSize="14" />
+                                    </Button>
+                                </StackPanel>
                             </Grid>
                         </Border>
                     </DataTemplate>
                 </ItemsControl.ItemTemplate>
             </ItemsControl>
-            <TextBlock Text="{Binding Current.CheckError}" Foreground="{ThemeResource SystemFillColorCautionBrush}" TextWrapping="Wrap" Visibility="{Binding Current.CheckError, Converter={StaticResource StringVisibilityConverter}}" />
+            <TextBlock Text="{Binding Current.CheckError}" Foreground="{ThemeResource SystemFillColorCautionBrush}" TextWrapping="Wrap"
+                       Visibility="{Binding Current.CheckError, Converter={StaticResource StringVisibilityConverter}}" />
         </StackPanel>
         <StackPanel Spacing="4" Visibility="{Binding FrankenPhpVisibility}">
             <Grid Margin="1,0,0,6">
-                <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
                 <TextBlock Text="FrankenPHP" Style="{StaticResource BodyStrongTextBlockStyle}" />
-                <Grid Grid.Column="1"><Button Content="Check now" Click="CheckFranken" Visibility="{Binding IsFrankenChecking, Converter={StaticResource InverseBooleanVisibilityConverter}}" /><ProgressRing Width="14" Height="14" IsActive="True" Visibility="{Binding IsFrankenChecking, Converter={StaticResource BooleanVisibilityConverter}}" /></Grid>
+                <Grid Grid.Column="1">
+                    <Button Content="Check now" Click="CheckFranken"
+                            Visibility="{Binding IsFrankenChecking, Converter={StaticResource InverseBooleanVisibilityConverter}}" />
+                    <ProgressRing Width="14" Height="14" IsActive="True" Visibility="{Binding IsFrankenChecking, Converter={StaticResource BooleanVisibilityConverter}}" />
+                </Grid>
             </Grid>
             <ItemsControl ItemsSource="{Binding Builds}">
                 <ItemsControl.ItemTemplate>
                     <DataTemplate>
                         <Border Style="{StaticResource CardStyle}">
                             <Grid ColumnSpacing="12">
-                                <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
-                                <StackPanel Spacing="2"><TextBlock Text="{Binding Php}" Style="{StaticResource BodyStrongTextBlockStyle}" /><TextBlock Text="{Binding Installed}" Style="{StaticResource CaptionTextBlockStyle}" /><StackPanel Spacing="4" Visibility="{Binding HasRunningJob, Converter={StaticResource BooleanVisibilityConverter}}"><StackPanel Orientation="Horizontal" Spacing="6"><ProgressRing Width="14" Height="14" IsActive="True" /><TextBlock Text="{Binding JobProgressText}" Style="{StaticResource CaptionTextBlockStyle}" VerticalAlignment="Center" /></StackPanel><ProgressBar Minimum="0" Maximum="1" Value="{Binding JobProgress}" IsIndeterminate="{Binding IsJobProgressIndeterminate}" /></StackPanel></StackPanel>
-                                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center"><Button Content="Install" Command="{Binding InstallCommand}" Visibility="{Binding ShowPrimaryInstall, Converter={StaticResource BooleanVisibilityConverter}}" /><Button Content="Update" Style="{StaticResource AccentButtonStyle}" Command="{Binding InstallCommand}" Visibility="{Binding ShowPrimaryUpdate, Converter={StaticResource BooleanVisibilityConverter}}" /><Button Content="Uninstall" Command="{Binding UninstallCommand}" Visibility="{Binding ShowPrimaryUninstall, Converter={StaticResource BooleanVisibilityConverter}}" /><Button Content="Cancel" Command="{Binding CancelCommand}" Visibility="{Binding ShowPrimaryCancel, Converter={StaticResource BooleanVisibilityConverter}}" /><Button Content="Retry" Command="{Binding InstallCommand}" Visibility="{Binding ShowPrimaryRetry, Converter={StaticResource BooleanVisibilityConverter}}" /><Button Click="OpenFrankenPhpActions" Padding="8,6" ToolTipService.ToolTip="More actions" automation:AutomationProperties.Name="More actions" Visibility="{Binding HasMoreActions, Converter={StaticResource BooleanVisibilityConverter}}"><FontIcon Glyph="&#xE712;" FontFamily="{StaticResource SymbolsFont}" FontSize="14" /></Button></StackPanel>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Spacing="2">
+                                    <TextBlock Text="{Binding Php}" Style="{StaticResource BodyStrongTextBlockStyle}" />
+                                    <TextBlock Text="{Binding Installed}" Style="{StaticResource CaptionTextBlockStyle}" />
+                                    <StackPanel Spacing="4" Visibility="{Binding HasRunningJob, Converter={StaticResource BooleanVisibilityConverter}}">
+                                        <StackPanel Orientation="Horizontal" Spacing="6">
+                                            <ProgressRing Width="14" Height="14" IsActive="True" />
+                                            <TextBlock Text="{Binding JobProgressText}" Style="{StaticResource CaptionTextBlockStyle}" VerticalAlignment="Center" />
+                                        </StackPanel>
+                                        <ProgressBar Minimum="0" Maximum="1" Value="{Binding JobProgress}" IsIndeterminate="{Binding IsJobProgressIndeterminate}" />
+                                    </StackPanel>
+                                </StackPanel>
+                                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                                    <Button Content="Install" Command="{Binding InstallCommand}"
+                                            Visibility="{Binding ShowPrimaryInstall, Converter={StaticResource BooleanVisibilityConverter}}" />
+                                    <Button Content="Update" Style="{StaticResource AccentButtonStyle}" Command="{Binding InstallCommand}"
+                                            Visibility="{Binding ShowPrimaryUpdate, Converter={StaticResource BooleanVisibilityConverter}}" />
+                                    <Button Content="Uninstall" Command="{Binding UninstallCommand}"
+                                            Visibility="{Binding ShowPrimaryUninstall, Converter={StaticResource BooleanVisibilityConverter}}" />
+                                    <Button Content="Cancel" Command="{Binding CancelCommand}"
+                                            Visibility="{Binding ShowPrimaryCancel, Converter={StaticResource BooleanVisibilityConverter}}" />
+                                    <Button Content="Retry" Command="{Binding InstallCommand}"
+                                            Visibility="{Binding ShowPrimaryRetry, Converter={StaticResource BooleanVisibilityConverter}}" />
+                                    <Button Click="OpenFrankenPhpActions" Padding="8,6" ToolTipService.ToolTip="More actions"
+                                            automation:AutomationProperties.Name="More actions"
+                                            Visibility="{Binding HasMoreActions, Converter={StaticResource BooleanVisibilityConverter}}">
+                                        <FontIcon Glyph="&#xE712;" FontFamily="{StaticResource SymbolsFont}" FontSize="14" />
+                                    </Button>
+                                </StackPanel>
                             </Grid>
                         </Border>
                     </DataTemplate>
                 </ItemsControl.ItemTemplate>
             </ItemsControl>
-            <TextBlock Text="{Binding FrankenCurrent.CheckError}" Foreground="{ThemeResource SystemFillColorCautionBrush}" TextWrapping="Wrap" Visibility="{Binding FrankenCurrent.CheckError, Converter={StaticResource StringVisibilityConverter}}" />
+            <TextBlock Text="{Binding FrankenCurrent.CheckError}" Foreground="{ThemeResource SystemFillColorCautionBrush}" TextWrapping="Wrap"
+                       Visibility="{Binding FrankenCurrent.CheckError, Converter={StaticResource StringVisibilityConverter}}" />
         </StackPanel>
     </StackPanel>
 </UserControl>

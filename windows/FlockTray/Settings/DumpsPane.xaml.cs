@@ -3,13 +3,12 @@ using Flock.Tray.Infrastructure;
 using Flock.Tray.ViewModels;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
-
 namespace Flock.Tray;
 
 internal sealed partial class DumpsPane : UserControl, ISettingsPane
 {
     private readonly DumpsViewModel viewModel;
-    private bool loaded;
+    private readonly bool loaded;
 
     public DumpsPane(SettingsWindow window, RuntimeService model)
     {
@@ -28,7 +27,10 @@ internal sealed partial class DumpsPane : UserControl, ISettingsPane
     public string Subtitle => "Send dump() and dd() output to Flock instead of the page or terminal — no changes to your projects.";
     public UIElement Root => this;
     public bool ScrollsItself => false;
-    public Task ActivateAsync(CancellationToken hidden) => Task.CompletedTask;
+    public Task ActivateAsync(CancellationToken hidden)
+    {
+        return Task.CompletedTask;
+    }
     public void Hidden() { }
     public Task ReleaseAsync()
     {
@@ -44,7 +46,10 @@ internal sealed partial class DumpsPane : UserControl, ISettingsPane
         }
     }
 
-    private void OpenDumps(object sender, RoutedEventArgs args) => App.Current.Open(WindowKind.Dumps);
+    private void OpenDumps(object sender, RoutedEventArgs args)
+    {
+        App.Current.Open(WindowKind.Dumps);
+    }
 
     private async void EditorChanged(object sender, SelectionChangedEventArgs args)
     {

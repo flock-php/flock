@@ -2,7 +2,6 @@ using Flock.Tray.Infrastructure;
 using Flock.Tray.ViewModels;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
-
 namespace Flock.Tray;
 
 internal sealed partial class DebuggerPane : UserControl, ISettingsPane
@@ -20,7 +19,10 @@ internal sealed partial class DebuggerPane : UserControl, ISettingsPane
     public string Subtitle => "Step through requests and commands with Xdebug.";
     public UIElement Root => this;
     public bool ScrollsItself => false;
-    public Task ActivateAsync(CancellationToken hidden) => Task.CompletedTask;
+    public Task ActivateAsync(CancellationToken hidden)
+    {
+        return Task.CompletedTask;
+    }
     public void Hidden() { }
     public Task ReleaseAsync()
     {

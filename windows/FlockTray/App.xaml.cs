@@ -4,50 +4,33 @@ using Flock.Tray.ViewModels;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
-
+using WinRT;
 namespace Flock.Tray;
 
 public enum WindowKind { Mail, Dumps, Logs, Settings, Setup }
 
 /// <summary>
-/// The tray app: a notification area icon with a panel (the macOS menu bar extra), plus the
-/// Mail, Dumps, Logs and Settings windows. It keeps running with no window open.
+///     The tray app: a notification area icon with a panel (the macOS menu bar extra), plus the
+///     Mail, Dumps, Logs and Settings windows. It keeps running with no window open.
 /// </summary>
 public sealed partial class App : Application
 {
-    private ITrayIcon? tray;
-    private IPanelWindow? panel;
 
-    public new static App Current => (App)Application.Current;
+    /// <summary>Command line argument of the sign-in autostart.</summary>
+    public const string BackgroundArgument = "--background";
+    private DispatcherQueue? dispatcher;
 
     private AppHost? host;
     private Task? launchTask;
-    private Task? updateTask;
-    private Task? quitTask;
-    private bool updatingTray;
-    private DispatcherQueue? dispatcher;
-    private WindowManager? windowManager;
-    private IUiDispatcher? uiDispatcher;
-    private ITrayIconFactory? trayFactory;
+    private IPanelWindow? panel;
     private IPanelWindowFactory? panelFactory;
-
-    public RuntimeService State => host?.RuntimeService ?? throw new InvalidOperationException("The application has not launched.");
-
-    public ApplicationRuntime Runtime => host?.Runtime ?? throw new InvalidOperationException("The application has not launched.");
-
-    internal static void Run(AppOptions options)
-    {
-        WinRT.ComWrappersSupport.InitializeComWrappers();
-        Application.Start(callback =>
-        {
-            SynchronizationContext.SetSynchronizationContext(new DispatcherQueueSynchronizationContext(DispatcherQueue.GetForCurrentThread()));
-            _ = new App(options);
-        });
-    }
-
-    internal AppOptions Options { get; }
-
-    internal WindowManager Windows => windowManager ?? throw new InvalidOperationException("The application has not launched.");
+    private Task? quitTask;
+    private ITrayIcon? tray;
+    private ITrayIconFactory? trayFactory;
+    private IUiDispatcher? uiDispatcher;
+    private Task? updateTask;
+    private bool updatingTray;
+    private WindowManager? windowManager;
 
     public App() : this(new AppOptions())
     {
@@ -75,6 +58,26 @@ public sealed partial class App : Application
             // An unowned WinUI exception is fatal. Do not mark it handled just to keep the tray alive.
             args.Handled = false;
         };
+    }
+
+    public new static App Current => (App)Application.Current;
+
+    public RuntimeService State => host?.RuntimeService ?? throw new InvalidOperationException("The application has not launched.");
+
+    public ApplicationRuntime Runtime => host?.Runtime ?? throw new InvalidOperationException("The application has not launched.");
+
+    internal AppOptions Options { get; }
+
+    internal WindowManager Windows => windowManager ?? throw new InvalidOperationException("The application has not launched.");
+
+    internal static void Run(AppOptions options)
+    {
+        ComWrappersSupport.InitializeComWrappers();
+        Start(callback =>
+        {
+            SynchronizationContext.SetSynchronizationContext(new DispatcherQueueSynchronizationContext(DispatcherQueue.GetForCurrentThread()));
+            _ = new App(options);
+        });
     }
 
     protected override void OnLaunched(LaunchActivatedEventArgs args)
@@ -138,10 +141,10 @@ public sealed partial class App : Application
         }
     }
 
-    /// <summary>Command line argument of the sign-in autostart.</summary>
-    public const string BackgroundArgument = "--background";
-
-    private string IconPath() => TrayIconPath(State, Native.TaskbarIsLight);
+    private string IconPath()
+    {
+        return TrayIconPath(State, Native.TaskbarIsLight);
+    }
 
     /// <summary>The logomark for the daemon's state, colored for a light or a dark background.</summary>
     /// <param name="extension">.ico for the notification area; .png inside windows (WinUI scales up an .ico's smallest image).</param>
@@ -191,16 +194,19 @@ public sealed partial class App : Application
     }
 
     /// <summary>Opens the app from outside the tray (a start by hand): the setup until Flock is set up, then Settings.</summary>
-    private void ShowMain() => Open(State.NeedsSetup ? WindowKind.Setup : WindowKind.Settings);
+    private void ShowMain()
+    {
+        Open(State.NeedsSetup ? WindowKind.Setup : WindowKind.Settings);
+    }
 
     /// <summary>
-    /// A flock:// link (registered by the installer). flock://install, e.g. from the website's
-    /// install buttons, shows the service in Settings → Services (a PHP or Node.js version in
-    /// Settings → PHP or Node), which asks before installing anything; before the setup the link
-    /// waits, and the pane asks about it once Flock is set up.
-    /// flock://secure, from the page served for a site that isn't secured, asks in Settings → Sites.
-    /// flock://update, from `flock update`, installs an update of the app in Settings → General
-    /// (before the setup without opening Settings).
+    ///     A flock:// link (registered by the installer). flock://install, e.g. from the website's
+    ///     install buttons, shows the service in Settings → Services (a PHP or Node.js version in
+    ///     Settings → PHP or Node), which asks before installing anything; before the setup the link
+    ///     waits, and the pane asks about it once Flock is set up.
+    ///     flock://secure, from the page served for a site that isn't secured, asks in Settings → Sites.
+    ///     flock://update, from `flock update`, installs an update of the app in Settings → General
+    ///     (before the setup without opening Settings).
     /// </summary>
     private void OpenLink(string? text)
     {
@@ -230,8 +236,8 @@ public sealed partial class App : Application
     }
 
     /// <summary>
-    /// Opens the pane that asks about an install link: PHP and Node for their versions, Services
-    /// (on the service's details) for everything else.
+    ///     Opens the pane that asks about an install link: PHP and Node for their versions, Services
+    ///     (on the service's details) for everything else.
     /// </summary>
     public void ShowInstall(InstallLink link)
     {
@@ -272,7 +278,7 @@ public sealed partial class App : Application
         {
             items.Insert(1, update);
         }
-        var choice = tray.ShowMenu([.. items], defaultItem: 0);
+        var choice = tray.ShowMenu([.. items], 0);
         if (update is not null && choice >= 1)
         {
             if (choice == 1)
@@ -304,8 +310,8 @@ public sealed partial class App : Application
     }
 
     /// <summary>
-    /// Installs the available update, showing it in Settings → General once Flock is set up. Before
-    /// the setup the silent installer runs on its own: Settings has nothing to show yet.
+    ///     Installs the available update, showing it in Settings → General once Flock is set up. Before
+    ///     the setup the silent installer runs on its own: Settings has nothing to show yet.
     /// </summary>
     public void InstallUpdate(bool check = false)
     {
@@ -401,7 +407,10 @@ public sealed partial class App : Application
         }
     }
 
-    public void Quit() => _ = QuitAsync();
+    public void Quit()
+    {
+        _ = QuitAsync();
+    }
 
     public Task QuitAsync()
     {
@@ -481,5 +490,8 @@ public sealed partial class App : Application
         tray = null;
     }
 
-    private void TrayFailure(string message) => State.ShowRuntimeError(message);
+    private void TrayFailure(string message)
+    {
+        State.ShowRuntimeError(message);
+    }
 }

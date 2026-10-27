@@ -1,32 +1,33 @@
-using Flock.Kit;
+using System.ComponentModel;
+using Windows.Foundation;
+using Windows.Graphics;
+using Windows.System;
 using Flock.Tray.Infrastructure;
 using Flock.Tray.ViewModels;
-using Microsoft.UI.Dispatching;
+using Microsoft.UI;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Media.Imaging;
-using Windows.Foundation;
-using Windows.Graphics;
-
+using DispatcherQueue = Microsoft.UI.Dispatching.DispatcherQueue;
 namespace Flock.Tray;
 
 /// <summary>
-/// The flyout shown from the notification area icon (the macOS app's menu bar panel): status,
-/// services, sites, toggles and window shortcuts.
+///     The flyout shown from the notification area icon (the macOS app's menu bar panel): status,
+///     services, sites, toggles and window shortcuts.
 /// </summary>
 internal sealed partial class PanelWindow : Window
 {
     private const int Width = 360;
+    private readonly DispatcherQueue dispatcher;
+    private readonly IntPtr hwnd;
 
     private readonly RuntimeService model;
     private readonly PanelViewModel viewModel;
-    private readonly DispatcherQueue dispatcher;
-    private readonly IntPtr hwnd;
-    private DateTime hiddenAt;
     private Native.POINT anchor;
     private bool fitPending;
+    private DateTime hiddenAt;
     private bool loaded;
     private bool releasing;
 
@@ -37,7 +38,7 @@ internal sealed partial class PanelWindow : Window
         InitializeComponent();
         Root.DataContext = viewModel;
         dispatcher = DispatcherQueue.GetForCurrentThread() ?? throw new InvalidOperationException("The panel dispatcher is unavailable.");
-        hwnd = Microsoft.UI.Win32Interop.GetWindowFromWindowId(AppWindow.Id);
+        hwnd = Win32Interop.GetWindowFromWindowId(AppWindow.Id);
         Title = App.Current.Options.Identity.DisplayName;
         SystemBackdrop = new DesktopAcrylicBackdrop();
         if (App.Current.Options.UseSolidBackground)
@@ -46,7 +47,7 @@ internal sealed partial class PanelWindow : Window
         }
 
         var presenter = OverlappedPresenter.Create();
-        presenter.SetBorderAndTitleBar(hasBorder: true, hasTitleBar: false);
+        presenter.SetBorderAndTitleBar(true, false);
         presenter.IsResizable = false;
         presenter.IsMaximizable = false;
         presenter.IsMinimizable = false;
@@ -56,7 +57,7 @@ internal sealed partial class PanelWindow : Window
 
         Root.Loaded += RootLoaded;
         Scroller.ActualThemeChanged += ThemeChanged;
-        Ui.Shortcut(Scroller, Windows.System.VirtualKey.Escape, Windows.System.VirtualKeyModifiers.None, Hide);
+        Ui.Shortcut(Scroller, VirtualKey.Escape, VirtualKeyModifiers.None, Hide);
         Ui.SettingsShortcut(Scroller);
         Activated += ActivatedChanged;
         viewModel.PropertyChanged += ViewModelChanged;
@@ -135,7 +136,7 @@ internal sealed partial class PanelWindow : Window
         }
     }
 
-    private void ViewModelChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs args)
+    private void ViewModelChanged(object? sender, PropertyChangedEventArgs args)
     {
         if (AppWindow.IsVisible)
         {
@@ -234,7 +235,10 @@ internal sealed partial class PanelWindow : Window
         await viewModel.ToggleDumpsCommand.ExecuteAsync(toggle.IsOn);
     }
 
-    private void DismissError(InfoBar sender, object args) => viewModel.DismissError();
+    private void DismissError(InfoBar sender, object args)
+    {
+        viewModel.DismissError();
+    }
 
     private void OpenSite(object sender, RoutedEventArgs args)
     {

@@ -1,19 +1,21 @@
+using System.Runtime.InteropServices;
 using System.Runtime.InteropServices.WindowsRuntime;
-using Flock.Kit;
-using Microsoft.UI.Xaml;
-using Microsoft.UI.Xaml.Controls;
-using Microsoft.UI.Xaml.Media.Imaging;
 using Windows.ApplicationModel.DataTransfer;
 using Windows.Storage;
 using Windows.Storage.Pickers;
 using Windows.Storage.Streams;
-
+using Flock.Kit;
+using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Media;
+using Microsoft.UI.Xaml.Media.Imaging;
+using WinRT.Interop;
 namespace Flock.Tray;
 
 /// <summary>
-/// The Share section: the site at a temporary public URL through a Cloudflare quick tunnel, to show
-/// work in progress. The daemon builds the assets when they need it, starts the tunnel and ends it
-/// after 8 hours; the status follows it through building, starting, running or failed.
+///     The Share section: the site at a temporary public URL through a Cloudflare quick tunnel, to show
+///     work in progress. The daemon builds the assets when they need it, starts the tunnel and ends it
+///     after 8 hours; the status follows it through building, starting, running or failed.
 /// </summary>
 internal sealed partial class SitesPane
 {
@@ -26,7 +28,8 @@ internal sealed partial class SitesPane
         var share = site.Share;
         if (share is null)
         {
-            section.Children.Add(Ui.Caption("Show the site at a temporary public address to preview work in progress, never for production. Visitors don't get debug pages, dumps or the dev tools."));
+            section.Children.Add(Ui.Caption(
+                "Show the site at a temporary public address to preview work in progress, never for production. Visitors don't get debug pages, dumps or the dev tools."));
             var start = Ui.Button("Share…", () => Start(site.Name, () => StartShare(site)));
             start.IsEnabled = site.Url is not null;
             section.Children.Add(start);
@@ -93,8 +96,8 @@ internal sealed partial class SitesPane
     }
 
     /// <summary>
-    /// Asks who may open the shared site (nobody listed: anyone with the link) and whether visitors see
-    /// the app's debug mode, then shares it.
+    ///     Asks who may open the shared site (nobody listed: anyone with the link) and whether visitors see
+    ///     the app's debug mode, then shares it.
     /// </summary>
     private async Task StartShare(Status.Site site)
     {
@@ -103,12 +106,14 @@ internal sealed partial class SitesPane
         var dialog = new ContentDialog
         {
             Title = $"Share {site.Name}",
-            Content = Ui.Column(12, box, Ui.Caption("Anyone with the link can open the site unless you list email addresses — Cloudflare then emails them a code. The link stops working after 8 hours or when you stop sharing."),
+            Content = Ui.Column(12, box,
+                Ui.Caption(
+                    "Anyone with the link can open the site unless you list email addresses — Cloudflare then emails them a code. The link stops working after 8 hours or when you stop sharing."),
                 Ui.Column(2, debug, Ui.Caption("Turns the app's debug mode on for this share, so visitors see stack traces. Only for people you trust."))),
             PrimaryButtonText = "Share",
             CloseButtonText = "Cancel",
             DefaultButton = ContentDialogButton.Primary,
-            XamlRoot = Window.XamlRoot,
+            XamlRoot = Window.XamlRoot
         };
         if (await dialog.ShowAsync() != ContentDialogResult.Primary)
         {
@@ -120,12 +125,12 @@ internal sealed partial class SitesPane
     }
 
     /// <summary>
-    /// The share's QR code: the daemon's PNG (8 pixels per module), shown at 160 pixels. Its context
-    /// menu copies or saves it, and it drags out as a .png file.
+    ///     The share's QR code: the daemon's PNG (8 pixels per module), shown at 160 pixels. Its context
+    ///     menu copies or saves it, and it drags out as a .png file.
     /// </summary>
     private Image QrImage(string data, string site)
     {
-        var image = new Image { Width = 160, Height = 160, Stretch = Microsoft.UI.Xaml.Media.Stretch.Uniform, HorizontalAlignment = HorizontalAlignment.Left, CanDrag = true };
+        var image = new Image { Width = 160, Height = 160, Stretch = Stretch.Uniform, HorizontalAlignment = HorizontalAlignment.Left, CanDrag = true };
         Ui.AutomationName(image, "QR code of the share's address");
         ToolTipService.SetToolTip(image, "Right-click to copy or save the QR code, or drag it out");
         var copy = new MenuFlyoutItem { Text = "Copy image" };
@@ -174,13 +179,16 @@ internal sealed partial class SitesPane
             qr = (data, bitmap);
             image.Source = bitmap;
         }
-        catch (Exception e) when (e is FormatException or System.Runtime.InteropServices.COMException)
+        catch (Exception e) when (e is FormatException or COMException)
         {
             App.Log(e);
         }
     }
 
-    private static string QrFileName(string site) => $"{site}-share-qr.png";
+    private static string QrFileName(string site)
+    {
+        return $"{site}-share-qr.png";
+    }
 
     /// <summary>Copies the share's QR code to the clipboard as an image.</summary>
     private static async Task CopyQr(string data)
@@ -195,7 +203,7 @@ internal sealed partial class SitesPane
             package.SetBitmap(RandomAccessStreamReference.CreateFromStream(stream));
             Clipboard.SetContent(package);
         }
-        catch (Exception e) when (e is FormatException or System.Runtime.InteropServices.COMException)
+        catch (Exception e) when (e is FormatException or COMException)
         {
             App.Log(e);
         }
@@ -206,7 +214,7 @@ internal sealed partial class SitesPane
     {
         var picker = new FileSavePicker { SuggestedFileName = Path.GetFileNameWithoutExtension(QrFileName(site)) };
         picker.FileTypeChoices.Add("PNG image", [".png"]);
-        WinRT.Interop.InitializeWithWindow.Initialize(picker, Window.Hwnd);
+        InitializeWithWindow.Initialize(picker, Window.Hwnd);
         var file = await picker.PickSaveFileAsync();
         if (file is null)
         {
