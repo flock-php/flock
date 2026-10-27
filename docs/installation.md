@@ -30,7 +30,7 @@ The setup adds the shims to your PATH, registers a launchd agent for the daemon,
 
 ## Linux
 
-**Requirements:** Ubuntu 24.04 or newer, or a current Fedora release, on x64 or arm64, with systemd-resolved as the system's DNS resolver (the default on both).
+**Requirements:** Ubuntu 24.04 or newer or a current Fedora release, on x64 or arm64, or Arch Linux on x64, with systemd-resolved as the system's DNS resolver (the default on Ubuntu and Fedora; on Arch, see below).
 
 1. Install the package for your system. In the folder you downloaded it to, run:
 
@@ -40,6 +40,16 @@ The setup adds the shims to your PATH, registers a launchd agent for the daemon,
    ```
 
    On arm64, the files end in `_arm64.deb` and `.aarch64.rpm`. The package also adds Flock's package repository, so new versions of Flock come with your system's updates. **Beta versions** in **General**, or `flock channel beta`, switches it to Flock's betas.
+
+   On Arch, Flock is the `flockphp-bin` package in the AUR. Install it with your AUR helper, and switch to systemd-resolved, which Arch doesn't use until you enable it:
+
+   ```bash
+   yay -S flockphp-bin                     # or: paru -S flockphp-bin
+   sudo systemctl enable --now systemd-resolved
+   sudo ln -sf ../run/systemd/resolve/stub-resolv.conf /etc/resolv.conf
+   ```
+
+   New versions of Flock come with your AUR helper's updates (`yay -Syu`).
 2. Open **Flock** from your apps. The Flock window opens with the first-run setup. Optionally keep **Open Flock when I log in** checked.
 3. Click **Set Up Flock**. Linux asks for your password once.
 
