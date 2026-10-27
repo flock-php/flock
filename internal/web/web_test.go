@@ -1,6 +1,7 @@
 package web
 
 import (
+	"encoding/json"
 	"strings"
 	"testing"
 
@@ -45,6 +46,56 @@ func TestCaddyfileRoutesSitesAndSubdomains(t *testing.T) {
 		if !strings.Contains(cf, want) {
 			t.Errorf("missing %q in:\n%s", want, cf)
 		}
+	}
+}
+
+func TestRemoteClientsAreRejectedBeforeAnyHandleBlock(t *testing.T) {
+	cfg := testConfig()
+	cfg.Sites = []Site{{Domain: "chat.test", Root: "/code/chat/public", FPM: []string{"unix//run/php84.sock"},
+		DebugFPM: []string{"unix//run/php84-xdebug.sock"}, Reverb: "127.0.0.1:21001"}}
+	out, _, err := caddyconfig.GetAdapter("caddyfile").Adapt([]byte(Caddyfile(cfg)), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var doc any
+	if err := json.Unmarshal(out, &doc); err != nil {
+		t.Fatal(err)
+	}
+
+	// In every route list, the abort (a static_response matching client_ip) comes before the subroutes.
+	checked := 0
+	var walk func(v any)
+	walk = func(v any) {
+		switch v := v.(type) {
+		case map[string]any:
+			if routes, ok := v["routes"].([]any); ok {
+				subroute := -1
+				for i, r := range routes {
+					b, _ := json.Marshal(r)
+					s := string(b)
+					if subroute < 0 && strings.Contains(s, `"handler":"subroute"`) {
+						subroute = i
+					}
+					if strings.Contains(s, `"client_ip"`) && strings.Contains(s, `"handler":"static_response"`) && !strings.Contains(s, `"handler":"subroute"`) {
+						checked++
+						if subroute >= 0 {
+							t.Errorf("abort after a handle block in:\n%s", out)
+						}
+					}
+				}
+			}
+			for _, child := range v {
+				walk(child)
+			}
+		case []any:
+			for _, child := range v {
+				walk(child)
+			}
+		}
+	}
+	walk(doc)
+	if checked == 0 {
+		t.Fatalf("no abort found in:\n%s", out)
 	}
 }
 

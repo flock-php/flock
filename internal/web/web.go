@@ -118,6 +118,9 @@ func Caddyfile(cfg Config) string {
 	persist_config off
 	auto_https disable_certs
 	skip_install_trust
+	# abort comes after handle by default, so a site's handle blocks (Reverb, Xdebug) would serve
+	# remote clients before flock_site rejects them.
+	order abort first
 	http_port %d
 	https_port %d
 	storage file_system %s
@@ -242,7 +245,7 @@ func app(s Site) string {
 	root := fmt.Sprintf("\troot * %s\n", quote(s.Root))
 	if s.Reverb != "" {
 		// Before the other handle blocks, which keep their order (none has a path matcher alone).
-		root += fmt.Sprintf("\t@reverb {\n\t\tpath /app/* /apps/*\n\t\texpression `%s`\n\t}\n\thandle @reverb {\n\t\tabort @remote\n%s\t}\n",
+		root += fmt.Sprintf("\t@reverb {\n\t\tpath /app/* /apps/*\n\t\texpression `%s`\n\t}\n\thandle @reverb {\n%s\t}\n",
 			reverbRequest, proxy(s.Reverb, "\t\t"))
 	}
 	serve := func(indent string) string { return php(s.FPM, indent) }
