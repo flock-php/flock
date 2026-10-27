@@ -33,10 +33,11 @@ func Installed(path string) bool {
 // Spec is the site's `php artisan reverb:start`. The PHP version must be installed.
 func Spec(root string, s Site) supervisor.Spec {
 	name := config.ReverbPortID(s.Name)
-	// php.Env rather than CLIEnv: a server has no use for pcov. FLOCK_RESTART changes the spec when
-	// the counter changes, so the supervisor restarts the process.
+	// php.Env rather than CLIEnv: a server has no use for pcov. FLOCK_RESTART and FLOCK_PHP_VERSION
+	// change the spec when the counter changes or a patch update is installed, so the supervisor
+	// restarts the process.
 	env := append(php.Env(root, s.Minor), s.Env...)
-	env = append(env, "FLOCK_RESTART="+strconv.Itoa(s.Restart))
+	env = append(env, "FLOCK_RESTART="+strconv.Itoa(s.Restart), "FLOCK_PHP_VERSION="+php.FullVersion(root, s.Minor))
 	return supervisor.Spec{
 		Name: name,
 		Path: php.Binary(root, s.Minor),

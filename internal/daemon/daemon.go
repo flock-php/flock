@@ -1056,7 +1056,7 @@ func notUsingPHP(cfg *config.Config, minor string, running []string) map[string]
 	reverbs := map[string]bool{}
 	if cfg != nil {
 		for _, site := range cfg.AllSites() {
-			if site.Reverb && project.PHPFor(cfg, &site, site.Path).Version == minor {
+			if site.Reverb && (minor == "" || project.PHPFor(cfg, &site, site.Path).Version == minor) {
 				reverbs[config.ReverbPortID(site.Name)] = true
 			}
 		}

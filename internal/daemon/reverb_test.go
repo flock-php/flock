@@ -44,7 +44,8 @@ func TestReverbSiteRunsReverbStartOrSaysWhyNot(t *testing.T) {
 	if !strings.HasPrefix(args, "artisan reverb:start --host=127.0.0.1 --port=") || !strings.Contains(args, "--hostname=127.0.0.1") || spec.Dir != app {
 		t.Errorf("command: %s in %s", args, spec.Dir)
 	}
-	if !slices.Contains(spec.Env, "VAR_DUMPER_FORMAT=server") || !slices.Contains(spec.Env, "FLOCK_RESTART=2") {
+	if !slices.Contains(spec.Env, "VAR_DUMPER_FORMAT=server") || !slices.Contains(spec.Env, "FLOCK_RESTART=2") ||
+		!slices.ContainsFunc(spec.Env, func(e string) bool { return strings.HasPrefix(e, "FLOCK_PHP_VERSION=") }) {
 		t.Errorf("env: %v", spec.Env)
 	}
 
@@ -68,6 +69,13 @@ func TestReleasingAPHPVersionStopsTheReverbServersOnIt(t *testing.T) {
 		"reverb-app": false, "reverb-old": true, "frankenphp-off": true}
 	if !maps.Equal(keep, want) {
 		t.Errorf("keep = %v, want %v", keep, want)
+	}
+
+	// "" releases every version.
+	keep = notUsingPHP(cfg, "", []string{"php8.4", "php8.3", "dump-server", "reverb-app", "reverb-old", "frankenphp-off"})
+	want = map[string]bool{"php8.4": false, "php8.3": false, "dump-server": false, "reverb-app": false, "reverb-old": false, "frankenphp-off": true}
+	if !maps.Equal(keep, want) {
+		t.Errorf("keep all = %v, want %v", keep, want)
 	}
 }
 
