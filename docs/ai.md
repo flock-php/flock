@@ -70,7 +70,7 @@ These tools change things, so clients ask you first:
 | `update_site` | Turn HTTPS on or off, isolate, unisolate, pin or unpin a version, add a domain, switch between FrankenPHP (with or without Octane) and PHP-FPM, or restart it |
 | `set_debugging` | Turn Xdebug or dump capture on or off |
 | `create_database` | Create a database in PostgreSQL, MySQL or MariaDB |
-| `create_worktree` | Create a [git worktree](worktrees.md) of a site on a branch, at its own URL, and wait while Flock sets it up |
+| `create_worktree` | Create a [git worktree](worktrees.md) of a site on a branch (or one Flock names), at its own URL, and wait while Flock sets it up |
 | `setup_worktree` | Set a worktree up, or wait for its setup |
 
 None of the tools remove anything: an agent can't unlink sites, uninstall versions or services, remove worktrees, drop databases, or delete data, mail or logs.

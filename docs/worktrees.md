@@ -1,11 +1,17 @@
 # Git worktrees
 
-Every git worktree of a site is served as a site of its own, at `<branch>.<site>.test`, and Flock sets it up for you: dependencies, `.env` and the project's own setup commands. Work on several branches at once, or let coding agents work in parallel, each with its own URL.
+Every git worktree of a site is served as a site of its own, at `<branch>.<site>.test`, and Flock sets it up for you: dependencies, `.env`, a database if you want one, and the project's own setup commands. Work on several branches at once, or let coding agents work in parallel, each with its own URL. Agents can also create worktrees themselves, through [Flock's MCP server](ai.md).
 
 ## Creating a worktree
 
 :::app
-In **Settings → Sites**, select the site and click **New Worktree…** under **Worktrees**, at the end of its settings. Enter the branch (a branch that exists is checked out, a new one starts from the current commit unless you enter another under **Start from**), choose its **Database**, and click **Create**. Flock creates the worktree next to the site and sets it up.
+In **Settings → Sites**, select the site and click **New Worktree…** under **Worktrees**, at the end of its settings:
+
+- **Branch**: a branch that exists is checked out; a new one is created. Leave it empty and Flock picks a name, like `brave-otter`.
+- **Start from**: where a new branch starts. The site's current branch is preselected; the menu also lists its other branches, and the remote ones as git last fetched them.
+- **Database**: the [database](#databases) the worktree gets.
+
+Click **Create**. The dialog then shows how Flock sets the worktree up, step by step with its log, and ends with **Open in Browser**, or with the error and **Run Setup Again**. **Hide** closes it while the setup goes on.
 
 ![A site's worktrees in Settings → Sites](screenshot:settings-sites-worktrees)
 :::
@@ -17,7 +23,7 @@ flock worktree add feature/auth
 # ready: ~/Code/acme-feature-auth → https://feature-auth.acme.test
 ```
 
-This creates the worktree next to the site, on a new branch from the current commit (`--from main` starts it elsewhere; a branch that exists is checked out), and waits until Flock has set it up. `--path` puts it somewhere else, and `--db copy` or `--db fresh` gives it a [database](#databases) of its own.
+This creates the worktree next to the site, on a new branch from the current commit (`--from main` starts it elsewhere; a branch that exists is checked out), and waits until Flock has set it up. Without a branch, Flock picks a name, like `brave-otter`. `--path` puts it somewhere else, and `--db copy` or `--db fresh` gives it a [database](#databases) of its own.
 :::
 
 Worktrees made any other way work the same: `git worktree add`, or a tool that uses worktrees, such as an agent app. Within a few seconds, Flock serves the worktree and sets it up.
@@ -53,7 +59,9 @@ It shows what Flock does and waits until it's done. A worktree that is set up al
 :::
 
 :::app
-In **Settings → Sites**, a worktree is listed under its site, with a spinner while it's set up and a warning when its setup failed. Select it to see how it's set up: **Run Setup Again** sets it up once more, **Show Log** opens its log.
+In **Settings → Sites**, a worktree is listed under its site, with a spinner while it's set up and a warning when its setup failed. Select it to see how it's set up: **Run Setup Again** sets it up once more and shows how it goes, **Show Log** opens its log.
+
+When the setup of a worktree fails while no dialog shows it, for example one an agent app or git created, Flock sends a notification. Click it to see the worktree in **Settings → Sites**.
 
 ![A worktree in Settings → Sites](screenshot:settings-sites-worktree)
 :::
@@ -82,7 +90,7 @@ The worktree's database is named after the site's and the branch, e.g. `acme_fea
 Choose the mode for a project in `flock.yml` (`database: copy`), or for one worktree when you create it.
 
 :::app
-To switch a worktree's database, select it in **Settings → Sites** and choose under **Database**. When it has a database of its own, Flock asks before it drops that one.
+To switch a worktree's database, select it in **Settings → Sites** and choose under **Database**. When it has a database of its own, Flock asks before it drops that one. The dialog then shows how the switch goes.
 :::
 
 :::cli
@@ -115,9 +123,8 @@ worktrees:
   env:                             # values written into the worktree's .env
     MAIL_FROM_ADDRESS: "hello@{{domain}}"
   hooks:
-    after_create:
-      - php artisan storage:link
-      - npm run build
+    after_create:                  # after Flock's own setup steps
+      - php artisan db:seed --class=DemoSeeder
     before_delete:
       - php artisan horizon:terminate
 ```
@@ -132,9 +139,11 @@ worktrees:
 | `{{parent_domain}}` | `acme.test` |
 | `{{folder}}` | The site's folder name |
 
+`path` knows only `{{folder}}`, `{{branch}}` and `{{parent}}`: the worktree doesn't exist yet when it's read.
+
 The worktree's own `flock.yml` counts (it comes with the branch), then the site's `flock.local.yml`, then the worktree's. `copy` and the hooks add up, `env` values are merged by name, and other settings are replaced.
 
-Hooks run line by line in the worktree, with the worktree's PHP and Node.js versions, through `sh` (`cmd` on Windows). The first line that fails stops the hook; the worktree is still served. They get `FLOCK_WORKTREE_PATH`, `FLOCK_WORKTREE_BRANCH`, `FLOCK_WORKTREE_DOMAIN`, `FLOCK_WORKTREE_URL`, `FLOCK_WORKTREE_PARENT` and `FLOCK_WORKTREE_DATABASE` (the worktree's own database, empty when it uses the site's); in hooks, `{{database}}` is that too.
+Hooks run line by line in the worktree, with the worktree's PHP and Node.js versions, through `sh` (`cmd` on Windows). The first line that fails stops the hook and the setup counts as failed; the worktree is still served. Don't repeat what Flock does by itself (above): `storage:link`, for one, fails when the link exists. They get `FLOCK_WORKTREE_PATH`, `FLOCK_WORKTREE_BRANCH`, `FLOCK_WORKTREE_DOMAIN`, `FLOCK_WORKTREE_URL`, `FLOCK_WORKTREE_PARENT` and `FLOCK_WORKTREE_DATABASE` (the worktree's own database, empty when it uses the site's); in hooks, `{{database}}` is that too.
 
 ## Settings and domains
 
