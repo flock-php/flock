@@ -190,6 +190,9 @@ func PinRoot(dir, rel string) (string, error) {
 // lifts the root set for it on this machine, so the project decides from now on. It returns the
 // file it wrote and whether it changed site (which the caller then stores).
 func PinSiteRoot(site *config.Site, rel string) (file string, lifted bool, err error) {
+	if site.IsWorktree() && site.Root != "" {
+		return "", false, followsParent(site, "document root "+site.Root, "flock root --reset")
+	}
 	if rel == "" {
 		rel = RootFor(site).Rel
 	}

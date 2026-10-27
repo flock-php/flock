@@ -85,6 +85,20 @@ func NodeFor(cfg *config.Config, site *config.Site, dir string) Version {
 // ErrInvalid marks a wrong tool or version.
 var ErrInvalid = errors.New("invalid version")
 
+// refusal is a pin Flock won't make, with a message of its own: it is ErrInvalid.
+type refusal string
+
+func (e refusal) Error() string        { return string(e) }
+func (e refusal) Is(target error) bool { return target == ErrInvalid }
+
+// followsParent refuses a pin in a worktree whose parent site sets the tool in Flock (what, e.g.
+// "PHP 8.4"): the worktree uses that setting, so the pinned file would change nothing, and only
+// the parent's setting can be lifted (with undo, run in the parent).
+func followsParent(site *config.Site, what, undo string) error {
+	return refusal(fmt.Sprintf("%s is a git worktree of %s and uses its %s, which is set in Flock — run `%s` in %s first, or pin it there",
+		site.Name, site.Parent, what, undo, site.Parent))
+}
+
 // ValidVersion checks a version for a tool: a PHP minor ("8.4") or a Node.js major ("22").
 func ValidVersion(tool, version string) error {
 	switch tool {
@@ -106,6 +120,14 @@ func ValidVersion(tool, version string) error {
 // for Node its major) and lifts the site's isolation for tool, so the project decides from now on.
 // It returns the file it wrote and whether it changed site (which the caller then stores).
 func PinSite(cfg *config.Config, site *config.Site, tool, version string) (file string, lifted bool, err error) {
+	if site.IsWorktree() {
+		switch {
+		case tool == PHP && site.PHP != "":
+			return "", false, followsParent(site, "PHP "+site.PHP, "flock unisolate php")
+		case tool == Node && site.Node != "":
+			return "", false, followsParent(site, "Node.js "+site.Node, "flock unisolate node")
+		}
+	}
 	if version == "" {
 		switch tool {
 		case PHP:
