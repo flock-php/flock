@@ -68,7 +68,7 @@ impl LogsWindow {
             .search_mode_enabled(true)
             .build();
         search_bar.connect_entry(&search);
-        let banner = adw::Banner::builder().button_label("Dismiss").build();
+        let banner = adw::Banner::builder().button_label("Dismiss").use_markup(false).build();
         let content = adw::Bin::builder().vexpand(true).build();
         let body = gtk::Box::new(gtk::Orientation::Vertical, 0);
         body.append(&banner);
@@ -167,7 +167,7 @@ impl LogsWindow {
     fn error(&self, error: Option<String>) {
         match error {
             Some(message) => {
-                self.banner.set_title(&glib::markup_escape_text(&message));
+                self.banner.set_title(&message);
                 self.banner.set_revealed(true);
             }
             None => self.banner.set_revealed(false),

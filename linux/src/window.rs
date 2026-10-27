@@ -78,7 +78,7 @@ impl MainWindow {
         sidebar_view.set_content(Some(&gtk::ScrolledWindow::builder().child(&sidebar).build()));
         let sidebar_page = adw::NavigationPage::new(&sidebar_view, "Flock");
 
-        let banner = adw::Banner::builder().button_label("Dismiss").build();
+        let banner = adw::Banner::builder().button_label("Dismiss").use_markup(false).build();
         let services = panes::services::ServicesPane::new(model.clone(), banner.clone());
         let sites = panes::sites::SitesPane::new(model.clone(), banner.clone());
         let panes: Vec<(&'static str, Box<dyn Pane>)> = vec![
@@ -216,7 +216,7 @@ impl MainWindow {
         let previous = self.action_error.replace(error.clone());
         match error {
             Some(message) => {
-                self.banner.set_title(&glib::markup_escape_text(&message));
+                self.banner.set_title(&message);
                 self.banner.set_revealed(true);
             }
             // The action succeeded since; a pane's error stays.
