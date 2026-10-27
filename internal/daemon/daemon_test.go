@@ -406,7 +406,34 @@ func TestGitWorktreesAreServedUnderTheirSite(t *testing.T) {
 		t.Error("a worktree older than Flock's worktree support got a .env")
 	}
 
-	if _, err := client.RemoveWorktree(context.Background(), path, true, false); err != nil {
+	// Removed outside Flock (an agent app, git): forgotten, with what Flock made for it.
+	other := filepath.Join(t.TempDir(), "acme-other")
+	git("worktree", "add", "-q", "-b", "other", other)
+	waitFor("other.acme", true)
+	known := func() bool {
+		cfg, err := config.Load(root)
+		if err != nil {
+			t.Fatal(err)
+		}
+		_, ok := cfg.WorktreeEntry(other)
+		return ok
+	}
+	deadline = time.Now().Add(10 * time.Second)
+	for st := sites()["other.acme"].Worktree; st == nil || st.State != worktree.Ready || !known(); st = sites()["other.acme"].Worktree {
+		if time.Now().After(deadline) {
+			t.Fatalf("other's setup: %+v, recorded %v", st, known())
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	git("worktree", "remove", "--force", other)
+	waitFor("other.acme", false)
+	for deadline = time.Now().Add(5 * time.Second); known(); time.Sleep(20 * time.Millisecond) {
+		if time.Now().After(deadline) {
+			t.Fatal("a worktree removed outside Flock is still recorded")
+		}
+	}
+
+	if _, err := client.RemoveWorktree(context.Background(), path, true); err != nil {
 		t.Fatal(err)
 	}
 	waitFor("feature-auth.acme", false)

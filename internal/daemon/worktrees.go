@@ -32,9 +32,9 @@ func (d *daemon) markWorktreesSince() {
 	})
 }
 
-// syncWorktrees starts the setup of worktrees that need one and forgets those that are gone,
-// keeping the database of one that had its own. It runs after every reload and never waits: a
-// setup saves config.json, which reloads.
+// syncWorktrees starts the setup of worktrees that need one, and forgets those that are gone,
+// however they went (git, an agent app, deleting the folder), dropping the database Flock made for
+// them. It runs after every reload and never waits: a setup saves config.json, which reloads.
 func (d *daemon) syncWorktrees(cfg *config.Config) {
 	if d.worktrees == nil {
 		return
@@ -42,7 +42,6 @@ func (d *daemon) syncWorktrees(cfg *config.Config) {
 	current := map[string]bool{}
 	created := map[string]time.Time{} // when git created each worktree, by path
 	scanned := map[string]bool{}      // parents whose worktrees are in created
-	var back []string                 // worktrees whose folder is there again
 	for _, site := range cfg.AllSites() {
 		if !site.IsWorktree() {
 			continue
@@ -52,10 +51,7 @@ func (d *daemon) syncWorktrees(cfg *config.Config) {
 			continue // set up (or failed) since the daemon started, or running
 		}
 		if e, known := cfg.WorktreeEntry(site.Path); known {
-			switch {
-			case e.Gone:
-				back = append(back, e.Path) // set up again, with the database it kept
-			case !e.SetUp:
+			if !e.SetUp {
 				d.startSetup(site, "") // a restart interrupted it
 			}
 			continue
@@ -87,33 +83,50 @@ func (d *daemon) syncWorktrees(cfg *config.Config) {
 			go d.worktrees.Forget(p)
 		}
 	}
-	var gone []string
 	for _, e := range cfg.Worktrees {
-		if !current[filepath.Clean(e.Path)] && !e.Gone {
-			gone = append(gone, e.Path)
+		if !current[filepath.Clean(e.Path)] && d.forgetting(e.Path) {
+			go d.forgetGone(cfg, e)
 		}
 	}
-	if len(gone) > 0 || len(back) > 0 {
-		go func() {
-			_ = d.Mutate(func(c *config.Config) error {
-				for _, p := range gone {
-					if e, ok := c.WorktreeEntry(p); ok && keepsDatabase(e.Engine, e.Database) {
-						e.Gone = true
-						c.SetWorktreeEntry(e)
-					} else {
-						c.RemoveWorktreeEntry(p)
-					}
-				}
-				for _, p := range back {
-					if e, ok := c.WorktreeEntry(p); ok {
-						e.Gone, e.SetUp = false, false
-						c.SetWorktreeEntry(e)
-					}
-				}
-				return nil
-			})
-		}()
+}
+
+// forgetting marks the worktree at path as being forgotten, and reports whether it wasn't already:
+// reloads come quicker than a database is dropped.
+func (d *daemon) forgetting(path string) bool {
+	d.pendingMu.Lock()
+	defer d.pendingMu.Unlock()
+	if d.gone == nil {
+		d.gone = map[string]bool{}
 	}
+	if d.gone[filepath.Clean(path)] {
+		return false
+	}
+	d.gone[filepath.Clean(path)] = true
+	return true
+}
+
+// forgetGone drops the database Flock made for a worktree that is gone and forgets it. When the
+// database can't be dropped (its server is stopped), the next reload tries again.
+func (d *daemon) forgetGone(cfg *config.Config, e config.WorktreeEntry) {
+	defer func() {
+		d.pendingMu.Lock()
+		delete(d.gone, filepath.Clean(e.Path))
+		d.pendingMu.Unlock()
+	}()
+	if e.Database != "" {
+		job, err := d.worktreeJob(cfg, e.Site, e.Path, config.Site{})
+		if err == nil {
+			err = job.DropDatabase(context.Background(), io.Discard)
+		}
+		if err != nil {
+			d.setWarnings(append(d.currentWarnings(), fmt.Sprintf("worktree %s: %v", e.Path, err)))
+			return
+		}
+	}
+	_ = d.Mutate(func(c *config.Config) error {
+		c.RemoveWorktreeEntry(e.Path)
+		return nil
+	})
 }
 
 // worktreeJob describes the setup (or removal) of the worktree at path of the site parentName,
@@ -179,7 +192,7 @@ func (d *daemon) startSetup(site config.Site, dbMode string) worktree.Status {
 			return err
 		}
 		job.DBMode = mode
-		return job.SwitchDatabase(ctx, log, step, false)
+		return job.SwitchDatabase(ctx, log, step)
 	}, func(e *config.WorktreeEntry) { e.SetUp = true })
 }
 
@@ -304,7 +317,7 @@ func (d *daemon) SetupWorktree(path string, again bool, dbMode string) (worktree
 	if !again {
 		if st := d.worktreeStatus(cfg, site); st != nil && st.State == worktree.Ready {
 			if job, err := d.worktreeJob(cfg, site.Parent, site.Path, site); err == nil && dbMode != "" && dbMode != job.DBMode {
-				return d.SwitchWorktreeDatabase(path, dbMode, false)
+				return d.SwitchWorktreeDatabase(path, dbMode)
 			}
 			return *st, nil
 		}
@@ -346,8 +359,8 @@ func (d *daemon) CreateWorktree(ctx context.Context, req api.WorktreeCreate) (st
 }
 
 // SwitchWorktreeDatabase implements api.Backend: as the worktree's job, it gives the worktree a
-// database by mode, dropping the one Flock made for it unless keep.
-func (d *daemon) SwitchWorktreeDatabase(path, mode string, keep bool) (worktree.Status, error) {
+// database by mode, dropping the one Flock made for it.
+func (d *daemon) SwitchWorktreeDatabase(path, mode string) (worktree.Status, error) {
 	if err := validDBMode(mode); err != nil {
 		return worktree.Status{}, err
 	}
@@ -359,7 +372,7 @@ func (d *daemon) SwitchWorktreeDatabase(path, mode string, keep bool) (worktree.
 		return worktree.Status{}, fmt.Errorf("%w: %s is being set up — wait for it with `flock worktree setup`", api.ErrConflict, site.Name)
 	}
 	return d.runJob(site, mode, func(ctx context.Context, log io.Writer, step func(string), job worktree.Job) error {
-		return job.SwitchDatabase(ctx, log, step, keep)
+		return job.SwitchDatabase(ctx, log, step)
 	}, func(*config.WorktreeEntry) {}), nil
 }
 
@@ -385,83 +398,32 @@ func (d *daemon) worktreeStatus(cfg *config.Config, site config.Site) *worktree.
 	return st
 }
 
-// LeftWorktrees implements api.Backend: worktrees whose folder is gone, whose database Flock kept.
-func (d *daemon) LeftWorktrees() []config.WorktreeEntry {
-	out := []config.WorktreeEntry{}
-	if cfg := d.config(); cfg != nil {
-		for _, e := range cfg.Worktrees {
-			if e.Gone {
-				out = append(out, e)
-			}
-		}
-	}
-	return out
-}
-
 // RemoveWorktree implements api.Backend: it stops the worktree's setup, runs its before_delete
-// hook, removes it with git and drops the database Flock made for it (unless keepDB, which keeps
-// it listed). For a worktree whose folder is gone, only the database goes. It returns what the
-// hook, git and the database tools printed.
-func (d *daemon) RemoveWorktree(ctx context.Context, path string, force, keepDB bool) (string, error) {
-	var log bytes.Buffer
+// hook, removes it with git and drops the database Flock made for it. It returns what the hook,
+// git and the database tools printed.
+func (d *daemon) RemoveWorktree(ctx context.Context, path string, force bool) (string, error) {
 	cfg, site, err := d.worktreeAt(path)
-	if errors.Is(err, api.ErrNotWorktree) {
-		e, ok := cfg.WorktreeEntry(path)
-		if !ok || !e.Gone {
-			return "", err
-		}
-		if keepDB {
-			return "", nil
-		}
-		job, err := d.worktreeJob(cfg, e.Site, e.Path, config.Site{})
-		if err != nil {
-			return "", err
-		}
-		if err := job.DropDatabase(ctx, &log); err != nil {
-			return log.String(), err
-		}
-		return log.String(), d.forgetWorktree(e.Path, false)
-	}
 	if err != nil {
 		return "", err
 	}
-
 	job, err := d.worktreeJob(cfg, site.Parent, site.Path, site)
 	if err != nil {
 		return "", err
 	}
 	d.worktrees.Forget(site.Path)
+	var log bytes.Buffer
 	if err := job.Remove(ctx, &log, force); err != nil {
 		return log.String(), err
 	}
-	if !keepDB {
-		if err := job.DropDatabase(ctx, &log); err != nil {
-			// Listed as left behind, for `flock worktree remove` to try again.
-			_ = d.forgetWorktree(site.Path, true)
-			return log.String(), fmt.Errorf("the worktree is removed, but its database isn't: %w", err)
-		}
-		job.Database = worktree.Database{}
+	if err := job.DropDatabase(ctx, &log); err != nil {
+		// Left in config.json: syncWorktrees tries again.
+		return log.String(), fmt.Errorf("the worktree is removed, but its database isn't: %w", err)
 	}
-	return log.String(), d.forgetWorktree(site.Path, keepsDatabase(job.Database.Engine, job.Database.Name))
-}
-
-// keepsDatabase reports whether a worktree's database outlives its folder: a SQLite file Flock
-// made is in the folder, and goes with it.
-func keepsDatabase(engine, name string) bool {
-	return name != "" && engine != "sqlite"
-}
-
-// forgetWorktree drops the worktree's entry, or with keep marks it gone (its database stays).
-func (d *daemon) forgetWorktree(path string, keep bool) error {
-	return d.Mutate(func(c *config.Config) error {
-		if e, ok := c.WorktreeEntry(path); ok && keep {
-			e.Gone = true
-			c.SetWorktreeEntry(e)
-		} else {
-			c.RemoveWorktreeEntry(path)
-		}
+	err = d.Mutate(func(c *config.Config) error {
+		c.RemoveWorktreeEntry(site.Path)
 		return nil
 	})
+	return log.String(), err
 }
 
 // withWorktrees adds the setup state to the worktrees among the statuses. The caller holds d.mu.

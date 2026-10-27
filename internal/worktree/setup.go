@@ -12,7 +12,9 @@ import (
 	"runtime"
 	"strings"
 
+	"flock/internal/boost"
 	"flock/internal/fsutil"
+	"flock/internal/share"
 )
 
 // Job is the setup of one worktree.
@@ -50,6 +52,9 @@ const (
 	StepDatabase = "setting up the database"
 	StepMigrate  = "running the migrations"
 	StepJS       = "installing JS packages"
+	StepLink     = "linking public storage"
+	StepBoost    = "updating Laravel Boost"
+	StepBuild    = "building the assets"
 	StepHooks    = "running hooks"
 )
 
@@ -118,6 +123,7 @@ func (j Job) Run(ctx context.Context, log io.Writer, step func(string)) error {
 	if err := j.installJS(ctx, log, step); err != nil {
 		return err
 	}
+	j.laravelSteps(ctx, log, step)
 
 	if len(j.Settings.AfterCreate) > 0 {
 		step(StepHooks)
@@ -231,10 +237,100 @@ func (j Job) writeEnv(log io.Writer) error {
 		}
 		set(env, log, "SANCTUM_STATEFUL_DOMAINS", strings.Join(parts, ","))
 	}
+	if exists(filepath.Join(j.Path, "artisan")) {
+		j.prefixes(env, log)
+	}
 	for _, key := range j.Settings.EnvKeys {
 		set(env, log, key, vars.Expand(j.Settings.Env[key]))
 	}
 	return env.Write(path)
+}
+
+// prefixes give a Laravel worktree keys of its own on the Redis and cache it shares with the
+// site: Laravel derives them from APP_NAME, which the worktree's .env has from the site, so a
+// queue worker in the worktree would take the site's jobs, and the two would read each other's
+// cache. A prefix the site sets gets the worktree's slug added; one the worktree's .env changed
+// is left alone. The session cookie only needs one when SESSION_DOMAIN shares it with the site.
+func (j Job) prefixes(env *Dotenv, log io.Writer) {
+	site, err := ReadDotenv(filepath.Join(j.Site, ".env"))
+	if err != nil {
+		site = &Dotenv{}
+	}
+	slug := strings.ReplaceAll(j.Vars()["branch"], "-", "_")
+	app := laravelSlug(env.Get("APP_NAME"))
+	keys := []struct{ key, suffix string }{{"REDIS_PREFIX", "_database_"}, {"CACHE_PREFIX", "_cache_"}}
+	if requires(j.Path, "laravel/horizon") {
+		keys = append(keys, struct{ key, suffix string }{"HORIZON_PREFIX", "_horizon:"})
+	}
+	if strings.HasPrefix(env.Get("SESSION_DOMAIN"), ".") {
+		keys = append(keys, struct{ key, suffix string }{"SESSION_COOKIE", "_session"})
+	}
+	for _, k := range keys {
+		ours, theirs := env.Get(k.key), site.Get(k.key)
+		if ours != theirs {
+			continue // the worktree's own, or set before
+		}
+		if theirs == "" {
+			set(env, log, k.key, app+"_"+slug+k.suffix)
+			continue
+		}
+		// acme_ → acme_feature_x_, acme_horizon: → acme_horizon_feature_x:
+		if last := theirs[len(theirs)-1]; last == '_' || last == ':' {
+			set(env, log, k.key, theirs[:len(theirs)-1]+"_"+slug+string(last))
+		} else {
+			set(env, log, k.key, theirs+"_"+slug)
+		}
+	}
+}
+
+// laravelSlug is Str::slug(APP_NAME, '_'), what Laravel's default prefixes start with.
+func laravelSlug(name string) string {
+	if name == "" {
+		name = "laravel"
+	}
+	var b strings.Builder
+	for _, r := range strings.ToLower(name) {
+		switch {
+		case r >= 'a' && r <= 'z', r >= '0' && r <= '9':
+			b.WriteRune(r)
+		case b.Len() > 0 && !strings.HasSuffix(b.String(), "_"):
+			b.WriteRune('_')
+		}
+	}
+	return strings.TrimSuffix(b.String(), "_")
+}
+
+// requires reports whether the project in dir requires a Composer package.
+func requires(dir, pkg string) bool {
+	data, err := os.ReadFile(filepath.Join(dir, "composer.json"))
+	return err == nil && bytes.Contains(data, []byte(`"`+pkg+`"`))
+}
+
+// laravelSteps do what a fresh checkout of a Laravel app lacks, where the project needs it: the
+// public storage link (when the site has one), Boost's agent files (gitignored; when the project
+// uses Boost) and the built assets (public/build isn't copied; when it builds with Vite, unless
+// flock.yml's build is false). They are conveniences: one that fails is logged, not fatal.
+func (j Job) laravelSteps(ctx context.Context, log io.Writer, step func(string)) {
+	if !exists(filepath.Join(j.Path, "artisan")) || !exists(filepath.Join(j.Path, "vendor")) {
+		return
+	}
+	try := func(name, command string, args ...string) {
+		step(name)
+		if err := j.run(ctx, log, j.Flock, append([]string{"exec"}, args...)...); err != nil {
+			fmt.Fprintf(log, "`%s` failed (%v): run it in the worktree yourself\n", command, err)
+		}
+	}
+	if info, err := os.Lstat(filepath.Join(j.Site, "public", "storage")); err == nil && info.Mode()&os.ModeSymlink != 0 {
+		if _, err := os.Lstat(filepath.Join(j.Path, "public", "storage")); err != nil {
+			try(StepLink, "php artisan storage:link", "php", "artisan", "storage:link")
+		}
+	}
+	if boost.Uses(j.Path) && exists(filepath.Join(j.Path, "vendor", "laravel", "boost")) {
+		try(StepBoost, "php artisan boost:update", "php", "artisan", "boost:update", "--no-interaction")
+	}
+	if j.Settings.Build && share.UsesVite(j.Path) && !exists(share.Manifest(j.Path)) {
+		try(StepBuild, "npm run build", "npm", "run", "build")
+	}
 }
 
 // installJS installs the JS packages with the package manager the lock file belongs to, unless

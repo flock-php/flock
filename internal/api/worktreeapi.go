@@ -10,7 +10,6 @@ import (
 	"net/url"
 	"time"
 
-	"flock/internal/config"
 	"flock/internal/worktree"
 )
 
@@ -27,18 +26,14 @@ var (
 	ErrConflict       = errConflict
 )
 
-// LeftWorktree is a worktree whose folder is gone, and whose database Flock kept.
-type LeftWorktree = config.WorktreeEntry
-
 // WorktreeRequest names a worktree by its folder. Again sets it up again although it is set up
 // already; DB is the database mode (shared, copy, fresh; "" leaves it to flock.yml). Force removes
-// it even when a hook fails or it has changes; KeepDB keeps the database Flock made for it.
+// it even when a hook fails or it has changes.
 type WorktreeRequest struct {
-	Path   string `json:"path"`
-	Again  bool   `json:"again,omitempty"`
-	DB     string `json:"db,omitempty"`
-	Force  bool   `json:"force,omitempty"`
-	KeepDB bool   `json:"keep_db,omitempty"`
+	Path  string `json:"path"`
+	Again bool   `json:"again,omitempty"`
+	DB    string `json:"db,omitempty"`
+	Force bool   `json:"force,omitempty"`
 }
 
 // WorktreeCreate asks for a new worktree of Site on Branch: the branch when it exists, else a new
@@ -123,22 +118,19 @@ func registerWorktrees(mux *http.ServeMux, b Backend) {
 		if !ok {
 			return
 		}
-		st, err := b.SwitchWorktreeDatabase(req.Path, req.DB, req.KeepDB)
+		st, err := b.SwitchWorktreeDatabase(req.Path, req.DB)
 		if err != nil {
 			fail(w, err)
 			return
 		}
 		writeJSON(w, http.StatusOK, st)
 	})
-	mux.HandleFunc("GET /v1/worktrees/left", func(w http.ResponseWriter, _ *http.Request) {
-		writeJSON(w, http.StatusOK, b.LeftWorktrees())
-	})
 	mux.HandleFunc("POST /v1/worktrees/remove", func(w http.ResponseWriter, r *http.Request) {
 		req, ok := decode(w, r)
 		if !ok {
 			return
 		}
-		out, err := b.RemoveWorktree(r.Context(), req.Path, req.Force, req.KeepDB)
+		out, err := b.RemoveWorktree(r.Context(), req.Path, req.Force)
 		if err != nil {
 			if out != "" {
 				err = fmt.Errorf("%w\n%s", err, out)
@@ -164,18 +156,12 @@ func (c *Client) SetupWorktree(ctx context.Context, path string, again bool, db 
 	return st, err
 }
 
-// SwitchWorktreeDatabase gives the worktree at path a database by mode, as its job.
-func (c *Client) SwitchWorktreeDatabase(ctx context.Context, path, mode string, keep bool) (WorktreeStatus, error) {
+// SwitchWorktreeDatabase gives the worktree at path a database by mode, as its job, dropping the
+// one Flock made for it.
+func (c *Client) SwitchWorktreeDatabase(ctx context.Context, path, mode string) (WorktreeStatus, error) {
 	var st WorktreeStatus
-	err := c.send(ctx, http.MethodPost, "/v1/worktrees/db", WorktreeRequest{Path: path, DB: mode, KeepDB: keep}, &st)
+	err := c.send(ctx, http.MethodPost, "/v1/worktrees/db", WorktreeRequest{Path: path, DB: mode}, &st)
 	return st, err
-}
-
-// LeftWorktrees lists the worktrees whose folder is gone, whose database Flock kept.
-func (c *Client) LeftWorktrees(ctx context.Context) ([]LeftWorktree, error) {
-	var out []LeftWorktree
-	err := c.get(ctx, "/v1/worktrees/left", &out)
-	return out, err
 }
 
 // WorktreeSetup reports the setup of the worktree at path.
@@ -186,9 +172,9 @@ func (c *Client) WorktreeSetup(ctx context.Context, path string) (WorktreeStatus
 }
 
 // RemoveWorktree runs the worktree's before_delete hook, removes it with git and drops the
-// database Flock made for it unless keepDB. For a worktree whose folder is gone, only the database goes.
-func (c *Client) RemoveWorktree(ctx context.Context, path string, force, keepDB bool) (string, error) {
+// database Flock made for it.
+func (c *Client) RemoveWorktree(ctx context.Context, path string, force bool) (string, error) {
 	var out WorktreeRemoval
-	err := c.timeout(10*time.Minute).send(ctx, http.MethodPost, "/v1/worktrees/remove", WorktreeRequest{Path: path, Force: force, KeepDB: keepDB}, &out)
+	err := c.timeout(10*time.Minute).send(ctx, http.MethodPost, "/v1/worktrees/remove", WorktreeRequest{Path: path, Force: force}, &out)
 	return out.Output, err
 }

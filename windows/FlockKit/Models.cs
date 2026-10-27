@@ -438,22 +438,6 @@ public sealed class Status
     }
 }
 
-/// <summary>An entry of GET /v1/worktrees/left: a worktree whose folder is gone, whose database Flock kept.</summary>
-public sealed class LeftWorktree
-{
-    /// <summary>Where the worktree was; POST /v1/worktrees/remove with it drops the database.</summary>
-    public string Path { get; init; } = "";
-    /// <summary>The site it was a worktree of.</summary>
-    public string Site { get; init; } = "";
-    /// <summary>The name it was served under, e.g. "feature-auth".</summary>
-    public string Slug { get; init; } = "";
-    public string DbMode { get; init; } = "";
-    public string Database { get; init; } = "";
-    /// <summary>"pgsql", "mysql", "mariadb" or "sqlite".</summary>
-    public string Engine { get; init; } = "";
-    public bool Gone { get; init; }
-}
-
 /// <summary>POST /v1/worktrees: the new worktree's folder and its setup.</summary>
 public sealed class WorktreeCreated
 {

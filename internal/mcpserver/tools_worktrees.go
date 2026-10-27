@@ -19,8 +19,7 @@ func (s *server) addWorktreeTools(srv *mcp.Server) {
 	mcp.AddTool(srv, &mcp.Tool{
 		Name: "list_worktrees",
 		Description: "List the git worktrees Flock serves, each at <branch>.<site>.test: their branch, URL, folder, " +
-			"how their setup went and whether they have a database of their own; also the databases Flock kept of " +
-			"worktrees that are gone.",
+			"how their setup went and whether they have a database of their own.",
 		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true, OpenWorldHint: ptr(false)},
 	}, s.listWorktrees)
 
@@ -74,15 +73,8 @@ type listWorktreesIn struct {
 	Site string `json:"site,omitempty" jsonschema:"only this site's worktrees: a site name, domain or folder; all when empty"`
 }
 
-type leftDatabase struct {
-	Site     string `json:"site"`
-	Database string `json:"database"`
-	Path     string `json:"path" jsonschema:"where the worktree was; remove_worktree with it drops the database"`
-}
-
 type listWorktreesOut struct {
 	Worktrees []worktreeInfo `json:"worktrees"`
-	Left      []leftDatabase `json:"left_databases,omitempty"`
 }
 
 func (s *server) listWorktrees(ctx context.Context, _ *mcp.CallToolRequest, in listWorktreesIn) (*mcp.CallToolResult, listWorktreesOut, error) {
@@ -102,15 +94,6 @@ func (s *server) listWorktrees(ctx context.Context, _ *mcp.CallToolRequest, in l
 	for _, st := range status.Sites {
 		if st.Parent != "" && (parent == "" || st.Parent == parent) {
 			out.Worktrees = append(out.Worktrees, worktreeInfoOf(st))
-		}
-	}
-	left, err := s.Daemon.LeftWorktrees(ctx)
-	if err != nil {
-		return nil, listWorktreesOut{}, err
-	}
-	for _, e := range left {
-		if parent == "" || e.Site == parent {
-			out.Left = append(out.Left, leftDatabase{Site: e.Site, Database: e.Database, Path: e.Path})
 		}
 	}
 	return nil, out, nil

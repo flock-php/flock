@@ -104,15 +104,8 @@ public class DecodingTests
     }
 
     [Fact]
-    public void DecodesLeftWorktreesAndACreatedOne()
+    public void DecodesACreatedWorktree()
     {
-        var left = FlockJson.Decode<List<LeftWorktree>>("""
-            [{"path":"C:\\code\\acme-old","site":"acme","slug":"old","set_up":true,"db_mode":"copy","database":"acme_old","engine":"pgsql","gone":true}]
-            """);
-        Assert.Equal(("C:\\code\\acme-old", "acme", "old"), (left[0].Path, left[0].Site, left[0].Slug));
-        Assert.Equal(("acme_old", "pgsql", true), (left[0].Database, left[0].Engine, left[0].Gone));
-        Assert.Empty(FlockJson.Decode<List<LeftWorktree>>("null"));
-
         var created = FlockJson.Decode<WorktreeCreated>("""
             {"path":"C:\\code\\acme-feature-auth","setup":{"state":"queued","log":"worktree-feature-auth.acme"}}
             """);

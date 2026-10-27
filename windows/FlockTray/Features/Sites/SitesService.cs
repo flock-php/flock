@@ -88,29 +88,16 @@ public sealed class SitesService : IAsyncDisposable
     public Task<OperationOutcome> SetupWorktreeAsync(string worktree, string path, bool again, CancellationToken token = default) =>
         MutateAsync(Key(worktree), worktree, (_, cancellationToken) => client.SetupWorktreeAsync(path, again, cancellationToken: cancellationToken), token);
 
-    /// <summary>Gives the worktree a database by mode; the one Flock made for it before is dropped unless keepDb.</summary>
-    public Task<OperationOutcome> SwitchWorktreeDatabaseAsync(string worktree, string path, string db, bool keepDb, CancellationToken token = default) =>
-        MutateAsync(Key(worktree), worktree, (_, cancellationToken) => client.SwitchWorktreeDatabaseAsync(path, db, keepDb, cancellationToken), token);
+    /// <summary>Gives the worktree a database by mode; the one Flock made for it before is dropped.</summary>
+    public Task<OperationOutcome> SwitchWorktreeDatabaseAsync(string worktree, string path, string db, CancellationToken token = default) =>
+        MutateAsync(Key(worktree), worktree, (_, cancellationToken) => client.SwitchWorktreeDatabaseAsync(path, db, cancellationToken), token);
 
     /// <summary>
-    /// Removes the worktree at path (or, for a worktree whose folder is gone, drops its database).
-    /// Returns the error for the dialog to offer removing it anyway (force).
+    /// Removes the worktree at path, and the database Flock made for it. Returns the error for the
+    /// dialog to offer removing it anyway (force).
     /// </summary>
-    public Task<string?> RemoveWorktreeAsync(string worktree, string path, bool force, bool keepDb, CancellationToken token = default) =>
-        RunInDialogAsync(Key(worktree), cancellationToken => client.RemoveWorktreeAsync(path, force, keepDb, cancellationToken), token);
-
-    /// <summary>The worktrees whose folder is gone, whose database Flock kept; null when the daemon can't say (an older one).</summary>
-    public async Task<List<LeftWorktree>?> LeftWorktreesAsync(CancellationToken token = default)
-    {
-        try
-        {
-            return await client.LeftWorktreesAsync(token);
-        }
-        catch (FlockException)
-        {
-            return null;
-        }
-    }
+    public Task<string?> RemoveWorktreeAsync(string worktree, string path, bool force, CancellationToken token = default) =>
+        RunInDialogAsync(Key(worktree), cancellationToken => client.RemoveWorktreeAsync(path, force, cancellationToken), token);
 
     /// <summary>Reads one selected site's extensions. A new site retires the prior read; equivalent reads join.</summary>
     public async Task<(ExtensionReport? Report, string? Error)> SiteExtensionsAsync(string site, CancellationToken token = default)

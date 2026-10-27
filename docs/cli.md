@@ -38,8 +38,8 @@ This page lists the `flock` commands. The other pages show where to find each ac
 | `flock worktree setup [path] [--again] [--db <mode>]` | Set a worktree up, or follow the setup that runs |
 | `flock worktree list [--site <name>]` | List the git worktrees Flock serves, of every site or of one |
 | `flock worktree open [name]` | Open a worktree in the browser (the one you're in, by default) |
-| `flock worktree db <shared\|copy\|fresh> [name] [--keep-db]` | Switch a worktree's database |
-| `flock worktree remove [name] [--force] [--keep-db]` | Run a worktree's `before_delete` hook, remove it with git and drop its own database (alias: `rm`) |
+| `flock worktree db <shared\|copy\|fresh> [name]` | Switch a worktree's database |
+| `flock worktree remove [name] [--force]` | Run a worktree's `before_delete` hook, remove it with git and drop its own database (alias: `rm`) |
 | `flock share [name] [--allow <email>] [--debug]` | Share a site at a temporary public URL until you press <kbd>Ctrl</kbd>+<kbd>C</kbd> |
 | `flock share [name] --stop` | Stop sharing a site (e.g. one shared from the app) |
 

@@ -245,16 +245,12 @@ func (j Job) serverDatabase(ctx context.Context, d *dbEnv, mode string, log io.W
 	return Database{Engine: d.connection, Name: name}, nil
 }
 
-// SwitchDatabase changes the worktree's database to j.DBMode: its own database goes (unless keep),
-// .env points at the site's again, then the new mode's database is set up.
-func (j *Job) SwitchDatabase(ctx context.Context, log io.Writer, step func(string), keep bool) error {
+// SwitchDatabase changes the worktree's database to j.DBMode: its own database is dropped, .env
+// points at the site's again, then the new mode's database is set up.
+func (j *Job) SwitchDatabase(ctx context.Context, log io.Writer, step func(string)) error {
 	step(StepDatabase)
-	if j.Database.Name != "" {
-		if keep {
-			fmt.Fprintf(log, "database: keeping %s\n", j.Database.Name)
-		} else if err := j.DropDatabase(ctx, log); err != nil {
-			return err
-		}
+	if err := j.DropDatabase(ctx, log); err != nil {
+		return err
 	}
 	j.Database = Database{}
 	if d, err := j.readDBEnv(); err == nil && d.parentDB != "" && d.connection != "sqlite" {

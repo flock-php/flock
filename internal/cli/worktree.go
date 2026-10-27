@@ -113,14 +113,12 @@ step failed, and 3 when the folder isn't a worktree of a Flock site.`,
 }
 
 func newWorktreeDBCommand() *cobra.Command {
-	var keep bool
-
 	cmd := &cobra.Command{
 		Use:   "db <shared|copy|fresh> [name]",
 		Short: "Switch a worktree's database (the one you're in, by default)",
 		Long: `Gives a worktree another database: shared uses the site's, copy a copy of the site's,
 fresh an empty one with the migrations run. The database Flock made for it before is
-dropped, unless --keep-db.`,
+dropped.`,
 		Args: cobra.RangeArgs(1, 2),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			s, err := load()
@@ -131,47 +129,35 @@ dropped, unless --keep-db.`,
 			if err != nil {
 				return err
 			}
-			if e, ok := s.cfg.WorktreeEntry(site.Path); ok && e.Database != "" && !keep && interactive() &&
+			if e, ok := s.cfg.WorktreeEntry(site.Path); ok && e.Database != "" && interactive() &&
 				!confirm(fmt.Sprintf("Drop %s, the database Flock made for %s?", e.Database, site.Name), false) {
-				return errors.New("nothing changed (--keep-db keeps the database)")
+				return errors.New("nothing changed")
 			}
 			client := s.client()
-			st, err := client.SwitchWorktreeDatabase(cmd.Context(), site.Path, args[0], keep)
+			st, err := client.SwitchWorktreeDatabase(cmd.Context(), site.Path, args[0])
 			if err != nil {
 				return err
 			}
 			return followSetup(cmd.Context(), cmd.OutOrStdout(), s, client, site.Path, st)
 		},
 	}
-	cmd.Flags().BoolVar(&keep, "keep-db", false, "keep the database Flock made for the worktree before")
 	return cmd
 }
 
 func newWorktreeRemoveCommand() *cobra.Command {
-	var force, keepDB bool
+	var force bool
 
 	cmd := &cobra.Command{
 		Use:     "remove [name]",
 		Aliases: []string{"rm"},
 		Short:   "Run a worktree's before_delete hook, remove it with git and drop its own database",
 		Long: `Runs the worktree's before_delete hook, removes it with git (the branch stays) and drops
-the database Flock made for it, unless --keep-db. Named by its path, it also drops the
-database of a worktree whose folder is gone (see flock worktree list).`,
+the database Flock made for it.`,
 		Args: cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			s, err := load()
 			if err != nil {
 				return err
-			}
-			if len(args) > 0 {
-				if e, ok := leftWorktree(s, args[0]); ok {
-					out, err := s.client().RemoveWorktree(cmd.Context(), e.Path, force, keepDB)
-					cmd.Print(out)
-					if err == nil {
-						cmd.Printf("forgot %s\n", e.Path)
-					}
-					return err
-				}
 			}
 			site, err := worktreeArg(s, args)
 			if err != nil {
@@ -184,7 +170,7 @@ database of a worktree whose folder is gone (see flock worktree list).`,
 					return fmt.Errorf("you're in the worktree: run it from another folder, e.g. %s", filepath.Dir(site.Path))
 				}
 			}
-			out, err := s.client().RemoveWorktree(cmd.Context(), site.Path, force, keepDB)
+			out, err := s.client().RemoveWorktree(cmd.Context(), site.Path, force)
 			if out != "" && err == nil {
 				cmd.Print(out)
 			}
@@ -196,22 +182,7 @@ database of a worktree whose folder is gone (see flock worktree list).`,
 		},
 	}
 	cmd.Flags().BoolVar(&force, "force", false, "remove it even when it has changes or the before_delete hook fails")
-	cmd.Flags().BoolVar(&keepDB, "keep-db", false, "keep the database Flock made for it")
 	return cmd
-}
-
-// leftWorktree finds a worktree whose folder is gone but whose database Flock kept, by its path.
-func leftWorktree(s *state, arg string) (config.WorktreeEntry, bool) {
-	path, err := filepath.Abs(arg)
-	if err != nil {
-		return config.WorktreeEntry{}, false
-	}
-	for _, e := range s.cfg.Worktrees {
-		if e.Gone && config.SamePath(e.Path, path) {
-			return e, true
-		}
-	}
-	return config.WorktreeEntry{}, false
 }
 
 // setupWorktree starts (or joins) the setup of the worktree at path and shows its log until it
@@ -355,26 +326,7 @@ func newWorktreeListCommand() *cobra.Command {
 				}
 				fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n", site.Parent, branchColumn(site), url, db, site.Path)
 			}
-			if err := w.Flush(); err != nil {
-				return err
-			}
-
-			var left []config.WorktreeEntry
-			for _, e := range s.cfg.Worktrees {
-				if e.Gone && (siteName == "" || e.Site == siteName) {
-					left = append(left, e)
-				}
-			}
-			if len(left) > 0 {
-				fmt.Fprintln(cmd.OutOrStdout(), "\nDatabases of worktrees that are gone (drop one with `flock worktree remove <path>`):")
-				w = tabwriter.NewWriter(cmd.OutOrStdout(), 0, 0, 2, ' ', 0)
-				fmt.Fprintln(w, "SITE\tDATABASE\tWAS AT")
-				for _, e := range left {
-					fmt.Fprintf(w, "%s\t%s\t%s\n", e.Site, e.Database, e.Path)
-				}
-				return w.Flush()
-			}
-			return nil
+			return w.Flush()
 		},
 	}
 	cmd.Flags().StringVar(&siteName, "site", "", "only this site's worktrees")

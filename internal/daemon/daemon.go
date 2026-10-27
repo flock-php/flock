@@ -89,6 +89,7 @@ type daemon struct {
 	worktrees *worktree.Manager
 	pendingMu sync.Mutex
 	pendingDB map[string]string
+	gone      map[string]bool // worktrees being forgotten, by path (see syncWorktrees)
 
 	// leaves issues certificates for deep subdomains, aliases and unknown names during handshakes.
 	leaves *certs.Leaves

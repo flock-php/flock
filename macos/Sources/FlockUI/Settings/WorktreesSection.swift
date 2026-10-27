@@ -1,8 +1,7 @@
 import FlockKit
 import SwiftUI
 
-/// A site's git worktrees in its details: each opens its own details, New Worktree… creates one,
-/// and the databases Flock kept of worktrees that are gone can be dropped.
+/// A site's git worktrees in its details: each opens its own details, and New Worktree… creates one.
 struct SiteWorktreesSection: View {
     @Environment(AppModel.self) private var model
     let site: Status.Site
@@ -10,13 +9,6 @@ struct SiteWorktreesSection: View {
     let select: (Status.Site) -> Void
 
     private let creatingState = State<Bool>(initialValue: false)
-    /// The databases of this site's worktrees that are gone, loaded with the details.
-    private let leftState = State<[LeftWorktree]>(initialValue: [])
-    private let droppingState = State<LeftWorktree?>(initialValue: nil)
-    private var dropping: LeftWorktree? {
-        get { droppingState.wrappedValue }
-        nonmutating set { droppingState.wrappedValue = newValue }
-    }
 
     var body: some View {
         let store = model.settings
@@ -37,26 +29,11 @@ struct SiteWorktreesSection: View {
                 .font(.callout)
                 .help("Show \(worktree.worktreeLabel)")
             }
-            ForEach(leftState.wrappedValue) { left in
-                HStack(spacing: 6) {
-                    Image(systemName: "cylinder").foregroundStyle(.secondary)
-                    Text(left.database)
-                    Text("its worktree is gone").foregroundStyle(.secondary)
-                    Spacer(minLength: 0)
-                    Button("Drop…") { dropping = left }
-                        .buttonStyle(.link)
-                }
-                .font(.callout)
-                .help("The worktree at \(left.path) was removed; Flock kept its database.")
-            }
             HStack(spacing: 8) {
                 Button("New Worktree…") { creatingState.wrappedValue = true }
                 Text(worktrees.isEmpty ? "Work on another branch at its own address, e.g. feature.\(site.domain)." : "")
                     .font(.caption).foregroundStyle(.secondary)
             }
-        }
-        .task(id: worktrees.map(\.path)) {
-            leftState.wrappedValue = ((try? await model.client.leftWorktrees()) ?? []).filter { $0.site == site.name }
         }
         .sheet(isPresented: creatingState.projectedValue) {
             NewWorktreeSheet(site: site) { branch, from, db in
@@ -65,18 +42,6 @@ struct SiteWorktreesSection: View {
             } cancel: {
                 creatingState.wrappedValue = false
             }
-        }
-        .confirmationDialog("Drop \(dropping?.database ?? "")?", isPresented: Binding(get: { dropping != nil }, set: { if !$0 { dropping = nil } }),
-                            presenting: dropping) { left in
-            Button("Drop Database", role: .destructive) {
-                Task {
-                    await store.perform { try await $0.removeWorktree(path: left.path) }
-                    leftState.wrappedValue.removeAll { $0.id == left.id }
-                }
-            }
-            Button("Cancel", role: .cancel) {}
-        } message: { left in
-            Text("Its data is gone for good. The worktree at \(left.path) was removed already.")
         }
     }
 }
@@ -155,28 +120,22 @@ struct WorktreeDetail: View {
         .confirmationDialog(switchTitle, isPresented: Binding(get: { switching != nil }, set: { if !$0 { switching = nil } }),
                             presenting: switching) { mode in
             if ownDatabase.isEmpty {
-                Button("Switch") { switchDatabase(to: mode, keep: false) }
+                Button("Switch") { switchDatabase(to: mode) }
             } else {
-                Button("Switch and Drop \(ownDatabase)", role: .destructive) { switchDatabase(to: mode, keep: false) }
-                Button("Switch and Keep \(ownDatabase)") { switchDatabase(to: mode, keep: true) }
+                Button("Switch and Drop \(ownDatabase)", role: .destructive) { switchDatabase(to: mode) }
             }
             Button("Cancel", role: .cancel) {}
         } message: { mode in
             Text(switchMessage(mode))
         }
         .confirmationDialog("Remove \(worktree.worktreeLabel)?", isPresented: removingState.projectedValue) {
-            if ownDatabase.isEmpty {
-                Button("Remove", role: .destructive) { remove(force: false, keepDB: false) }
-            } else {
-                Button("Remove and Drop \(ownDatabase)", role: .destructive) { remove(force: false, keepDB: false) }
-                Button("Remove, Keep \(ownDatabase)") { remove(force: false, keepDB: true) }
-            }
+            Button("Remove", role: .destructive) { remove(force: false) }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("Flock runs its before_delete hook and deletes \(worktree.path). \(worktree.branch.isEmpty ? "Commits" : "The branch \(worktree.branch)") stays.")
+            Text("Flock runs its before_delete hook and deletes \(worktree.path)\(ownDatabase.isEmpty ? "" : " and its database \(ownDatabase)"). \(worktree.branch.isEmpty ? "Commits" : "The branch \(worktree.branch)") stays.")
         }
         .alert("Couldn't remove \(worktree.worktreeLabel)", isPresented: Binding(get: { removeError != nil }, set: { if !$0 { removeError = nil } })) {
-            Button("Remove Anyway", role: .destructive) { remove(force: true, keepDB: false) }
+            Button("Remove Anyway", role: .destructive) { remove(force: true) }
             Button("Cancel", role: .cancel) {}
         } message: {
             Text(removeError ?? "")
@@ -250,11 +209,11 @@ struct WorktreeDetail: View {
         case .copy: "Flock copies \(parent)'s database for it and runs the migrations."
         case .fresh: "Flock creates an empty database for it and runs the migrations."
         }
-        return ownDatabase.isEmpty ? new : "\(new) Its database \(ownDatabase) can be dropped or kept."
+        return ownDatabase.isEmpty ? new : "\(new) Its database \(ownDatabase) is dropped."
     }
 
-    private func switchDatabase(to mode: DatabaseMode, keep: Bool) {
-        Task { await model.settings.perform { [path = worktree.path] in _ = try await $0.switchWorktreeDatabase(path: path, to: mode, keep: keep) } }
+    private func switchDatabase(to mode: DatabaseMode) {
+        Task { await model.settings.perform { [path = worktree.path] in _ = try await $0.switchWorktreeDatabase(path: path, to: mode) } }
     }
 
     private func runSetup() {
@@ -262,11 +221,11 @@ struct WorktreeDetail: View {
     }
 
     /// Removes it; when git refuses (changes in it, a failing hook), offers to remove it anyway.
-    private func remove(force: Bool, keepDB: Bool) {
+    private func remove(force: Bool) {
         let path = worktree.path
         Task {
             do {
-                try await model.client.removeWorktree(path: path, force: force, keepDB: keepDB)
+                try await model.client.removeWorktree(path: path, force: force)
                 await model.settings.perform { _ in }
             } catch {
                 removeError = error.localizedDescription

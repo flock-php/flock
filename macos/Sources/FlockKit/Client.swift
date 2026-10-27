@@ -191,32 +191,20 @@ public actor FlockClient {
         return try await decode(WorktreeSetup.self, "POST", "/v1/worktrees/setup", body: try JSONEncoder().encode(Request(path: path, again: again)))
     }
 
-    /// Gives a worktree another database, dropping the one Flock made for it unless keep. It
-    /// returns at once, like `setupWorktree`.
-    public func switchWorktreeDatabase(path: String, to mode: DatabaseMode, keep: Bool = false) async throws -> WorktreeSetup {
-        struct Request: Encodable {
-            let path: String, db: String, keepDB: Bool
-            enum CodingKeys: String, CodingKey { case path, db, keepDB = "keep_db" }
-        }
-        return try await decode(WorktreeSetup.self, "POST", "/v1/worktrees/db", body: try JSONEncoder().encode(Request(path: path, db: mode.rawValue, keepDB: keep)))
-    }
-
-    /// Worktrees whose folder is gone, whose database Flock kept.
-    public func leftWorktrees() async throws -> [LeftWorktree] {
-        try await decode([LeftWorktree]?.self, "GET", "/v1/worktrees/left") ?? []
+    /// Gives a worktree another database, dropping the one Flock made for it. It returns at once,
+    /// like `setupWorktree`.
+    public func switchWorktreeDatabase(path: String, to mode: DatabaseMode) async throws -> WorktreeSetup {
+        struct Request: Encodable { let path: String; let db: String }
+        return try await decode(WorktreeSetup.self, "POST", "/v1/worktrees/db", body: try JSONEncoder().encode(Request(path: path, db: mode.rawValue)))
     }
 
     /// Runs a worktree's before_delete hook, removes it with git and drops the database Flock made
-    /// for it unless keepDB; force removes it also with changes or a failing hook. For a worktree
-    /// whose folder is gone (`leftWorktrees()`), it drops the database. It returns what they printed.
+    /// for it; force removes it also with changes or a failing hook. It returns what they printed.
     @discardableResult
-    public func removeWorktree(path: String, force: Bool = false, keepDB: Bool = false) async throws -> String {
-        struct Request: Encodable {
-            let path: String, force: Bool, keepDB: Bool
-            enum CodingKeys: String, CodingKey { case path, force, keepDB = "keep_db" }
-        }
+    public func removeWorktree(path: String, force: Bool = false) async throws -> String {
+        struct Request: Encodable { let path: String; let force: Bool }
         struct Response: Decodable { let output: String }
-        let body = try JSONEncoder().encode(Request(path: path, force: force, keepDB: keepDB))
+        let body = try JSONEncoder().encode(Request(path: path, force: force))
         return try await decode(Response.self, "POST", "/v1/worktrees/remove", body: body, timeout: 600).output
     }
 

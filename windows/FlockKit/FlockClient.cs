@@ -142,22 +142,18 @@ public sealed class FlockClient : IDisposable
 
     /// <summary>
     /// Gives the worktree a database by mode (WorktreeDatabase), as its job: the status follows it.
-    /// The database Flock made for it before is dropped, unless keepDb.
+    /// The database Flock made for it before is dropped.
     /// </summary>
-    public Task<Status.WorktreeSetup> SwitchWorktreeDatabaseAsync(string path, string db, bool keepDb = false, CancellationToken cancellationToken = default) =>
-        Send<Status.WorktreeSetup>(HttpMethod.Post, "/v1/worktrees/db", new { path, db, keepDb }, cancellationToken: cancellationToken);
-
-    /// <summary>The worktrees whose folder is gone, whose database Flock kept.</summary>
-    public Task<List<LeftWorktree>> LeftWorktreesAsync(CancellationToken cancellationToken = default) => Get<List<LeftWorktree>>("/v1/worktrees/left", cancellationToken: cancellationToken);
+    public Task<Status.WorktreeSetup> SwitchWorktreeDatabaseAsync(string path, string db, CancellationToken cancellationToken = default) =>
+        Send<Status.WorktreeSetup>(HttpMethod.Post, "/v1/worktrees/db", new { path, db }, cancellationToken: cancellationToken);
 
     /// <summary>
     /// Runs the worktree's before_delete hook, removes it with git and drops the database Flock made
-    /// for it, unless keepDb; the branch stays. force removes it even with changes or a failing hook.
-    /// For a worktree whose folder is gone (LeftWorktree.Path), only its database goes. Returns what
+    /// for it; the branch stays. force removes it even with changes or a failing hook. Returns what
     /// the hook and git printed.
     /// </summary>
-    public async Task<string> RemoveWorktreeAsync(string path, bool force = false, bool keepDb = false, CancellationToken cancellationToken = default) =>
-        (await Send<WorktreeRemoval>(HttpMethod.Post, "/v1/worktrees/remove", new { path, force, keepDb }, timeout: WorktreeRemoveTimeout, cancellationToken: cancellationToken)).Output;
+    public async Task<string> RemoveWorktreeAsync(string path, bool force = false, CancellationToken cancellationToken = default) =>
+        (await Send<WorktreeRemoval>(HttpMethod.Post, "/v1/worktrees/remove", new { path, force }, timeout: WorktreeRemoveTimeout, cancellationToken: cancellationToken)).Output;
 
     private sealed class WorktreeRemoval
     {

@@ -33,9 +33,12 @@ When Flock notices a new worktree, it:
 3. runs `composer install`, unless the lock file is the site's. A new Laravel `.env` gets an app key.
 4. sets up the [database](#databases): by default the worktree uses the site's.
 5. runs `npm install` (or pnpm, yarn or bun, by lock file), unless the lock file is the site's.
-6. runs your `after_create` hook (below).
+6. for a Laravel app, does what a fresh checkout lacks, where the project needs it: `php artisan storage:link` when the site has the `public/storage` link, `php artisan boost:update` when the project uses [Laravel Boost](https://laravel.com/docs/boost) (its agent files aren't committed), and `npm run build` when it builds its assets with Vite. If one of these fails, the setup's log says so and the worktree counts as set up.
+7. runs your `after_create` hook (below).
 
-Nothing the worktree already has is copied over, and the `.env` is only changed where it says above. `public/build` isn't copied, so the worktree never serves the site's built assets: run `npm run dev` in it, or build in a hook.
+Nothing the worktree already has is copied over, and the `.env` is only changed where it says here. `public/build` isn't copied, so the worktree never serves the site's built assets: Flock builds them for the worktree, and `npm run dev` in it takes over while it runs. To skip the build, set `build: false` in `flock.yml`.
+
+A Laravel worktree also gets keys of its own on the Redis and cache it shares with the site. Laravel names them after `APP_NAME`, which the worktree has from the site's `.env`, so without this a queue worker in the worktree would take the site's jobs, and both would read each other's cache. Flock sets `REDIS_PREFIX`, `CACHE_PREFIX` and, with Laravel Horizon, `HORIZON_PREFIX` for the worktree, e.g. `acme_feature_auth_cache_`; a prefix the site sets gets the worktree's name added. When `SESSION_DOMAIN` shares the session cookie with the site (`.acme.test`), the worktree gets a `SESSION_COOKIE` of its own too. With the database queue or cache and a shared database, the worktree and the site still share those tables: give the worktree a [database of its own](#databases).
 
 Worktrees that existed before your Flock version could set them up are served, but left as they are. To set one up, run `flock worktree setup` in it.
 
@@ -79,7 +82,7 @@ The worktree's database is named after the site's and the branch, e.g. `acme_fea
 Choose the mode for a project in `flock.yml` (`database: copy`), or for one worktree when you create it.
 
 :::app
-To switch a worktree's database, select it in **Settings → Sites** and choose under **Database**. When it has a database of its own, Flock asks whether to drop or keep that one.
+To switch a worktree's database, select it in **Settings → Sites** and choose under **Database**. When it has a database of its own, Flock asks before it drops that one.
 :::
 
 :::cli
@@ -90,18 +93,10 @@ flock worktree db copy
 flock worktree db shared feature/auth   # back to the site's
 ```
 
-The database Flock made for the worktree before is dropped (after asking), unless you add `--keep-db`.
+The database Flock made for the worktree before is dropped (after asking).
 :::
 
-When a worktree's folder is removed (by git, your agent app or deleting it), its PostgreSQL, MySQL or MariaDB database is kept, in case you need its data; a SQLite file in the worktree goes with the folder. When a worktree comes back at the same path, it gets its database back.
-
-:::app
-These databases are listed under **Worktrees** in the site's settings; **Drop…** drops one.
-:::
-
-:::cli
-`flock worktree list` lists these databases, and `flock worktree remove <path>` drops one.
-:::
+A worktree's own database goes with the worktree, however it's removed: with Flock, with git, by your agent app or by deleting its folder.
 
 ## flock.yml
 
@@ -113,11 +108,12 @@ worktrees:
   path: "../{{folder}}-{{branch}}" # where `flock worktree add` creates them
   database: shared                 # shared, copy or fresh
   migrate: true                    # run the migrations for a copy or fresh database
+  build: true                      # npm run build, for a project that uses Vite
   copy:                            # files git doesn't track, copied from the site
     - storage/app/private
     - .env.testing
   env:                             # values written into the worktree's .env
-    REDIS_PREFIX: "{{branch}}_"
+    MAIL_FROM_ADDRESS: "hello@{{domain}}"
   hooks:
     after_create:
       - php artisan storage:link
@@ -140,8 +136,6 @@ The worktree's own `flock.yml` counts (it comes with the branch), then the site'
 
 Hooks run line by line in the worktree, with the worktree's PHP and Node.js versions, through `sh` (`cmd` on Windows). The first line that fails stops the hook; the worktree is still served. They get `FLOCK_WORKTREE_PATH`, `FLOCK_WORKTREE_BRANCH`, `FLOCK_WORKTREE_DOMAIN`, `FLOCK_WORKTREE_URL`, `FLOCK_WORKTREE_PARENT` and `FLOCK_WORKTREE_DATABASE` (the worktree's own database, empty when it uses the site's); in hooks, `{{database}}` is that too.
 
-Without a `REDIS_PREFIX`, worktrees share the site's cache and queues on Redis: a queue worker in a worktree can pick up the site's jobs.
-
 ## Settings and domains
 
 A worktree uses its site's PHP and Node.js versions, HTTPS and document root. If the branch pins other versions in `.flockrc`, `.nvmrc` or `.node-version`, those apply, unless the site is [isolated](project-versions.md). To change a worktree's settings, change them on its site. Worktrees are always served through PHP-FPM, also when their site runs on FrankenPHP.
@@ -157,7 +151,7 @@ The **Sites** section of the Flock panel shows how many worktrees a site has: cl
 
 ![Worktrees in the Flock panel](screenshot:panel-worktrees)
 
-To remove a worktree, select it in **Settings → Sites** and click its **Remove worktree** icon. Flock runs its `before_delete` hook, deletes its folder and, unless you keep it, its own database. The branch stays. When git refuses because the worktree has changes, **Remove Anyway** removes it all the same.
+To remove a worktree, select it in **Settings → Sites** and click its **Remove worktree** icon. Flock runs its `before_delete` hook, deletes its folder and its own database. The branch stays. When git refuses because the worktree has changes, **Remove Anyway** removes it all the same.
 :::
 
 :::cli
@@ -168,7 +162,7 @@ flock worktree open feature/auth # by branch, name or domain; the one you're in 
 flock worktree remove feature/auth
 ```
 
-`flock worktree remove` runs the `before_delete` hook, removes the worktree with git and drops the database Flock made for it. The branch stays. `--force` removes it even when it has changes or the hook fails, and `--keep-db` keeps its database.
+`flock worktree remove` runs the `before_delete` hook, removes the worktree with git and drops the database Flock made for it. The branch stays. `--force` removes it even when it has changes or the hook fails.
 :::
 
 A worktree removed any other way (`git worktree remove`, your agent app, or deleting its folder) stops being served within a few seconds.

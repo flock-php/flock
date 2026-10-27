@@ -31,8 +31,6 @@ type fakeDaemon struct {
 	phpPolls int
 	polled   int
 	changes  []string
-	// left are the databases kept of worktrees that are gone.
-	left []api.LeftWorktree
 }
 
 func (f *fakeDaemon) record(format string, args ...any) {
@@ -174,9 +172,6 @@ func (f *fakeDaemon) WorktreeSetup(_ context.Context, path string) (api.Worktree
 		}
 	}
 	return api.WorktreeStatus{}, api.ErrNotWorktree
-}
-func (f *fakeDaemon) LeftWorktrees(context.Context) ([]api.LeftWorktree, error) {
-	return f.left, f.err()
 }
 
 func (f *fakeDaemon) UpdateSettings(_ context.Context, s api.Settings) (api.Status, error) {
@@ -572,7 +567,6 @@ func TestPHPExtensionsOfTheCurrentSite(t *testing.T) {
 
 func TestWorktreeTools(t *testing.T) {
 	d, opts := fixture(t)
-	d.left = []api.LeftWorktree{{Path: "/code/shop-old", Site: "shop", Database: "shop_old", Gone: true}}
 	cs := connect(t, opts)
 
 	if e := callTool(t, cs, "setup_worktree", nil, nil); !strings.Contains(e, "not in a worktree") {
@@ -595,8 +589,7 @@ func TestWorktreeTools(t *testing.T) {
 	if e := callTool(t, cs, "list_worktrees", map[string]any{"site": "shop"}, &list); e != "" {
 		t.Fatal(e)
 	}
-	if len(list.Worktrees) != 1 || list.Worktrees[0].Branch != "feature/x" || list.Worktrees[0].Site != "shop" ||
-		len(list.Left) != 1 || list.Left[0].Database != "shop_old" {
+	if len(list.Worktrees) != 1 || list.Worktrees[0].Branch != "feature/x" || list.Worktrees[0].Site != "shop" {
 		t.Errorf("list: %+v", list)
 	}
 

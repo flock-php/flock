@@ -51,12 +51,11 @@ func (f *fakeBackend) CreateWorktree(context.Context, WorktreeCreate) (string, W
 func (f *fakeBackend) SetupWorktree(string, bool, string) (WorktreeStatus, error) {
 	return WorktreeStatus{}, ErrNotWorktree
 }
-func (f *fakeBackend) SwitchWorktreeDatabase(string, string, bool) (WorktreeStatus, error) {
+func (f *fakeBackend) SwitchWorktreeDatabase(string, string) (WorktreeStatus, error) {
 	return WorktreeStatus{}, ErrNotWorktree
 }
 func (f *fakeBackend) WorktreeSetup(string) (*WorktreeStatus, error) { return nil, ErrNotWorktree }
-func (f *fakeBackend) LeftWorktrees() []LeftWorktree                 { return nil }
-func (f *fakeBackend) RemoveWorktree(context.Context, string, bool, bool) (string, error) {
+func (f *fakeBackend) RemoveWorktree(context.Context, string, bool) (string, error) {
 	return "", ErrNotWorktree
 }
 

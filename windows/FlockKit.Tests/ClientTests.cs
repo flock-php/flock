@@ -139,7 +139,6 @@ public class ClientTests : IDisposable
             Content = new StringContent(r.RequestUri!.AbsolutePath switch
             {
                 "/v1/worktrees" => """{"path":"C:\\code\\acme-feature","setup":{"state":"queued","log":"worktree-feature.acme"}}""",
-                "/v1/worktrees/left" => "null",
                 "/v1/worktrees/remove" => """{"output":"removed"}""",
                 _ => """{"state":"running","step":"Copying the database","db_mode":"copy"}""",
             }),
@@ -149,26 +148,24 @@ public class ClientTests : IDisposable
         var created = await client.CreateWorktreeAsync("acme", "feature", db: Status.WorktreeDatabase.Fresh);
         await client.CreateWorktreeAsync("acme", "feature", from: "main");
         var setup = await client.SetupWorktreeAsync(created.Path, again: true);
-        await client.SwitchWorktreeDatabaseAsync(created.Path, Status.WorktreeDatabase.Shared, keepDb: true);
-        Assert.Empty(await client.LeftWorktreesAsync());
+        await client.SwitchWorktreeDatabaseAsync(created.Path, Status.WorktreeDatabase.Shared);
         Assert.Equal("removed", await client.RemoveWorktreeAsync(created.Path, force: true));
 
         Assert.Equal("C:\\code\\acme-feature", created.Path);
         Assert.Equal((Status.WorktreeState.Running, "copy"), (setup.State, setup.DbMode));
         Assert.Equal(
-            ["POST /v1/worktrees", "POST /v1/worktrees", "POST /v1/worktrees/setup", "POST /v1/worktrees/db", "GET /v1/worktrees/left", "POST /v1/worktrees/remove"],
+            ["POST /v1/worktrees", "POST /v1/worktrees", "POST /v1/worktrees/setup", "POST /v1/worktrees/db", "POST /v1/worktrees/remove"],
             handler.Requests.Select(r => $"{r.Method} {r.RequestUri!.PathAndQuery}"));
         Assert.Equal(
         [
             """{"site":"acme","branch":"feature","db":"fresh"}""",
             """{"site":"acme","branch":"feature","from":"main"}""",
             """{"path":"C:\\code\\acme-feature","again":true}""",
-            """{"path":"C:\\code\\acme-feature","db":"shared","keep_db":true}""",
-            "",
-            """{"path":"C:\\code\\acme-feature","force":true,"keep_db":false}""",
+            """{"path":"C:\\code\\acme-feature","db":"shared"}""",
+            """{"path":"C:\\code\\acme-feature","force":true}""",
         ], handler.Bodies);
         // Creating runs git worktree add; removing runs the before_delete hook too.
-        Assert.Equal([TimeSpan.FromMinutes(2), TimeSpan.FromMinutes(2), TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(5), TimeSpan.FromMinutes(10)], handler.Timeouts);
+        Assert.Equal([TimeSpan.FromMinutes(2), TimeSpan.FromMinutes(2), TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(5), TimeSpan.FromMinutes(10)], handler.Timeouts);
     }
 
     [Fact]

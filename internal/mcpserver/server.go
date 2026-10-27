@@ -45,7 +45,6 @@ type Daemon interface {
 	CreateWorktree(ctx context.Context, req api.WorktreeCreate) (api.WorktreeCreated, error)
 	SetupWorktree(ctx context.Context, path string, again bool, db string) (api.WorktreeStatus, error)
 	WorktreeSetup(ctx context.Context, path string) (api.WorktreeStatus, error)
-	LeftWorktrees(ctx context.Context) ([]api.LeftWorktree, error)
 	UnpinSite(ctx context.Context, name, tool string) (api.Status, error)
 	RestartSite(ctx context.Context, name string) (api.Status, error)
 	UpdateSettings(ctx context.Context, s api.Settings) (api.Status, error)

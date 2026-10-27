@@ -246,15 +246,13 @@ type Backend interface {
 	// one set up already is left alone unless again.
 	SetupWorktree(path string, again bool, db string) (WorktreeStatus, error)
 	// SwitchWorktreeDatabase gives the worktree a database by mode as its job, dropping the one
-	// Flock made for it unless keep.
-	SwitchWorktreeDatabase(path, mode string, keep bool) (WorktreeStatus, error)
+	// Flock made for it.
+	SwitchWorktreeDatabase(path, mode string) (WorktreeStatus, error)
 	// WorktreeSetup is the state of the worktree's setup, nil when Flock hasn't set it up.
 	WorktreeSetup(path string) (*WorktreeStatus, error)
-	// LeftWorktrees are the worktrees whose folder is gone, whose database Flock kept.
-	LeftWorktrees() []LeftWorktree
 	// RemoveWorktree runs the worktree's before_delete hook, removes it with git and drops the
-	// database Flock made for it unless keepDB, returning what they printed.
-	RemoveWorktree(ctx context.Context, path string, force, keepDB bool) (string, error)
+	// database Flock made for it, returning what they printed.
+	RemoveWorktree(ctx context.Context, path string, force bool) (string, error)
 }
 
 // NewHandler builds the API routes. A non-empty token requires `Authorization: Bearer <token>`

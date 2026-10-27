@@ -337,8 +337,4 @@ private func decode<T: Decodable>(_ type: T.Type, _ json: String) throws -> T {
     #expect(setup.busy && setup.step == "composer install" && setup.dbMode == .copy && setup.database == "acme_feature_auth")
     #expect(worktrees[1].worktree == nil && !status.sites[3].isWorktree)
 
-    let left = try decode([LeftWorktree].self, """
-    [{"path":"/code/acme-old","site":"acme","slug":"old","database":"acme_old","engine":"pgsql","gone":true}]
-    """)
-    #expect(left.first?.database == "acme_old")
 }

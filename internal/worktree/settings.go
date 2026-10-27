@@ -29,7 +29,8 @@ type Settings struct {
 	Auto     bool     // set up new worktrees without being asked
 	Path     string   // where `flock worktree add` puts them (placeholders, relative to the site)
 	Database string   // shared, copy or fresh
-	Migrate  bool     // run the migrations for a fresh database
+	Migrate  bool     // run the migrations for a database of its own
+	Build    bool     // build the assets (npm run build) of a project that uses Vite
 	Copy     []string // untracked paths copied from the site, relative to it
 	// Env are values written into the worktree's .env (placeholders allowed), in EnvKeys order.
 	Env          map[string]string
@@ -40,7 +41,7 @@ type Settings struct {
 
 // Defaults are the settings without any file.
 func Defaults() Settings {
-	return Settings{Auto: true, Path: DefaultPath, Database: "shared", Migrate: true, Env: map[string]string{}}
+	return Settings{Auto: true, Path: DefaultPath, Database: "shared", Migrate: true, Build: true, Env: map[string]string{}}
 }
 
 type file struct {
@@ -49,6 +50,7 @@ type file struct {
 		Path     *string   `yaml:"path"`
 		Database *string   `yaml:"database"`
 		Migrate  *bool     `yaml:"migrate"`
+		Build    *bool     `yaml:"build"`
 		Copy     []string  `yaml:"copy"`
 		Env      yaml.Node `yaml:"env"`
 		Hooks    struct {
@@ -105,6 +107,9 @@ func (s *Settings) apply(path string) error {
 	}
 	if w.Migrate != nil {
 		s.Migrate = *w.Migrate
+	}
+	if w.Build != nil {
+		s.Build = *w.Build
 	}
 	for _, p := range w.Copy {
 		if !slices.Contains(s.Copy, p) {

@@ -59,7 +59,6 @@ internal sealed partial class SitesPane : Pane
         activeLifetime = CancellationTokenSource.CreateLinkedTokenSource(hidden);
         viewModel.Apply(Model.Status);
         UpdateRetained();
-        LoadLeftWorktrees(force: true);
         await HandlePendingSecureAsync(hidden);
     }
 
@@ -82,7 +81,7 @@ internal sealed partial class SitesPane : Pane
     {
         viewModel.Apply(Model.Status);
         UpdateRetained();
-        LoadLeftWorktrees();
+        SelectCreatedWorktree();
         if (active && Model.PendingSecure is not null && pendingSecure.IsCompleted)
         {
             pendingSecure = ObservePendingSecureAsync(activeLifetime?.Token ?? CancellationToken.None);

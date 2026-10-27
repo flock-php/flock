@@ -17,7 +17,7 @@ use super::common::{PaneView, ask_link, group, info_row, report};
 use super::versions::{MenuItem, badge, button, more_menu};
 use super::{Data, Pane};
 use crate::api::{
-    Client, Config, Error, ExtensionReport, LeftWorktree, PhpExtension, ShareStatus, SiteChange, SiteStatus, Status, WorktreeStatus,
+    Client, Config, Error, ExtensionReport, PhpExtension, ShareStatus, SiteChange, SiteStatus, Status, WorktreeStatus,
 };
 use crate::links::{self, Link};
 use crate::model::AppModel;
@@ -40,25 +40,19 @@ struct Inner {
     shown: RefCell<Option<String>>,
     /// The sites whose worktrees the list shows (prefs.rs).
     expanded: RefCell<Vec<String>>,
-    /// Worktrees whose folder is gone, whose database Flock kept; and for which site and
-    /// worktrees they were read, so they are read again when a worktree goes.
-    left: RefCell<Vec<LeftWorktree>>,
-    left_for: RefCell<Option<String>>,
     /// The site and branch of the worktree being created.
     creating: RefCell<Option<(String, String)>>,
     /// The folder of the worktree being removed.
     removing: RefCell<Option<String>>,
 }
 
-/// A worktree to remove: its folder, name, what it is listed as and its site. For a database
-/// left behind, name is "" and label the database.
+/// A worktree to remove: its folder, name, what it is listed as and its site.
 #[derive(Clone)]
 struct Removal {
     path: String,
     name: String,
     label: String,
     parent: String,
-    keep_db: bool,
 }
 
 /// The database modes of a worktree, and how the Database rows name them.
@@ -84,8 +78,6 @@ impl SitesPane {
             restarting: RefCell::default(),
             shown: RefCell::default(),
             expanded: RefCell::new(prefs::load().expanded_sites),
-            left: RefCell::default(),
-            left_for: RefCell::default(),
             creating: RefCell::default(),
             removing: RefCell::default(),
         }))
@@ -131,12 +123,11 @@ impl Inner {
     fn render(self: &Rc<Self>) {
         self.ask_link();
         let key = format!(
-            "{:?}{:?}{:?}{:?}{:?}{:?}{:?}",
+            "{:?}{:?}{:?}{:?}{:?}{:?}",
             self.status.borrow(),
             self.config.borrow(),
             self.selected.borrow(),
             self.restarting.borrow(),
-            self.left.borrow(),
             self.creating.borrow(),
             self.removing.borrow()
         );
@@ -161,7 +152,6 @@ impl Inner {
     fn open(self: &Rc<Self>, name: &str) {
         self.selected.replace(Some(name.to_owned()));
         self.shown.replace(None);
-        self.left_for.replace(None);
         self.render();
         self.detail.scrolled.vadjustment().set_value(0.0);
         self.stack.set_visible_child_name("detail");
@@ -319,7 +309,6 @@ impl Inner {
         }
         let config = self.config.borrow().clone().unwrap_or_default();
         let status = self.status.borrow().clone().unwrap_or_default();
-        self.load_left(site, &status);
         let mut groups: Vec<gtk::Widget> = vec![self.header(site).upcast()];
         groups.push(self.site_group(site, &status).upcast());
         groups.push(self.share_group(site).upcast());
@@ -1019,7 +1008,7 @@ impl Inner {
 
     // MARK: worktrees
 
-    /// A site's worktrees, New Worktree… and the databases of worktrees that are gone.
+    /// A site's worktrees and New Worktree….
     fn worktrees_group(self: &Rc<Self>, site: &SiteStatus, status: &Status) -> adw::PreferencesGroup {
         let group = group(
             "Worktrees",
@@ -1044,34 +1033,7 @@ impl Inner {
             row.add_prefix(&gtk::Spinner::builder().spinning(true).build());
             group.add(&row);
         }
-        for left in self.left.borrow().iter().filter(|l| l.site == site.name && !l.database.is_empty()) {
-            let row = adw::ActionRow::builder()
-                .title(glib::markup_escape_text(&format!("{} — its worktree is gone", left.database)))
-                .subtitle(glib::markup_escape_text(&left.path))
-                .build();
-            let (this, l) = (self.clone(), left.clone());
-            row.add_suffix(&button("Drop…", false, move || this.drop_left(&l)));
-            group.add(&row);
-        }
         group
-    }
-
-    /// Reads the databases left behind, when the site or its worktrees changed since they were read.
-    fn load_left(self: &Rc<Self>, site: &SiteStatus, status: &Status) {
-        let worktrees = status.worktrees_of(&site.name);
-        let paths: Vec<&str> = worktrees.iter().map(|w| w.path.as_str()).collect();
-        let key = format!("{}\n{}", site.name, paths.join("\n"));
-        if self.left_for.borrow().as_deref() == Some(key.as_str()) {
-            return;
-        }
-        self.left_for.replace(Some(key));
-        let this = self.clone();
-        glib::spawn_future_local(async move {
-            let result = gio::spawn_blocking(|| Client.left_worktrees()).await.expect("worktrees request");
-            // A daemon without worktrees has nothing left behind.
-            this.left.replace(result.unwrap_or_default());
-            this.render();
-        });
     }
 
     /// Asks for the branch, where it starts and the database of a new worktree.
@@ -1132,49 +1094,26 @@ impl Inner {
         });
     }
 
-    fn drop_left(self: &Rc<Self>, left: &LeftWorktree) {
-        let dialog = adw::AlertDialog::new(
-            Some(&format!("Drop {}?", left.database)),
-            Some(&format!("Its worktree in {} is gone. Flock deletes the database and its data.", left.path)),
-        );
-        dialog.add_responses(&[("cancel", "Cancel"), ("drop", "Drop")]);
-        dialog.set_response_appearance("drop", adw::ResponseAppearance::Destructive);
-        let removal = Removal {
-            path: left.path.clone(),
-            name: String::new(),
-            label: left.database.clone(),
-            parent: left.site.clone(),
-            keep_db: false,
-        };
-        let this = self.clone();
-        dialog.choose(Some(&self.stack), gio::Cancellable::NONE, move |response| {
-            if response == "drop" {
-                this.remove_worktree(removal.clone(), false);
-            }
-        });
-    }
-
-    /// Removes a worktree, or drops a database left behind. A worktree git or its hook refuses to
-    /// remove (changes, a failing hook) can be removed anyway.
+    /// Removes a worktree and its own database. One git or its hook refuses to remove (changes, a
+    /// failing hook) can be removed anyway.
     fn remove_worktree(self: &Rc<Self>, removal: Removal, force: bool) {
         self.removing.replace(Some(removal.path.clone()));
         self.render();
         let this = self.clone();
         glib::spawn_future_local(async move {
-            let (path, keep_db) = (removal.path.clone(), removal.keep_db);
-            let result = gio::spawn_blocking(move || Client.remove_worktree(&path, force, keep_db)).await.expect("worktree request");
+            let path = removal.path.clone();
+            let result = gio::spawn_blocking(move || Client.remove_worktree(&path, force)).await.expect("worktree request");
             this.removing.replace(None);
-            this.left_for.replace(None);
             match result {
                 Ok(_) => {
                     report(&this.banner, None);
                     // Its site's detail follows the worktree's.
                     let selected = this.selected.borrow().clone();
-                    if !removal.name.is_empty() && selected.as_deref() == Some(removal.name.as_str()) {
+                    if selected.as_deref() == Some(removal.name.as_str()) {
                         this.selected.replace(Some(removal.parent.clone()));
                     }
                 }
-                Err(e) if !force && !removal.name.is_empty() => this.offer_force(removal, &e.to_string()),
+                Err(e) if !force => this.offer_force(removal, &e.to_string()),
                 Err(e) => report(&this.banner, Some(e.to_string())),
             }
             this.render();
@@ -1316,19 +1255,12 @@ impl Inner {
         group
     }
 
-    /// Asks before switching a worktree's database; the one Flock made for it is dropped unless
-    /// the user keeps it.
+    /// Asks before switching a worktree's database; the one Flock made for it is dropped.
     fn switch_database(self: &Rc<Self>, site: &SiteStatus, db: &str) {
         let (label, parent) = (site.worktree_label(), site.parent.clone());
         let own = site.own_database().map(str::to_owned);
         let (title, body) = match (&own, db) {
-            (Some(name), "shared") => {
-                (format!("Drop {name}?"), format!("{label} then uses {parent}'s database. Flock deletes {name} and its data."))
-            }
-            (Some(name), "copy") => {
-                (format!("Drop {name}?"), format!("{label} gets a new copy of {parent}'s database. Flock deletes {name} and its data."))
-            }
-            (Some(name), _) => (format!("Drop {name}?"), format!("{label} gets a new, empty database. Flock deletes {name} and its data.")),
+            (Some(name), _) => (format!("Drop {name}?"), format!("Its database {name} is dropped.")),
             (None, "shared") => (format!("Use {parent}'s database?"), format!("{label} then uses {parent}'s database.")),
             (None, "copy") => {
                 let body = format!("Flock copies {parent}'s database and runs the branch's migrations on it.");
@@ -1337,10 +1269,6 @@ impl Inner {
             (None, _) => (format!("Give {label} a fresh database?"), "Flock creates an empty database and runs the migrations.".to_owned()),
         };
         let dialog = adw::AlertDialog::new(Some(&title), Some(&body));
-        let keep = own.as_ref().map(|name| gtk::CheckButton::with_label(&format!("Keep {name}")));
-        if let Some(keep) = &keep {
-            dialog.set_extra_child(Some(keep));
-        }
         dialog.add_responses(&[("cancel", "Cancel"), ("switch", "Switch")]);
         dialog.set_response_appearance(
             "switch",
@@ -1354,11 +1282,9 @@ impl Inner {
                 this.render();
                 return;
             }
-            let keep_db = keep.as_ref().is_some_and(|k| k.is_active());
             let (this, path, db) = (this.clone(), path.clone(), db.clone());
             glib::spawn_future_local(async move {
-                let result =
-                    gio::spawn_blocking(move || Client.switch_worktree_database(&path, &db, keep_db)).await.expect("worktree request");
+                let result = gio::spawn_blocking(move || Client.switch_worktree_database(&path, &db)).await.expect("worktree request");
                 report(&this.banner, result.err().map(|e| e.to_string()));
                 this.model.refresh();
             });
@@ -1408,23 +1334,21 @@ impl Inner {
 
     fn ask_remove(self: &Rc<Self>, site: &SiteStatus) {
         let label = site.worktree_label();
-        let mut body = format!("Flock runs the before_delete hook and removes the worktree in {} with git.", site.path);
+        let mut body = match site.own_database() {
+            Some(db) => format!("Flock runs its before_delete hook and deletes {} and its database {db}.", site.path),
+            None => format!("Flock runs its before_delete hook and deletes {}.", site.path),
+        };
         if !site.branch.is_empty() {
             body.push_str(&format!(" The branch {} stays.", site.branch));
         }
         let dialog = adw::AlertDialog::new(Some(&format!("Remove {label}?")), Some(&body));
-        let keep = site.own_database().map(|_| gtk::CheckButton::with_label("Keep its database"));
-        if let Some(keep) = &keep {
-            dialog.set_extra_child(Some(keep));
-        }
         dialog.add_responses(&[("cancel", "Cancel"), ("remove", "Remove")]);
         dialog.set_response_appearance("remove", adw::ResponseAppearance::Destructive);
         let this = self.clone();
-        let removal = Removal { path: site.path.clone(), name: site.name.clone(), label, parent: site.parent.clone(), keep_db: false };
+        let removal = Removal { path: site.path.clone(), name: site.name.clone(), label, parent: site.parent.clone() };
         dialog.choose(Some(&self.stack), gio::Cancellable::NONE, move |response| {
             if response == "remove" {
-                let keep_db = keep.as_ref().is_some_and(|k| k.is_active());
-                this.remove_worktree(Removal { keep_db, ..removal.clone() }, false);
+                this.remove_worktree(removal.clone(), false);
             }
         });
     }

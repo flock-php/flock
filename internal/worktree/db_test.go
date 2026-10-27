@@ -93,7 +93,7 @@ func TestServerDatabases(t *testing.T) {
 
 	// Back to the site's: dropped, .env names the site's again.
 	j.DBMode = Shared
-	if err := j.SwitchDatabase(ctx, log, func(string) {}, false); err != nil {
+	if err := j.SwitchDatabase(ctx, log, func(string) {}); err != nil {
 		t.Fatal(err)
 	}
 	if !slices.Equal(server.dbs, []string{"acme"}) || recorded != (Database{}) {
@@ -150,7 +150,7 @@ func TestSQLiteDatabases(t *testing.T) {
 	}
 
 	j.DBMode = Fresh
-	if err := j.SwitchDatabase(ctx, log, func(string) {}, false); err != nil {
+	if err := j.SwitchDatabase(ctx, log, func(string) {}); err != nil {
 		t.Fatal(err)
 	}
 	if read(t, file) != "" || read(t, filepath.Join(j.Site, "database", "database.sqlite")) != "site data" {

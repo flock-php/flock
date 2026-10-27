@@ -392,23 +392,17 @@ impl Client {
     }
 
     /// Gives a worktree the site's database (shared) or one of its own (copy, fresh), as its job.
-    /// The database Flock made for it before is dropped unless keep_db.
-    pub fn switch_worktree_database(&self, path: &str, db: &str, keep_db: bool) -> Result<WorktreeStatus, Error> {
-        let body = serde_json::json!({ "path": path, "db": db, "keep_db": keep_db });
+    /// The database Flock made for it before is dropped.
+    pub fn switch_worktree_database(&self, path: &str, db: &str) -> Result<WorktreeStatus, Error> {
+        let body = serde_json::json!({ "path": path, "db": db });
         self.request("POST", "/v1/worktrees/db", Some(&body), DEFAULT_TIMEOUT)
     }
 
-    /// Worktrees whose folder is gone, whose database Flock kept.
-    pub fn left_worktrees(&self) -> Result<Vec<LeftWorktree>, Error> {
-        self.request::<_, Option<Vec<LeftWorktree>>>("GET", "/v1/worktrees/left", None::<&()>, DEFAULT_TIMEOUT)
-            .map(Option::unwrap_or_default)
-    }
-
     /// Runs the worktree's before_delete hook, removes it with git and drops the database Flock
-    /// made for it unless keep_db; for one whose folder is gone, only drops its database. Answers
-    /// with what the hook and git printed. force removes it despite changes or a failing hook.
-    pub fn remove_worktree(&self, path: &str, force: bool, keep_db: bool) -> Result<String, Error> {
-        let body = serde_json::json!({ "path": path, "force": force, "keep_db": keep_db });
+    /// made for it. Answers with what the hook and git printed. force removes it despite changes
+    /// or a failing hook.
+    pub fn remove_worktree(&self, path: &str, force: bool) -> Result<String, Error> {
+        let body = serde_json::json!({ "path": path, "force": force });
         self.request::<_, WorktreeRemoval>("POST", "/v1/worktrees/remove", Some(&body), INSTALL_TIMEOUT).map(|r| r.output)
     }
 
@@ -1114,20 +1108,6 @@ struct WorktreeRemoval {
     output: String,
 }
 
-/// GET /v1/worktrees/left (config.WorktreeEntry): a worktree whose folder is gone, whose database
-/// Flock kept.
-#[derive(Deserialize, Debug, Clone, PartialEq, Default)]
-#[serde(default)]
-pub struct LeftWorktree {
-    pub path: String,
-    pub site: String,
-    pub slug: String,
-    pub database: String,
-    /// pgsql, mysql, mariadb or sqlite.
-    pub engine: String,
-    pub gone: bool,
-}
-
 /// A site's share (`flock share`).
 #[derive(Deserialize, Debug, Clone, PartialEq, Default)]
 #[serde(default)]
@@ -1236,12 +1216,7 @@ mod tests {
     }
 
     #[test]
-    fn decodes_left_worktrees() {
-        let json = r#"[{"path":"/home/a/acme-gone","site":"acme","slug":"gone","db_mode":"copy",
-            "database":"acme_gone","engine":"pgsql","gone":true}]"#;
-        let left: Vec<LeftWorktree> = serde_json::from_str(json).unwrap();
-        assert_eq!(left[0].database, "acme_gone");
-        assert!(left[0].gone);
+    fn decodes_a_created_worktree() {
         let created: WorktreeCreated =
             serde_json::from_str(r#"{"path":"/home/a/acme-x","setup":{"state":"queued","log":"worktree-x.acme"}}"#).unwrap();
         assert_eq!(created.setup.text(), "Waiting…");

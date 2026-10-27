@@ -263,3 +263,82 @@ func TestCreateMakesTheWorktreeWhereFlockYmlSays(t *testing.T) {
 		}
 	}
 }
+
+func TestALaravelWorktreeGetsKeysOfItsOwn(t *testing.T) {
+	site, wt := t.TempDir(), t.TempDir()
+	write(t, filepath.Join(wt, "artisan"), "")
+	write(t, filepath.Join(wt, "composer.json"), `{"require":{"laravel/horizon":"^5.0"}}`)
+	write(t, filepath.Join(site, ".env"), "APP_NAME=\"Watch Tower\"\nCACHE_PREFIX=wt_cache_\nSESSION_DOMAIN=.watchtower.test\n")
+	write(t, filepath.Join(wt, ".env"), "APP_NAME=\"Watch Tower\"\nCACHE_PREFIX=wt_cache_\nSESSION_DOMAIN=.watchtower.test\nREDIS_PREFIX=mine_\n")
+	job := Job{Site: site, Path: wt, Domain: "feature-x.watchtower.test", ParentDomain: "watchtower.test", Settings: Defaults()}
+
+	if err := job.writeEnv(&bytes.Buffer{}); err != nil {
+		t.Fatal(err)
+	}
+	env := read(t, filepath.Join(wt, ".env"))
+	for _, want := range []string{
+		"REDIS_PREFIX=mine_\n",                          // the worktree's own: left alone
+		"CACHE_PREFIX=wt_cache_feature_x_\n",            // the site's, with the worktree's slug
+		"HORIZON_PREFIX=watch_tower_feature_x_horizon:", // Laravel's default shape
+		"SESSION_COOKIE=watch_tower_feature_x_session",  // the cookie is shared with the site
+	} {
+		if !strings.Contains(env, want) {
+			t.Errorf(".env lacks %q:\n%s", want, env)
+		}
+	}
+
+	// Set up again, nothing changes.
+	if err := job.writeEnv(&bytes.Buffer{}); err != nil || read(t, filepath.Join(wt, ".env")) != env {
+		t.Errorf("again: %v\n%s", err, read(t, filepath.Join(wt, ".env")))
+	}
+
+	// Not Laravel: no prefixes.
+	plain := t.TempDir()
+	write(t, filepath.Join(plain, ".env"), "APP_NAME=x\n")
+	job.Path = plain
+	if err := job.writeEnv(&bytes.Buffer{}); err != nil || strings.Contains(read(t, filepath.Join(plain, ".env")), "PREFIX") {
+		t.Errorf("not Laravel: %v\n%s", err, read(t, filepath.Join(plain, ".env")))
+	}
+}
+
+func TestLaravelStepsRunWhereTheProjectNeedsThem(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("the fake flock is sh")
+	}
+	site, wt := t.TempDir(), t.TempDir()
+	calls := filepath.Join(t.TempDir(), "calls")
+	flock := filepath.Join(t.TempDir(), "flock")
+	write(t, flock, "#!/bin/sh\necho \"$*\" >> "+calls+"\n")
+	if err := os.Chmod(flock, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	write(t, filepath.Join(wt, "artisan"), "")
+	write(t, filepath.Join(wt, "vendor", "laravel", "boost", "composer.json"), "{}")
+	write(t, filepath.Join(wt, "composer.json"), `{"require-dev":{"laravel/boost":"^2.0"}}`)
+	write(t, filepath.Join(wt, "package.json"), `{"scripts":{"build":"vite build"},"devDependencies":{"laravel-vite-plugin":"^2.0"}}`)
+	write(t, filepath.Join(wt, "vite.config.js"), "")
+	write(t, filepath.Join(site, "storage", "app", "public", ".gitignore"), "")
+	if err := os.MkdirAll(filepath.Join(site, "public"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(filepath.Join(site, "storage", "app", "public"), filepath.Join(site, "public", "storage")); err != nil {
+		t.Fatal(err)
+	}
+	job := Job{Site: site, Path: wt, Domain: "x.acme.test", ParentDomain: "acme.test", Settings: Defaults(), Flock: flock}
+
+	job.laravelSteps(context.Background(), &bytes.Buffer{}, func(string) {})
+	want := "exec php artisan storage:link\nexec php artisan boost:update --no-interaction\nexec npm run build\n"
+	if got := read(t, calls); got != want {
+		t.Errorf("got\n%s\nwant\n%s", got, want)
+	}
+
+	// Built and linked already, and build turned off: only Boost.
+	write(t, filepath.Join(wt, "public", "build", "manifest.json"), "{}")
+	write(t, filepath.Join(wt, "public", "storage"), "")
+	job.Settings.Build = false
+	_ = os.Remove(calls)
+	job.laravelSteps(context.Background(), &bytes.Buffer{}, func(string) {})
+	if got := read(t, calls); got != "exec php artisan boost:update --no-interaction\n" {
+		t.Errorf("again: %q", got)
+	}
+}

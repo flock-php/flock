@@ -55,27 +55,6 @@ public enum DatabaseMode: String, Codable, Sendable, CaseIterable, Identifiable 
     }
 }
 
-/// A worktree whose folder is gone, whose database Flock kept.
-public struct LeftWorktree: Decodable, Sendable, Equatable, Identifiable {
-    /// Where the worktree was; names it for removal.
-    public var path: String
-    public var site: String
-    public var database: String
-
-    public var id: String { path }
-
-    enum CodingKeys: String, CodingKey {
-        case path, site, database
-    }
-
-    public init(from decoder: Decoder) throws {
-        let c = try decoder.container(keyedBy: CodingKeys.self)
-        path = try c.decodeIfPresent(String.self, forKey: .path) ?? ""
-        site = try c.decodeIfPresent(String.self, forKey: .site) ?? ""
-        database = try c.decodeIfPresent(String.self, forKey: .database) ?? ""
-    }
-}
-
 /// A new worktree: its folder, and its setup.
 public struct WorktreeCreated: Decodable, Sendable {
     public var path: String

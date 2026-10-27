@@ -7,16 +7,12 @@ namespace Flock.Tray;
 /// <summary>
 /// Git worktrees: the daemon serves each worktree of a site at &lt;branch&gt;.&lt;site&gt;.test and sets it
 /// up (dependencies, .env, installs, hooks, optionally a database of its own). A site lists its
-/// worktrees, creates new ones and drops the databases of worktrees whose folder is gone; a
+/// worktrees and creates new ones; a
 /// worktree shows its branch and folder, its database and its setup. Its PHP, Node.js, HTTPS and
 /// document root are its site's, so they are only shown here.
 /// </summary>
 internal sealed partial class SitesPane
 {
-    // Worktrees whose folder is gone, whose database Flock kept (GET /v1/worktrees/left).
-    private List<LeftWorktree> leftWorktrees = [];
-    // The worktrees' folders when those were last read: a worktree going away may leave its database behind.
-    private string? leftFor;
     // A worktree created here, selected once the status lists it.
     private string? selectWhenListed;
 
@@ -24,35 +20,17 @@ internal sealed partial class SitesPane
     private static readonly string[] DatabaseModes = [Status.WorktreeDatabase.Shared, Status.WorktreeDatabase.Copy, Status.WorktreeDatabase.Fresh];
     private static readonly string[] DatabaseChoices = ["The site's", "A copy of the site's", "A new, empty one"];
 
-    /// <summary>Reads the left-behind databases again when the worktrees changed (or force).</summary>
-    private void LoadLeftWorktrees(bool force = false)
+    /// <summary>Selects the worktree created here once the status lists it (the daemon may list it a moment later).</summary>
+    private void SelectCreatedWorktree()
     {
-        if (!active)
-        {
-            return;
-        }
-        var sites = Model.Status?.Sites ?? [];
-        var folders = string.Join('\n', sites.Where(s => s.IsWorktree).Select(s => s.Path));
-        if (selectWhenListed is { } path && sites.FirstOrDefault(s => s.IsWorktree && SamePath(s.Path, path)) is { } created)
+        if (selectWhenListed is { } path && Model.Status?.Sites.FirstOrDefault(s => s.IsWorktree && SamePath(s.Path, path)) is { } created)
         {
             selectWhenListed = null;
             Select(created.Name);
         }
-        if (!force && folders == leftFor)
-        {
-            return;
-        }
-        leftFor = folders;
-        Start("worktrees:left", async () =>
-        {
-            if (await Model.Sites.LeftWorktreesAsync(activeLifetime?.Token ?? CancellationToken.None) is { } left)
-            {
-                leftWorktrees = left;
-            }
-        });
     }
 
-    /// <summary>A site's worktrees (each selects it), the databases of ones that are gone, and New Worktree.</summary>
+    /// <summary>A site's worktrees (each selects it) and New Worktree.</summary>
     private StackPanel Worktrees(Status.Site site)
     {
         var section = Section("Worktrees");
@@ -65,14 +43,6 @@ internal sealed partial class SitesPane
             ToolTipService.SetToolTip(link, worktree.Path);
             var domain = Ui.Caption(worktree.Domain, Ui.TertiaryText, wrap: false);
             section.Children.Add(Ui.Spread(Ui.Row(8, link, domain), WorktreeSummary(worktree)));
-        }
-        foreach (var left in leftWorktrees.Where(l => l.Site == site.Name && l.Database.Length > 0))
-        {
-            var entry = left;
-            var drop = Ui.Button("Drop…", () => Start(site.Name, () => DropLeftDatabase(entry)));
-            var text = Ui.Caption($"{entry.Database} — its worktree is gone");
-            ToolTipService.SetToolTip(text, entry.Path);
-            section.Children.Add(Ui.Spread(text, drop));
         }
         if (worktrees.Count == 0)
         {
@@ -156,22 +126,8 @@ internal sealed partial class SitesPane
         {
             // The daemon may list it a moment later.
             selectWhenListed = created;
-            LoadLeftWorktrees();
+            SelectCreatedWorktree();
         }
-    }
-
-    /// <summary>Drops the database Flock kept for a worktree whose folder is gone.</summary>
-    private async Task DropLeftDatabase(LeftWorktree entry)
-    {
-        if (!await Window.Confirm($"Drop {entry.Database}?", $"Its worktree ({entry.Path}) is gone. Flock kept the database in case you need its data; dropping it deletes that data.", "Drop", destructive: true))
-        {
-            return;
-        }
-        if (await Model.Sites.RemoveWorktreeAsync(entry.Site, entry.Path, force: false, keepDb: false) is { } error)
-        {
-            await Ui.Inform(Window.XamlRoot, $"Couldn't drop {entry.Database}", error);
-        }
-        LoadLeftWorktrees(force: true);
     }
 
     /// <summary>
@@ -297,7 +253,7 @@ internal sealed partial class SitesPane
         return section;
     }
 
-    /// <summary>Confirms switching the worktree's database (dropping its own, unless kept), then switches it as the worktree's job.</summary>
+    /// <summary>Confirms switching the worktree's database (dropping its own), then switches it as the worktree's job.</summary>
     private async Task SwitchDatabase(Status.Site worktree, string mode)
     {
         var label = worktree.WorktreeLabel;
@@ -308,15 +264,12 @@ internal sealed partial class SitesPane
             Status.WorktreeDatabase.Fresh => "an empty database",
             _ => $"{parent}'s database",
         };
-        var keepDb = false;
         if (worktree.Worktree is { HasOwnDatabase: true } setup)
         {
-            var keep = new CheckBox { Content = $"Keep {setup.Database}" };
-            if (!await Window.Confirm($"Drop {setup.Database}?", $"{label} then uses {what}. Flock drops the database it made for it, with its data.", "Switch", destructive: true, extra: keep))
+            if (!await Window.Confirm($"Drop {setup.Database}?", $"{label} then uses {what}. Its database {setup.Database} is dropped, with its data.", "Switch", destructive: true))
             {
                 return;
             }
-            keepDb = keep.IsChecked == true;
         }
         else
         {
@@ -331,7 +284,7 @@ internal sealed partial class SitesPane
                 return;
             }
         }
-        await Model.Sites.SwitchWorktreeDatabaseAsync(worktree.Name, worktree.Path, mode, keepDb);
+        await Model.Sites.SwitchWorktreeDatabaseAsync(worktree.Name, worktree.Path, mode);
     }
 
     /// <summary>The worktree's setup: queued, running (the step), set up or failed (why), with its log and Run Setup Again.</summary>
@@ -380,27 +333,27 @@ internal sealed partial class SitesPane
     }
 
     /// <summary>
-    /// Removes the worktree with git (after its before_delete hook), and its database unless kept; the
+    /// Removes the worktree with git (after its before_delete hook), and its own database; the
     /// branch stays. When git refuses (e.g. uncommitted changes), offers to remove it anyway.
     /// </summary>
     private async Task RemoveWorktree(Status.Site worktree)
     {
         var label = worktree.WorktreeLabel;
-        var keep = worktree.Worktree is { HasOwnDatabase: true } ? new CheckBox { Content = "Keep its database" } : null;
-        var details = $"Runs its before_delete hook and removes {worktree.Path} with git." + (worktree.Branch.Length > 0 ? $" The branch {worktree.Branch} stays." : "");
-        if (!await Window.Confirm($"Remove {label}?", details, "Remove", destructive: true, extra: keep))
+        var details = $"Flock runs its before_delete hook and deletes {worktree.Path}"
+            + (worktree.Worktree is { HasOwnDatabase: true } setup ? $" and its database {setup.Database}." : ".")
+            + (worktree.Branch.Length > 0 ? $" The branch {worktree.Branch} stays." : "");
+        if (!await Window.Confirm($"Remove {label}?", details, "Remove", destructive: true))
         {
             return;
         }
-        var keepDb = keep?.IsChecked == true;
-        var error = await Model.Sites.RemoveWorktreeAsync(worktree.Name, worktree.Path, force: false, keepDb);
+        var error = await Model.Sites.RemoveWorktreeAsync(worktree.Name, worktree.Path, force: false);
         if (error is not null)
         {
             if (!await Window.Confirm($"Couldn't remove {label}", error, "Remove Anyway", destructive: true))
             {
                 return;
             }
-            error = await Model.Sites.RemoveWorktreeAsync(worktree.Name, worktree.Path, force: true, keepDb);
+            error = await Model.Sites.RemoveWorktreeAsync(worktree.Name, worktree.Path, force: true);
             if (error is not null)
             {
                 await Ui.Inform(Window.XamlRoot, $"Couldn't remove {label}", error);
