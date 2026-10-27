@@ -26,8 +26,14 @@ enum Phase {
     /// What the setup does now.
     Running(String),
     /// The worktree's name and URL, once the status lists it.
-    Ready { name: Option<String>, url: Option<String> },
-    Failed { path: Option<String>, error: String },
+    Ready {
+        name: Option<String>,
+        url: Option<String>,
+    },
+    Failed {
+        path: Option<String>,
+        error: String,
+    },
 }
 
 struct JobView {
