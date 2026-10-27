@@ -321,7 +321,8 @@ private func decode<T: Decodable>(_ type: T.Type, _ json: String) throws -> T {
 
 @Test func decodesWorktreesUnderTheirSite() throws {
     let status = try decode(Status.self, """
-    {"sites":[{"name":"acme","domain":"acme.test","path":"/code/acme","php":"8.5"},
+    {"version":"dev","pid":1,"started_at":"2026-10-27T10:00:00+01:00",
+     "sites":[{"name":"acme","domain":"acme.test","path":"/code/acme","php":"8.5"},
               {"name":"feature-auth.acme","domain":"feature-auth.acme.test","path":"/code/acme-feature-auth","php":"8.5",
                "parent":"acme","branch":"feature/auth",
                "worktree":{"state":"running","step":"composer install","log":"worktree-feature-auth.acme","db_mode":"copy","database":"acme_feature_auth"}},

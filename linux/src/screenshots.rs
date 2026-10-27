@@ -158,8 +158,8 @@ async fn shoot(id: &str, app: &adw::Application, model: &Rc<model::AppModel>, wi
             scroll_to_end(&title)?;
         }
         "settings-sites-worktrees" => {
-            let title = find(&window, &|w| w.downcast_ref::<gtk::Label>().is_some_and(|l| l.label() == "Worktrees"))
-                .ok_or("no Worktrees group")?;
+            let title =
+                find(&window, &|w| w.downcast_ref::<gtk::Label>().is_some_and(|l| l.label() == "Worktrees")).ok_or("no Worktrees group")?;
             scroll_to_end(&title)?;
         }
         "panel-worktrees" => {

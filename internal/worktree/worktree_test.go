@@ -95,10 +95,12 @@ func TestDotenvChangesOnlyTheKeysItSets(t *testing.T) {
 	env.Set("MAIL_FROM", "hi@feature.acme.test")
 	env.Set("REDIS_PREFIX", "feature_")
 	env.Set("GREETING", "hello world")
+	env.Set("WIN_PATH", `C:\Code\acme\database.sqlite`)
+	env.Set("WIN_SPACES", `C:\My Code\acme`)
 	if err := env.Write(path); err != nil {
 		t.Fatal(err)
 	}
-	want := "# app\nAPP_NAME=\"Feature\"\nAPP_URL=http://acme.test # the site\n\nexport MAIL_FROM=hi@feature.acme.test\nAPP_URL=https://feature.acme.test\nREDIS_PREFIX=feature_\nGREETING=\"hello world\"\n"
+	want := "# app\nAPP_NAME=\"Feature\"\nAPP_URL=http://acme.test # the site\n\nexport MAIL_FROM=hi@feature.acme.test\nAPP_URL=https://feature.acme.test\nREDIS_PREFIX=feature_\nGREETING=\"hello world\"\nWIN_PATH=C:\\Code\\acme\\database.sqlite\nWIN_SPACES='C:\\My Code\\acme'\n"
 	if got := read(t, path); got != want {
 		t.Errorf("got\n%s\nwant\n%s", got, want)
 	}

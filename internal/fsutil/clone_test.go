@@ -3,6 +3,7 @@ package fsutil
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 )
 
@@ -28,10 +29,11 @@ func TestCloneTreeCopiesFilesModesAndSymlinks(t *testing.T) {
 	if data, err := os.ReadFile(filepath.Join(dst, "autoload.php")); err != nil || string(data) != "<?php\n" {
 		t.Errorf("autoload.php: %q %v", data, err)
 	}
-	if info, err := os.Stat(filepath.Join(dst, "bin", "tool")); err != nil || info.Mode().Perm()&0o100 == 0 {
+	// Windows has no executable bit.
+	if info, err := os.Stat(filepath.Join(dst, "bin", "tool")); err != nil || runtime.GOOS != "windows" && info.Mode().Perm()&0o100 == 0 {
 		t.Errorf("bin/tool lost its mode: %v %v", info, err)
 	}
-	if link, err := os.Readlink(filepath.Join(dst, "tool")); err != nil || link != "bin/tool" {
+	if link, err := os.Readlink(filepath.Join(dst, "tool")); err != nil || filepath.ToSlash(link) != "bin/tool" {
 		t.Errorf("symlink: %q %v", link, err)
 	}
 

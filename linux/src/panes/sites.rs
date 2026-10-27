@@ -1271,8 +1271,7 @@ impl Inner {
             address.connect_activated(move |r| launch_uri(r, &url));
         }
         group.add(&address);
-        let versions =
-            [("PHP", &site.php, &site.php_source, &site.php_file), ("Node.js", &site.node, &site.node_source, &site.node_file)];
+        let versions = [("PHP", &site.php, &site.php_source, &site.php_file), ("Node.js", &site.node, &site.node_source, &site.node_file)];
         for (label, version, source, file) in versions {
             let row = info_row(label, if version.is_empty() { "—" } else { version.as_str() });
             if source == "project" && !file.is_empty() {

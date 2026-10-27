@@ -66,11 +66,15 @@ func (d *Dotenv) Get(key string) string {
 }
 
 // Set assigns key: its last line is replaced, keeping double quotes when it had them, or a new
-// line is added at the end.
+// line is added at the end. A value with a backslash (a Windows path) that needs quotes gets
+// single quotes, in which dotenv parsers take it as written.
 func (d *Dotenv) Set(key, value string) {
 	i, raw := d.line(key)
-	quoted := strings.HasPrefix(raw, `"`) || strings.ContainsAny(value, " #\"'\\") || value != strings.TrimSpace(value)
-	if quoted {
+	switch {
+	case !strings.HasPrefix(raw, `"`) && !strings.ContainsAny(value, " #\"'") && value == strings.TrimSpace(value):
+	case strings.Contains(value, `\`) && !strings.Contains(value, "'"):
+		value = "'" + value + "'"
+	default:
 		value = `"` + strings.NewReplacer(`\`, `\\`, `"`, `\"`).Replace(value) + `"`
 	}
 	if i < 0 {
