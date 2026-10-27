@@ -1,26 +1,25 @@
-# What linux/packaging/postinstall.sh and preremove.sh do for the .deb and .rpm, minus the package
-# repository: pacman's own hooks reload systemd and refresh the icon and desktop caches.
-
-post_install() {
-  echo 'Flock is installed. Set it up for your user with: flk install'
-}
+# What linux/packaging/postinstall.sh does for the .deb and .rpm, minus the package repository:
+# pacman's own hooks reload systemd and refresh the icon and desktop caches. Removing Flock undoes
+# its setup in flockphp.hook.
 
 # Every running daemon restarts and runs the new flock through the link `flk install` put in the
-# user's data dir.
-post_upgrade() {
+# user's data dir: after an upgrade, and after flockphp-bin and flockphp-beta-bin replace each
+# other (which installs the other package).
+restart_daemons() {
   if [ -d /run/systemd/system ]; then
     systemctl daemon-reload || true
     systemctl try-restart 'flock@*.service' || true
   fi
 }
 
-# Every user's daemon is stopped and their system-wide setup undone (unit drop-in, *.test DNS, CA
-# trust, Firefox policy). Users' own files stay: `flock uninstall` removes those.
-pre_remove() {
+post_install() {
+  restart_daemons
   for dir in /etc/systemd/system/flock@?*.service.d; do
-    [ -d "$dir" ] || continue
-    user="${dir#/etc/systemd/system/flock@}"
-    user="${user%.service.d}"
-    /usr/libexec/flockphp/flock privileged-setup --remove --user "$user" || echo "flockphp: could not undo Flock's setup for $user" >&2
+    [ -d "$dir" ] && return
   done
+  echo 'Flock is installed. Set it up for your user with: flk install'
+}
+
+post_upgrade() {
+  restart_daemons
 }

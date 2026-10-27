@@ -49,7 +49,7 @@ The setup adds the shims to your PATH, registers a launchd agent for the daemon,
    sudo ln -sf ../run/systemd/resolve/stub-resolv.conf /etc/resolv.conf
    ```
 
-   New versions of Flock come with your AUR helper's updates (`yay -Syu`).
+   New versions of Flock come with your AUR helper's updates (`yay -Syu`). Flock's betas are the package `flockphp-beta-bin`: installing it replaces `flockphp-bin` and keeps your setup, and installing `flockphp-bin` again goes back. **Beta versions** in **General**, or `flock channel beta`, also switches PHP and the services to their betas.
 2. Open **Flock** from your apps. The Flock window opens with the first-run setup. Optionally keep **Open Flock when I log in** checked.
 3. Click **Set Up Flock**. Linux asks for your password once.
 

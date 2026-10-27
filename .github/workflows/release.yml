@@ -171,6 +171,33 @@ jobs:
           signing-key: ${{ secrets.REPO_SIGNING_KEY }}
           token: ${{ github.token }}
 
+  # A job of its own: the release is out either way, and a failed AUR push can run again from here.
+  aur:
+    name: AUR
+    needs: [release-please, publish]
+    if: always() && needs.publish.result == 'success'
+    runs-on: ubuntu-latest
+    # AUR_SSH_KEY, which pushes to the AUR packages.
+    environment: release
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.release-please.outputs.tag_name }}
+
+      - name: Download the .debs
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.release-please.outputs.tag_name }}
+        run: gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --pattern 'flockphp_*.deb' --dir dist
+
+      - uses: ./.github/actions/aur
+        with:
+          version: ${{ needs.release-please.outputs.version }}
+          ssh-key: ${{ secrets.AUR_SSH_KEY }}
+          token: ${{ github.token }}
+
   # develop must contain everything main has: the release-please commit (CHANGELOG.md, the version)
   # and any hotfix. A PR from main into develop merges itself, unless a hotfix conflicts with
   # develop; then it waits for the conflict to be resolved by hand.
