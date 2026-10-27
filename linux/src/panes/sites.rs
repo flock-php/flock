@@ -2,6 +2,9 @@
 //! address, domains and document root, its PHP and Node.js versions, what serves it, its share and
 //! Laravel Boost. Version and root pickers offer the project's pin (or the default) first, then
 //! what isolates the site on this machine; the pin menu writes them into the project.
+//!
+//! A site's git worktrees are listed under it. A worktree's detail shows its setup and database
+//! instead of settings: it uses its site's.
 
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -10,12 +13,15 @@ use adw::prelude::*;
 use base64::Engine;
 use gtk::{gdk, gio, glib};
 
-use super::common::{PaneView, ask_link, group, report};
+use super::common::{PaneView, ask_link, group, info_row, report};
 use super::versions::{MenuItem, badge, button, more_menu};
 use super::{Data, Pane};
-use crate::api::{Client, Config, Error, ExtensionReport, PhpExtension, ShareStatus, SiteChange, SiteStatus, Status};
+use crate::api::{
+    Client, Config, Error, ExtensionReport, LeftWorktree, PhpExtension, ShareStatus, SiteChange, SiteStatus, Status, WorktreeStatus,
+};
 use crate::links::{self, Link};
 use crate::model::AppModel;
+use crate::prefs;
 
 #[derive(Clone)]
 pub struct SitesPane(Rc<Inner>);
@@ -32,7 +38,32 @@ struct Inner {
     /// The FrankenPHP site that is restarting.
     restarting: RefCell<Option<String>>,
     shown: RefCell<Option<String>>,
+    /// The sites whose worktrees the list shows (prefs.rs).
+    expanded: RefCell<Vec<String>>,
+    /// Worktrees whose folder is gone, whose database Flock kept; and for which site and
+    /// worktrees they were read, so they are read again when a worktree goes.
+    left: RefCell<Vec<LeftWorktree>>,
+    left_for: RefCell<Option<String>>,
+    /// The site and branch of the worktree being created.
+    creating: RefCell<Option<(String, String)>>,
+    /// The folder of the worktree being removed.
+    removing: RefCell<Option<String>>,
 }
+
+/// A worktree to remove: its folder, name, what it is listed as and its site. For a database
+/// left behind, name is "" and label the database.
+#[derive(Clone)]
+struct Removal {
+    path: String,
+    name: String,
+    label: String,
+    parent: String,
+    keep_db: bool,
+}
+
+/// The database modes of a worktree, and how the Database rows name them.
+const DB_MODES: [&str; 3] = ["shared", "copy", "fresh"];
+const DB_CHOICES: [&str; 3] = ["The site's", "A copy of the site's", "A new, empty one"];
 
 impl SitesPane {
     pub fn new(model: Rc<AppModel>, banner: adw::Banner) -> Self {
@@ -52,6 +83,11 @@ impl SitesPane {
             selected: RefCell::default(),
             restarting: RefCell::default(),
             shown: RefCell::default(),
+            expanded: RefCell::new(prefs::load().expanded_sites),
+            left: RefCell::default(),
+            left_for: RefCell::default(),
+            creating: RefCell::default(),
+            removing: RefCell::default(),
         }))
     }
 }
@@ -94,7 +130,16 @@ impl Inner {
 
     fn render(self: &Rc<Self>) {
         self.ask_link();
-        let key = format!("{:?}{:?}{:?}{:?}", self.status.borrow(), self.config.borrow(), self.selected.borrow(), self.restarting.borrow());
+        let key = format!(
+            "{:?}{:?}{:?}{:?}{:?}{:?}{:?}",
+            self.status.borrow(),
+            self.config.borrow(),
+            self.selected.borrow(),
+            self.restarting.borrow(),
+            self.left.borrow(),
+            self.creating.borrow(),
+            self.removing.borrow()
+        );
         if self.shown.borrow().as_deref() == Some(key.as_str()) {
             return;
         }
@@ -116,6 +161,7 @@ impl Inner {
     fn open(self: &Rc<Self>, name: &str) {
         self.selected.replace(Some(name.to_owned()));
         self.shown.replace(None);
+        self.left_for.replace(None);
         self.render();
         self.detail.scrolled.vadjustment().set_value(0.0);
         self.stack.set_visible_child_name("detail");
@@ -164,7 +210,8 @@ impl Inner {
     // MARK: the list
 
     fn render_list(self: &Rc<Self>) {
-        let sites = self.status.borrow().as_ref().map(|s| s.sites.clone()).unwrap_or_default();
+        let status = self.status.borrow().clone().unwrap_or_default();
+        let sites = status.top_sites();
         let group = group("", "");
         let add = gtk::Button::builder().label("Add Site…").css_classes(["flat"]).build();
         let this = self.clone();
@@ -191,41 +238,88 @@ impl Inner {
                     .build(),
             );
         }
-        for site in &sites {
-            let row = adw::ActionRow::builder()
-                .title(glib::markup_escape_text(&site.name))
-                .subtitle(glib::markup_escape_text(&site.domain))
-                .activatable(true)
-                .build();
-            row.set_tooltip_text(Some(&site.path));
-            if let Some(problem) = problem(site) {
-                let warning = gtk::Image::from_icon_name("dialog-warning-symbolic");
-                warning.add_css_class("warning");
-                warning.set_tooltip_text(Some(&problem));
-                row.add_suffix(&warning);
+        for site in sites {
+            let worktrees = status.worktrees_of(&site.name);
+            if worktrees.is_empty() {
+                group.add(&self.site_row(site));
+            } else {
+                group.add(&self.expander(site, &worktrees));
             }
-            if site.shared() {
-                row.add_suffix(&badge("Shared", "success"));
-            }
-            if site.secured {
-                let lock = gtk::Image::from_icon_name("channel-secure-symbolic");
-                lock.add_css_class("dim-label");
-                lock.set_tooltip_text(Some("Served over HTTPS"));
-                row.add_suffix(&lock);
-            }
-            row.add_suffix(&gtk::Image::from_icon_name("go-next-symbolic"));
-            let (this, name) = (self.clone(), site.name.clone());
-            row.connect_activated(move |_| this.open(&name));
-            group.add(&row);
         }
         self.list.set_groups(&[group.upcast()]);
+    }
+
+    /// A site's row, or a worktree's (by its branch), which opens its detail.
+    fn site_row(self: &Rc<Self>, site: &SiteStatus) -> adw::ActionRow {
+        let title = if site.is_worktree() { site.worktree_label() } else { site.name.clone() };
+        let row = adw::ActionRow::builder()
+            .title(glib::markup_escape_text(&title))
+            .subtitle(glib::markup_escape_text(&site.domain))
+            .activatable(true)
+            .build();
+        row.set_tooltip_text(Some(&site.path));
+        for widget in worktree_suffixes(site).into_iter().chain(site_suffixes(site)) {
+            row.add_suffix(&widget);
+        }
+        row.add_suffix(&gtk::Image::from_icon_name("go-next-symbolic"));
+        let (this, name) = (self.clone(), site.name.clone());
+        row.connect_activated(move |_| this.open(&name));
+        row
+    }
+
+    /// A site with worktrees: its row expands to them (collapsed until the user expands it, which
+    /// is remembered), and its arrow opens the site.
+    fn expander(self: &Rc<Self>, site: &SiteStatus, worktrees: &[&SiteStatus]) -> adw::ExpanderRow {
+        let row = adw::ExpanderRow::builder()
+            .title(glib::markup_escape_text(&site.name))
+            .subtitle(glib::markup_escape_text(&site.domain))
+            .expanded(self.expanded.borrow().contains(&site.name))
+            .build();
+        row.set_tooltip_text(Some(&site.path));
+        let count = badge(&worktrees.len().to_string(), "");
+        let worktrees_text = if worktrees.len() == 1 { "1 worktree".to_owned() } else { format!("{} worktrees", worktrees.len()) };
+        count.set_tooltip_text(Some(&worktrees_text));
+        row.add_suffix(&count);
+        for widget in site_suffixes(site) {
+            row.add_suffix(&widget);
+        }
+        let open = gtk::Button::builder()
+            .icon_name("go-next-symbolic")
+            .tooltip_text(format!("Open {}", site.name))
+            .valign(gtk::Align::Center)
+            .css_classes(["flat"])
+            .build();
+        let (this, name) = (self.clone(), site.name.clone());
+        open.connect_clicked(move |_| this.open(&name));
+        row.add_suffix(&open);
+        for worktree in worktrees {
+            row.add_row(&self.site_row(worktree));
+        }
+        let (this, name) = (self.clone(), site.name.clone());
+        row.connect_expanded_notify(move |row| {
+            let expanded = row.is_expanded();
+            {
+                let mut list = this.expanded.borrow_mut();
+                list.retain(|s| *s != name);
+                if expanded {
+                    list.push(name.clone());
+                }
+            }
+            prefs::set_expanded(&name, expanded);
+        });
+        row
     }
 
     // MARK: a site's detail
 
     fn render_detail(self: &Rc<Self>, site: &SiteStatus) {
+        if site.is_worktree() {
+            self.render_worktree(site);
+            return;
+        }
         let config = self.config.borrow().clone().unwrap_or_default();
         let status = self.status.borrow().clone().unwrap_or_default();
+        self.load_left(site, &status);
         let mut groups: Vec<gtk::Widget> = vec![self.header(site).upcast()];
         groups.push(self.site_group(site, &status).upcast());
         groups.push(self.share_group(site).upcast());
@@ -234,6 +328,7 @@ impl Inner {
         if site.boost == "missing" || site.boost == "outdated" {
             groups.push(self.boost_group(site).upcast());
         }
+        groups.push(self.worktrees_group(site, &status).upcast());
         self.detail.set_groups(&groups);
     }
 
@@ -922,6 +1017,419 @@ impl Inner {
         menu
     }
 
+    // MARK: worktrees
+
+    /// A site's worktrees, New Worktree… and the databases of worktrees that are gone.
+    fn worktrees_group(self: &Rc<Self>, site: &SiteStatus, status: &Status) -> adw::PreferencesGroup {
+        let group = group(
+            "Worktrees",
+            &format!("Each git worktree of {} is served at <branch>.{}, with its own dependencies and .env.", site.name, site.domain),
+        );
+        let add = gtk::Button::builder().label("New Worktree…").css_classes(["flat"]).build();
+        let (this, s) = (self.clone(), site.clone());
+        add.connect_clicked(move |_| this.new_worktree(&s));
+        group.set_header_suffix(Some(&add));
+        let worktrees = status.worktrees_of(&site.name);
+        let creating = self.creating.borrow().clone().filter(|(name, _)| *name == site.name);
+        if worktrees.is_empty() && creating.is_none() {
+            group.add(
+                &adw::ActionRow::builder().title("No worktrees").subtitle("Create one here, with git or with your agent app.").build(),
+            );
+        }
+        for worktree in worktrees {
+            group.add(&self.site_row(worktree));
+        }
+        if let Some((_, branch)) = creating {
+            let row = adw::ActionRow::builder().title(glib::markup_escape_text(&format!("Creating {branch}…"))).build();
+            row.add_prefix(&gtk::Spinner::builder().spinning(true).build());
+            group.add(&row);
+        }
+        for left in self.left.borrow().iter().filter(|l| l.site == site.name && !l.database.is_empty()) {
+            let row = adw::ActionRow::builder()
+                .title(glib::markup_escape_text(&format!("{} — its worktree is gone", left.database)))
+                .subtitle(glib::markup_escape_text(&left.path))
+                .build();
+            let (this, l) = (self.clone(), left.clone());
+            row.add_suffix(&button("Drop…", false, move || this.drop_left(&l)));
+            group.add(&row);
+        }
+        group
+    }
+
+    /// Reads the databases left behind, when the site or its worktrees changed since they were read.
+    fn load_left(self: &Rc<Self>, site: &SiteStatus, status: &Status) {
+        let worktrees = status.worktrees_of(&site.name);
+        let paths: Vec<&str> = worktrees.iter().map(|w| w.path.as_str()).collect();
+        let key = format!("{}\n{}", site.name, paths.join("\n"));
+        if self.left_for.borrow().as_deref() == Some(key.as_str()) {
+            return;
+        }
+        self.left_for.replace(Some(key));
+        let this = self.clone();
+        glib::spawn_future_local(async move {
+            let result = gio::spawn_blocking(|| Client.left_worktrees()).await.expect("worktrees request");
+            // A daemon without worktrees has nothing left behind.
+            this.left.replace(result.unwrap_or_default());
+            this.render();
+        });
+    }
+
+    /// Asks for the branch, where it starts and the database of a new worktree.
+    fn new_worktree(self: &Rc<Self>, site: &SiteStatus) {
+        let entry = |placeholder: &str| {
+            gtk::Entry::builder().placeholder_text(placeholder).activates_default(true).valign(gtk::Align::Center).hexpand(true).build()
+        };
+        let (branch, from) = (entry("feature/auth"), entry("current commit"));
+        let branch_row = adw::ActionRow::builder().title("Branch").build();
+        branch_row.add_suffix(&branch);
+        let from_row = adw::ActionRow::builder().title("Start from").build();
+        from_row.add_suffix(&from);
+        let database = adw::ComboRow::builder()
+            .title("Database")
+            .model(&gtk::StringList::new(&["Project default", DB_CHOICES[0], DB_CHOICES[1], DB_CHOICES[2]]))
+            .build();
+        let list = gtk::ListBox::builder().css_classes(["boxed-list"]).selection_mode(gtk::SelectionMode::None).build();
+        list.append(&branch_row);
+        list.append(&from_row);
+        list.append(&database);
+        let dialog = adw::AlertDialog::new(
+            Some(&format!("New worktree of {}", site.name)),
+            Some("Flock creates it next to the site, on a new branch (a branch that exists is checked out), and sets it up."),
+        );
+        dialog.set_extra_child(Some(&list));
+        dialog.add_responses(&[("cancel", "Cancel"), ("create", "Create")]);
+        dialog.set_response_appearance("create", adw::ResponseAppearance::Suggested);
+        dialog.set_default_response(Some("create"));
+        dialog.set_response_enabled("create", false);
+        let weak = dialog.downgrade();
+        branch.connect_changed(move |entry| {
+            if let Some(dialog) = weak.upgrade() {
+                dialog.set_response_enabled("create", !entry.text().trim().is_empty());
+            }
+        });
+        let (this, name) = (self.clone(), site.name.clone());
+        dialog.choose(Some(&self.stack), gio::Cancellable::NONE, move |response| {
+            let branch = branch.text().trim().to_owned();
+            if response != "create" || branch.is_empty() {
+                return;
+            }
+            let from = from.text().trim().to_owned();
+            let db = ["", "shared", "copy", "fresh"].get(database.selected() as usize).copied().unwrap_or_default().to_owned();
+            this.create_worktree(name.clone(), branch, from, db);
+        });
+    }
+
+    fn create_worktree(self: &Rc<Self>, site: String, branch: String, from: String, db: String) {
+        self.creating.replace(Some((site.clone(), branch.clone())));
+        self.render();
+        let this = self.clone();
+        glib::spawn_future_local(async move {
+            let result = gio::spawn_blocking(move || Client.create_worktree(&site, &branch, &from, &db)).await.expect("worktree request");
+            this.creating.replace(None);
+            report(&this.banner, result.err().map(|e| e.to_string()));
+            this.render();
+            this.model.refresh();
+        });
+    }
+
+    fn drop_left(self: &Rc<Self>, left: &LeftWorktree) {
+        let dialog = adw::AlertDialog::new(
+            Some(&format!("Drop {}?", left.database)),
+            Some(&format!("Its worktree in {} is gone. Flock deletes the database and its data.", left.path)),
+        );
+        dialog.add_responses(&[("cancel", "Cancel"), ("drop", "Drop")]);
+        dialog.set_response_appearance("drop", adw::ResponseAppearance::Destructive);
+        let removal = Removal {
+            path: left.path.clone(),
+            name: String::new(),
+            label: left.database.clone(),
+            parent: left.site.clone(),
+            keep_db: false,
+        };
+        let this = self.clone();
+        dialog.choose(Some(&self.stack), gio::Cancellable::NONE, move |response| {
+            if response == "drop" {
+                this.remove_worktree(removal.clone(), false);
+            }
+        });
+    }
+
+    /// Removes a worktree, or drops a database left behind. A worktree git or its hook refuses to
+    /// remove (changes, a failing hook) can be removed anyway.
+    fn remove_worktree(self: &Rc<Self>, removal: Removal, force: bool) {
+        self.removing.replace(Some(removal.path.clone()));
+        self.render();
+        let this = self.clone();
+        glib::spawn_future_local(async move {
+            let (path, keep_db) = (removal.path.clone(), removal.keep_db);
+            let result = gio::spawn_blocking(move || Client.remove_worktree(&path, force, keep_db)).await.expect("worktree request");
+            this.removing.replace(None);
+            this.left_for.replace(None);
+            match result {
+                Ok(_) => {
+                    report(&this.banner, None);
+                    // Its site's detail follows the worktree's.
+                    let selected = this.selected.borrow().clone();
+                    if !removal.name.is_empty() && selected.as_deref() == Some(removal.name.as_str()) {
+                        this.selected.replace(Some(removal.parent.clone()));
+                    }
+                }
+                Err(e) if !force && !removal.name.is_empty() => this.offer_force(removal, &e.to_string()),
+                Err(e) => report(&this.banner, Some(e.to_string())),
+            }
+            this.render();
+            this.model.refresh();
+        });
+    }
+
+    fn offer_force(self: &Rc<Self>, removal: Removal, error: &str) {
+        let dialog = adw::AlertDialog::new(Some(&format!("Couldn't remove {}", removal.label)), Some(error));
+        dialog.add_responses(&[("cancel", "Cancel"), ("force", "Remove Anyway")]);
+        dialog.set_response_appearance("force", adw::ResponseAppearance::Destructive);
+        let this = self.clone();
+        dialog.choose(Some(&self.stack), gio::Cancellable::NONE, move |response| {
+            if response == "force" {
+                this.remove_worktree(removal.clone(), true);
+            }
+        });
+    }
+
+    // MARK: a worktree's detail
+
+    fn render_worktree(self: &Rc<Self>, site: &SiteStatus) {
+        let mut groups: Vec<gtk::Widget> = vec![self.worktree_header(site).upcast(), self.worktree_info(site).upcast()];
+        if let Some(setup) = &site.worktree {
+            groups.push(self.database_group(site, setup).upcast());
+        }
+        groups.push(self.setup_group(site).upcast());
+        self.detail.set_groups(&groups);
+    }
+
+    fn worktree_header(self: &Rc<Self>, site: &SiteStatus) -> adw::PreferencesGroup {
+        let header = group("", "");
+        let back = adw::ActionRow::builder().title(glib::markup_escape_text(&site.parent)).activatable(true).build();
+        back.add_prefix(&gtk::Image::from_icon_name("go-previous-symbolic"));
+        let (this, parent) = (self.clone(), site.parent.clone());
+        back.connect_activated(move |_| this.open(&parent));
+        header.add(&back);
+
+        let title = adw::ActionRow::builder()
+            .title(glib::markup_escape_text(&site.worktree_label()))
+            .subtitle(glib::markup_escape_text(&format!("{}\n{}", site.url.as_deref().unwrap_or(&site.domain), site.path)))
+            .subtitle_selectable(true)
+            .build();
+        title.add_suffix(&badge("Worktree", ""));
+        let open = gtk::Button::builder()
+            .icon_name("dev.flock.Flock-sites-symbolic")
+            .tooltip_text("Open in the browser")
+            .valign(gtk::Align::Center)
+            .css_classes(["flat"])
+            .build();
+        open.set_sensitive(site.url.is_some());
+        let url = site.url.clone().unwrap_or_default();
+        open.connect_clicked(move |b| launch_uri(b, &url));
+        title.add_suffix(&open);
+        // While the hook and git run, a spinner instead of the button.
+        if self.removing.borrow().as_deref() == Some(site.path.as_str()) {
+            title.add_suffix(&gtk::Spinner::builder().spinning(true).valign(gtk::Align::Center).build());
+        } else {
+            let remove = gtk::Button::builder()
+                .icon_name("user-trash-symbolic")
+                .tooltip_text("Remove worktree")
+                .valign(gtk::Align::Center)
+                .css_classes(["flat"])
+                .build();
+            let (this, s) = (self.clone(), site.clone());
+            remove.connect_clicked(move |_| this.ask_remove(&s));
+            title.add_suffix(&remove);
+        }
+        header.add(&title);
+        if let Some(problem) = &site.problem {
+            header.add(&adw::ActionRow::builder().title(glib::markup_escape_text(problem)).css_classes(["warning"]).build());
+        }
+        header
+    }
+
+    /// Branch, folder and address, and the versions it gets from its site (or the branch's pins).
+    fn worktree_info(self: &Rc<Self>, site: &SiteStatus) -> adw::PreferencesGroup {
+        let group = group("Worktree", "");
+        group.add(&info_row("Branch", if site.branch.is_empty() { "None (detached HEAD)" } else { site.branch.as_str() }));
+        let folder = info_row("Folder", &site.path);
+        let open_folder = gtk::Button::builder()
+            .icon_name("folder-symbolic")
+            .tooltip_text("Open the folder")
+            .valign(gtk::Align::Center)
+            .css_classes(["flat"])
+            .build();
+        let path = site.path.clone();
+        open_folder.connect_clicked(move |b| launch_file(b, &path));
+        folder.add_suffix(&open_folder);
+        group.add(&folder);
+        let address = info_row("URL", site.url.as_deref().unwrap_or(&site.domain));
+        if let Some(url) = site.url.clone() {
+            address.set_activatable(true);
+            address.connect_activated(move |r| launch_uri(r, &url));
+        }
+        group.add(&address);
+        let versions =
+            [("PHP", &site.php, &site.php_source, &site.php_file), ("Node.js", &site.node, &site.node_source, &site.node_file)];
+        for (label, version, source, file) in versions {
+            let row = info_row(label, if version.is_empty() { "—" } else { version.as_str() });
+            if source == "project" && !file.is_empty() {
+                row.set_subtitle(&glib::markup_escape_text(&format!("The branch pins it in {}", file_name(file))));
+            }
+            group.add(&row);
+        }
+        let settings = adw::ActionRow::builder()
+            .title(glib::markup_escape_text(&format!("Uses {}'s settings", site.parent)))
+            .subtitle("Change its PHP and Node.js versions, HTTPS and document root on the site.")
+            .activatable(true)
+            .build();
+        settings.add_suffix(&gtk::Image::from_icon_name("go-next-symbolic"));
+        let (this, parent) = (self.clone(), site.parent.clone());
+        settings.connect_activated(move |_| this.open(&parent));
+        group.add(&settings);
+        group
+    }
+
+    fn database_group(self: &Rc<Self>, site: &SiteStatus, setup: &WorktreeStatus) -> adw::PreferencesGroup {
+        let group = group("Database", "A database of its own gets the branch's migrations run on it.");
+        // The project's default mode isn't in the status: a database of its own is most likely a copy.
+        let current: u32 = match setup.db_mode.as_str() {
+            "shared" => 0,
+            "copy" => 1,
+            "fresh" => 2,
+            _ if !setup.database.is_empty() => 1,
+            _ => 0,
+        };
+        let mode = adw::ComboRow::builder().title("Database").model(&gtk::StringList::new(&DB_CHOICES)).selected(current).build();
+        if let Some(database) = site.own_database() {
+            mode.set_subtitle(&glib::markup_escape_text(database));
+        }
+        mode.set_sensitive(!setup.busy());
+        let (this, s) = (self.clone(), site.clone());
+        mode.connect_selected_notify(move |row| {
+            if let Some(db) = DB_MODES.get(row.selected() as usize).filter(|_| row.selected() != current) {
+                this.switch_database(&s, db);
+            }
+        });
+        group.add(&mode);
+        group
+    }
+
+    /// Asks before switching a worktree's database; the one Flock made for it is dropped unless
+    /// the user keeps it.
+    fn switch_database(self: &Rc<Self>, site: &SiteStatus, db: &str) {
+        let (label, parent) = (site.worktree_label(), site.parent.clone());
+        let own = site.own_database().map(str::to_owned);
+        let (title, body) = match (&own, db) {
+            (Some(name), "shared") => {
+                (format!("Drop {name}?"), format!("{label} then uses {parent}'s database. Flock deletes {name} and its data."))
+            }
+            (Some(name), "copy") => {
+                (format!("Drop {name}?"), format!("{label} gets a new copy of {parent}'s database. Flock deletes {name} and its data."))
+            }
+            (Some(name), _) => (format!("Drop {name}?"), format!("{label} gets a new, empty database. Flock deletes {name} and its data.")),
+            (None, "shared") => (format!("Use {parent}'s database?"), format!("{label} then uses {parent}'s database.")),
+            (None, "copy") => {
+                let body = format!("Flock copies {parent}'s database and runs the branch's migrations on it.");
+                (format!("Give {label} a copy of the database?"), body)
+            }
+            (None, _) => (format!("Give {label} a fresh database?"), "Flock creates an empty database and runs the migrations.".to_owned()),
+        };
+        let dialog = adw::AlertDialog::new(Some(&title), Some(&body));
+        let keep = own.as_ref().map(|name| gtk::CheckButton::with_label(&format!("Keep {name}")));
+        if let Some(keep) = &keep {
+            dialog.set_extra_child(Some(keep));
+        }
+        dialog.add_responses(&[("cancel", "Cancel"), ("switch", "Switch")]);
+        dialog.set_response_appearance(
+            "switch",
+            if own.is_some() { adw::ResponseAppearance::Destructive } else { adw::ResponseAppearance::Suggested },
+        );
+        let (this, path, db) = (self.clone(), site.path.clone(), db.to_owned());
+        dialog.choose(Some(&self.stack), gio::Cancellable::NONE, move |response| {
+            if response != "switch" {
+                // The row shows the mode it has again.
+                this.shown.replace(None);
+                this.render();
+                return;
+            }
+            let keep_db = keep.as_ref().is_some_and(|k| k.is_active());
+            let (this, path, db) = (this.clone(), path.clone(), db.clone());
+            glib::spawn_future_local(async move {
+                let result =
+                    gio::spawn_blocking(move || Client.switch_worktree_database(&path, &db, keep_db)).await.expect("worktree request");
+                report(&this.banner, result.err().map(|e| e.to_string()));
+                this.model.refresh();
+            });
+        });
+    }
+
+    fn setup_group(self: &Rc<Self>, site: &SiteStatus) -> adw::PreferencesGroup {
+        let group = group("Setup", "");
+        let Some(setup) = &site.worktree else {
+            let row = adw::ActionRow::builder()
+                .title("Flock hasn't set this worktree up")
+                .subtitle("Setting it up copies dependencies and .env, installs and runs the project's hooks.")
+                .build();
+            let (this, path) = (self.clone(), site.path.clone());
+            row.add_suffix(&button("Set Up", false, move || this.run_setup(&path, false)));
+            group.add(&row);
+            return group;
+        };
+        let row = adw::ActionRow::builder().title(glib::markup_escape_text(&setup.text())).build();
+        if setup.busy() {
+            row.add_prefix(&gtk::Spinner::builder().spinning(true).build());
+        } else if setup.failed() {
+            row.set_subtitle(&glib::markup_escape_text(&setup_error(setup)));
+            row.add_css_class("warning");
+        }
+        if !setup.log.is_empty() {
+            let show_log = gtk::Button::builder().label("Show Log").valign(gtk::Align::Center).action_name("app.open").build();
+            show_log.set_action_target_value(Some(&format!("logs/services/{}", setup.log).to_variant()));
+            row.add_suffix(&show_log);
+        }
+        let (this, path) = (self.clone(), site.path.clone());
+        let again = button("Run Setup Again", false, move || this.run_setup(&path, true));
+        again.set_sensitive(!setup.busy());
+        row.add_suffix(&again);
+        group.add(&row);
+        group
+    }
+
+    fn run_setup(self: &Rc<Self>, path: &str, again: bool) {
+        let (this, path) = (self.clone(), path.to_owned());
+        glib::spawn_future_local(async move {
+            let result = gio::spawn_blocking(move || Client.setup_worktree(&path, again)).await.expect("worktree request");
+            report(&this.banner, result.err().map(|e| e.to_string()));
+            this.model.refresh();
+        });
+    }
+
+    fn ask_remove(self: &Rc<Self>, site: &SiteStatus) {
+        let label = site.worktree_label();
+        let mut body = format!("Flock runs the before_delete hook and removes the worktree in {} with git.", site.path);
+        if !site.branch.is_empty() {
+            body.push_str(&format!(" The branch {} stays.", site.branch));
+        }
+        let dialog = adw::AlertDialog::new(Some(&format!("Remove {label}?")), Some(&body));
+        let keep = site.own_database().map(|_| gtk::CheckButton::with_label("Keep its database"));
+        if let Some(keep) = &keep {
+            dialog.set_extra_child(Some(keep));
+        }
+        dialog.add_responses(&[("cancel", "Cancel"), ("remove", "Remove")]);
+        dialog.set_response_appearance("remove", adw::ResponseAppearance::Destructive);
+        let this = self.clone();
+        let removal = Removal { path: site.path.clone(), name: site.name.clone(), label, parent: site.parent.clone(), keep_db: false };
+        dialog.choose(Some(&self.stack), gio::Cancellable::NONE, move |response| {
+            if response == "remove" {
+                let keep_db = keep.as_ref().is_some_and(|k| k.is_active());
+                this.remove_worktree(Removal { keep_db, ..removal.clone() }, false);
+            }
+        });
+    }
+
     // MARK: PHP extensions
 
     fn show_extensions(self: &Rc<Self>, site: &SiteStatus) {
@@ -1051,6 +1559,53 @@ fn extension_row(ext: &PhpExtension, php: &str, path: &str, require: Rc<dyn Fn(S
         row.add_suffix(&add);
     }
     row
+}
+
+/// A site's suffixes in the list: what it warns about, its share and its lock.
+fn site_suffixes(site: &SiteStatus) -> Vec<gtk::Widget> {
+    let mut widgets: Vec<gtk::Widget> = Vec::new();
+    if let Some(problem) = problem(site) {
+        let warning = gtk::Image::from_icon_name("dialog-warning-symbolic");
+        warning.add_css_class("warning");
+        warning.set_tooltip_text(Some(&problem));
+        widgets.push(warning.upcast());
+    }
+    if site.shared() {
+        widgets.push(badge("Shared", "success").upcast());
+    }
+    if site.secured {
+        let lock = gtk::Image::from_icon_name("channel-secure-symbolic");
+        lock.add_css_class("dim-label");
+        lock.set_tooltip_text(Some("Served over HTTPS"));
+        widgets.push(lock.upcast());
+    }
+    widgets
+}
+
+/// A worktree's suffixes in a list: its setup while it runs or when it failed, and its own
+/// database ("copy", "fresh").
+fn worktree_suffixes(site: &SiteStatus) -> Vec<gtk::Widget> {
+    let mut widgets: Vec<gtk::Widget> = Vec::new();
+    let Some(setup) = &site.worktree else { return widgets };
+    if setup.busy() {
+        widgets.push(gtk::Spinner::builder().spinning(true).valign(gtk::Align::Center).build().upcast());
+        widgets.push(gtk::Label::builder().label(setup.text()).css_classes(["dim-label", "caption"]).build().upcast());
+    } else if setup.failed() {
+        let warning = gtk::Image::from_icon_name("dialog-warning-symbolic");
+        warning.add_css_class("warning");
+        warning.set_tooltip_text(Some(&setup_error(setup)));
+        widgets.push(warning.upcast());
+    }
+    if !setup.database.is_empty() {
+        let tag = badge(if setup.db_mode.is_empty() { "own database" } else { setup.db_mode.as_str() }, "");
+        tag.set_tooltip_text(Some(&format!("Its own database: {}", setup.database)));
+        widgets.push(tag.upcast());
+    }
+    widgets
+}
+
+fn setup_error(setup: &WorktreeStatus) -> String {
+    if setup.error.is_empty() { "The setup failed.".to_owned() } else { setup.error.clone() }
 }
 
 /// What a site's list row warns about: the site, its document root, a domain, or its FrankenPHP.

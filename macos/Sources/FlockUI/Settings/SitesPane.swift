@@ -73,8 +73,12 @@ struct SitesPane: View {
                         selectionState.wrappedValue = $0
                         listFocusState.wrappedValue = true
                     })) {
-                        ForEach(sites) { site in
+                        ForEach(sites.topLevel) { site in
                             siteRow(site).tag(site.id)
+                            // Its git worktrees, under it.
+                            ForEach(sites.worktrees(of: site.name)) { worktree in
+                                worktreeRow(worktree).tag(worktree.id)
+                            }
                         }
                     }
                     .listStyle(.inset)
@@ -84,8 +88,14 @@ struct SitesPane: View {
                     Divider()
 
                     ScrollView {
-                        detail(selected, phpVersions: phpVersions, nodeMajors: nodeMajors)
-                            .padding(16)
+                        Group {
+                            if selected.isWorktree {
+                                WorktreeDetail(worktree: selected) { selectionState.wrappedValue = selected.parent }
+                            } else {
+                                detail(selected, phpVersions: phpVersions, nodeMajors: nodeMajors)
+                            }
+                        }
+                        .padding(16)
                     }
                     // Another site's details start at the top.
                     .id(selected.id)
@@ -188,6 +198,19 @@ struct SitesPane: View {
         }
         .padding(.vertical, 2)
         .help(site.path)
+    }
+
+    /// A worktree in the list, indented under its site: its branch, and how its setup goes.
+    private func worktreeRow(_ worktree: Status.Site) -> some View {
+        HStack(spacing: 6) {
+            Image(systemName: "arrow.triangle.branch").font(.caption).foregroundStyle(.secondary)
+            Text(worktree.worktreeLabel).lineLimit(1).truncationMode(.middle)
+            Spacer(minLength: 4)
+            WorktreeState(worktree: worktree)
+        }
+        .padding(.leading, 12)
+        .padding(.vertical, 1)
+        .help(worktree.path)
     }
 
     /// What a site's list row warns about: the site, its document root, one of its domains, or its FrankenPHP.
@@ -336,6 +359,13 @@ struct SitesPane: View {
             if site.boost == .missing || site.boost == .outdated {
                 section("Laravel Boost") {
                     boost(site)
+                }
+            }
+
+            let worktrees = (model.status?.sites ?? []).worktrees(of: site.name)
+            if !worktrees.isEmpty || isGitCheckout(site.path) {
+                SiteWorktreesSection(site: site, worktrees: worktrees) { worktree in
+                    selectionState.wrappedValue = worktree.id
                 }
             }
         }
@@ -879,6 +909,12 @@ struct SitesPane: View {
     }
 
     private func fileName(_ path: String) -> String { URL(fileURLWithPath: path).lastPathComponent }
+
+    /// A main git checkout, which can have worktrees (in a worktree, .git is a file).
+    private func isGitCheckout(_ path: String) -> Bool {
+        var isDirectory: ObjCBool = false
+        return FileManager.default.fileExists(atPath: (path as NSString).appendingPathComponent(".git"), isDirectory: &isDirectory) && isDirectory.boolValue
+    }
 
     /// "22.11.0" → "22"; pins and isolations are majors.
     private func major(_ version: String) -> String { String(version.split(separator: ".").first ?? "") }

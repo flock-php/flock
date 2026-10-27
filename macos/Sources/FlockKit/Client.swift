@@ -175,6 +175,51 @@ public actor FlockClient {
         _ = try await send("DELETE", "/v1/shares/\(escape(site))")
     }
 
+    // MARK: Worktrees
+
+    /// Creates a git worktree of a site on branch (a new branch from `from`, the current commit by
+    /// default; a branch that exists is checked out) and starts its setup.
+    public func createWorktree(site: String, branch: String, from: String = "", db: DatabaseMode? = nil) async throws -> WorktreeCreated {
+        struct Request: Encodable { let site: String; let branch: String; let from: String; let db: String }
+        let body = try JSONEncoder().encode(Request(site: site, branch: branch, from: from, db: db?.rawValue ?? ""))
+        return try await decode(WorktreeCreated.self, "POST", "/v1/worktrees", body: body, timeout: 120)
+    }
+
+    /// Sets a worktree up again. It returns at once: the progress shows on the worktree in `status()`.
+    public func setupWorktree(path: String, again: Bool = true) async throws -> WorktreeSetup {
+        struct Request: Encodable { let path: String; let again: Bool }
+        return try await decode(WorktreeSetup.self, "POST", "/v1/worktrees/setup", body: try JSONEncoder().encode(Request(path: path, again: again)))
+    }
+
+    /// Gives a worktree another database, dropping the one Flock made for it unless keep. It
+    /// returns at once, like `setupWorktree`.
+    public func switchWorktreeDatabase(path: String, to mode: DatabaseMode, keep: Bool = false) async throws -> WorktreeSetup {
+        struct Request: Encodable {
+            let path: String, db: String, keepDB: Bool
+            enum CodingKeys: String, CodingKey { case path, db, keepDB = "keep_db" }
+        }
+        return try await decode(WorktreeSetup.self, "POST", "/v1/worktrees/db", body: try JSONEncoder().encode(Request(path: path, db: mode.rawValue, keepDB: keep)))
+    }
+
+    /// Worktrees whose folder is gone, whose database Flock kept.
+    public func leftWorktrees() async throws -> [LeftWorktree] {
+        try await decode([LeftWorktree]?.self, "GET", "/v1/worktrees/left") ?? []
+    }
+
+    /// Runs a worktree's before_delete hook, removes it with git and drops the database Flock made
+    /// for it unless keepDB; force removes it also with changes or a failing hook. For a worktree
+    /// whose folder is gone (`leftWorktrees()`), it drops the database. It returns what they printed.
+    @discardableResult
+    public func removeWorktree(path: String, force: Bool = false, keepDB: Bool = false) async throws -> String {
+        struct Request: Encodable {
+            let path: String, force: Bool, keepDB: Bool
+            enum CodingKeys: String, CodingKey { case path, force, keepDB = "keep_db" }
+        }
+        struct Response: Decodable { let output: String }
+        let body = try JSONEncoder().encode(Request(path: path, force: force, keepDB: keepDB))
+        return try await decode(Response.self, "POST", "/v1/worktrees/remove", body: body, timeout: 600).output
+    }
+
     // MARK: AI clients
 
     /// The AI clients Flock's MCP server can be registered with.

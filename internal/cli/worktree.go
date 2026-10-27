@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"text/tabwriter"
@@ -52,45 +51,16 @@ until Flock has set it up.`,
 			if site.IsWorktree() {
 				site, _ = s.cfg.FindSite(site.Parent)
 			}
-			if info, err := os.Stat(filepath.Join(site.Path, ".git")); err != nil || !info.IsDir() {
-				return fmt.Errorf("%s is not the main checkout of a git repository", site.Path)
-			}
-
-			branch := args[0]
-			slug := config.WorktreeSlug(branch)
-			if slug == "" {
-				return fmt.Errorf("%q can't name a worktree", branch)
-			}
-			if path == "" {
-				settings, err := worktree.Load(site.Path, "")
-				if err != nil {
+			if path != "" {
+				if path, err = filepath.Abs(path); err != nil {
 					return err
 				}
-				vars := worktree.Vars{"folder": filepath.Base(site.Path), "branch": slug, "parent": site.Name}
-				path = vars.Expand(settings.Path)
-				if !filepath.IsAbs(path) {
-					path = filepath.Join(site.Path, path)
-				}
 			}
-			if path, err = filepath.Abs(path); err != nil {
+			created, err := s.client().CreateWorktree(cmd.Context(), api.WorktreeCreate{Site: site.Name, Branch: args[0], From: from, Path: path, DB: db})
+			if err != nil {
 				return err
 			}
-
-			gitArgs := []string{"-C", site.Path, "worktree", "add", path, branch}
-			if exec.Command("git", "-C", site.Path, "rev-parse", "--verify", "--quiet", "refs/heads/"+branch).Run() != nil {
-				gitArgs = []string{"-C", site.Path, "worktree", "add", "-b", branch, path}
-				if from != "" {
-					gitArgs = append(gitArgs, from)
-				}
-			} else if from != "" {
-				return fmt.Errorf("the branch %s exists already, so it can't start from %s", branch, from)
-			}
-			git := exec.CommandContext(cmd.Context(), "git", gitArgs...)
-			git.Stdout, git.Stderr = cmd.ErrOrStderr(), cmd.ErrOrStderr()
-			if err := git.Run(); err != nil {
-				return fmt.Errorf("git worktree add failed: %w", err)
-			}
-
+			path = created.Path
 			if err := setupWorktree(cmd, s, path, false, db); err != nil {
 				return err
 			}

@@ -49,6 +49,8 @@ internal static class Ui
     public const string GlyphRobot = "\uE99A";
     public const string GlyphPuzzle = "\uEA86";
     public const string GlyphCheck = "\uE73E";
+    public const string GlyphChevronRight = "\uE76C";
+    public const string GlyphChevronDown = "\uE70D";
 
     public static T Resource<T>(string key) => (T)Application.Current.Resources[key];
 

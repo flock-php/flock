@@ -378,6 +378,40 @@ impl Client {
         self.request("DELETE", &format!("/v1/mcp/clients/{}", escape(id)), None::<&()>, MCP_TIMEOUT)
     }
 
+    /// Creates a worktree of site on branch (a new branch from `from`, "" for the current commit;
+    /// a branch that exists is checked out) and starts its setup. db is "", shared, copy or fresh.
+    pub fn create_worktree(&self, site: &str, branch: &str, from: &str, db: &str) -> Result<WorktreeCreated, Error> {
+        let body = serde_json::json!({ "site": site, "branch": branch, "from": from, "db": db });
+        self.request("POST", "/v1/worktrees", Some(&body), CHANGE_TIMEOUT)
+    }
+
+    /// Sets a worktree up, or joins the setup that runs; again sets up one that is set up already.
+    pub fn setup_worktree(&self, path: &str, again: bool) -> Result<WorktreeStatus, Error> {
+        let body = serde_json::json!({ "path": path, "again": again });
+        self.request("POST", "/v1/worktrees/setup", Some(&body), DEFAULT_TIMEOUT)
+    }
+
+    /// Gives a worktree the site's database (shared) or one of its own (copy, fresh), as its job.
+    /// The database Flock made for it before is dropped unless keep_db.
+    pub fn switch_worktree_database(&self, path: &str, db: &str, keep_db: bool) -> Result<WorktreeStatus, Error> {
+        let body = serde_json::json!({ "path": path, "db": db, "keep_db": keep_db });
+        self.request("POST", "/v1/worktrees/db", Some(&body), DEFAULT_TIMEOUT)
+    }
+
+    /// Worktrees whose folder is gone, whose database Flock kept.
+    pub fn left_worktrees(&self) -> Result<Vec<LeftWorktree>, Error> {
+        self.request::<_, Option<Vec<LeftWorktree>>>("GET", "/v1/worktrees/left", None::<&()>, DEFAULT_TIMEOUT)
+            .map(Option::unwrap_or_default)
+    }
+
+    /// Runs the worktree's before_delete hook, removes it with git and drops the database Flock
+    /// made for it unless keep_db; for one whose folder is gone, only drops its database. Answers
+    /// with what the hook and git printed. force removes it despite changes or a failing hook.
+    pub fn remove_worktree(&self, path: &str, force: bool, keep_db: bool) -> Result<String, Error> {
+        let body = serde_json::json!({ "path": path, "force": force, "keep_db": keep_db });
+        self.request::<_, WorktreeRemoval>("POST", "/v1/worktrees/remove", Some(&body), INSTALL_TIMEOUT).map(|r| r.output)
+    }
+
     /// Serves every folder in path as a site (`flock park`).
     pub fn park(&self, path: &str) -> Result<Status, Error> {
         self.request("POST", "/v1/parked", Some(&serde_json::json!({ "path": path })), DEFAULT_TIMEOUT)
@@ -906,6 +940,12 @@ pub struct SiteStatus {
     pub node_shadowed: String,
     pub secured: bool,
     pub parked: bool,
+    /// Set on a git worktree of another site: that site's name, whose settings it uses. branch is
+    /// the worktree's branch ("" when HEAD is detached).
+    pub parent: String,
+    pub branch: String,
+    /// The setup of a worktree Flock set up (None for others).
+    pub worktree: Option<WorktreeStatus>,
     pub url: Option<String>,
     pub problem: Option<String>,
     pub notice: Option<String>,
@@ -947,6 +987,24 @@ impl SiteStatus {
         !self.root_pinned.is_empty()
     }
 
+    pub fn is_worktree(&self) -> bool {
+        !self.parent.is_empty()
+    }
+
+    /// What a worktree is listed as: its branch, or the name it is served under ("feature-auth" of
+    /// feature-auth.acme) when HEAD is detached.
+    pub fn worktree_label(&self) -> String {
+        if !self.branch.is_empty() {
+            return self.branch.clone();
+        }
+        self.name.split('.').next().unwrap_or(&self.name).to_owned()
+    }
+
+    /// The database Flock made for the worktree, if it has one of its own.
+    pub fn own_database(&self) -> Option<&str> {
+        self.worktree.as_ref().map(|w| w.database.as_str()).filter(|d| !d.is_empty())
+    }
+
     /// FrankenPHP runs PHP 8.2 and newer; a version that can't be read doesn't block it.
     pub fn supports_frankenphp(&self) -> bool {
         let mut parts = self.php.split('.').map(|p| p.parse::<u32>());
@@ -954,6 +1012,19 @@ impl SiteStatus {
             (Some(Ok(major)), Some(Ok(minor))) => (major, minor) >= (8, 2),
             _ => true,
         }
+    }
+}
+
+impl Status {
+    /// The sites the lists show at the top: those that aren't worktrees, and worktrees whose site
+    /// isn't served (any more).
+    pub fn top_sites(&self) -> Vec<&SiteStatus> {
+        self.sites.iter().filter(|s| !s.is_worktree() || !self.sites.iter().any(|p| p.name == s.parent)).collect()
+    }
+
+    /// The worktrees of a site.
+    pub fn worktrees_of(&self, name: &str) -> Vec<&SiteStatus> {
+        self.sites.iter().filter(|s| s.parent == name).collect()
     }
 }
 
@@ -982,6 +1053,79 @@ pub struct SiteFrankenPhp {
     pub progress: f64,
     pub problem: String,
     pub log: String,
+}
+
+/// The setup of a git worktree (worktree.Status).
+#[derive(Deserialize, Debug, Clone, PartialEq, Default)]
+#[serde(default)]
+pub struct WorktreeStatus {
+    /// queued, running, ready or failed.
+    pub state: String,
+    /// What a running setup does now, e.g. "composer install".
+    pub step: String,
+    pub error: String,
+    /// The setup's log, for /v1/logs/services/{log}.
+    pub log: String,
+    /// The database mode asked for: shared, copy, fresh, or "" for the project's.
+    pub db_mode: String,
+    /// The worktree's own database, "" when it uses the site's.
+    pub database: String,
+}
+
+impl WorktreeStatus {
+    /// Queued or running: the setup, or a switch of the database.
+    pub fn busy(&self) -> bool {
+        self.state == "queued" || self.state == "running"
+    }
+
+    pub fn failed(&self) -> bool {
+        self.state == "failed"
+    }
+
+    /// "Waiting…", "composer install…", "Ready" or "Setup failed".
+    pub fn text(&self) -> String {
+        match self.state.as_str() {
+            "queued" => "Waiting…".to_owned(),
+            "running" if self.step.is_empty() => "Setting up…".to_owned(),
+            "running" => format!("{}…", capitalized(&self.step)),
+            "failed" => "Setup failed".to_owned(),
+            _ => "Ready".to_owned(),
+        }
+    }
+}
+
+fn capitalized(text: &str) -> String {
+    let mut chars = text.chars();
+    chars.next().map(|c| c.to_uppercase().chain(chars).collect()).unwrap_or_default()
+}
+
+/// POST /v1/worktrees (api.WorktreeCreated).
+#[derive(Deserialize, Debug, Clone, PartialEq, Default)]
+#[serde(default)]
+pub struct WorktreeCreated {
+    pub path: String,
+    pub setup: WorktreeStatus,
+}
+
+/// POST /v1/worktrees/remove (api.WorktreeRemoval).
+#[derive(Deserialize, Debug, Clone, PartialEq, Default)]
+#[serde(default)]
+struct WorktreeRemoval {
+    output: String,
+}
+
+/// GET /v1/worktrees/left (config.WorktreeEntry): a worktree whose folder is gone, whose database
+/// Flock kept.
+#[derive(Deserialize, Debug, Clone, PartialEq, Default)]
+#[serde(default)]
+pub struct LeftWorktree {
+    pub path: String,
+    pub site: String,
+    pub slug: String,
+    pub database: String,
+    /// pgsql, mysql, mariadb or sqlite.
+    pub engine: String,
+    pub gone: bool,
 }
 
 /// A site's share (`flock share`).
@@ -1058,6 +1202,49 @@ mod tests {
         assert_eq!(status.sites[0].url.as_deref(), Some("https://acme.test"));
         assert!(!status.sites[0].shared());
         assert!(!status.is_degraded());
+    }
+
+    // A site with two worktrees: one set up with a database of its own, one Flock didn't set up.
+    #[test]
+    fn decodes_worktrees() {
+        let json = r#"{"sites":[
+            {"name":"acme","domain":"acme.test","path":"/home/a/acme","secured":true},
+            {"name":"feature-auth.acme","domain":"feature-auth.acme.test","path":"/home/a/acme-feature-auth",
+              "parent":"acme","branch":"feature/auth","url":"https://feature-auth.acme.test",
+              "worktree":{"state":"running","step":"composer install","log":"worktree-feature-auth.acme",
+                "db_mode":"copy","database":"acme_feature_auth"}},
+            {"name":"old.acme","domain":"old.acme.test","path":"/home/a/acme-old","parent":"acme","worktree":null}]}"#;
+        let status: Status = serde_json::from_str(json).unwrap();
+        assert_eq!(status.top_sites().len(), 1);
+        let worktrees = status.worktrees_of("acme");
+        assert_eq!(worktrees.len(), 2);
+        let auth = worktrees[0];
+        assert!(auth.is_worktree());
+        assert_eq!(auth.worktree_label(), "feature/auth");
+        assert_eq!(auth.own_database(), Some("acme_feature_auth"));
+        let setup = auth.worktree.as_ref().unwrap();
+        assert!(setup.busy());
+        assert_eq!(setup.text(), "Composer install…");
+        assert_eq!(setup.log, "worktree-feature-auth.acme");
+        // Detached, and not set up by Flock.
+        assert_eq!(worktrees[1].worktree_label(), "old");
+        assert_eq!(worktrees[1].worktree, None);
+        assert_eq!(worktrees[1].own_database(), None);
+        // An older daemon's site.
+        assert!(!status.sites[0].is_worktree());
+        assert!(status.worktrees_of("old.acme").is_empty());
+    }
+
+    #[test]
+    fn decodes_left_worktrees() {
+        let json = r#"[{"path":"/home/a/acme-gone","site":"acme","slug":"gone","db_mode":"copy",
+            "database":"acme_gone","engine":"pgsql","gone":true}]"#;
+        let left: Vec<LeftWorktree> = serde_json::from_str(json).unwrap();
+        assert_eq!(left[0].database, "acme_gone");
+        assert!(left[0].gone);
+        let created: WorktreeCreated =
+            serde_json::from_str(r#"{"path":"/home/a/acme-x","setup":{"state":"queued","log":"worktree-x.acme"}}"#).unwrap();
+        assert_eq!(created.setup.text(), "Waiting…");
     }
 
     #[test]

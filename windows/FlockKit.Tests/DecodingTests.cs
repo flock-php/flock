@@ -51,6 +51,77 @@ public class DecodingTests
     }
 
     [Fact]
+    public void DecodesWorktreesAndTheirSetup()
+    {
+        var status = FlockJson.Decode<Status>("""
+            {"version":"dev","pid":1,"started_at":"2026-10-13T14:10:01Z","processes":[],
+             "sites":[{"name":"acme","domain":"acme.test","path":"C:\\code\\acme","php":"8.4"},
+                      {"name":"feature-auth.acme","domain":"feature-auth.acme.test","path":"C:\\code\\acme-feature-auth","php":"8.4",
+                       "parent":"acme","branch":"feature/auth",
+                       "worktree":{"state":"running","step":"Installing Composer packages","log":"worktree-feature-auth.acme","db_mode":"copy","database":"acme_feature_auth"}},
+                      {"name":"a1b2c3.acme","domain":"a1b2c3.acme.test","path":"C:\\code\\a1b2c3","php":"8.4","parent":"acme",
+                       "worktree":{"state":"failed","error":"composer install failed","log":"worktree-a1b2c3.acme"}},
+                      {"name":"old.acme","domain":"old.acme.test","path":"C:\\code\\old","php":"8.4","parent":"acme","branch":"old"}]}
+            """);
+
+        var (site, running, failed, untouched) = (status.Sites[0], status.Sites[1], status.Sites[2], status.Sites[3]);
+        Assert.False(site.IsWorktree);
+        Assert.Null(site.Worktree);
+        Assert.Equal("", site.Branch);
+
+        Assert.True(running.IsWorktree);
+        Assert.Equal(("acme", "feature/auth", "feature/auth"), (running.Parent, running.Branch, running.WorktreeLabel));
+        var setup = running.Worktree!;
+        Assert.Equal((Status.WorktreeState.Running, "Installing Composer packages", ""), (setup.State, setup.Step, setup.Error));
+        Assert.Equal(("worktree-feature-auth.acme", Status.WorktreeDatabase.Copy, "acme_feature_auth"), (setup.Log, setup.DbMode, setup.Database));
+        Assert.True(setup.IsBusy);
+        Assert.True(setup.HasOwnDatabase);
+
+        // A detached HEAD: listed by the name it is served under.
+        Assert.Equal("a1b2c3", failed.WorktreeLabel);
+        Assert.True(failed.Worktree!.IsFailed);
+        Assert.False(failed.Worktree.IsBusy);
+        Assert.Equal("", failed.Worktree.DbMode);
+        Assert.False(failed.Worktree.HasOwnDatabase);
+
+        // Served, but not set up by Flock.
+        Assert.True(untouched.IsWorktree);
+        Assert.Null(untouched.Worktree);
+    }
+
+    [Fact]
+    public void NestsWorktreesUnderTheirSite()
+    {
+        static Status.Site Site(string name, string? parent = null) => new() { Name = name, Parent = parent };
+        var status = new Status
+        {
+            Sites = [Site("acme"), Site("blog"), Site("b.acme", "acme"), Site("x.gone", "gone"), Site("a.blog", "blog"), Site("a.acme", "acme")],
+        };
+
+        Assert.Equal(["acme", "b.acme", "a.acme", "blog", "a.blog", "x.gone"], status.SitesWithWorktrees().Select(s => s.Name));
+        Assert.Equal(["b.acme", "a.acme"], status.WorktreesOf("acme").Select(s => s.Name));
+        Assert.Empty(status.WorktreesOf("b.acme"));
+    }
+
+    [Fact]
+    public void DecodesLeftWorktreesAndACreatedOne()
+    {
+        var left = FlockJson.Decode<List<LeftWorktree>>("""
+            [{"path":"C:\\code\\acme-old","site":"acme","slug":"old","set_up":true,"db_mode":"copy","database":"acme_old","engine":"pgsql","gone":true}]
+            """);
+        Assert.Equal(("C:\\code\\acme-old", "acme", "old"), (left[0].Path, left[0].Site, left[0].Slug));
+        Assert.Equal(("acme_old", "pgsql", true), (left[0].Database, left[0].Engine, left[0].Gone));
+        Assert.Empty(FlockJson.Decode<List<LeftWorktree>>("null"));
+
+        var created = FlockJson.Decode<WorktreeCreated>("""
+            {"path":"C:\\code\\acme-feature-auth","setup":{"state":"queued","log":"worktree-feature-auth.acme"}}
+            """);
+        Assert.Equal("C:\\code\\acme-feature-auth", created.Path);
+        Assert.Equal(Status.WorktreeState.Queued, created.Setup.State);
+        Assert.True(created.Setup.IsBusy);
+    }
+
+    [Fact]
     public void DecodesWhereASiteVersionComesFrom()
     {
         var status = FlockJson.Decode<Status>("""

@@ -318,3 +318,26 @@ private func decode<T: Decodable>(_ type: T.Type, _ json: String) throws -> T {
 
     #expect(ShareStatus.parseAllow(" bob@acme.com,  *@client.com\nann@x.io ") == ["bob@acme.com", "*@client.com", "ann@x.io"])
 }
+
+@Test func decodesWorktreesUnderTheirSite() throws {
+    let status = try decode(Status.self, """
+    {"sites":[{"name":"acme","domain":"acme.test","path":"/code/acme","php":"8.5"},
+              {"name":"feature-auth.acme","domain":"feature-auth.acme.test","path":"/code/acme-feature-auth","php":"8.5",
+               "parent":"acme","branch":"feature/auth",
+               "worktree":{"state":"running","step":"composer install","log":"worktree-feature-auth.acme","db_mode":"copy","database":"acme_feature_auth"}},
+              {"name":"bisect.acme","domain":"bisect.acme.test","path":"/code/bisect","php":"8.5","parent":"acme","branch":""},
+              {"name":"blog","domain":"blog.test","path":"/code/blog","php":"8.4","parent":""}]}
+    """)
+
+    #expect(status.sites.topLevel.map(\.name) == ["acme", "blog"])
+    let worktrees = status.sites.worktrees(of: "acme")
+    #expect(worktrees.map(\.worktreeLabel) == ["feature/auth", "bisect"])
+    let setup = try #require(worktrees[0].worktree)
+    #expect(setup.busy && setup.step == "composer install" && setup.dbMode == .copy && setup.database == "acme_feature_auth")
+    #expect(worktrees[1].worktree == nil && !status.sites[3].isWorktree)
+
+    let left = try decode([LeftWorktree].self, """
+    [{"path":"/code/acme-old","site":"acme","slug":"old","database":"acme_old","engine":"pgsql","gone":true}]
+    """)
+    #expect(left.first?.database == "acme_old")
+}

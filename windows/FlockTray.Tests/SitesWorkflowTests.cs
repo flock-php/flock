@@ -155,7 +155,18 @@ public sealed class SitesWorkflowTests : IDisposable
         Assert.Equal("8.4", retained.Php);
     }
 
+    [Fact]
+    public void ListsWorktreesRightAfterTheirSite()
+    {
+        var model = new SitesViewModel(service);
+        model.Apply(new Status { Sites = [Site("acme", "8.4"), Site("blog", "8.3"), Worktree("feature.acme", "acme")] });
+
+        Assert.Equal(["acme", "feature.acme", "blog"], model.Sites.Select(row => row.Name));
+    }
+
     private static Status.Site Site(string name, string php) => new() { Name = name, Domain = name + ".test", Php = php };
+
+    private static Status.Site Worktree(string name, string parent) => new() { Name = name, Domain = name + ".test", Php = "8.4", Parent = parent };
 
     private sealed class Handler : HttpMessageHandler
     {

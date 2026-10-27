@@ -134,6 +134,12 @@ public struct Status: Decodable, Sendable, Equatable {
         public var boost: Boost
         /// The site's tunnel (`flock share`), while there is one.
         public var share: ShareStatus?
+        /// Set on a git worktree of another site: that site's name, whose settings it uses.
+        public var parent: String?
+        /// A worktree's branch; empty when its HEAD is detached.
+        public var branch: String
+        /// How Flock set the worktree up; nil when it hasn't.
+        public var worktree: WorktreeSetup?
 
         public var id: String { name }
 
@@ -173,7 +179,7 @@ public struct Status: Decodable, Sendable, Equatable {
         enum CodingKeys: String, CodingKey {
             case name, domain, path, php, phpSource, phpPinned, phpFile, node, nodeSource, nodePinned, nodeFile, nodeShadowed
             case secured, parked, url, problem, notice, root, rootSource, rootPinned, rootFile, rootState, rootSuggestions
-            case domains, debugging, server, worker, octaneAvailable, boost, share
+            case domains, debugging, server, worker, octaneAvailable, boost, share, parent, branch, worktree
             case frankenPHP = "frankenphp"
         }
 
@@ -210,6 +216,9 @@ public struct Status: Decodable, Sendable, Equatable {
             frankenPHP = try c.decodeIfPresent(SiteFrankenPHP.self, forKey: .frankenPHP)
             boost = try c.decodeIfPresent(Boost.self, forKey: .boost) ?? .none
             share = try c.decodeIfPresent(ShareStatus.self, forKey: .share)
+            parent = try c.decodeIfPresent(String.self, forKey: .parent).flatMap { $0.isEmpty ? nil : $0 }
+            branch = try c.decodeIfPresent(String.self, forKey: .branch) ?? ""
+            worktree = try c.decodeIfPresent(WorktreeSetup.self, forKey: .worktree)
         }
     }
 

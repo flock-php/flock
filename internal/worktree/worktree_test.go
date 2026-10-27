@@ -3,8 +3,10 @@ package worktree
 import (
 	"bytes"
 	"context"
+	"errors"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"slices"
@@ -218,5 +220,44 @@ func TestManagerRunsOneSetupPerWorktreeAndJoinsIt(t *testing.T) {
 	m.Forget("/code/acme-x")
 	if m.Get("/code/acme-x") != nil {
 		t.Error("Forget kept the status")
+	}
+}
+
+func TestCreateMakesTheWorktreeWhereFlockYmlSays(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git is not installed")
+	}
+	site := filepath.Join(t.TempDir(), "acme")
+	git := func(args ...string) {
+		t.Helper()
+		if out, err := exec.Command("git", append([]string{"-C", site, "-c", "user.name=Flock", "-c", "user.email=flock@example.test"}, args...)...).CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v\n%s", args, err, out)
+		}
+	}
+	if err := os.Mkdir(site, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	git("init", "-q")
+	git("commit", "-q", "--allow-empty", "-m", "init")
+	git("branch", "existing")
+	ctx := context.Background()
+
+	path, err := Create(ctx, site, "acme", "feature-auth", "feature/auth", "", "")
+	if err != nil || path != filepath.Join(filepath.Dir(site), "acme-feature-auth") {
+		t.Fatalf("default path: %q %v", path, err)
+	}
+	if path, err = Create(ctx, site, "acme", "existing", "existing", "", filepath.Join(t.TempDir(), "x")); err != nil {
+		t.Fatalf("an existing branch: %v", err)
+	}
+
+	for _, c := range []struct{ branch, from, path string }{
+		{"feature/auth", "", ""},                 // checked out already
+		{"existing", "main", t.TempDir() + "/y"}, // can't start from elsewhere
+		{"bad..name", "", ""},                    // not a branch name
+		{"other", "", filepath.Dir(site)},        // the folder exists
+	} {
+		if _, err := Create(ctx, site, "acme", "x", c.branch, c.from, c.path); !errors.Is(err, ErrInvalid) {
+			t.Errorf("%+v: want ErrInvalid, got %v", c, err)
+		}
 	}
 }

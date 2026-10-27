@@ -30,7 +30,8 @@ public sealed class SitesViewModel : ObservableObject
         {
             return;
         }
-        synchronizer.Synchronize(Sites, status.Sites, site => site.Name, site => site.Name,
+        // Each site's worktrees right after it, so the list nests them.
+        synchronizer.Synchronize(Sites, status.SitesWithWorktrees(), site => site.Name, site => site.Name,
             site => new SiteRowViewModel(site), (row, site) => row.Apply(site));
         foreach (var row in Sites)
         {

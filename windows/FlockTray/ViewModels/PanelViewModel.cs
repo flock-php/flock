@@ -12,6 +12,7 @@ public sealed class PanelViewModel : ObservableObject, IDisposable
     private readonly RuntimeService model;
     private readonly CollectionSynchronizer<string, PanelSiteRow> siteSynchronizer = new();
     private readonly CollectionSynchronizer<string, PanelServiceRow> serviceSynchronizer = new();
+    private HashSet<string>? expanded;
     private bool released;
 
     public PanelViewModel(RuntimeService model)
@@ -43,6 +44,42 @@ public sealed class PanelViewModel : ObservableObject, IDisposable
     public IAsyncRelayCommand RestartCommand { get; }
 
     public Task SetDumpsAsync(bool enabled) => model.SetDumpsAsync(enabled);
+
+    /// <summary>Shows or hides a site's worktrees under it, and remembers it in the preferences.</summary>
+    public void ToggleWorktrees(string site)
+    {
+        if (!Expanded.Add(site))
+        {
+            Expanded.Remove(site);
+        }
+        RefreshRows();
+        _ = SaveExpandedAsync(string.Join('\n', Expanded.Order(StringComparer.Ordinal)));
+    }
+
+    /// <summary>Shows a site's worktrees without remembering it (for screenshots).</summary>
+    internal void ShowWorktrees(string site)
+    {
+        if (Expanded.Add(site))
+        {
+            RefreshRows();
+        }
+    }
+
+    // Read once: the panel's own toggles are the newer state from then on.
+    private HashSet<string> Expanded => expanded ??= model.Preferences.Snapshot.ExpandedSites
+        .Split('\n', StringSplitOptions.RemoveEmptyEntries).ToHashSet(StringComparer.Ordinal);
+
+    private async Task SaveExpandedAsync(string value)
+    {
+        try
+        {
+            await model.Preferences.UpdateAsync(data => data with { ExpandedSites = value });
+        }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException or System.Text.Json.JsonException or OperationCanceledException)
+        {
+            // PreferencesService reports a failed save (Error); the panel keeps the state until it quits.
+        }
+    }
 
     public void DismissError()
     {
@@ -90,8 +127,11 @@ public sealed class PanelViewModel : ObservableObject, IDisposable
     private void RefreshRows()
     {
         var status = model.Status;
-        siteSynchronizer.Synchronize(Sites, status?.Sites ?? [], row => row.Domain, site => site.Domain,
-            site => new PanelSiteRow(site), (row, site) => row.Update(site));
+        // Worktrees are listed under their site, which shows them when it is expanded.
+        List<PanelSiteValue> sites = status is null ? [] : status.Sites.Where(site => !site.IsWorktree)
+            .Select(site => new PanelSiteValue(site, status.WorktreesOf(site.Name), Expanded.Contains(site.Name))).ToList();
+        siteSynchronizer.Synchronize(Sites, sites, row => row.Domain, value => value.Site.Domain,
+            value => new PanelSiteRow(value), (row, value) => row.Update(value));
 
         List<PanelServiceValue> values = status is null ? [] : BuildServices(status);
         serviceSynchronizer.Synchronize(Services, values, row => row.Id, row => row.Id,
@@ -154,10 +194,17 @@ public sealed class PanelViewModel : ObservableObject, IDisposable
     }
 }
 
-public sealed class PanelSiteRow(Status.Site value) : ObservableObject
-{
-    private Status.Site current = value;
+/// <summary>A site of the panel, with its worktrees and whether they are shown.</summary>
+public sealed record PanelSiteValue(Status.Site Site, IReadOnlyList<Status.Site> Worktrees, bool Expanded);
 
+public sealed class PanelSiteRow(PanelSiteValue value) : ObservableObject
+{
+    private Status.Site current = value.Site;
+    private PanelSiteValue entry = value;
+
+    public string Name => current.Name;
+    public IReadOnlyList<Status.Site> Worktrees => entry.Worktrees;
+    public bool Expanded => entry.Expanded;
     public string Domain => current.Domain;
     public string Path => current.Path;
     public string? Url => current.Url;
@@ -170,9 +217,10 @@ public sealed class PanelSiteRow(Status.Site value) : ObservableObject
     public bool IsShared => current.IsShared;
     public string? ShareUrl => current.Share?.Url;
 
-    public void Update(Status.Site value)
+    public void Update(PanelSiteValue value)
     {
-        current = value;
+        entry = value;
+        current = value.Site;
         OnPropertyChanged(string.Empty);
     }
 }

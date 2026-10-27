@@ -39,6 +39,8 @@ internal sealed class Screenshots(Screenshots.Options options)
         new("settings-sites-https", app => app.ShowSite("acme")),
         new("settings-sites-add-domain", app => app.ShowAddDomain("acme", "admin")),
         new("settings-sites-pin", app => app.ShowSiteMenu("shop")),
+        new("settings-sites-worktrees", app => app.ShowSite("acme", heading: "Worktrees")),
+        new("settings-sites-worktree", app => app.ShowSite("feature-checkout.acme")),
         new("settings-php", app => app.ShowSettings(SettingsPane.Php)),
         new("settings-node", app => app.ShowSettings(SettingsPane.Node)),
         new("settings-services-postgres", app => app.ShowService("postgres")),
@@ -48,6 +50,7 @@ internal sealed class Screenshots(Screenshots.Options options)
         new("mail-window", app => app.ShowMail()),
         new("dumps-window", app => app.ShowWindow(WindowKind.Dumps)),
         new("panel-running", app => app.ShowPanelForScreenshot()),
+        new("panel-worktrees", app => app.ShowPanelForScreenshot(expanding: ["acme"])),
     ];
 
     /// <summary>The number of shots that failed: the process's exit code.</summary>

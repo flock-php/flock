@@ -59,6 +59,7 @@ internal sealed partial class SitesPane : Pane
         activeLifetime = CancellationTokenSource.CreateLinkedTokenSource(hidden);
         viewModel.Apply(Model.Status);
         UpdateRetained();
+        LoadLeftWorktrees(force: true);
         await HandlePendingSecureAsync(hidden);
     }
 
@@ -81,6 +82,7 @@ internal sealed partial class SitesPane : Pane
     {
         viewModel.Apply(Model.Status);
         UpdateRetained();
+        LoadLeftWorktrees();
         if (active && Model.PendingSecure is not null && pendingSecure.IsCompleted)
         {
             pendingSecure = ObservePendingSecureAsync(activeLifetime?.Token ?? CancellationToken.None);
@@ -251,7 +253,7 @@ internal sealed partial class SitesPane : Pane
             Grid.SetColumn(detailScroller, 1);
             sitesLayout.Children.Add(detailScroller);
         }
-        var detail = Detail(selected, selectedRow);
+        var detail = selected.IsWorktree ? WorktreeDetail(selected) : Detail(selected, selectedRow);
         detail.Margin = new Thickness(0, 0, 14, 8);
         detailScroller.Content = detail;
         retainedRoot ??= new Grid();
@@ -288,13 +290,27 @@ internal sealed partial class SitesPane : Pane
         private void Update()
         {
             var site = row.Snapshot;
-            var text = Ui.Column(1, Ui.Text(row.Name, "BodyStrongTextBlockStyle", wrap: false), Ui.Caption(row.Domain, wrap: false));
+            // A worktree is indented under its site, by its branch.
+            Margin = new Thickness(site.IsWorktree ? 20 : 0, 0, 0, 0);
+            var text = Ui.Column(1, Ui.Text(site.IsWorktree ? site.WorktreeLabel : row.Name, "BodyStrongTextBlockStyle", wrap: false), Ui.Caption(row.Domain, wrap: false));
             var marks = Ui.Row(6);
+            if (site.Worktree is { IsBusy: true } setup)
+            {
+                var ring = new ProgressRing { Width = 12, Height = 12 };
+                ToolTipService.SetToolTip(ring, setup.Step.Length > 0 ? setup.Step : "Setting up…");
+                marks.Children.Add(ring);
+            }
             if (Problem(site) is { } problem)
             {
                 var warning = Ui.Icon(Ui.GlyphWarning, 12, Ui.Caution);
                 ToolTipService.SetToolTip(warning, problem);
                 marks.Children.Add(warning);
+            }
+            if (site.Worktree is { HasOwnDatabase: true } own)
+            {
+                var database = Ui.Badge(own.DbMode is { Length: > 0 } mode ? mode : "own database", Ui.Tone.Neutral);
+                ToolTipService.SetToolTip(database, $"Its own database: {own.Database}");
+                marks.Children.Add(database);
             }
             if (row.Secured)
             {
@@ -324,6 +340,7 @@ internal sealed partial class SitesPane : Pane
     /// <summary>What a site's list row warns about: the site, its document root, one of its domains, or its FrankenPHP.</summary>
     private static string? Problem(Status.Site site) =>
         site.Problem
+        ?? (site.Worktree is { IsFailed: true, Error.Length: > 0 } setup ? setup.Error : null)
         ?? site.Notice
         ?? site.Domains.Select(d => d.Problem is { } p ? $"{d.Host}: {p}" : null).FirstOrDefault(p => p is not null)
         ?? (site.IsFrankenPhp && site.FrankenPhp is { IsRunning: false, IsInstalling: false, Problem.Length: > 0 } f ? f.Problem : null);
@@ -438,6 +455,9 @@ internal sealed partial class SitesPane : Pane
         {
             panel.Children.Add(Section("Laravel Boost", boost));
         }
+
+        // Last, so screenshots and the docs find it at the end of the details.
+        panel.Children.Add(Worktrees(site));
 
         var card = Ui.Card(panel, new Thickness(20, 16, 16, 20));
         card.VerticalAlignment = VerticalAlignment.Top;

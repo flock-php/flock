@@ -105,6 +105,26 @@ public sealed class Status
         public bool Up { get; init; }
     }
 
+    /// <summary>The site's git worktrees, in the status's order.</summary>
+    public List<Site> WorktreesOf(string site) => Sites.Where(s => s.Parent == site).ToList();
+
+    /// <summary>
+    /// The sites, each followed by its worktrees, for lists that nest them. A worktree whose site
+    /// isn't listed comes last.
+    /// </summary>
+    public List<Site> SitesWithWorktrees()
+    {
+        var parents = Sites.Where(s => !s.IsWorktree).Select(s => s.Name).ToHashSet();
+        var nested = new List<Site>(Sites.Count);
+        foreach (var site in Sites.Where(s => !s.IsWorktree))
+        {
+            nested.Add(site);
+            nested.AddRange(WorktreesOf(site.Name));
+        }
+        nested.AddRange(Sites.Where(s => s.IsWorktree && !parents.Contains(s.Parent!)));
+        return nested;
+    }
+
     /// <summary>Something needs attention: a warning, or a supervised process that is down.</summary>
     [JsonIgnore]
     public bool IsDegraded => Warnings.Count > 0 || Processes.Any(p => !p.Up);
@@ -189,6 +209,19 @@ public sealed class Status
         public string Boost { get; init; } = "";
         /// <summary>The site's tunnel (`flock share`), while there is one.</summary>
         public SiteShare? Share { get; init; }
+        /// <summary>Set on a git worktree of another site: that site's name, whose settings it uses.</summary>
+        public string? Parent { get; init; }
+        /// <summary>A worktree's branch; empty when its HEAD is detached.</summary>
+        public string Branch { get; init; } = "";
+        /// <summary>A worktree's setup; null until Flock sets it up.</summary>
+        public WorktreeSetup? Worktree { get; init; }
+
+        [JsonIgnore]
+        public bool IsWorktree => Parent is { Length: > 0 };
+
+        /// <summary>What a worktree is listed as: its branch, or the name it is served under ("feature-auth" of "feature-auth.acme").</summary>
+        [JsonIgnore]
+        public string WorktreeLabel => Branch.Length > 0 ? Branch : Name.Split('.')[0];
 
         [JsonIgnore]
         public bool IsFrankenPhp => Server == SiteServer.FrankenPhp;
@@ -328,6 +361,55 @@ public sealed class Status
         public bool IsFailed => State == ShareState.Failed;
     }
 
+    /// <summary>
+    /// The setup of a git worktree Flock serves: copying dependencies and .env, installs, its
+    /// database and hooks. It is followed through the status, like a share.
+    /// </summary>
+    public sealed class WorktreeSetup
+    {
+        /// <summary>One of WorktreeState.</summary>
+        public string State { get; init; } = "";
+        /// <summary>What a running setup does now.</summary>
+        public string Step { get; init; } = "";
+        /// <summary>Why it failed; the worktree is still served.</summary>
+        public string Error { get; init; } = "";
+        /// <summary>Name for /v1/logs/services/{name}.</summary>
+        public string Log { get; init; } = "";
+        /// <summary>The database mode asked for: one of WorktreeDatabase, or "" for the project's (flock.yml).</summary>
+        public string DbMode { get; init; } = "";
+        /// <summary>The worktree's own database; empty when it uses the site's.</summary>
+        public string Database { get; init; } = "";
+
+        [JsonIgnore]
+        public bool IsBusy => State is WorktreeState.Queued or WorktreeState.Running;
+
+        [JsonIgnore]
+        public bool IsFailed => State == WorktreeState.Failed;
+
+        [JsonIgnore]
+        public bool HasOwnDatabase => Database.Length > 0;
+    }
+
+    /// <summary>Values of WorktreeSetup.State.</summary>
+    public static class WorktreeState
+    {
+        public const string Queued = "queued";
+        public const string Running = "running";
+        public const string Ready = "ready";
+        public const string Failed = "failed";
+    }
+
+    /// <summary>A worktree's database modes.</summary>
+    public static class WorktreeDatabase
+    {
+        /// <summary>The site's database (the default).</summary>
+        public const string Shared = "shared";
+        /// <summary>A copy of the site's, with the branch's new migrations run.</summary>
+        public const string Copy = "copy";
+        /// <summary>An empty one, with the migrations run.</summary>
+        public const string Fresh = "fresh";
+    }
+
     /// <summary>Values of SiteShare.State.</summary>
     public static class ShareState
     {
@@ -354,6 +436,29 @@ public sealed class Status
         public int Restarts { get; init; }
         public string? LastError { get; init; }
     }
+}
+
+/// <summary>An entry of GET /v1/worktrees/left: a worktree whose folder is gone, whose database Flock kept.</summary>
+public sealed class LeftWorktree
+{
+    /// <summary>Where the worktree was; POST /v1/worktrees/remove with it drops the database.</summary>
+    public string Path { get; init; } = "";
+    /// <summary>The site it was a worktree of.</summary>
+    public string Site { get; init; } = "";
+    /// <summary>The name it was served under, e.g. "feature-auth".</summary>
+    public string Slug { get; init; } = "";
+    public string DbMode { get; init; } = "";
+    public string Database { get; init; } = "";
+    /// <summary>"pgsql", "mysql", "mariadb" or "sqlite".</summary>
+    public string Engine { get; init; } = "";
+    public bool Gone { get; init; }
+}
+
+/// <summary>POST /v1/worktrees: the new worktree's folder and its setup.</summary>
+public sealed class WorktreeCreated
+{
+    public string Path { get; init; } = "";
+    public Status.WorktreeSetup Setup { get; init; } = new();
 }
 
 /// <summary>An entry of GET /v1/mail.</summary>

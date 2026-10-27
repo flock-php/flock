@@ -41,6 +41,22 @@ type WorktreeRequest struct {
 	KeepDB bool   `json:"keep_db,omitempty"`
 }
 
+// WorktreeCreate asks for a new worktree of Site on Branch: the branch when it exists, else a new
+// one from From (HEAD when ""), at Path ("" for where flock.yml says), with the database mode DB.
+type WorktreeCreate struct {
+	Site   string `json:"site"`
+	Branch string `json:"branch"`
+	From   string `json:"from,omitempty"`
+	Path   string `json:"path,omitempty"`
+	DB     string `json:"db,omitempty"`
+}
+
+// WorktreeCreated is the new worktree's folder and its setup.
+type WorktreeCreated struct {
+	Path  string         `json:"path"`
+	Setup WorktreeStatus `json:"setup"`
+}
+
 // WorktreeRemoval is what removing a worktree printed (its before_delete hook, git).
 type WorktreeRemoval struct {
 	Output string `json:"output"`
@@ -63,6 +79,19 @@ func registerWorktrees(mux *http.ServeMux, b Backend) {
 		writeError(w, code, err)
 	}
 
+	mux.HandleFunc("POST /v1/worktrees", func(w http.ResponseWriter, r *http.Request) {
+		var req WorktreeCreate
+		if err := json.NewDecoder(io.LimitReader(r.Body, 1<<16)).Decode(&req); err != nil || req.Site == "" || req.Branch == "" {
+			writeError(w, http.StatusBadRequest, errors.New("name the site and the branch"))
+			return
+		}
+		path, st, err := b.CreateWorktree(r.Context(), req)
+		if err != nil {
+			fail(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, WorktreeCreated{Path: path, Setup: st})
+	})
 	// Starts the setup, or joins the one running; see Backend.SetupWorktree.
 	mux.HandleFunc("POST /v1/worktrees/setup", func(w http.ResponseWriter, r *http.Request) {
 		req, ok := decode(w, r)
@@ -119,6 +148,13 @@ func registerWorktrees(mux *http.ServeMux, b Backend) {
 		}
 		writeJSON(w, http.StatusOK, WorktreeRemoval{Output: out})
 	})
+}
+
+// CreateWorktree creates a worktree and starts its setup.
+func (c *Client) CreateWorktree(ctx context.Context, req WorktreeCreate) (WorktreeCreated, error) {
+	var out WorktreeCreated
+	err := c.slow().send(ctx, http.MethodPost, "/v1/worktrees", req, &out)
+	return out, err
 }
 
 // SetupWorktree starts the setup of the worktree at path, or joins the one that runs.

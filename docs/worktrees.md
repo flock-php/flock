@@ -5,7 +5,9 @@ Every git worktree of a site is served as a site of its own, at `<branch>.<site>
 ## Creating a worktree
 
 :::app
-The apps don't list worktrees yet. Create them with git, your agent app or the CLI, then open them at `<branch>.<site>.test`.
+In **Settings → Sites**, select the site and click **New Worktree…** under **Worktrees**, at the end of its settings. Enter the branch (a branch that exists is checked out, a new one starts from the current commit unless you enter another under **Start from**), choose its **Database**, and click **Create**. Flock creates the worktree next to the site and sets it up.
+
+![A site's worktrees in Settings → Sites](screenshot:settings-sites-worktrees)
 :::
 
 :::cli
@@ -47,6 +49,12 @@ flock worktree setup
 It shows what Flock does and waits until it's done. A worktree that is set up already is left alone; `--again` sets it up once more. In scripts, it exits with `0` when the worktree is ready, `1` when a step failed (the worktree is still served) and `3` when the folder isn't a worktree of a Flock site.
 :::
 
+:::app
+In **Settings → Sites**, a worktree is listed under its site, with a spinner while it's set up and a warning when its setup failed. Select it to see how it's set up: **Run Setup Again** sets it up once more, **Show Log** opens its log.
+
+![A worktree in Settings → Sites](screenshot:settings-sites-worktree)
+:::
+
 The log of each setup is in `flock logs worktree-<branch>.<site>`.
 
 ## Databases
@@ -68,7 +76,11 @@ Flock reads `DB_CONNECTION`, `DB_HOST`, `DB_PORT` and `DB_DATABASE` from the sit
 
 The worktree's database is named after the site's and the branch, e.g. `acme_feature_auth`, and `DB_DATABASE` in the worktree's `.env` names it. A SQLite file goes to the same place in the worktree as in the site. When a database by that name exists already and Flock didn't make it, Flock leaves it alone and the worktree uses the site's; the setup's log says so, and so it does when Flock can't make the database at all.
 
-Choose the mode for a project in `flock.yml` (`database: copy`), or for one worktree with `--db`.
+Choose the mode for a project in `flock.yml` (`database: copy`), or for one worktree when you create it.
+
+:::app
+To switch a worktree's database, select it in **Settings → Sites** and choose under **Database**. When it has a database of its own, Flock asks whether to drop or keep that one.
+:::
 
 :::cli
 Switch the database of a worktree that's set up, the one you're in by default:
@@ -81,7 +93,15 @@ flock worktree db shared feature/auth   # back to the site's
 The database Flock made for the worktree before is dropped (after asking), unless you add `--keep-db`.
 :::
 
-When a worktree's folder is removed (by git, your agent app or deleting it), its PostgreSQL, MySQL or MariaDB database is kept, in case you need its data; a SQLite file in the worktree goes with the folder. `flock worktree list` lists these databases, and `flock worktree remove <path>` drops one. When a worktree comes back at the same path, it gets its database back.
+When a worktree's folder is removed (by git, your agent app or deleting it), its PostgreSQL, MySQL or MariaDB database is kept, in case you need its data; a SQLite file in the worktree goes with the folder. When a worktree comes back at the same path, it gets its database back.
+
+:::app
+These databases are listed under **Worktrees** in the site's settings; **Drop…** drops one.
+:::
+
+:::cli
+`flock worktree list` lists these databases, and `flock worktree remove <path>` drops one.
+:::
 
 ## flock.yml
 
@@ -131,6 +151,14 @@ The worktree's own subdomains reach it too: `tenant1.feature-auth.acme.test`. Ev
 Worktrees can be anywhere on disk. One that sits in a [project folder](sites.md#parking-a-folder) next to its site is served as the worktree, not as a site of its own. A folder you link yourself with `flock link` stays a site of its own.
 
 ## Listing and removing worktrees
+
+:::app
+The **Sites** section of the Flock panel shows how many worktrees a site has: click the number to list them under the site, and a worktree to open it. On Linux, the tray menu has a submenu for a site with worktrees, with the site and its worktrees.
+
+![Worktrees in the Flock panel](screenshot:panel-worktrees)
+
+To remove a worktree, select it in **Settings → Sites** and click its **Remove worktree** icon. Flock runs its `before_delete` hook, deletes its folder and, unless you keep it, its own database. The branch stays. When git refuses because the worktree has changes, **Remove Anyway** removes it all the same.
+:::
 
 :::cli
 ```bash

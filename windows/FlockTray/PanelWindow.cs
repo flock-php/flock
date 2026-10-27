@@ -56,7 +56,7 @@ internal sealed partial class PanelWindow : Window
         serviceBinding = new KeyedRowsBinding<string, PanelServiceRow>(serviceRows, row => row.Id,
             row => new ServiceRowControl(row), (_, element) => ((ServiceRowControl)element).Dispose());
         siteBinding = new KeyedRowsBinding<string, PanelSiteRow>(siteRows, row => row.Domain,
-            row => new SiteRowControl(row, model), (_, element) => ((SiteRowControl)element).Dispose());
+            row => new SiteRowControl(row, model, viewModel.ToggleWorktrees), (_, element) => ((SiteRowControl)element).Dispose());
         sitesScroller.Content = siteRows;
         servicesSection.Children.Add(SectionTitle("Services"));
         servicesSection.Children.Add(serviceRows);
@@ -452,11 +452,53 @@ internal sealed partial class PanelWindow : Window
         }
     }
 
-    private sealed class SiteRowControl : Grid, IDisposable
+    /// <summary>
+    /// A site: opens it. A site with worktrees has a toggle that shows them under it, each opening
+    /// its own address.
+    /// </summary>
+    private sealed class SiteRowControl : StackPanel, IDisposable
     {
         private readonly PanelSiteRow row;
         private readonly RuntimeService model;
-        private readonly Button button = new()
+        private readonly Action<string> toggleWorktrees;
+        private readonly Grid header = new() { ColumnSpacing = 2 };
+        private readonly StackPanel worktreeRows = Ui.Column(2);
+        private readonly Button button = RowButton();
+        private readonly Button toggle = new()
+        {
+            Background = new SolidColorBrush(Microsoft.UI.Colors.Transparent),
+            BorderThickness = new Thickness(0),
+            Padding = new Thickness(6, 4, 6, 4),
+            VerticalAlignment = VerticalAlignment.Stretch,
+        };
+
+        public SiteRowControl(PanelSiteRow row, RuntimeService model, Action<string> toggleWorktrees)
+        {
+            this.row = row;
+            this.model = model;
+            this.toggleWorktrees = toggleWorktrees;
+            Spacing = 2;
+            header.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            header.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            Grid.SetColumn(toggle, 1);
+            header.Children.Add(button);
+            header.Children.Add(toggle);
+            Children.Add(header);
+            Children.Add(worktreeRows);
+            row.PropertyChanged += RowChanged;
+            button.Click += Clicked;
+            toggle.Click += Toggled;
+            Update();
+        }
+
+        public void Dispose()
+        {
+            row.PropertyChanged -= RowChanged;
+            button.Click -= Clicked;
+            toggle.Click -= Toggled;
+        }
+
+        private static Button RowButton() => new()
         {
             HorizontalAlignment = HorizontalAlignment.Stretch,
             HorizontalContentAlignment = HorizontalAlignment.Stretch,
@@ -465,22 +507,6 @@ internal sealed partial class PanelWindow : Window
             Padding = new Thickness(6, 4, 6, 4),
         };
 
-        public SiteRowControl(PanelSiteRow row, RuntimeService model)
-        {
-            this.row = row;
-            this.model = model;
-            Children.Add(button);
-            row.PropertyChanged += RowChanged;
-            button.Click += Clicked;
-            Update();
-        }
-
-        public void Dispose()
-        {
-            row.PropertyChanged -= RowChanged;
-            button.Click -= Clicked;
-        }
-
         private void Clicked(object sender, RoutedEventArgs args)
         {
             if (row.Url is { Length: > 0 } url)
@@ -488,6 +514,8 @@ internal sealed partial class PanelWindow : Window
                 model.Open(url);
             }
         }
+
+        private void Toggled(object sender, RoutedEventArgs args) => toggleWorktrees(row.Name);
 
         private void RowChanged(object? sender, PropertyChangedEventArgs args) => Update();
 
@@ -519,6 +547,63 @@ internal sealed partial class PanelWindow : Window
             button.Content = Ui.Spread(Ui.Row(8, icon, name), php);
             button.IsEnabled = row.Url is not null;
             ToolTipService.SetToolTip(button, row.Url ?? row.Problem ?? row.Path);
+
+            // The worktrees' toggle: how many, and whether they are shown.
+            var count = row.Worktrees.Count;
+            toggle.Visibility = count > 0 ? Visibility.Visible : Visibility.Collapsed;
+            toggle.Content = Ui.Row(4, Ui.Caption(count.ToString(System.Globalization.CultureInfo.CurrentCulture), wrap: false),
+                Ui.Icon(row.Expanded ? Ui.GlyphChevronDown : Ui.GlyphChevronRight, 10, Ui.SecondaryText));
+            var label = row.Expanded ? "Hide worktrees" : count == 1 ? "Show 1 worktree" : $"Show {count} worktrees";
+            ToolTipService.SetToolTip(toggle, label);
+            Ui.AutomationName(toggle, label);
+
+            worktreeRows.Children.Clear();
+            if (row.Expanded)
+            {
+                foreach (var worktree in row.Worktrees)
+                {
+                    worktreeRows.Children.Add(WorktreeRow(worktree));
+                }
+            }
+            worktreeRows.Visibility = worktreeRows.Children.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
+        }
+
+        /// <summary>A worktree, indented under its site: its branch, its own database and its setup.</summary>
+        private Button WorktreeRow(Status.Site worktree)
+        {
+            var setup = worktree.Worktree;
+            var name = Ui.Column(0, Ui.Text(worktree.WorktreeLabel, wrap: false));
+            if (worktree.Problem is { } problem)
+            {
+                name.Children.Add(Ui.Caption(problem, Ui.Critical));
+            }
+            else if (setup is { IsFailed: true, Error.Length: > 0 })
+            {
+                name.Children.Add(Ui.Caption(setup.Error, Ui.Critical));
+            }
+            var icon = Ui.Icon(worktree.Secured ? Ui.GlyphLock : Ui.GlyphGlobe, 12, worktree.Secured ? Ui.Success : Ui.SecondaryText);
+            var trailing = Ui.Row(6);
+            if (setup is { HasOwnDatabase: true })
+            {
+                var database = Ui.Badge(setup.DbMode is { Length: > 0 } mode ? mode : "own database", Ui.Tone.Neutral);
+                ToolTipService.SetToolTip(database, $"Its own database: {setup.Database}");
+                trailing.Children.Add(database);
+            }
+            if (setup is { IsBusy: true })
+            {
+                var step = Ui.Caption(setup.Step.Length > 0 ? setup.Step : "Setting up…", wrap: false);
+                step.MaxWidth = 150;
+                step.TextTrimming = TextTrimming.CharacterEllipsis;
+                trailing.Children.Add(new ProgressRing { Width = 12, Height = 12 });
+                trailing.Children.Add(step);
+            }
+            var worktreeButton = RowButton();
+            worktreeButton.Margin = new Thickness(20, 0, 0, 0);
+            worktreeButton.Content = Ui.Spread(Ui.Row(8, icon, name), trailing);
+            worktreeButton.IsEnabled = worktree.Url is not null;
+            ToolTipService.SetToolTip(worktreeButton, worktree.Url ?? worktree.Problem ?? worktree.Path);
+            worktreeButton.Click += (_, _) => model.Open(worktree);
+            return worktreeButton;
         }
     }
 }

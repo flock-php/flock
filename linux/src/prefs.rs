@@ -12,6 +12,8 @@ use crate::paths;
 pub struct Prefs {
     /// Where the Dumps window opens source files: an id of EDITORS.
     pub editor: String,
+    /// The sites whose worktrees the Sites list shows, by name; the others are collapsed.
+    pub expanded_sites: Vec<String>,
 }
 
 /// Editors the Dumps window can open files in: id, name and URL scheme ("" for none).
@@ -36,6 +38,16 @@ pub fn load() -> Prefs {
         prefs.editor = "phpstorm".to_owned();
     }
     prefs
+}
+
+/// Remembers whether a site's worktrees are shown in the Sites list.
+pub fn set_expanded(site: &str, expanded: bool) {
+    let mut prefs = load();
+    prefs.expanded_sites.retain(|s| s != site);
+    if expanded {
+        prefs.expanded_sites.push(site.to_owned());
+    }
+    let _ = save(&prefs);
 }
 
 pub fn save(prefs: &Prefs) -> std::io::Result<()> {

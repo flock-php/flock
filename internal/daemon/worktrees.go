@@ -312,6 +312,39 @@ func (d *daemon) SetupWorktree(path string, again bool, dbMode string) (worktree
 	return d.startSetup(site, dbMode), nil
 }
 
+// CreateWorktree implements api.Backend: it creates a worktree of the site on branch (see
+// worktree.Create) and starts its setup.
+func (d *daemon) CreateWorktree(ctx context.Context, req api.WorktreeCreate) (string, worktree.Status, error) {
+	if req.DB != "" {
+		if err := validDBMode(req.DB); err != nil {
+			return "", worktree.Status{}, err
+		}
+	}
+	cfg := d.config()
+	if cfg == nil {
+		return "", worktree.Status{}, errors.New("the daemon has no configuration yet")
+	}
+	site, ok := cfg.FindSite(req.Site)
+	if !ok || site.IsWorktree() {
+		return "", worktree.Status{}, fmt.Errorf("%w: no site named %s that worktrees can be made of", api.ErrInvalidRequest, req.Site)
+	}
+	if runningAsRoot() {
+		return "", worktree.Status{}, fmt.Errorf("%w: Flock runs as root here, so it doesn't create worktrees: use `git worktree add`", api.ErrConflict)
+	}
+	path, err := worktree.Create(ctx, site.Path, site.Name, config.WorktreeSlug(req.Branch), req.Branch, req.From, req.Path)
+	if errors.Is(err, worktree.ErrInvalid) {
+		return "", worktree.Status{}, fmt.Errorf("%w: %v", api.ErrInvalidRequest, err)
+	}
+	if err != nil {
+		return "", worktree.Status{}, err
+	}
+	if err := d.reload(); err != nil {
+		return path, worktree.Status{}, err
+	}
+	st, err := d.SetupWorktree(path, false, req.DB)
+	return path, st, err
+}
+
 // SwitchWorktreeDatabase implements api.Backend: as the worktree's job, it gives the worktree a
 // database by mode, dropping the one Flock made for it unless keep.
 func (d *daemon) SwitchWorktreeDatabase(path, mode string, keep bool) (worktree.Status, error) {
