@@ -1,0 +1,41 @@
+# Flock for Arch Linux, in the AUR as flockphp-bin: the files of a release's .deb (the same CLI,
+# daemon and app as on Ubuntu and Fedora), installed the Arch way. See linux/packaging/aur/README.md.
+# Maintainer: Guava s.r.o.
+
+pkgname=flockphp-bin
+_tag=1.0.0
+pkgver=${_tag/-/}
+pkgrel=1
+pkgdesc='Native local development environment for Laravel and PHP'
+arch=(x86_64 aarch64)
+url='https://flockphp.com'
+license=(AGPL-3.0-only)
+depends=(systemd polkit ca-certificates nss gtk4 libadwaita webkitgtk-6.0)
+provides=(flockphp)
+conflicts=(flockphp)
+install=flockphp-bin.install
+options=(!strip !debug)
+source_x86_64=("https://github.com/flock-php/flock/releases/download/v$_tag/flockphp_${_tag}_amd64.deb")
+source_aarch64=("https://github.com/flock-php/flock/releases/download/v$_tag/flockphp_${_tag}_arm64.deb")
+sha256sums_x86_64=(SKIP)
+sha256sums_aarch64=(SKIP)
+
+package() {
+  mkdir -p deb
+  bsdtar -xf data.tar.* -C deb
+  cd deb
+
+  # The command is flk: /usr/bin/flock is util-linux's (see linux/packaging/nfpm.yaml).
+  install -Dm755 -t "$pkgdir/usr/libexec/flockphp" usr/libexec/flockphp/flock usr/libexec/flockphp/flock-app
+  install -d "$pkgdir/usr/bin"
+  ln -s /usr/libexec/flockphp/flock "$pkgdir/usr/bin/flk"
+
+  install -Dm644 -t "$pkgdir/usr/share/applications" usr/share/applications/dev.flock.Flock.desktop
+  install -Dm644 -t "$pkgdir/usr/share/metainfo" usr/share/metainfo/dev.flock.Flock.metainfo.xml
+  install -Dm644 -t "$pkgdir/usr/share/icons/hicolor/scalable/apps" usr/share/icons/hicolor/scalable/apps/*
+  install -Dm644 -t "$pkgdir/usr/share/icons/hicolor/symbolic/apps" usr/share/icons/hicolor/symbolic/apps/*
+  install -Dm644 -t "$pkgdir/usr/lib/systemd/system" usr/lib/systemd/system/flock@.service
+  install -Dm644 -t "$pkgdir/usr/share/polkit-1/rules.d" usr/share/polkit-1/rules.d/50-flock.rules
+  install -Dm644 usr/share/doc/flockphp/copyright "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+  # Not the .deb's apt key: Flock's package repository is apt and dnf only, Arch updates from the AUR.
+}

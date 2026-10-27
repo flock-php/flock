@@ -5,7 +5,7 @@ To remove Flock, open **Settings…** from the Flock panel, go to **About** and 
 
 On Windows, you can also uninstall Flock from **Settings → Apps**.
 
-On Linux, open Flock, go to **About** and click **Uninstall Flock…**. Linux asks for your password once. Then remove the package with `sudo apt remove flockphp` (Ubuntu) or `sudo dnf remove flockphp` (Fedora).
+On Linux, open Flock, go to **About** and click **Uninstall Flock…**. Linux asks for your password once. Then remove the package with `sudo apt remove flockphp` (Ubuntu), `sudo dnf remove flockphp` (Fedora) or `sudo pacman -R flockphp-bin` (Arch).
 :::
 
 :::cli
@@ -17,7 +17,7 @@ flock uninstall
 
 It asks whether to delete your sites' settings and databases too. The answer defaults to no.
 
-On Linux, remove the package afterwards with `sudo apt remove flockphp` (Ubuntu) or `sudo dnf remove flockphp` (Fedora). Removing only the package stops Flock and undoes its system-wide setup, but keeps the changes in your home folder: run `flock uninstall` first.
+On Linux, remove the package afterwards with `sudo apt remove flockphp` (Ubuntu), `sudo dnf remove flockphp` (Fedora) or `sudo pacman -R flockphp-bin` (Arch). Removing only the package stops Flock and undoes its system-wide setup, but keeps the changes in your home folder: run `flock uninstall` first.
 :::
 
 This removes:

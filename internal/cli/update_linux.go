@@ -22,6 +22,9 @@ func update(cmd *cobra.Command) error {
 		steps = [][]string{{"apt-get", "update"}, {"apt-get", "install", "--only-upgrade", "flockphp"}}
 	case hasCommand("dnf"):
 		steps = [][]string{{"dnf", "upgrade", "--refresh", "flockphp"}}
+	case hasCommand("pacman"):
+		// The AUR's flockphp-bin: AUR helpers build it as the user, never with sudo.
+		return errors.New("Flock comes from the AUR here: update flockphp-bin with your AUR helper (e.g. `yay -Syu` or `paru -Syu`)")
 	default:
 		return errors.New("neither apt nor dnf is here: update the flockphp package with your package manager")
 	}
