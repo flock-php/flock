@@ -159,7 +159,7 @@
     "category": "Cache & Queue",
     "description": "The in-memory store for your cache, queues and sessions, from Redis Ltd.",
     "available": false,
-    "unavailable": "Flock offers Valkey on Windows instead: the open-source Redis, which works with Laravel's Redis settings unchanged.",
+    "unavailable": "Flock offers Valkey here instead: the open-source Redis, which works with Laravel's Redis settings unchanged.",
     "version": "",
     "port": 6379,
     "installed": false,

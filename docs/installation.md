@@ -1,6 +1,6 @@
 # Installation
 
-Download the installer for your platform from the [download page](https://flockphp.com/download). Both apps are code-signed, and the macOS app is notarized by Apple, so they open without security warnings.
+Download the installer for your platform from the [download page](https://flockphp.com/download). The Windows and macOS apps are code-signed, and the macOS app is notarized by Apple, so they open without security warnings. On Linux, Flock comes as a `.deb` or `.rpm` package from its own signed package repository.
 
 ## Windows
 
@@ -28,10 +28,36 @@ The setup:
 
 The setup adds the shims to your PATH, registers a launchd agent for the daemon, writes `/etc/resolver/test` so `.test` names go to Flock's DNS server, and trusts the certificate authority in your login keychain.
 
+## Linux
+
+**Requirements:** Ubuntu 24.04 or newer, or a current Fedora release, on x64 or arm64, with systemd-resolved as the system's DNS resolver (the default on both).
+
+1. Install the package for your system. In the folder you downloaded it to, run:
+
+   ```bash
+   sudo apt install ./flockphp_<version>_amd64.deb     # Ubuntu
+   sudo dnf install ./flockphp-<version>.x86_64.rpm    # Fedora
+   ```
+
+   On arm64, the files end in `_arm64.deb` and `.aarch64.rpm`. The package also adds Flock's package repository, so new versions of Flock come with your system's updates. **Beta versions** in **General**, or `flock channel beta`, switches it to Flock's betas.
+2. Open **Flock** from your apps. The Flock window opens with the first-run setup. Optionally keep **Open Flock when I log in** checked.
+3. Click **Set Up Flock**. Linux asks for your password once.
+
+To set Flock up from the terminal instead, run `flk install`. The package names the command `flk`, because `/usr/bin/flock` is a file-locking tool that every Linux system has. After the setup, `flock` works too: Flock's own `flock` comes first on your PATH and hands every command that isn't Flock's to the system's `flock`, so scripts that use it keep working.
+
+The setup:
+
+- adds Flock's `bin` folder to your PATH, in `~/.bashrc`, `~/.zshrc`, fish's `conf.d` and `~/.config/environment.d` for apps started from the desktop,
+- registers the `flock@<user>` systemd service, which starts with your computer,
+- tells systemd-resolved to send `*.test` lookups to Flock's DNS server,
+- adds Flock's certificate authority to the system's trust store, to Firefox through a policy, and to the certificate databases of Chrome and other Chromium browsers.
+
+Flock also puts an icon in the top bar with its status, your sites, mail, dumps and logs. KDE shows it on its own, and GNOME with the AppIndicator extension, which Ubuntu includes. On Fedora's GNOME, install **AppIndicator and KStatusNotifierItem Support** to get it. Without the icon, Flock is a regular window that quits when you close it, and the daemon keeps running.
+
 ## Checking the installation
 
 :::app
-Click the bird in the menu bar (macOS) or the tray icon (Windows). The top of the panel should read **Running**, followed by the Flock version, and every service listed under **Services** should have a green dot.
+Click the bird in the menu bar (macOS) or the tray icon (Windows). The top of the panel should read **Running**, followed by the Flock version, and every service listed under **Services** should have a green dot. On Linux, open Flock: **Running** and the version are under the window's title, and **General** shows no warnings.
 
 ![The Flock panel with every service running](screenshot:panel-running)
 
@@ -50,10 +76,10 @@ It shows the daemon, web server, DNS and every service, and whether `.test` name
 
 ## Ports
 
-Flock needs ports **80** and **443** for the web server. If another program uses them, for example another local environment, IIS or Apache, Flock tells you which program it is.
+Flock needs ports **80** and **443** for the web server. If another program uses them, for example another local environment, IIS or Apache, Flock tells you which program it is. On Linux, it also gives you the command that stops it, such as `sudo systemctl disable --now apache2`.
 
 :::app
-Stop that program, then click **Restart** at the bottom of the Flock panel.
+Stop that program, then click **Restart** at the bottom of the Flock panel. On Linux, click **Restart Daemon** in **General**.
 :::
 
 :::cli

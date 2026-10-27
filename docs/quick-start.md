@@ -58,7 +58,7 @@ Then update `APP_URL` in your `.env` to `https://acme.test`.
 Pin the versions for the project. Flock writes them to `.flockrc` (PHP) and `.nvmrc` (Node), which you can commit.
 
 :::app
-In **Settings → Sites**, select `acme` and choose the PHP and Node versions under **Versions**. Then click the pin icon (macOS) or open the **…** menu (Windows) and choose **Pin PHP 8.5 to Project…** and **Pin Node 22 to Project…**.
+In **Settings → Sites**, select `acme` and choose the PHP and Node versions under **Versions**. Then click the pin icon (macOS and Linux) or open the **…** menu (Windows) and choose **Pin PHP 8.5 to Project…** and **Pin Node 22 to Project…**.
 
 ![Pinning versions in Settings → Sites](screenshot:settings-sites-pin)
 

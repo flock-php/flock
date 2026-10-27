@@ -24,7 +24,7 @@ Messages up to 25 MB are accepted, attachments included.
 ## Reading mail
 
 :::app
-Click **Mail** in the Flock panel, or **Open Mail** in **Settings → Mail**. On Windows, it's also in the tray icon's right-click menu.
+Click **Mail** in the Flock panel, or **Open Mail** in **Settings → Mail**. On Windows, it's also in the tray icon's right-click menu, and on Linux in the Flock window's main menu.
 
 ![The Mail window](screenshot:mail-window)
 

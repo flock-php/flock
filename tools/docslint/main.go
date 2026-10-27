@@ -41,7 +41,7 @@ var imageExtensions = []string{".png", ".jpg", ".jpeg", ".gif", ".svg", ".webp"}
 
 // The variants of each screenshot:id image.
 var (
-	screenshotPlatforms = []string{"macos", "windows"}
+	screenshotPlatforms = []string{"macos", "windows", "linux"}
 	screenshotThemes    = []string{"light", "dark"}
 )
 

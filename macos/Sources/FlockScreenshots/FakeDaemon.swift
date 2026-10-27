@@ -126,7 +126,8 @@ final class FakeDaemon: @unchecked Sendable {
     }
 }
 
-/// What tells the fixtures (written on Windows) from a Mac's daemon.
+/// What tells the fixtures (written on Windows) from a Mac's daemon: paths, PHP-FPM pools, the
+/// DNS server's port, no hosts file, Redis and Typesense, PHP from 8.1 on.
 enum MacFixtures {
     /// The Windows-only parts of the answer for a fixture, swapped for what macOS has.
     static func adapt(json text: String, name: String) -> String {
@@ -143,6 +144,12 @@ enum MacFixtures {
         case "services":
             // Windows resolves *.test through the hosts file; macOS has a resolver for the TLD.
             value = (value as? [[String: Any]])?.filter { $0["id"] as? String != "hosts" }.map(offered).map(dnsPort) ?? value
+        case "php_versions":
+            // PHP 7.4 and 8.0 are Windows-only.
+            if var versions = value as? [String: Any], let list = versions["versions"] as? [[String: Any]] {
+                versions["versions"] = list.filter { !["7.4", "8.0"].contains($0["minor"] as? String ?? "") }
+                value = versions
+            }
         case "catalog":
             if var catalog = value as? [String: Any] {
                 catalog["services"] = (catalog["services"] as? [[String: Any]])?.map(offered)

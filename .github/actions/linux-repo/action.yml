@@ -1,0 +1,67 @@
+# Flock's apt and dnf repository (linux/packaging/repository.md), in two steps of a release:
+# - sign: signs the release's .rpm files in `dist`, before they are uploaded.
+# - index: after the update feed (releases.json) is written, rebuilds the suites this release now
+#   leads (stable, beta) from its packages and uploads them to the "updates" release, with the key.
+name: Linux repository
+description: Sign the Linux packages and publish the repository's index
+inputs:
+  mode:
+    description: sign or index
+    required: true
+  version:
+    description: The release, e.g. 1.1.0 or 1.1.0-beta.2
+    required: true
+  dist:
+    description: Folder with the release's flockphp .deb and .rpm files
+    default: dist
+  signing-key:
+    description: REPO_SIGNING_KEY, the repository's private OpenPGP key (armored)
+    required: true
+  token:
+    description: Token that may write releases
+    required: true
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      env:
+        MODE: ${{ inputs.mode }}
+        VERSION: ${{ inputs.version }}
+        DIST: ${{ inputs.dist }}
+        REPO_SIGNING_KEY: ${{ inputs.signing-key }}
+        GH_TOKEN: ${{ inputs.token }}
+      run: |
+        set -euo pipefail
+        export GNUPGHOME="$RUNNER_TEMP/gnupg"
+        mkdir -p -m 700 "$GNUPGHOME"
+        gpg --batch --import <<< "$REPO_SIGNING_KEY"
+        REPO_KEY_ID="$(gpg --list-secret-keys --with-colons | awk -F: '/^fpr/ { print $10; exit }')"
+        export REPO_KEY_ID
+
+        case "$MODE" in
+          sign)
+            sudo apt-get install -y -qq rpm > /dev/null
+            linux/sign-rpms.sh "$DIST"
+            ;;
+          index)
+            sudo apt-get install -y -qq dpkg-dev apt-utils createrepo-c > /dev/null
+            feed="$RUNNER_TEMP/repo-feed"
+            mkdir -p "$feed"
+            gh release download updates --repo "$GITHUB_REPOSITORY" --pattern releases.json --dir "$feed" --clobber
+            suites=()
+            [ "$(jq -r '.stable.version // ""' "$feed/releases.json")" = "$VERSION" ] && suites+=(stable)
+            [ "$(jq -r '.beta.version // ""' "$feed/releases.json")" = "$VERSION" ] && suites+=(beta)
+            if [ ${#suites[@]} -eq 0 ]; then
+              echo "$VERSION leads no suite (a newer release does): the repository stays as it is."
+              exit 0
+            fi
+            out="$RUNNER_TEMP/repo"
+            linux/build-repo.sh "$VERSION" "$DIST" "$out" "${suites[@]}"
+            cp linux/packaging/flockphp.asc "$out/flockphp.asc"
+            gh release upload updates --repo "$GITHUB_REPOSITORY" --clobber "$out"/*
+            ;;
+          *)
+            echo "::error::unknown mode $MODE"
+            exit 1
+            ;;
+        esac

@@ -1,6 +1,8 @@
 # CLI reference
 
-Almost every feature of Flock is available from the `flock` command. Run `flock --help` or `flock <command> --help` for details.
+Almost every feature of Flock is available from the `flock` command. Run `flock --help` or `flock <command> --help` for details. `flk` is a shorter name for the same command: `flk link` does what `flock link` does.
+
+On Linux, the package puts only `flk` on your PATH, because `/usr/bin/flock` is a file-locking tool that comes with every Linux system: run `flk install` to set Flock up. After that, `flock` works too, and hands every command that isn't Flock's to the system's `flock`, so scripts that use it keep working.
 
 :::app
 This page lists the `flock` commands. The other pages show where to find each action in the app.
@@ -14,8 +16,8 @@ This page lists the `flock` commands. The other pages show where to find each ac
 | `flock uninstall [--purge]` | Remove Flock. Keeps site settings and databases unless `--purge` is given |
 | `flock status` | Show the state of the daemon and its services |
 | `flock restart` | Restart the daemon and all services |
-| `flock logs [name] [-n 50] [-f]` | Show service logs (daemon, web, php8.5-fpm on macOS or php8.5-cgi on Windows, postgres, …). Without a name, lists the logs |
-| `flock update` | Update Flock: the app installs the new version, CLI and daemon included |
+| `flock logs [name] [-n 50] [-f]` | Show service logs (daemon, web, php8.5-fpm on macOS and Linux or php8.5-cgi on Windows, postgres, …). Without a name, lists the logs |
+| `flock update` | Update Flock, CLI and daemon included: the app installs the new version (on Linux, apt or dnf) |
 | `flock version` | Print the Flock version |
 
 ## Sites
@@ -65,7 +67,7 @@ This page lists the `flock` commands. The other pages show where to find each ac
 | Command | Description |
 | --- | --- |
 | `flock services` | List services and their state |
-| `flock services install <service> [version] [--port N]` | Install PostgreSQL, MySQL, MariaDB, MongoDB, Valkey, Redis (macOS), Meilisearch, Typesense (macOS) or RustFS. `--port` doesn't apply to PostgreSQL |
+| `flock services install <service> [version] [--port N]` | Install PostgreSQL, MySQL, MariaDB, MongoDB, Valkey, Redis (macOS), Meilisearch, Typesense (macOS and Linux) or RustFS. `--port` doesn't apply to PostgreSQL |
 | `flock services uninstall <service> [version] [--delete-data]` | Remove a version of a service (the active one unless given) |
 | `flock services use <service> <version>` | Switch a service to another installed version |
 | `flock services update <service> [version]` | Update a version of a service to its newest release (the active one unless given) |

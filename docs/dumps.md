@@ -38,7 +38,7 @@ Queries, logs and dumps link to the line in your app that caused them: the first
 Dumps are always captured. Every other kind can be switched off, for example views on a page that renders hundreds of components.
 
 :::app
-Open the **Capture Options** menu in the toolbar of the Dumps window (**Capture** on Windows) and untick the kinds you don't need. On macOS, the same switches are under **While capturing** in **Settings → Dumps**.
+Open the **Capture Options** menu in the toolbar of the Dumps window (**Capture** on Windows, **⋯** on Linux) and untick the kinds you don't need. On macOS and Linux, the same switches are under **While capturing** in **Settings → Dumps**.
 :::
 
 :::cli
@@ -55,7 +55,7 @@ The kinds are `query`, `log`, `view`, `job` and `request`.
 While capture is on, `dump()` output goes to Flock only. If you want to see it in the page or terminal as well, turn on **Show dump() in the page too**. `dd()` always shows in the page, because it ends the request.
 
 :::app
-It's in the same **Capture Options** menu (**Capture** on Windows). On macOS, it's also under **While capturing** in **Settings → Dumps**.
+It's in the same **Capture Options** menu (**Capture** on Windows, **⋯** on Linux). On macOS and Linux, it's also under **While capturing** in **Settings → Dumps**.
 :::
 
 :::cli
@@ -76,7 +76,7 @@ The window is a timeline with the newest request at the top. Each request or Art
 Flock keeps the last 500 dumps and the last 5,000 other events.
 
 :::app
-Click **Dumps** in the Flock panel, or **Open Dumps** in **Settings → Dumps**. On Windows, it's also in the tray icon's right-click menu.
+Click **Dumps** in the Flock panel, or **Open Dumps** in **Settings → Dumps**. On Windows, it's also in the tray icon's right-click menu, and on Linux in the Flock window's main menu.
 
 ![The Dumps window](screenshot:dumps-window)
 

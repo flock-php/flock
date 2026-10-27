@@ -9,9 +9,11 @@
 /build/valkey/*.log
 /macos/.build/
 /build/macos/
+/build/linux/
 /windows/**/bin/
 /windows/**/obj/
 /windows/dist/
 /design/icongen/bin/
 /design/icongen/obj/
 .omc/
+/linux/target/

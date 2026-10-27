@@ -181,12 +181,17 @@ func TestTheFirstRunWaitsForTheDefaultsAndSaysSo(t *testing.T) {
 		t.Fatalf("sites: %+v", status.Sites)
 	}
 
-	// The site's name gets the page that says PHP is coming, not "not linked".
+	// The site's name gets the page that says PHP is coming, not "not linked". The first run's
+	// background work reloads the web server meanwhile, which can drop a connection.
 	req, _ := http.NewRequest(http.MethodGet, "http://127.0.0.1:"+strconv.Itoa(cfg.Ports.HTTP)+"/", nil)
 	req.Host = "app.test"
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatal(err)
+	var resp *http.Response
+	deadline := time.Now().Add(5 * time.Second)
+	for resp, err = http.DefaultClient.Do(req); err != nil; resp, err = http.DefaultClient.Do(req) {
+		if time.Now().After(deadline) {
+			t.Fatal(err)
+		}
+		time.Sleep(20 * time.Millisecond)
 	}
 	defer resp.Body.Close()
 	body, _ := io.ReadAll(resp.Body)
