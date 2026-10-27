@@ -31,6 +31,8 @@ type fakeDaemon struct {
 	phpPolls int
 	polled   int
 	changes  []string
+	// left are the databases kept of worktrees that are gone.
+	left []api.LeftWorktree
 }
 
 func (f *fakeDaemon) record(format string, args ...any) {
@@ -142,6 +144,41 @@ func (f *fakeDaemon) RestartSite(_ context.Context, name string) (api.Status, er
 	return f.status, nil
 }
 
+func (f *fakeDaemon) CreateWorktree(_ context.Context, req api.WorktreeCreate) (api.WorktreeCreated, error) {
+	f.record("worktree create", req)
+	path := filepath.Join(filepath.Dir(f.status.Sites[0].Path), "shop-feature-x")
+	f.mu.Lock()
+	f.status.Sites = append(f.status.Sites, api.SiteStatus{
+		Name: "feature-x.shop", Domain: "feature-x.shop.test", Path: path, URL: "https://feature-x.shop.test", Secured: true,
+		Parent: "shop", Branch: req.Branch, Worktree: &api.WorktreeStatus{State: "running", Step: "composer install", Log: "worktree-feature-x.shop"},
+	})
+	f.mu.Unlock()
+	return api.WorktreeCreated{Path: path, Setup: api.WorktreeStatus{State: "queued"}}, f.err()
+}
+func (f *fakeDaemon) SetupWorktree(_ context.Context, path string, again bool, db string) (api.WorktreeStatus, error) {
+	f.record("worktree setup", path, again, db)
+	return api.WorktreeStatus{State: "running"}, f.err()
+}
+
+// WorktreeSetup finishes a setup on the second poll, with a database of its own.
+func (f *fakeDaemon) WorktreeSetup(_ context.Context, path string) (api.WorktreeStatus, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.polled++
+	for i, site := range f.status.Sites {
+		if site.Path == path && site.Worktree != nil && f.polled >= 2 {
+			f.status.Sites[i].Worktree = &api.WorktreeStatus{State: "ready", Log: site.Worktree.Log, Database: "shop_feature_x"}
+		}
+		if site.Path == path && site.Worktree != nil {
+			return *f.status.Sites[i].Worktree, nil
+		}
+	}
+	return api.WorktreeStatus{}, api.ErrNotWorktree
+}
+func (f *fakeDaemon) LeftWorktrees(context.Context) ([]api.LeftWorktree, error) {
+	return f.left, f.err()
+}
+
 func (f *fakeDaemon) UpdateSettings(_ context.Context, s api.Settings) (api.Status, error) {
 	f.record("settings", s)
 	return f.status, nil
@@ -212,17 +249,18 @@ func TestToolsAndAnnotations(t *testing.T) {
 		}
 	}
 	for _, name := range []string{"status", "site_info", "list_sites", "list_services", "list_php_versions", "list_node_versions",
-		"get_errors", "get_dumps", "get_events", "list_mail", "read_mail", "service_logs", "php_extensions"} {
+		"get_errors", "get_dumps", "get_events", "list_mail", "read_mail", "service_logs", "php_extensions", "list_worktrees"} {
 		if !readOnly[name] {
 			t.Errorf("%s should be a read-only tool", name)
 		}
 	}
-	for _, name := range []string{"service", "install_version", "link_site", "update_site", "set_debugging", "create_database"} {
+	for _, name := range []string{"service", "install_version", "link_site", "update_site", "set_debugging", "create_database",
+		"create_worktree", "setup_worktree"} {
 		if ro, ok := readOnly[name]; !ok || ro {
 			t.Errorf("%s should be a tool that changes things (listed: %v)", name, ok)
 		}
 	}
-	if len(res.Tools) != 19 {
+	if len(res.Tools) != 22 {
 		t.Errorf("got %d tools", len(res.Tools))
 	}
 }
@@ -529,5 +567,49 @@ func TestPHPExtensionsOfTheCurrentSite(t *testing.T) {
 	var out phpext.Report
 	if e := callTool(t, cs, "php_extensions", nil, &out); e != "" || out.PHP != "8.4" || len(out.Extensions) != 1 || out.Extensions[0].Name != "intl" {
 		t.Fatalf("%q %+v", e, out)
+	}
+}
+
+func TestWorktreeTools(t *testing.T) {
+	d, opts := fixture(t)
+	d.left = []api.LeftWorktree{{Path: "/code/shop-old", Site: "shop", Database: "shop_old", Gone: true}}
+	cs := connect(t, opts)
+
+	if e := callTool(t, cs, "setup_worktree", nil, nil); !strings.Contains(e, "not in a worktree") {
+		t.Errorf("setup_worktree in the site itself: %q", e)
+	}
+
+	var created worktreeActionOut
+	if e := callTool(t, cs, "create_worktree", map[string]any{"branch": "feature/x", "database": "copy"}, &created); e != "" {
+		t.Fatal(e)
+	}
+	if want := `worktree create [{"site":"shop","branch":"feature/x","db":"copy"}]`; len(d.changes) != 1 || d.changes[0] != want {
+		t.Errorf("got %q, want %q", d.changes, want)
+	}
+	if !created.Done || created.Worktree == nil || created.Worktree.Database != "shop_feature_x" ||
+		!strings.Contains(created.Message, "https://feature-x.shop.test") {
+		t.Errorf("created: %+v %+v", created, created.Worktree)
+	}
+
+	var list listWorktreesOut
+	if e := callTool(t, cs, "list_worktrees", map[string]any{"site": "shop"}, &list); e != "" {
+		t.Fatal(e)
+	}
+	if len(list.Worktrees) != 1 || list.Worktrees[0].Branch != "feature/x" || list.Worktrees[0].Site != "shop" ||
+		len(list.Left) != 1 || list.Left[0].Database != "shop_old" {
+		t.Errorf("list: %+v", list)
+	}
+
+	d.changes = nil
+	for _, ref := range []string{"feature/x", "feature-x", "feature-x.shop.test", created.Worktree.Path} {
+		if e := callTool(t, cs, "setup_worktree", map[string]any{"worktree": ref, "again": true}, nil); e != "" {
+			t.Errorf("%s: %s", ref, e)
+		}
+	}
+	if len(d.changes) != 4 || !strings.Contains(d.changes[0], `shop-feature-x",true,""`) {
+		t.Errorf("setups: %q", d.changes)
+	}
+	if e := callTool(t, cs, "setup_worktree", map[string]any{"worktree": "nope"}, nil); !strings.Contains(e, "no worktree") {
+		t.Errorf("an unknown worktree: %q", e)
 	}
 }

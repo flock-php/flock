@@ -199,6 +199,9 @@ type siteInfo struct {
 	FrankenPHP string `json:"frankenphp_state,omitempty"`
 	Octane     bool   `json:"octane_installed,omitempty"`
 	Parked     bool   `json:"parked,omitempty"`
+	// WorktreeOf is set on a git worktree: the site whose settings it uses; Branch is its branch.
+	WorktreeOf string `json:"worktree_of,omitempty"`
+	Branch     string `json:"branch,omitempty"`
 	Problem    string `json:"problem,omitempty"`
 	Notice     string `json:"notice,omitempty"`
 }
@@ -206,7 +209,7 @@ type siteInfo struct {
 func siteInfoOf(st api.SiteStatus) siteInfo {
 	info := siteInfo{
 		Name: st.Name, URL: st.URL, Path: st.Path, HTTPS: st.Secured, Server: st.Server, Worker: st.Worker,
-		Octane: st.OctaneAvailable, Parked: st.Parked, Problem: st.Problem, Notice: st.Notice,
+		Octane: st.OctaneAvailable, Parked: st.Parked, WorktreeOf: st.Parent, Branch: st.Branch, Problem: st.Problem, Notice: st.Notice,
 		PHP:  versionInfo{Version: st.PHP, Source: st.PHPSource, File: st.PHPFile},
 		Node: versionInfo{Version: st.Node, Source: st.NodeSource, File: st.NodeFile},
 		Root: rootInfo{Path: st.Root, Source: st.RootSource, File: st.RootFile, Suggestions: st.RootSuggestions},

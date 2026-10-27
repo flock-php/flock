@@ -49,6 +49,7 @@ These tools only read, so most clients run them without asking:
 | `site_info` | A site's URLs, folder, HTTPS, PHP and Node.js versions (and where they come from), and its server |
 | `php_extensions` | The PHP extensions a site requires or uses, and whether Flock's PHP has each |
 | `list_sites` | Every site with its URL, folder and PHP version |
+| `list_worktrees` | The [git worktrees](worktrees.md) Flock serves: their branch, URL, folder, setup and database |
 | `list_services` | Databases and other services: installed, running, their port and the `.env` settings to connect |
 | `list_php_versions` | Installed and available PHP versions |
 | `list_node_versions` | Installed and available Node.js versions |
@@ -69,14 +70,16 @@ These tools change things, so clients ask you first:
 | `update_site` | Turn HTTPS on or off, isolate, unisolate, pin or unpin a version, add a domain, switch between FrankenPHP (with or without Octane) and PHP-FPM, or restart it |
 | `set_debugging` | Turn Xdebug or dump capture on or off |
 | `create_database` | Create a database in PostgreSQL, MySQL or MariaDB |
+| `create_worktree` | Create a [git worktree](worktrees.md) of a site on a branch, at its own URL, and wait while Flock sets it up |
+| `setup_worktree` | Set a worktree up, or wait for its setup |
 
-None of the tools remove anything: an agent can't unlink sites, uninstall versions or services, or delete data, mail or logs.
+None of the tools remove anything: an agent can't unlink sites, uninstall versions or services, remove worktrees, drop databases, or delete data, mail or logs.
 
 Flock also offers a `debug_site` prompt, which gathers the site's setup, recent errors, dumps, the latest request's events and mail and asks the agent to find what's wrong, a `site_information` resource with the current site's details, and `flock://sites/{name}` resources with the details of any site.
 
 ## Which site the agent works on
 
-Flock uses the folder the agent's client starts it in. When that isn't inside a site, or the agent works on another one, the agent passes the site's name or folder to the tool. To fix the site for a client, start the server with `flock mcp --site <name>`, or set `FLOCK_SITE`.
+Flock uses the folder the agent's client starts it in. When that isn't inside a site, or the agent works on another one, the agent passes the site's name or folder to the tool. Started in a git worktree, the agent works on the worktree, and Flock tells it which site it belongs to. To fix the site for a client, start the server with `flock mcp --site <name>`, or set `FLOCK_SITE`.
 
 ## What the agent can see
 
