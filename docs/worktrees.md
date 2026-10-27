@@ -11,7 +11,7 @@ In **Settings → Sites**, select the site and click **New Worktree…** under *
 - **Start from**: where a new branch starts. The site's current branch is preselected; the menu also lists its other branches, and the remote ones as git last fetched them.
 - **Database**: the [database](#databases) the worktree gets.
 
-Click **Create**. The dialog then shows how Flock sets the worktree up, step by step with its log, and ends with **Open in Browser**, or with the error and **Run Setup Again**. **Hide** closes it while the setup goes on.
+Click **Create**. The dialog shows how Flock sets the worktree up, step by step, and ends with **Open in Browser**.
 
 ![A site's worktrees in Settings → Sites](screenshot:settings-sites-worktrees)
 :::
