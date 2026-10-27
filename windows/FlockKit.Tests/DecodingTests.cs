@@ -90,6 +90,30 @@ public class DecodingTests
     }
 
     [Fact]
+    public void DecodesASitesBranchesAndOrdersThem()
+    {
+        var branches = FlockJson.Decode<SiteBranches>("""
+            {"current":"develop","default":"main","local":["alpha","develop","feature/x","main"],"remote":["origin/develop","origin/main"]}
+            """);
+        Assert.Equal(["develop", "main", "alpha", "feature/x"], branches.Ordered());
+        Assert.Equal(["origin/develop", "origin/main"], branches.Remote);
+
+        // Detached, and no default: just the local branches.
+        var detached = FlockJson.Decode<SiteBranches>("""{"current":"","default":"","local":["b","a"],"remote":null}""");
+        Assert.Equal(["b", "a"], detached.Ordered());
+        Assert.Empty(detached.Remote);
+    }
+
+    [Fact]
+    public void SlugsABranchLikeTheDaemon()
+    {
+        Assert.Equal("feature-auth", SiteBranches.Slug("feature/auth"));
+        Assert.Equal("fix-v1-2-a-b", SiteBranches.Slug("Fix_v1.2//a--b!"));
+        Assert.Equal("", SiteBranches.Slug("ü/"));
+        Assert.Equal(63, SiteBranches.Slug(new string('a', 70)).Length);
+    }
+
+    [Fact]
     public void NestsWorktreesUnderTheirSite()
     {
         static Status.Site Site(string name, string? parent = null) => new() { Name = name, Parent = parent };
@@ -107,9 +131,10 @@ public class DecodingTests
     public void DecodesACreatedWorktree()
     {
         var created = FlockJson.Decode<WorktreeCreated>("""
-            {"path":"C:\\code\\acme-feature-auth","setup":{"state":"queued","log":"worktree-feature-auth.acme"}}
+            {"path":"C:\\code\\acme-feature-auth","branch":"brave-otter","setup":{"state":"queued","log":"worktree-feature-auth.acme"}}
             """);
         Assert.Equal("C:\\code\\acme-feature-auth", created.Path);
+        Assert.Equal("brave-otter", created.Branch);
         Assert.Equal(Status.WorktreeState.Queued, created.Setup.State);
         Assert.True(created.Setup.IsBusy);
     }

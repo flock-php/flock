@@ -438,11 +438,57 @@ public sealed class Status
     }
 }
 
-/// <summary>POST /v1/worktrees: the new worktree's folder and its setup.</summary>
+/// <summary>POST /v1/worktrees: the new worktree's folder, its branch and its setup.</summary>
 public sealed class WorktreeCreated
 {
     public string Path { get; init; } = "";
+    /// <summary>The branch it is on: the one asked for, or the name Flock made up (e.g. "brave-otter").</summary>
+    public string Branch { get; init; } = "";
     public Status.WorktreeSetup Setup { get; init; } = new();
+}
+
+/// <summary>GET /v1/sites/{name}/branches: a site's git branches, for where a new worktree's branch starts.</summary>
+public sealed class SiteBranches
+{
+    /// <summary>The branch the site's checkout is on; empty when its HEAD is detached.</summary>
+    public string Current { get; init; } = "";
+    /// <summary>The repository's default branch (origin's HEAD, else main or master); empty when unknown.</summary>
+    public string Default { get; init; } = "";
+    /// <summary>The local branches, sorted by name.</summary>
+    public List<string> Local { get; init; } = [];
+    /// <summary>The remote-tracking branches ("origin/main") as git last fetched them, sorted by name.</summary>
+    public List<string> Remote { get; init; } = [];
+
+    /// <summary>The local branches as offered: the current one, the default one, then the others.</summary>
+    public List<string> Ordered() =>
+        new[] { Current, Default }.Where(b => b.Length > 0 && Local.Contains(b)).Concat(Local).Distinct().ToList();
+
+    /// <summary>
+    /// The name a worktree on branch is served under, as the daemon makes it (config.WorktreeSlug):
+    /// lowercase letters, digits and -, with /, _ and . turned into -.
+    /// </summary>
+    public static string Slug(string branch)
+    {
+        var slug = new System.Text.StringBuilder();
+        foreach (var c in branch.ToLowerInvariant())
+        {
+            if (c is (>= 'a' and <= 'z') or (>= '0' and <= '9') or '-')
+            {
+                slug.Append(c);
+            }
+            else if (c is '/' or '_' or '.')
+            {
+                slug.Append('-');
+            }
+        }
+        var text = slug.ToString();
+        while (text.Contains("--", StringComparison.Ordinal))
+        {
+            text = text.Replace("--", "-", StringComparison.Ordinal);
+        }
+        text = text.Trim('-');
+        return text.Length > 63 ? text[..63].TrimEnd('-') : text;
+    }
 }
 
 /// <summary>An entry of GET /v1/mail.</summary>

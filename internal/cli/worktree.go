@@ -29,12 +29,12 @@ func newWorktreeAddCommand() *cobra.Command {
 	var from, path, db string
 
 	cmd := &cobra.Command{
-		Use:   "add <branch>",
+		Use:   "add [branch]",
 		Short: "Create a git worktree of the current site and set it up",
-		Long: `Creates a worktree of the site you're in on <branch> (a new branch from --from, or the
-branch if it exists), next to the site by default (worktrees.path in flock.yml), and waits
-until Flock has set it up.`,
-		Args: cobra.ExactArgs(1),
+		Long: `Creates a worktree of the site you're in on [branch] (a new branch from --from, or the
+branch if it exists; without one, a branch with a name of its own like brave-otter), next to
+the site by default (worktrees.path in flock.yml), and waits until Flock has set it up.`,
+		Args: cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			s, err := load()
 			if err != nil {
@@ -56,11 +56,18 @@ until Flock has set it up.`,
 					return err
 				}
 			}
-			created, err := s.client().CreateWorktree(cmd.Context(), api.WorktreeCreate{Site: site.Name, Branch: args[0], From: from, Path: path, DB: db})
+			branch := ""
+			if len(args) > 0 {
+				branch = args[0]
+			}
+			created, err := s.client().CreateWorktree(cmd.Context(), api.WorktreeCreate{Site: site.Name, Branch: branch, From: from, Path: path, DB: db})
 			if err != nil {
 				return err
 			}
 			path = created.Path
+			if branch == "" {
+				cmd.Printf("branch %s\n", created.Branch)
+			}
 			if err := setupWorktree(cmd, s, path, false, db); err != nil {
 				return err
 			}

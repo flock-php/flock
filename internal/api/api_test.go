@@ -45,8 +45,11 @@ func (f *fakeBackend) Binaries() *binaries.Catalog             { return f.binari
 func (f *fakeBackend) RestartSite(string) error                { return nil }
 func (f *fakeBackend) Shares() *share.Manager                  { return nil }
 func (f *fakeBackend) StartShare(string, []string, bool) error { return nil }
-func (f *fakeBackend) CreateWorktree(context.Context, WorktreeCreate) (string, WorktreeStatus, error) {
-	return "", WorktreeStatus{}, ErrInvalidRequest
+func (f *fakeBackend) CreateWorktree(context.Context, WorktreeCreate) (WorktreeCreated, error) {
+	return WorktreeCreated{}, ErrInvalidRequest
+}
+func (f *fakeBackend) SiteBranches(context.Context, string) (WorktreeBranches, error) {
+	return WorktreeBranches{}, ErrInvalidRequest
 }
 func (f *fakeBackend) SetupWorktree(string, bool, string) (WorktreeStatus, error) {
 	return WorktreeStatus{}, ErrNotWorktree

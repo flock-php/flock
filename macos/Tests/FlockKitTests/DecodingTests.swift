@@ -338,3 +338,11 @@ private func decode<T: Decodable>(_ type: T.Type, _ json: String) throws -> T {
     #expect(worktrees[1].worktree == nil && !status.sites[3].isWorktree)
 
 }
+
+@Test func ordersBranchesCurrentAndDefaultFirst() throws {
+    let branches = try decode(Branches.self, """
+    {"current":"develop","default":"main","local":["alpha","develop","main"],"remote":["origin/main"]}
+    """)
+    #expect(branches.ordered == ["develop", "main", "alpha"])
+    #expect(Branches(current: "", default: "gone", local: ["a", "b"]).ordered == ["a", "b"])
+}

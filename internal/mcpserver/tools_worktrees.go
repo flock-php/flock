@@ -26,7 +26,8 @@ func (s *server) addWorktreeTools(srv *mcp.Server) {
 	mcp.AddTool(srv, &mcp.Tool{
 		Name: "create_worktree",
 		Description: "Create a git worktree of a site on a branch (a new branch from `from`, the current commit by default; " +
-			"a branch that exists is checked out), next to the site, and wait while Flock sets it up: it copies vendor/, " +
+			"a branch that exists is checked out; without a branch, one with a name of its own like brave-otter), next to " +
+			"the site, and wait while Flock sets it up: it copies vendor/, " +
 			"node_modules/ and .env from the site, points .env at the worktree's URL, runs the installs and the project's " +
 			"hooks. database: shared (the site's, the default), copy (a copy of it) or fresh (empty, migrated). " +
 			"When the setup takes longer than about a minute the tool answers that it is still running; list_worktrees shows it.",
@@ -107,7 +108,7 @@ type worktreeActionOut struct {
 }
 
 type createWorktreeIn struct {
-	Branch   string `json:"branch" jsonschema:"the branch: one that exists is checked out, else it is created"`
+	Branch   string `json:"branch,omitempty" jsonschema:"the branch: one that exists is checked out, else it is created; Flock names it when empty"`
 	Site     string `json:"site,omitempty" jsonschema:"the site: a site name, domain or folder; defaults to the project Flock was started in"`
 	From     string `json:"from,omitempty" jsonschema:"where a new branch starts (a branch or commit); defaults to the current commit"`
 	Path     string `json:"path,omitempty" jsonschema:"the worktree's folder (absolute); defaults to worktrees.path in flock.yml, else next to the site"`
@@ -115,9 +116,6 @@ type createWorktreeIn struct {
 }
 
 func (s *server) createWorktree(ctx context.Context, req *mcp.CallToolRequest, in createWorktreeIn) (*mcp.CallToolResult, worktreeActionOut, error) {
-	if strings.TrimSpace(in.Branch) == "" {
-		return nil, worktreeActionOut{}, errors.New("give the branch")
-	}
 	site, err := s.site(ctx, in.Site)
 	if err != nil {
 		return nil, worktreeActionOut{}, err

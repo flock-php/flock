@@ -38,6 +38,7 @@ type WorktreeRequest struct {
 
 // WorktreeCreate asks for a new worktree of Site on Branch: the branch when it exists, else a new
 // one from From (HEAD when ""), at Path ("" for where flock.yml says), with the database mode DB.
+// Without a Branch, Flock makes up its name (like brave-otter).
 type WorktreeCreate struct {
 	Site   string `json:"site"`
 	Branch string `json:"branch"`
@@ -46,11 +47,15 @@ type WorktreeCreate struct {
 	DB     string `json:"db,omitempty"`
 }
 
-// WorktreeCreated is the new worktree's folder and its setup.
+// WorktreeCreated is the new worktree's folder, its branch and its setup.
 type WorktreeCreated struct {
-	Path  string         `json:"path"`
-	Setup WorktreeStatus `json:"setup"`
+	Path   string         `json:"path"`
+	Branch string         `json:"branch"`
+	Setup  WorktreeStatus `json:"setup"`
 }
+
+// WorktreeBranches are a site's git branches (see worktree.Branches).
+type WorktreeBranches = worktree.Branches
 
 // WorktreeRemoval is what removing a worktree printed (its before_delete hook, git).
 type WorktreeRemoval struct {
@@ -76,16 +81,24 @@ func registerWorktrees(mux *http.ServeMux, b Backend) {
 
 	mux.HandleFunc("POST /v1/worktrees", func(w http.ResponseWriter, r *http.Request) {
 		var req WorktreeCreate
-		if err := json.NewDecoder(io.LimitReader(r.Body, 1<<16)).Decode(&req); err != nil || req.Site == "" || req.Branch == "" {
-			writeError(w, http.StatusBadRequest, errors.New("name the site and the branch"))
+		if err := json.NewDecoder(io.LimitReader(r.Body, 1<<16)).Decode(&req); err != nil || req.Site == "" {
+			writeError(w, http.StatusBadRequest, errors.New("name the site"))
 			return
 		}
-		path, st, err := b.CreateWorktree(r.Context(), req)
+		created, err := b.CreateWorktree(r.Context(), req)
 		if err != nil {
 			fail(w, err)
 			return
 		}
-		writeJSON(w, http.StatusOK, WorktreeCreated{Path: path, Setup: st})
+		writeJSON(w, http.StatusOK, created)
+	})
+	mux.HandleFunc("GET /v1/sites/{name}/branches", func(w http.ResponseWriter, r *http.Request) {
+		branches, err := b.SiteBranches(r.Context(), r.PathValue("name"))
+		if err != nil {
+			fail(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, branches)
 	})
 	// Starts the setup, or joins the one running; see Backend.SetupWorktree.
 	mux.HandleFunc("POST /v1/worktrees/setup", func(w http.ResponseWriter, r *http.Request) {
@@ -146,6 +159,13 @@ func registerWorktrees(mux *http.ServeMux, b Backend) {
 func (c *Client) CreateWorktree(ctx context.Context, req WorktreeCreate) (WorktreeCreated, error) {
 	var out WorktreeCreated
 	err := c.slow().send(ctx, http.MethodPost, "/v1/worktrees", req, &out)
+	return out, err
+}
+
+// SiteBranches lists the git branches of a site.
+func (c *Client) SiteBranches(ctx context.Context, name string) (WorktreeBranches, error) {
+	var out WorktreeBranches
+	err := c.get(ctx, "/v1/sites/"+url.PathEscape(name)+"/branches", &out)
 	return out, err
 }
 

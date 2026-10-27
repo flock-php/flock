@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"slices"
 	"strings"
@@ -239,17 +240,33 @@ func TestCreateMakesTheWorktreeWhereFlockYmlSays(t *testing.T) {
 	if err := os.Mkdir(site, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	git("init", "-q")
+	git("init", "-q", "-b", "main")
 	git("commit", "-q", "--allow-empty", "-m", "init")
 	git("branch", "existing")
 	ctx := context.Background()
 
-	path, err := Create(ctx, site, "acme", "feature-auth", "feature/auth", "", "")
-	if err != nil || path != filepath.Join(filepath.Dir(site), "acme-feature-auth") {
-		t.Fatalf("default path: %q %v", path, err)
+	path, branch, err := Create(ctx, site, "acme", "feature/auth", "", "")
+	if err != nil || path != filepath.Join(filepath.Dir(site), "acme-feature-auth") || branch != "feature/auth" {
+		t.Fatalf("default path: %q %q %v", path, branch, err)
 	}
-	if path, err = Create(ctx, site, "acme", "existing", "existing", "", filepath.Join(t.TempDir(), "x")); err != nil {
+	if _, _, err = Create(ctx, site, "acme", "existing", "", filepath.Join(t.TempDir(), "x")); err != nil {
 		t.Fatalf("an existing branch: %v", err)
+	}
+	// No branch: one with a name of its own, from the branch asked for.
+	path, branch, err = Create(ctx, site, "acme", "", "existing", "")
+	if err != nil || !regexp.MustCompile(`^[a-z]+-[a-z]+$`).MatchString(branch) || path != filepath.Join(filepath.Dir(site), "acme-"+branch) {
+		t.Fatalf("a new name: %q %q %v", path, branch, err)
+	}
+
+	branches, err := ListBranches(ctx, site)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Contains(branches.Local, "existing") || !slices.Contains(branches.Local, branch) || branches.Remote == nil {
+		t.Errorf("branches: %+v", branches)
+	}
+	if branches.Current == "" || branches.Default != branches.Current {
+		t.Errorf("a repository without origin defaults to its main branch, which is checked out: %+v", branches)
 	}
 
 	for _, c := range []struct{ branch, from, path string }{
@@ -258,7 +275,7 @@ func TestCreateMakesTheWorktreeWhereFlockYmlSays(t *testing.T) {
 		{"bad..name", "", ""},                    // not a branch name
 		{"other", "", filepath.Dir(site)},        // the folder exists
 	} {
-		if _, err := Create(ctx, site, "acme", "x", c.branch, c.from, c.path); !errors.Is(err, ErrInvalid) {
+		if _, _, err := Create(ctx, site, "acme", c.branch, c.from, c.path); !errors.Is(err, ErrInvalid) {
 			t.Errorf("%+v: want ErrInvalid, got %v", c, err)
 		}
 	}

@@ -55,10 +55,51 @@ public enum DatabaseMode: String, Codable, Sendable, CaseIterable, Identifiable 
     }
 }
 
-/// A new worktree: its folder, and its setup.
+/// A new worktree: its folder, its branch (Flock's name for it when none was given), and its setup.
 public struct WorktreeCreated: Decodable, Sendable {
     public var path: String
+    public var branch: String?
     public var setup: WorktreeSetup
+}
+
+/// A site's git branches, for where a new worktree's branch starts.
+public struct Branches: Decodable, Sendable, Equatable {
+    /// The branch the site's checkout is on; empty when its HEAD is detached.
+    public var current: String
+    /// The repository's default branch (origin's HEAD, else main or master); empty when unknown.
+    public var `default`: String
+    public var local: [String]
+    /// Remote-tracking branches (origin/main), as git last fetched them.
+    public var remote: [String]
+
+    public init(current: String = "", default: String = "", local: [String] = [], remote: [String] = []) {
+        self.current = current
+        self.default = `default`
+        self.local = local
+        self.remote = remote
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case current, `default`, local, remote
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        current = try c.decodeIfPresent(String.self, forKey: .current) ?? ""
+        `default` = try c.decodeIfPresent(String.self, forKey: .default) ?? ""
+        local = try c.decodeIfPresent([String].self, forKey: .local) ?? []
+        remote = try c.decodeIfPresent([String].self, forKey: .remote) ?? []
+    }
+
+    /// The local branches in the order a menu offers them: the current one, the default one, then
+    /// the others by name.
+    public var ordered: [String] {
+        var out: [String] = []
+        for name in [current, `default`] + local where local.contains(name) && !out.contains(name) {
+            out.append(name)
+        }
+        return out
+    }
 }
 
 extension Status.Site {

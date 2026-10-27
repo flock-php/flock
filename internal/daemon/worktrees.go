@@ -327,35 +327,58 @@ func (d *daemon) SetupWorktree(path string, again bool, dbMode string) (worktree
 
 // CreateWorktree implements api.Backend: it creates a worktree of the site on branch (see
 // worktree.Create) and starts its setup.
-func (d *daemon) CreateWorktree(ctx context.Context, req api.WorktreeCreate) (string, worktree.Status, error) {
+func (d *daemon) CreateWorktree(ctx context.Context, req api.WorktreeCreate) (api.WorktreeCreated, error) {
 	if req.DB != "" {
 		if err := validDBMode(req.DB); err != nil {
-			return "", worktree.Status{}, err
+			return api.WorktreeCreated{}, err
 		}
 	}
-	cfg := d.config()
-	if cfg == nil {
-		return "", worktree.Status{}, errors.New("the daemon has no configuration yet")
-	}
-	site, ok := cfg.FindSite(req.Site)
-	if !ok || site.IsWorktree() {
-		return "", worktree.Status{}, fmt.Errorf("%w: no site named %s that worktrees can be made of", api.ErrInvalidRequest, req.Site)
+	site, err := d.mainSite(req.Site)
+	if err != nil {
+		return api.WorktreeCreated{}, err
 	}
 	if runningAsRoot() {
-		return "", worktree.Status{}, fmt.Errorf("%w: Flock runs as root here, so it doesn't create worktrees: use `git worktree add`", api.ErrConflict)
+		return api.WorktreeCreated{}, fmt.Errorf("%w: Flock runs as root here, so it doesn't create worktrees: use `git worktree add`", api.ErrConflict)
 	}
-	path, err := worktree.Create(ctx, site.Path, site.Name, config.WorktreeSlug(req.Branch), req.Branch, req.From, req.Path)
+	path, branch, err := worktree.Create(ctx, site.Path, site.Name, req.Branch, req.From, req.Path)
 	if errors.Is(err, worktree.ErrInvalid) {
-		return "", worktree.Status{}, fmt.Errorf("%w: %v", api.ErrInvalidRequest, err)
+		return api.WorktreeCreated{}, fmt.Errorf("%w: %v", api.ErrInvalidRequest, err)
 	}
 	if err != nil {
-		return "", worktree.Status{}, err
+		return api.WorktreeCreated{}, err
 	}
+	created := api.WorktreeCreated{Path: path, Branch: branch}
 	if err := d.reload(); err != nil {
-		return path, worktree.Status{}, err
+		return created, err
 	}
-	st, err := d.SetupWorktree(path, false, req.DB)
-	return path, st, err
+	created.Setup, err = d.SetupWorktree(path, false, req.DB)
+	return created, err
+}
+
+// SiteBranches implements api.Backend: the git branches of a site that worktrees can be made of.
+func (d *daemon) SiteBranches(ctx context.Context, name string) (api.WorktreeBranches, error) {
+	site, err := d.mainSite(name)
+	if err != nil {
+		return api.WorktreeBranches{}, err
+	}
+	branches, err := worktree.ListBranches(ctx, site.Path)
+	if errors.Is(err, worktree.ErrInvalid) {
+		return branches, fmt.Errorf("%w: %v", api.ErrInvalidRequest, err)
+	}
+	return branches, err
+}
+
+// mainSite finds the site named name that worktrees can be made of: not a worktree itself.
+func (d *daemon) mainSite(name string) (config.Site, error) {
+	cfg := d.config()
+	if cfg == nil {
+		return config.Site{}, errors.New("the daemon has no configuration yet")
+	}
+	site, ok := cfg.FindSite(name)
+	if !ok || site.IsWorktree() {
+		return config.Site{}, fmt.Errorf("%w: no site named %s that worktrees can be made of", api.ErrInvalidRequest, name)
+	}
+	return site, nil
 }
 
 // SwitchWorktreeDatabase implements api.Backend: as the worktree's job, it gives the worktree a

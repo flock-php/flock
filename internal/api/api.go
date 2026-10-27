@@ -239,8 +239,10 @@ type Backend interface {
 	// that the site can be shared, with the app's debug mode on for visitors when debug is set.
 	Shares() *share.Manager
 	StartShare(site string, allow []string, debug bool) error
-	// CreateWorktree creates a git worktree of a site and starts its setup, returning its folder.
-	CreateWorktree(ctx context.Context, req WorktreeCreate) (string, WorktreeStatus, error)
+	// CreateWorktree creates a git worktree of a site and starts its setup.
+	CreateWorktree(ctx context.Context, req WorktreeCreate) (WorktreeCreated, error)
+	// SiteBranches lists the git branches of a site, for where a new worktree's branch starts.
+	SiteBranches(ctx context.Context, name string) (WorktreeBranches, error)
 	// SetupWorktree starts the setup of the git worktree at path (ErrNotWorktree when it isn't
 	// one of a site's) with the database mode db ("" for flock.yml's), or joins the one that runs;
 	// one set up already is left alone unless again.

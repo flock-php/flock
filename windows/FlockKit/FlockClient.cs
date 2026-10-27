@@ -128,9 +128,13 @@ public sealed class FlockClient : IDisposable
     public Task<List<Status.SiteShare>> StopShareAsync(string site, CancellationToken cancellationToken = default) =>
         Send<List<Status.SiteShare>>(HttpMethod.Delete, $"/v1/shares/{Escape(site)}", cancellationToken: cancellationToken);
 
+    /// <summary>A site's git branches, for where a new worktree's branch starts.</summary>
+    public Task<SiteBranches> SiteBranchesAsync(string site, CancellationToken cancellationToken = default) =>
+        Get<SiteBranches>($"/v1/sites/{Escape(site)}/branches", cancellationToken: cancellationToken);
+
     /// <summary>
     /// Creates a git worktree of site on branch (checked out when it exists, else a new branch from
-    /// from, the current commit by default), at path (null: where flock.yml says), with the database
+    /// from, the current commit by default; an empty branch gets a name Flock makes up), at path (null: where flock.yml says), with the database
     /// mode db (null: the project's). It returns once git has created it: the status follows its setup.
     /// </summary>
     public Task<WorktreeCreated> CreateWorktreeAsync(string site, string branch, string? from = null, string? path = null, string? db = null, CancellationToken cancellationToken = default) =>

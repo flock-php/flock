@@ -378,8 +378,14 @@ impl Client {
         self.request("DELETE", &format!("/v1/mcp/clients/{}", escape(id)), None::<&()>, MCP_TIMEOUT)
     }
 
+    /// The site's branches, for where a new worktree starts.
+    pub fn site_branches(&self, site: &str) -> Result<Branches, Error> {
+        self.request("GET", &format!("/v1/sites/{}/branches", escape(site)), None::<&()>, DEFAULT_TIMEOUT)
+    }
+
     /// Creates a worktree of site on branch (a new branch from `from`, "" for the current commit;
-    /// a branch that exists is checked out) and starts its setup. db is "", shared, copy or fresh.
+    /// a branch that exists is checked out; "" for a name Flock makes up) and starts its setup.
+    /// db is "", shared, copy or fresh.
     pub fn create_worktree(&self, site: &str, branch: &str, from: &str, db: &str) -> Result<WorktreeCreated, Error> {
         let body = serde_json::json!({ "site": site, "branch": branch, "from": from, "db": db });
         self.request("POST", "/v1/worktrees", Some(&body), CHANGE_TIMEOUT)
@@ -1098,7 +1104,53 @@ fn capitalized(text: &str) -> String {
 #[serde(default)]
 pub struct WorktreeCreated {
     pub path: String,
+    /// The branch it is on: the one asked for, or the name Flock made up.
+    pub branch: String,
     pub setup: WorktreeStatus,
+}
+
+/// GET /v1/sites/{name}/branches (api.Branches): current is "" when HEAD is detached; default is
+/// origin's HEAD, else main or master, else "".
+#[derive(Deserialize, Debug, Clone, PartialEq, Default)]
+#[serde(default)]
+pub struct Branches {
+    pub current: String,
+    pub default: String,
+    pub local: Option<Vec<String>>,
+    pub remote: Option<Vec<String>>,
+}
+
+impl Branches {
+    pub fn has_local(&self, name: &str) -> bool {
+        self.local.iter().flatten().any(|b| b == name)
+    }
+
+    /// Where a new branch can start, as value and label: the current commit when HEAD is
+    /// detached, the current branch, the default one, the other local ones, then origin's.
+    pub fn choices(&self) -> Vec<(String, String)> {
+        let mut choices = Vec::new();
+        if self.current.is_empty() {
+            choices.push((String::new(), "The current commit".to_owned()));
+        }
+        let mut names: Vec<&String> = Vec::new();
+        for name in [&self.current, &self.default].into_iter().chain(self.local.iter().flatten()) {
+            if !name.is_empty() && self.has_local(name) && !names.contains(&name) {
+                names.push(name);
+            }
+        }
+        for name in names {
+            let label = if *name == self.current {
+                format!("{name} (current)")
+            } else if *name == self.default {
+                format!("{name} (default)")
+            } else {
+                name.clone()
+            };
+            choices.push((name.clone(), label));
+        }
+        choices.extend(self.remote.iter().flatten().map(|r| (r.clone(), r.clone())));
+        choices
+    }
 }
 
 /// POST /v1/worktrees/remove (api.WorktreeRemoval).
@@ -1217,9 +1269,26 @@ mod tests {
 
     #[test]
     fn decodes_a_created_worktree() {
-        let created: WorktreeCreated =
-            serde_json::from_str(r#"{"path":"/home/a/acme-x","setup":{"state":"queued","log":"worktree-x.acme"}}"#).unwrap();
+        let json = r#"{"path":"/home/a/acme-brave-otter","branch":"brave-otter","setup":{"state":"queued","log":"worktree-x.acme"}}"#;
+        let created: WorktreeCreated = serde_json::from_str(json).unwrap();
+        assert_eq!(created.branch, "brave-otter");
         assert_eq!(created.setup.text(), "Waiting…");
+    }
+
+    #[test]
+    fn orders_the_branches_to_start_from() {
+        let json = r#"{"current":"develop","default":"main","local":["develop","feature/x","main"],
+            "remote":["origin/develop","origin/main"]}"#;
+        let branches: Branches = serde_json::from_str(json).unwrap();
+        assert!(branches.has_local("feature/x"));
+        assert!(!branches.has_local("origin/main"));
+        let labels: Vec<String> = branches.choices().into_iter().map(|(_, label)| label).collect();
+        assert_eq!(labels, ["develop (current)", "main (default)", "feature/x", "origin/develop", "origin/main"]);
+        assert_eq!(branches.choices()[1].0, "main");
+        // Detached, or a daemon without branches: only the current commit.
+        let detached: Branches = serde_json::from_str(r#"{"current":"","default":"","local":null,"remote":null}"#).unwrap();
+        assert_eq!(detached.choices(), [(String::new(), "The current commit".to_owned())]);
+        assert_eq!(Branches::default().choices().len(), 1);
     }
 
     #[test]

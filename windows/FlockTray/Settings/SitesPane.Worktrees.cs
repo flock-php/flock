@@ -61,11 +61,19 @@ internal sealed partial class SitesPane
         _ => Ui.Row(0),
     };
 
-    /// <summary>Asks for the branch, where it starts and the database, then creates the worktree; a failure shows in the dialog.</summary>
+    /// <summary>
+    /// Asks for the branch (empty: Flock makes a name up), where a new one starts (the site's
+    /// branches, once loaded) and the database, then creates the worktree; a failure shows in the dialog.
+    /// </summary>
     private async Task NewWorktree(Status.Site site)
     {
-        var branch = new TextBox { Header = "Branch", PlaceholderText = "feature/login" };
-        var from = new TextBox { Header = "Start from", PlaceholderText = "current commit" };
+        var token = activeLifetime?.Token ?? CancellationToken.None;
+        var branch = new TextBox { Header = "Branch", PlaceholderText = "a name like brave-otter" };
+        // Disabled until the branches are loaded; values[i] is where item i starts ("" the current commit, null the separator).
+        var from = new ComboBox { Header = "Start from", MinWidth = 260, IsEnabled = false };
+        var values = new List<string?>();
+        var branches = new SiteBranches();
+        var loaded = false;
         var database = new ComboBox { Header = "Database", MinWidth = 200 };
         database.Items.Add("Project default");
         foreach (var item in DatabaseChoices)
@@ -73,6 +81,7 @@ internal sealed partial class SitesPane
             database.Items.Add(item);
         }
         database.SelectedIndex = 0;
+        var explanation = Ui.Caption("", Ui.TertiaryText);
         var working = Ui.Row(8, new ProgressRing { Width = 16, Height = 16 }, Ui.Caption("Creating the worktree…", wrap: false));
         working.Visibility = Visibility.Collapsed;
         var error = Ui.Caption("", Ui.Critical);
@@ -81,18 +90,78 @@ internal sealed partial class SitesPane
         var dialog = new ContentDialog
         {
             Title = $"New worktree of {site.Name}",
-            Content = Ui.Column(12,
-                Ui.Column(4, branch, Ui.Caption("A branch that exists is checked out. A new one starts from the commit, branch or tag below.", Ui.TertiaryText)),
-                from,
+            Content = Ui.Column(12, branch, from,
                 Ui.Column(4, database, Ui.Caption("A database of its own gets the migrations run. Project default is what flock.yml says, else the site's.", Ui.TertiaryText)),
-                working, error),
+                explanation, working, error),
             PrimaryButtonText = "Create",
             CloseButtonText = "Cancel",
             DefaultButton = ContentDialogButton.Primary,
-            IsPrimaryButtonEnabled = false,
             XamlRoot = Window.XamlRoot,
         };
-        branch.TextChanged += (_, _) => dialog.IsPrimaryButtonEnabled = branch.Text.Trim().Length > 0;
+        dialog.Resources["ContentDialogMaxWidth"] = 520.0;
+
+        // The current commit when detached; the local branches (current, default, the rest); the remote ones.
+        void FillFrom()
+        {
+            from.Items.Clear();
+            values.Clear();
+            if (branches.Current.Length == 0)
+            {
+                from.Items.Add("The current commit");
+                values.Add("");
+            }
+            foreach (var name in branches.Ordered())
+            {
+                from.Items.Add(name == branches.Current ? $"{name} (current)" : name == branches.Default ? $"{name} (default)" : name);
+                values.Add(name);
+            }
+            if (branches.Remote.Count > 0)
+            {
+                from.Items.Add(new ComboBoxItem
+                {
+                    IsEnabled = false,
+                    Content = new Border { Height = 1, Background = Ui.Brush("DividerStrokeColorDefaultBrush") },
+                    HorizontalContentAlignment = HorizontalAlignment.Stretch,
+                });
+                values.Add(null);
+                foreach (var name in branches.Remote)
+                {
+                    from.Items.Add(name);
+                    values.Add(name);
+                }
+            }
+            from.SelectedIndex = Math.Max(0, values.IndexOf(branches.Current));
+        }
+
+        string Typed() => branch.Text.Trim();
+        // A branch that exists is checked out as it is, so it doesn't start anywhere.
+        bool Exists() => branches.Local.Contains(Typed());
+
+        void Update()
+        {
+            from.IsEnabled = loaded && !Exists();
+            var typed = Typed();
+            var address = typed.Length == 0 ? "its own address" : $"{SiteBranches.Slug(typed)}.{site.Domain}";
+            explanation.Text = Exists()
+                ? $"{typed} exists, so the worktree checks it out. Flock creates it next to {site.Name}, sets it up and serves it at {address}."
+                : $"Flock creates the worktree next to {site.Name} on {(typed.Length == 0 ? "a new branch with a name of its own" : $"the new branch {typed}")}, sets it up and serves it at {address}.";
+        }
+
+        async Task LoadBranches()
+        {
+            // An older daemon can't list them: only the current commit is offered.
+            if (await Model.Sites.SiteBranchesAsync(site.Name, token) is { } listed)
+            {
+                branches = listed;
+                FillFrom();
+            }
+            loaded = true;
+            Update();
+        }
+
+        FillFrom();
+        Update();
+        branch.TextChanged += (_, _) => Update();
 
         string? created = null;
         dialog.PrimaryButtonClick += async (_, args) =>
@@ -104,10 +173,9 @@ internal sealed partial class SitesPane
             error.Visibility = Visibility.Collapsed;
             try
             {
-                var start = from.Text.Trim();
+                var start = Exists() || from.SelectedIndex < 0 ? null : values[from.SelectedIndex];
                 var db = database.SelectedIndex > 0 ? DatabaseModes[database.SelectedIndex - 1] : null;
-                (created, var failure) = await Model.Sites.CreateWorktreeAsync(site.Name, branch.Text.Trim(), start.Length > 0 ? start : null, db,
-                    activeLifetime?.Token ?? CancellationToken.None);
+                (created, var failure) = await Model.Sites.CreateWorktreeAsync(site.Name, Typed(), start is { Length: > 0 } ? start : null, db, token);
                 if (failure is not null)
                 {
                     args.Cancel = true;
@@ -118,11 +186,14 @@ internal sealed partial class SitesPane
             finally
             {
                 working.Visibility = Visibility.Collapsed;
-                dialog.IsPrimaryButtonEnabled = branch.Text.Trim().Length > 0;
+                dialog.IsPrimaryButtonEnabled = true;
                 deferral.Complete();
             }
         };
-        if (await dialog.ShowAsync() == ContentDialogResult.Primary && created is not null)
+        var load = LoadBranches();
+        var result = await dialog.ShowAsync();
+        await load;
+        if (result == ContentDialogResult.Primary && created is not null)
         {
             // The daemon may list it a moment later.
             selectWhenListed = created;

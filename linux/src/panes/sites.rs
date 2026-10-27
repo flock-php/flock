@@ -6,7 +6,7 @@
 //! A site's git worktrees are listed under it. A worktree's detail shows its setup and database
 //! instead of settings: it uses its site's.
 
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 
 use adw::prelude::*;
@@ -16,7 +16,9 @@ use gtk::{gdk, gio, glib};
 use super::common::{PaneView, ask_link, group, info_row, report};
 use super::versions::{MenuItem, badge, button, more_menu};
 use super::{Data, Pane};
-use crate::api::{Client, Config, Error, ExtensionReport, PhpExtension, ShareStatus, SiteChange, SiteStatus, Status, WorktreeStatus};
+use crate::api::{
+    Branches, Client, Config, Error, ExtensionReport, PhpExtension, ShareStatus, SiteChange, SiteStatus, Status, WorktreeStatus,
+};
 use crate::links::{self, Link};
 use crate::model::AppModel;
 use crate::prefs;
@@ -1027,53 +1029,86 @@ impl Inner {
             group.add(&self.site_row(worktree));
         }
         if let Some((_, branch)) = creating {
-            let row = adw::ActionRow::builder().title(glib::markup_escape_text(&format!("Creating {branch}…"))).build();
+            let title = if branch.is_empty() { "Creating a worktree…".to_owned() } else { format!("Creating {branch}…") };
+            let row = adw::ActionRow::builder().title(glib::markup_escape_text(&title)).build();
             row.add_prefix(&gtk::Spinner::builder().spinning(true).build());
             group.add(&row);
         }
         group
     }
 
-    /// Asks for the branch, where it starts and the database of a new worktree.
+    /// Asks for the branch, where it starts and the database of a new worktree. The branches to
+    /// start from are read when it opens; a branch that exists is checked out as it is.
     fn new_worktree(self: &Rc<Self>, site: &SiteStatus) {
-        let entry = |placeholder: &str| {
-            gtk::Entry::builder().placeholder_text(placeholder).activates_default(true).valign(gtk::Align::Center).hexpand(true).build()
-        };
-        let (branch, from) = (entry("feature/auth"), entry("current commit"));
+        let branch = gtk::Entry::builder()
+            .placeholder_text("a name like brave-otter")
+            .activates_default(true)
+            .valign(gtk::Align::Center)
+            .hexpand(true)
+            .build();
         let branch_row = adw::ActionRow::builder().title("Branch").build();
         branch_row.add_suffix(&branch);
-        let from_row = adw::ActionRow::builder().title("Start from").build();
-        from_row.add_suffix(&from);
+        let from_model = gtk::StringList::new(&["The current commit"]);
+        let from = adw::ComboRow::builder().title("Start from").model(&from_model).sensitive(false).build();
         let database = adw::ComboRow::builder()
             .title("Database")
             .model(&gtk::StringList::new(&["Project default", DB_CHOICES[0], DB_CHOICES[1], DB_CHOICES[2]]))
             .build();
         let list = gtk::ListBox::builder().css_classes(["boxed-list"]).selection_mode(gtk::SelectionMode::None).build();
         list.append(&branch_row);
-        list.append(&from_row);
+        list.append(&from);
         list.append(&database);
-        let dialog = adw::AlertDialog::new(
-            Some(&format!("New worktree of {}", site.name)),
-            Some("Flock creates it next to the site, on a new branch (a branch that exists is checked out), and sets it up."),
-        );
+        let dialog = adw::AlertDialog::new(Some(&format!("New Worktree of {}", site.name)), Some(&new_worktree_text(site, "", false)));
         dialog.set_extra_child(Some(&list));
         dialog.add_responses(&[("cancel", "Cancel"), ("create", "Create")]);
         dialog.set_response_appearance("create", adw::ResponseAppearance::Suggested);
         dialog.set_default_response(Some("create"));
-        dialog.set_response_enabled("create", false);
-        let weak = dialog.downgrade();
-        branch.connect_changed(move |entry| {
-            if let Some(dialog) = weak.upgrade() {
-                dialog.set_response_enabled("create", !entry.text().trim().is_empty());
+
+        // The branches, the value of each Start from choice, and whether they were read.
+        let branches: Rc<RefCell<Branches>> = Rc::default();
+        let values: Rc<RefCell<Vec<String>>> = Rc::new(RefCell::new(vec![String::new()]));
+        let loaded = Rc::new(Cell::new(false));
+        // Follows the branch typed in: one that exists starts from itself.
+        let follow: Rc<dyn Fn(&str)> = Rc::new({
+            let (weak, from, branches, loaded, s) = (dialog.downgrade(), from.clone(), branches.clone(), loaded.clone(), site.clone());
+            move |text: &str| {
+                let branch = text.trim();
+                let exists = branches.borrow().has_local(branch);
+                from.set_sensitive(loaded.get() && !exists);
+                if let Some(dialog) = weak.upgrade() {
+                    dialog.set_body(&new_worktree_text(&s, branch, exists));
+                }
             }
         });
+        let f = follow.clone();
+        branch.connect_changed(move |entry| f(entry.text().as_str()));
+        let (name, entry) = (site.name.clone(), branch.clone());
+        let (from_list, model, b, v, l) = (from.clone(), from_model.clone(), branches.clone(), values.clone(), loaded.clone());
+        glib::spawn_future_local(async move {
+            // An older daemon has no branches to offer: the current commit only.
+            let read = gio::spawn_blocking(move || Client.site_branches(&name)).await.expect("branches request").unwrap_or_default();
+            let choices = read.choices();
+            let labels: Vec<&str> = choices.iter().map(|(_, label)| label.as_str()).collect();
+            model.splice(0, model.n_items(), &labels);
+            let current = choices.iter().position(|(value, _)| *value == read.current).unwrap_or(0);
+            from_list.set_selected(current as u32);
+            v.replace(choices.into_iter().map(|(value, _)| value).collect());
+            b.replace(read);
+            l.set(true);
+            follow(entry.text().as_str());
+        });
+
         let (this, name) = (self.clone(), site.name.clone());
         dialog.choose(Some(&self.stack), gio::Cancellable::NONE, move |response| {
-            let branch = branch.text().trim().to_owned();
-            if response != "create" || branch.is_empty() {
+            if response != "create" {
                 return;
             }
-            let from = from.text().trim().to_owned();
+            let branch = branch.text().trim().to_owned();
+            let from = if branches.borrow().has_local(&branch) {
+                String::new()
+            } else {
+                values.borrow().get(from.selected() as usize).cloned().unwrap_or_default()
+            };
             let db = ["", "shared", "copy", "fresh"].get(database.selected() as usize).copied().unwrap_or_default().to_owned();
             this.create_worktree(name.clone(), branch, from, db);
         });
@@ -1529,6 +1564,36 @@ fn setup_error(setup: &WorktreeStatus) -> String {
     if setup.error.is_empty() { "The setup failed.".to_owned() } else { setup.error.clone() }
 }
 
+/// What the New Worktree dialog says it does with the branch typed in.
+fn new_worktree_text(site: &SiteStatus, branch: &str, exists: bool) -> String {
+    let address = if branch.is_empty() { "its own address".to_owned() } else { format!("{}.{}", slug(branch), site.domain) };
+    if exists {
+        return format!(
+            "{branch} exists, so the worktree checks it out. Flock creates it next to {}, sets it up and serves it at {address}.",
+            site.name
+        );
+    }
+    let name = if branch.is_empty() { "a new branch with a name of its own".to_owned() } else { format!("the new branch {branch}") };
+    format!("Flock creates the worktree next to {} on {name}, sets it up and serves it at {address}.", site.name)
+}
+
+/// The name a worktree is served under, as Flock makes it from the branch (config.WorktreeSlug):
+/// "Feature/Auth" → "feature-auth".
+fn slug(branch: &str) -> String {
+    let mut out = String::new();
+    for c in branch.to_lowercase().chars() {
+        if c.is_ascii_alphanumeric() || c == '-' {
+            out.push(c);
+        } else if matches!(c, '/' | '_' | '.') {
+            out.push('-');
+        }
+    }
+    while out.contains("--") {
+        out = out.replace("--", "-");
+    }
+    out.trim_matches('-').to_owned()
+}
+
 /// What a site's list row warns about: the site, its document root, a domain, or its FrankenPHP.
 fn problem(site: &SiteStatus) -> Option<String> {
     if let Some(p) = site.problem.clone().or_else(|| site.notice.clone()) {
@@ -1620,4 +1685,16 @@ fn launch_uri(widget: &impl IsA<gtk::Widget>, uri: &str) {
 fn launch_file(widget: &impl IsA<gtk::Widget>, path: &str) {
     let window = widget.root().and_downcast::<gtk::Window>();
     gtk::FileLauncher::new(Some(&gio::File::for_path(path))).launch(window.as_ref(), gio::Cancellable::NONE, |_| {});
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn makes_the_worktree_slug_like_flock() {
+        assert_eq!(slug("Feature/Auth_2.x"), "feature-auth-2-x");
+        assert_eq!(slug("fix//ümlaut-"), "fix-mlaut");
+        assert_eq!(slug("brave-otter"), "brave-otter");
+    }
 }

@@ -71,8 +71,21 @@ public sealed class SitesService : IAsyncDisposable
     public Task<OperationOutcome> StopShareAsync(string site, CancellationToken token = default) =>
         MutateAsync(Key(site), site, (_, cancellationToken) => client.StopShareAsync(site, cancellationToken), token);
 
+    /// <summary>A site's git branches for the New Worktree dialog; null when the daemon can't list them (an older one, not a git checkout).</summary>
+    public async Task<SiteBranches?> SiteBranchesAsync(string site, CancellationToken token = default)
+    {
+        try
+        {
+            return await client.SiteBranchesAsync(site, token);
+        }
+        catch (FlockException)
+        {
+            return null;
+        }
+    }
+
     /// <summary>
-    /// Creates a git worktree of site on branch, from from (null: the current commit), with the
+    /// Creates a git worktree of site on branch (empty: Flock makes a name up), from from (null: the current commit), with the
     /// database mode db (null: the project's). The dialog asking for it shows a failure, so it
     /// returns the error instead of putting it into the window's error bar.
     /// </summary>

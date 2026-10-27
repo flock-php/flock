@@ -177,8 +177,14 @@ public actor FlockClient {
 
     // MARK: Worktrees
 
+    /// The git branches of a site, for where a new worktree's branch starts.
+    public func siteBranches(_ site: String) async throws -> Branches {
+        try await decode(Branches.self, "GET", "/v1/sites/\(escape(site))/branches")
+    }
+
     /// Creates a git worktree of a site on branch (a new branch from `from`, the current commit by
-    /// default; a branch that exists is checked out) and starts its setup.
+    /// default; a branch that exists is checked out; an empty one gets a name of its own, like
+    /// brave-otter) and starts its setup.
     public func createWorktree(site: String, branch: String, from: String = "", db: DatabaseMode? = nil) async throws -> WorktreeCreated {
         struct Request: Encodable { let site: String; let branch: String; let from: String; let db: String }
         let body = try JSONEncoder().encode(Request(site: site, branch: branch, from: from, db: db?.rawValue ?? ""))

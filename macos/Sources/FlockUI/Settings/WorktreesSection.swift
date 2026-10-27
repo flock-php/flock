@@ -270,42 +270,82 @@ struct WorktreeState: View {
     }
 }
 
-/// Asks for a new worktree's branch, where a new branch starts, and its database.
+/// Asks for a new worktree's branch (empty: Flock names it), where a new branch starts (the site's
+/// branches, its current one first) and its database.
 private struct NewWorktreeSheet: View {
+    @Environment(AppModel.self) private var model
     let site: Status.Site
     let create: (String, String, DatabaseMode?) -> Void
     let cancel: () -> Void
     private let branchState = State<String>(initialValue: "")
+    /// Where a new branch starts: a local or remote branch; "" for the current commit.
     private let fromState = State<String>(initialValue: "")
     private let databaseState = State<DatabaseMode?>(initialValue: nil)
+    private let branchesState = State<Branches?>(initialValue: nil)
 
     private var branch: String { branchState.wrappedValue.trimmingCharacters(in: .whitespaces) }
+    private var branches: Branches { branchesState.wrappedValue ?? Branches() }
+    /// The branch typed in exists: it's checked out as it is.
+    private var exists: Bool { branches.local.contains(branch) }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("New Worktree of \(site.name)").font(.headline)
             Form {
-                TextField("Branch", text: branchState.projectedValue, prompt: Text("feature/checkout"))
-                TextField("Start from", text: fromState.projectedValue, prompt: Text("the current commit"))
+                TextField("Branch", text: branchState.projectedValue, prompt: Text("a name like brave-otter"))
+                Picker("Start from", selection: fromState.projectedValue) {
+                    if branches.current.isEmpty {
+                        Text("The current commit").tag("")
+                    }
+                    ForEach(branches.ordered, id: \.self) { name in
+                        Text(label(name)).tag(name)
+                    }
+                    if !branches.remote.isEmpty {
+                        Divider()
+                        ForEach(branches.remote, id: \.self) { Text($0).tag($0) }
+                    }
+                }
+                .disabled(exists || branchesState.wrappedValue == nil)
                 Picker("Database", selection: databaseState.projectedValue) {
                     Text("Project default").tag(DatabaseMode?.none)
                     ForEach(DatabaseMode.allCases) { Text($0.title).tag(DatabaseMode?.some($0)) }
                 }
             }
-            Text("Flock creates the worktree next to \(site.name) on this branch (a branch that exists is checked out), sets it up and serves it at \(branch.isEmpty ? "<branch>" : slug).\(site.domain).")
+            Text(explanation)
                 .font(.caption).foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
             HStack {
                 Spacer()
                 Button("Cancel", role: .cancel) { cancel() }
                     .keyboardShortcut(.cancelAction)
-                Button("Create") { create(branch, fromState.wrappedValue.trimmingCharacters(in: .whitespaces), databaseState.wrappedValue) }
+                Button("Create") { create(branch, exists ? "" : fromState.wrappedValue, databaseState.wrappedValue) }
                     .keyboardShortcut(.defaultAction)
-                    .disabled(branch.isEmpty)
             }
         }
         .padding(20)
         .frame(width: 440)
+        .task {
+            let loaded = (try? await model.client.siteBranches(site.name)) ?? Branches()
+            branchesState.wrappedValue = loaded
+            fromState.wrappedValue = loaded.current
+        }
+    }
+
+    private func label(_ name: String) -> String {
+        switch name {
+        case branches.current: "\(name) (current)"
+        case branches.default: "\(name) (default)"
+        default: name
+        }
+    }
+
+    private var explanation: String {
+        let address = branch.isEmpty ? "its own address" : "\(slug).\(site.domain)"
+        if exists {
+            return "\(branch) exists, so the worktree checks it out. Flock creates it next to \(site.name), sets it up and serves it at \(address)."
+        }
+        let name = branch.isEmpty ? "a new branch with a name of its own" : "the new branch \(branch)"
+        return "Flock creates the worktree next to \(site.name) on \(name), sets it up and serves it at \(address)."
     }
 
     /// The name it's served under, as Flock makes it from the branch (config.WorktreeSlug).
