@@ -16,9 +16,7 @@ use gtk::{gdk, gio, glib};
 use super::common::{PaneView, ask_link, group, info_row, report};
 use super::versions::{MenuItem, badge, button, more_menu};
 use super::{Data, Pane};
-use crate::api::{
-    Client, Config, Error, ExtensionReport, PhpExtension, ShareStatus, SiteChange, SiteStatus, Status, WorktreeStatus,
-};
+use crate::api::{Client, Config, Error, ExtensionReport, PhpExtension, ShareStatus, SiteChange, SiteStatus, Status, WorktreeStatus};
 use crate::links::{self, Link};
 use crate::model::AppModel;
 use crate::prefs;
