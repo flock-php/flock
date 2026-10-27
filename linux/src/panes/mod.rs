@@ -12,6 +12,7 @@ pub mod php;
 pub mod services;
 pub mod sites;
 mod versions;
+mod worktree_job;
 
 use crate::api::{Config, Service, Status};
 

@@ -102,6 +102,13 @@ struct SitesPane: View {
                     .frame(minWidth: 340, maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
                     .background(Color(nsColor: .controlBackgroundColor).opacity(0.5))
                 }
+                .onChange(of: model.pendingSite, initial: true) { _, name in
+                    // A notification or link asks for this site: selected once.
+                    if let name, sites.contains(where: { $0.name == name }) {
+                        selectionState.wrappedValue = name
+                        model.pendingSite = nil
+                    }
+                }
                 .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(.separator))
                 .clipShape(RoundedRectangle(cornerRadius: 8))
                 .padding(.horizontal, 20)

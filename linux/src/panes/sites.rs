@@ -15,6 +15,7 @@ use gtk::{gdk, gio, glib};
 
 use super::common::{PaneView, ask_link, group, info_row, report};
 use super::versions::{MenuItem, badge, button, more_menu};
+use super::worktree_job;
 use super::{Data, Pane};
 use crate::api::{
     Branches, Client, Config, Error, ExtensionReport, PhpExtension, ShareStatus, SiteChange, SiteStatus, Status, WorktreeStatus,
@@ -40,8 +41,6 @@ struct Inner {
     shown: RefCell<Option<String>>,
     /// The sites whose worktrees the list shows (prefs.rs).
     expanded: RefCell<Vec<String>>,
-    /// The site and branch of the worktree being created.
-    creating: RefCell<Option<(String, String)>>,
     /// The folder of the worktree being removed.
     removing: RefCell<Option<String>>,
 }
@@ -78,7 +77,6 @@ impl SitesPane {
             restarting: RefCell::default(),
             shown: RefCell::default(),
             expanded: RefCell::new(prefs::load().expanded_sites),
-            creating: RefCell::default(),
             removing: RefCell::default(),
         }))
     }
@@ -123,12 +121,11 @@ impl Inner {
     fn render(self: &Rc<Self>) {
         self.ask_link();
         let key = format!(
-            "{:?}{:?}{:?}{:?}{:?}{:?}",
+            "{:?}{:?}{:?}{:?}{:?}",
             self.status.borrow(),
             self.config.borrow(),
             self.selected.borrow(),
             self.restarting.borrow(),
-            self.creating.borrow(),
             self.removing.borrow()
         );
         if self.shown.borrow().as_deref() == Some(key.as_str()) {
@@ -1019,20 +1016,13 @@ impl Inner {
         add.connect_clicked(move |_| this.new_worktree(&s));
         group.set_header_suffix(Some(&add));
         let worktrees = status.worktrees_of(&site.name);
-        let creating = self.creating.borrow().clone().filter(|(name, _)| *name == site.name);
-        if worktrees.is_empty() && creating.is_none() {
+        if worktrees.is_empty() {
             group.add(
                 &adw::ActionRow::builder().title("No worktrees").subtitle("Create one here, with git or with your agent app.").build(),
             );
         }
         for worktree in worktrees {
             group.add(&self.site_row(worktree));
-        }
-        if let Some((_, branch)) = creating {
-            let title = if branch.is_empty() { "Creating a worktree…".to_owned() } else { format!("Creating {branch}…") };
-            let row = adw::ActionRow::builder().title(glib::markup_escape_text(&title)).build();
-            row.add_prefix(&gtk::Spinner::builder().spinning(true).build());
-            group.add(&row);
         }
         group
     }
@@ -1110,20 +1100,12 @@ impl Inner {
                 values.borrow().get(from.selected() as usize).cloned().unwrap_or_default()
             };
             let db = ["", "shared", "copy", "fresh"].get(database.selected() as usize).copied().unwrap_or_default().to_owned();
-            this.create_worktree(name.clone(), branch, from, db);
-        });
-    }
-
-    fn create_worktree(self: &Rc<Self>, site: String, branch: String, from: String, db: String) {
-        self.creating.replace(Some((site.clone(), branch.clone())));
-        self.render();
-        let this = self.clone();
-        glib::spawn_future_local(async move {
-            let result = gio::spawn_blocking(move || Client.create_worktree(&site, &branch, &from, &db)).await.expect("worktree request");
-            this.creating.replace(None);
-            report(&this.banner, result.err().map(|e| e.to_string()));
-            this.render();
-            this.model.refresh();
+            let (title, site) = (format!("New Worktree of {name}"), name.clone());
+            let start: worktree_job::Start =
+                Box::new(move |c: Client| c.create_worktree(&site, &branch, &from, &db).map(|created| created.path));
+            // Closed once it is ready, the dialog shows the new worktree.
+            let pane = this.clone();
+            worktree_job::open(&this.stack, this.model.clone(), &title, start, move |worktree| pane.open(&worktree));
         });
     }
 
@@ -1308,6 +1290,7 @@ impl Inner {
             if own.is_some() { adw::ResponseAppearance::Destructive } else { adw::ResponseAppearance::Suggested },
         );
         let (this, path, db) = (self.clone(), site.path.clone(), db.to_owned());
+        let job_title = format!("Switching {label}'s Database");
         dialog.choose(Some(&self.stack), gio::Cancellable::NONE, move |response| {
             if response != "switch" {
                 // The row shows the mode it has again.
@@ -1315,12 +1298,9 @@ impl Inner {
                 this.render();
                 return;
             }
-            let (this, path, db) = (this.clone(), path.clone(), db.clone());
-            glib::spawn_future_local(async move {
-                let result = gio::spawn_blocking(move || Client.switch_worktree_database(&path, &db)).await.expect("worktree request");
-                report(&this.banner, result.err().map(|e| e.to_string()));
-                this.model.refresh();
-            });
+            let (path, db) = (path.clone(), db.clone());
+            let start: worktree_job::Start = Box::new(move |c: Client| c.switch_worktree_database(&path, &db).map(|_| path));
+            worktree_job::open(&this.stack, this.model.clone(), &job_title, start, |_| {});
         });
     }
 
@@ -1331,8 +1311,8 @@ impl Inner {
                 .title("Flock hasn't set this worktree up")
                 .subtitle("Setting it up copies dependencies and .env, installs and runs the project's hooks.")
                 .build();
-            let (this, path) = (self.clone(), site.path.clone());
-            row.add_suffix(&button("Set Up", false, move || this.run_setup(&path, false)));
+            let (this, s) = (self.clone(), site.clone());
+            row.add_suffix(&button("Set Up", false, move || this.run_setup(&s, false)));
             group.add(&row);
             return group;
         };
@@ -1348,21 +1328,19 @@ impl Inner {
             show_log.set_action_target_value(Some(&format!("logs/services/{}", setup.log).to_variant()));
             row.add_suffix(&show_log);
         }
-        let (this, path) = (self.clone(), site.path.clone());
-        let again = button("Run Setup Again", false, move || this.run_setup(&path, true));
+        let (this, s) = (self.clone(), site.clone());
+        let again = button("Run Setup Again", false, move || this.run_setup(&s, true));
         again.set_sensitive(!setup.busy());
         row.add_suffix(&again);
         group.add(&row);
         group
     }
 
-    fn run_setup(self: &Rc<Self>, path: &str, again: bool) {
-        let (this, path) = (self.clone(), path.to_owned());
-        glib::spawn_future_local(async move {
-            let result = gio::spawn_blocking(move || Client.setup_worktree(&path, again)).await.expect("worktree request");
-            report(&this.banner, result.err().map(|e| e.to_string()));
-            this.model.refresh();
-        });
+    /// Sets the worktree up (again), in the progress dialog.
+    fn run_setup(self: &Rc<Self>, site: &SiteStatus, again: bool) {
+        let path = site.path.clone();
+        let start: worktree_job::Start = Box::new(move |c: Client| c.setup_worktree(&path, again).map(|_| path));
+        worktree_job::open(&self.stack, self.model.clone(), &format!("Setting Up {}", site.worktree_label()), start, |_| {});
     }
 
     fn ask_remove(self: &Rc<Self>, site: &SiteStatus) {

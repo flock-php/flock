@@ -13,22 +13,9 @@ namespace Flock.Tray;
 /// </summary>
 internal sealed partial class SitesPane
 {
-    // A worktree created here, selected once the status lists it.
-    private string? selectWhenListed;
-
     // The database pickers' modes and their labels, in their order.
     private static readonly string[] DatabaseModes = [Status.WorktreeDatabase.Shared, Status.WorktreeDatabase.Copy, Status.WorktreeDatabase.Fresh];
     private static readonly string[] DatabaseChoices = ["The site's", "A copy of the site's", "A new, empty one"];
-
-    /// <summary>Selects the worktree created here once the status lists it (the daemon may list it a moment later).</summary>
-    private void SelectCreatedWorktree()
-    {
-        if (selectWhenListed is { } path && Model.Status?.Sites.FirstOrDefault(s => s.IsWorktree && SamePath(s.Path, path)) is { } created)
-        {
-            selectWhenListed = null;
-            Select(created.Name);
-        }
-    }
 
     /// <summary>A site's worktrees (each selects it) and New Worktree.</summary>
     private StackPanel Worktrees(Status.Site site)
@@ -82,17 +69,12 @@ internal sealed partial class SitesPane
         }
         database.SelectedIndex = 0;
         var explanation = Ui.Caption("", Ui.TertiaryText);
-        var working = Ui.Row(8, new ProgressRing { Width = 16, Height = 16 }, Ui.Caption("Creating the worktree…", wrap: false));
-        working.Visibility = Visibility.Collapsed;
-        var error = Ui.Caption("", Ui.Critical);
-        error.IsTextSelectionEnabled = true;
-        error.Visibility = Visibility.Collapsed;
         var dialog = new ContentDialog
         {
             Title = $"New worktree of {site.Name}",
             Content = Ui.Column(12, branch, from,
                 Ui.Column(4, database, Ui.Caption("A database of its own gets the migrations run. Project default is what flock.yml says, else the site's.", Ui.TertiaryText)),
-                explanation, working, error),
+                explanation),
             PrimaryButtonText = "Create",
             CloseButtonText = "Cancel",
             DefaultButton = ContentDialogButton.Primary,
@@ -163,41 +145,32 @@ internal sealed partial class SitesPane
         Update();
         branch.TextChanged += (_, _) => Update();
 
-        string? created = null;
-        dialog.PrimaryButtonClick += async (_, args) =>
+        // Create turns the dialog into the job's progress; it stays open until it is closed.
+        WorktreeJobView? job = null;
+        Task? run = null;
+        dialog.PrimaryButtonClick += (_, args) =>
         {
-            // The dialog stays open while git creates the worktree, and shows why it couldn't.
-            var deferral = args.GetDeferral();
-            dialog.IsPrimaryButtonEnabled = false;
-            working.Visibility = Visibility.Visible;
-            error.Visibility = Visibility.Collapsed;
-            try
+            if (job is not null)
             {
-                var start = Exists() || from.SelectedIndex < 0 ? null : values[from.SelectedIndex];
-                var db = database.SelectedIndex > 0 ? DatabaseModes[database.SelectedIndex - 1] : null;
-                (created, var failure) = await Model.Sites.CreateWorktreeAsync(site.Name, Typed(), start is { Length: > 0 } ? start : null, db, token);
-                if (failure is not null)
-                {
-                    args.Cancel = true;
-                    error.Text = failure;
-                    error.Visibility = Visibility.Visible;
-                }
+                return;
             }
-            finally
-            {
-                working.Visibility = Visibility.Collapsed;
-                dialog.IsPrimaryButtonEnabled = true;
-                deferral.Complete();
-            }
+            args.Cancel = true;
+            var start = Exists() || from.SelectedIndex < 0 ? null : values[from.SelectedIndex];
+            var db = database.SelectedIndex > 0 ? DatabaseModes[database.SelectedIndex - 1] : null;
+            var name = Typed();
+            job = new WorktreeJobView(dialog, Model, $"New Worktree of {site.Name}");
+            run = job.RunAsync(cancellationToken => Model.Sites.CreateWorktreeAsync(site.Name, name, start is { Length: > 0 } ? start : null, db, cancellationToken));
         };
         var load = LoadBranches();
-        var result = await dialog.ShowAsync();
+        await dialog.ShowAsync();
         await load;
-        if (result == ContentDialogResult.Primary && created is not null)
+        if (run is not null)
         {
-            // The daemon may list it a moment later.
-            selectWhenListed = created;
-            SelectCreatedWorktree();
+            await run;
+        }
+        if (job?.Ready is { } created)
+        {
+            Select(created.Name);
         }
     }
 
@@ -355,7 +328,7 @@ internal sealed partial class SitesPane
                 return;
             }
         }
-        await Model.Sites.SwitchWorktreeDatabaseAsync(worktree.Name, worktree.Path, mode);
+        await FollowJob($"Switching {label}'s Database", worktree.Path, token => Model.Sites.SwitchWorktreeDatabaseAsync(worktree.Name, worktree.Path, mode, token));
     }
 
     /// <summary>The worktree's setup: queued, running (the step), set up or failed (why), with its log and Run Setup Again.</summary>
@@ -365,7 +338,8 @@ internal sealed partial class SitesPane
         if (worktree.Worktree is not { } setup)
         {
             section.Children.Add(Ui.Caption("Flock serves this worktree, but hasn't set it up: its dependencies, .env and database are as they were."));
-            section.Children.Add(Ui.Button("Set Up", () => Start(worktree.Name, () => Model.Sites.SetupWorktreeAsync(worktree.Name, worktree.Path, again: false))));
+            section.Children.Add(Ui.Button("Set Up", () => Start(worktree.Name, () => FollowJob($"Setting Up {worktree.WorktreeLabel}", worktree.Path,
+                token => Model.Sites.SetupWorktreeAsync(worktree.Name, worktree.Path, again: false, token)))));
             return section;
         }
 
@@ -395,13 +369,18 @@ internal sealed partial class SitesPane
                 token => Model.Client.ServiceLogAsync(log, 400, token),
                 () => Model.Status?.Sites.FirstOrDefault(s => s.Name == name)?.Worktree?.IsBusy == true))));
         }
-        var again = Ui.Button("Run Setup Again", () => Start(worktree.Name, () => Model.Sites.SetupWorktreeAsync(worktree.Name, worktree.Path, again: true)),
+        var again = Ui.Button("Run Setup Again", () => Start(worktree.Name, () => FollowJob($"Setting Up {worktree.WorktreeLabel}", worktree.Path,
+            token => Model.Sites.SetupWorktreeAsync(worktree.Name, worktree.Path, again: true, token))),
             tooltip: "Copy what's missing, install, set up the database and run the hooks again");
         again.IsEnabled = !setup.IsBusy;
         buttons.Children.Add(again);
         section.Children.Add(buttons);
         return section;
     }
+
+    /// <summary>Starts a job of the worktree at path (its error, or null) and follows it in a progress dialog.</summary>
+    private Task FollowJob(string title, string path, Func<CancellationToken, Task<string?>> start) =>
+        WorktreeJobView.ShowAsync(Window, Model, title, async token => (path, await start(token)));
 
     /// <summary>
     /// Removes the worktree with git (after its before_delete hook), and its own database; the

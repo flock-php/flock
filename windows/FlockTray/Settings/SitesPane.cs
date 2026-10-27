@@ -81,7 +81,6 @@ internal sealed partial class SitesPane : Pane
     {
         viewModel.Apply(Model.Status);
         UpdateRetained();
-        SelectCreatedWorktree();
         if (active && Model.PendingSecure is not null && pendingSecure.IsCompleted)
         {
             pendingSecure = ObservePendingSecureAsync(activeLifetime?.Token ?? CancellationToken.None);
@@ -188,6 +187,8 @@ internal sealed partial class SitesPane : Pane
             detailScroller.ChangeView(null, 0, null, disableAnimation: true);
         }
         selection = name;
+        // Before the pane was shown (a notification opening it), its rows aren't there yet.
+        viewModel.Apply(Model.Status);
         viewModel.Select(name);
         UpdateRetained();
     }

@@ -144,6 +144,10 @@ public sealed class FlockClient : IDisposable
     public Task<Status.WorktreeSetup> SetupWorktreeAsync(string path, bool again = false, string? db = null, CancellationToken cancellationToken = default) =>
         Send<Status.WorktreeSetup>(HttpMethod.Post, "/v1/worktrees/setup", new { path, again, db }, cancellationToken: cancellationToken);
 
+    /// <summary>The setup (or database switch) of the worktree at path: a 404 while Flock hasn't set it up.</summary>
+    public Task<Status.WorktreeSetup> WorktreeSetupAsync(string path, CancellationToken cancellationToken = default) =>
+        Get<Status.WorktreeSetup>("/v1/worktrees/setup?path=" + Uri.EscapeDataString(path), cancellationToken: cancellationToken);
+
     /// <summary>
     /// Gives the worktree a database by mode (WorktreeDatabase), as its job: the status follows it.
     /// The database Flock made for it before is dropped.

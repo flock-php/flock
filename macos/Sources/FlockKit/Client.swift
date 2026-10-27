@@ -191,6 +191,11 @@ public actor FlockClient {
         return try await decode(WorktreeCreated.self, "POST", "/v1/worktrees", body: body, timeout: 120)
     }
 
+    /// How a worktree's setup goes, for following it.
+    public func worktreeSetup(path: String) async throws -> WorktreeSetup {
+        try await decode(WorktreeSetup.self, "GET", "/v1/worktrees/setup", query: [URLQueryItem(name: "path", value: path)])
+    }
+
     /// Sets a worktree up again. It returns at once: the progress shows on the worktree in `status()`.
     public func setupWorktree(path: String, again: Bool = true) async throws -> WorktreeSetup {
         struct Request: Encodable { let path: String; let again: Bool }

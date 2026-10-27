@@ -53,6 +53,9 @@ public sealed class App : Application, IXamlMetadataProvider
 
     internal WindowManager Windows => windowManager ?? throw new InvalidOperationException("The application has not launched.");
 
+    /// <summary>Notifies of worktree setups that fail while no progress dialog follows them.</summary>
+    internal WorktreeNotifier WorktreeNotifier { get; } = new();
+
     public App() : this(new AppOptions())
     {
     }
@@ -123,6 +126,7 @@ public sealed class App : Application, IXamlMetadataProvider
             tray.ThemeChanged += UpdateTray;
             tray.Failure += TrayFailure;
             State.Changed += UpdateTray;
+            WorktreeNotifier.Start(State, dispatcher);
             State.NeedsSetup = State.Installation.BundledFlock is not null && !await State.Installation.IsSetUpAsync();
 
             if (!Options.Identity.IsDevelopment && !State.NeedsSetup && await State.Installation.NeedsUpdateAsync())
@@ -360,6 +364,16 @@ public sealed class App : Application, IXamlMetadataProvider
         ((FlockWindow)window).Present();
     }
 
+    /// <summary>Opens Settings → Sites with a site (or worktree) selected.</summary>
+    public void OpenSite(string name)
+    {
+        Open(WindowKind.Settings, SettingsPane.Sites);
+        if (windowManager?.Open(WindowKind.Settings) is SettingsWindow settings && !State.NeedsSetup)
+        {
+            settings.Sites.Select(name);
+        }
+    }
+
     /// <summary>Opens the Logs window on one log.</summary>
     public void OpenLog(LogsViewModel.Source source)
     {
@@ -401,6 +415,7 @@ public sealed class App : Application, IXamlMetadataProvider
 
     private async Task QuitCoreAsync()
     {
+        WorktreeNotifier.Stop();
         try
         {
             if (host is not null)

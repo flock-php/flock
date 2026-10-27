@@ -351,7 +351,12 @@ impl Client {
 
     /// The last lines of a service's log.
     pub fn service_log(&self, name: &str) -> Result<String, Error> {
-        self.text(&format!("/v1/logs/services/{}?lines=2000", escape(name)))
+        self.service_log_tail(name, 2000)
+    }
+
+    /// The last `lines` lines of a service's log, such as a worktree's setup.
+    pub fn service_log_tail(&self, name: &str, lines: u32) -> Result<String, Error> {
+        self.text(&format!("/v1/logs/services/{}?lines={lines}", escape(name)))
     }
 
     /// A site's Laravel log entries, newest first.
@@ -395,6 +400,11 @@ impl Client {
     pub fn setup_worktree(&self, path: &str, again: bool) -> Result<WorktreeStatus, Error> {
         let body = serde_json::json!({ "path": path, "again": again });
         self.request("POST", "/v1/worktrees/setup", Some(&body), DEFAULT_TIMEOUT)
+    }
+
+    /// The setup of the worktree at path: its state, step and log.
+    pub fn worktree_setup(&self, path: &str) -> Result<WorktreeStatus, Error> {
+        self.request("GET", &format!("/v1/worktrees/setup?path={}", escape(path)), None::<&()>, DEFAULT_TIMEOUT)
     }
 
     /// Gives a worktree the site's database (shared) or one of its own (copy, fresh), as its job.
@@ -1086,11 +1096,15 @@ impl WorktreeStatus {
     pub fn text(&self) -> String {
         match self.state.as_str() {
             "queued" => "Waiting…".to_owned(),
-            "running" if self.step.is_empty() => "Setting up…".to_owned(),
-            "running" => format!("{}…", capitalized(&self.step)),
+            "running" => self.step_text(),
             "failed" => "Setup failed".to_owned(),
             _ => "Ready".to_owned(),
         }
+    }
+
+    /// What a running setup does: "Composer install…", or "Setting up…" between steps.
+    pub fn step_text(&self) -> String {
+        if self.step.is_empty() { "Setting up…".to_owned() } else { format!("{}…", capitalized(&self.step)) }
     }
 }
 

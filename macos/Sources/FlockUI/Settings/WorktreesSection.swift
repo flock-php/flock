@@ -9,9 +9,10 @@ struct SiteWorktreesSection: View {
     let select: (Status.Site) -> Void
 
     private let creatingState = State<Bool>(initialValue: false)
+    /// What Create asked for, once clicked: the sheet then follows it.
+    private let requestState = State<NewWorktree?>(initialValue: nil)
 
     var body: some View {
-        let store = model.settings
         VStack(alignment: .leading, spacing: 10) {
             Text("Worktrees").font(.subheadline.weight(.semibold))
             ForEach(worktrees) { worktree in
@@ -35,15 +36,30 @@ struct SiteWorktreesSection: View {
                     .font(.caption).foregroundStyle(.secondary)
             }
         }
-        .sheet(isPresented: creatingState.projectedValue) {
-            NewWorktreeSheet(site: site) { branch, from, db in
-                creatingState.wrappedValue = false
-                Task { await store.perform { _ = try await $0.createWorktree(site: site.name, branch: branch, from: from, db: db) } }
-            } cancel: {
-                creatingState.wrappedValue = false
+        .sheet(isPresented: creatingState.projectedValue, onDismiss: { requestState.wrappedValue = nil }) {
+            if let request = requestState.wrappedValue {
+                WorktreeJobView(title: "New Worktree of \(site.name)") { [name = site.name] client in
+                    try await client.createWorktree(site: name, branch: request.branch, from: request.from, db: request.db).path
+                } close: { worktree in
+                    creatingState.wrappedValue = false
+                    if let worktree { select(worktree) }
+                }
+            } else {
+                NewWorktreeSheet(site: site) { branch, from, db in
+                    requestState.wrappedValue = NewWorktree(branch: branch, from: from, db: db)
+                } cancel: {
+                    creatingState.wrappedValue = false
+                }
             }
         }
     }
+}
+
+/// What New Worktree… asks for.
+private struct NewWorktree: Sendable {
+    let branch: String
+    let from: String
+    let db: DatabaseMode?
 }
 
 /// A selected worktree: its address and folder, the site whose settings it uses, its database and
@@ -61,6 +77,8 @@ struct WorktreeDetail: View {
         nonmutating set { switchingState.wrappedValue = newValue }
     }
     private let removingState = State<Bool>(initialValue: false)
+    /// The job a sheet follows: a setup run again or a database switch.
+    private let jobState = State<WorktreeJob?>(initialValue: nil)
     /// Why removing failed, offering to remove it anyway.
     private let removeErrorState = State<String?>(initialValue: nil)
     private var removeError: String? {
@@ -116,6 +134,9 @@ struct WorktreeDetail: View {
                     }
                 }
             }
+        }
+        .sheet(item: jobState.projectedValue) { job in
+            WorktreeJobView(title: job.title, start: job.start) { _ in jobState.wrappedValue = nil }
         }
         .confirmationDialog(switchTitle, isPresented: Binding(get: { switching != nil }, set: { if !$0 { switching = nil } }),
                             presenting: switching) { mode in
@@ -213,11 +234,19 @@ struct WorktreeDetail: View {
     }
 
     private func switchDatabase(to mode: DatabaseMode) {
-        Task { await model.settings.perform { [path = worktree.path] in _ = try await $0.switchWorktreeDatabase(path: path, to: mode) } }
+        let path = worktree.path
+        jobState.wrappedValue = WorktreeJob(title: "Switching \(worktree.worktreeLabel)'s Database") { client in
+            _ = try await client.switchWorktreeDatabase(path: path, to: mode)
+            return path
+        }
     }
 
     private func runSetup() {
-        Task { await model.settings.perform { [path = worktree.path] in _ = try await $0.setupWorktree(path: path) } }
+        let path = worktree.path
+        jobState.wrappedValue = WorktreeJob(title: "Setting Up \(worktree.worktreeLabel)") { client in
+            _ = try await client.setupWorktree(path: path)
+            return path
+        }
     }
 
     /// Removes it; when git refuses (changes in it, a failing hook), offers to remove it anyway.
@@ -361,4 +390,170 @@ private struct NewWorktreeSheet: View {
         while out.contains("--") { out = out.replacingOccurrences(of: "--", with: "-") }
         return out.trimmingCharacters(in: CharacterSet(charactersIn: "-"))
     }
+}
+
+/// Follows a worktree's job (its creation and setup, a setup run again, a database switch) in a
+/// sheet: the step it's at and its log as it grows, then Ready with Open in Browser, or the error
+/// with Run Setup Again. Hide leaves it running; the list shows it, and a failure is notified.
+struct WorktreeJobView: View {
+    @Environment(AppModel.self) private var model
+    let title: String
+    /// Starts the job and returns the worktree's folder.
+    let start: @Sendable (FlockClient) async throws -> String
+    /// Closes the sheet; with the worktree when it's ready, so it can be shown.
+    let close: (Status.Site?) -> Void
+
+    private enum Phase: Equatable {
+        case starting
+        case running(path: String, step: String)
+        case ready(path: String)
+        case failed(path: String?, error: String)
+    }
+
+    private let phaseState = State<Phase>(initialValue: .starting)
+    private var phase: Phase {
+        get { phaseState.wrappedValue }
+        nonmutating set { phaseState.wrappedValue = newValue }
+    }
+    private let logState = State<String>(initialValue: "")
+    /// Bumped to start the job again (Run Setup Again).
+    private let runState = State<Int>(initialValue: 0)
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text(title).font(.headline)
+            headline
+            ScrollViewReader { proxy in
+                ScrollView {
+                    Text(logState.wrappedValue.isEmpty ? " " : logState.wrappedValue)
+                        .font(.system(.caption, design: .monospaced))
+                        .textSelection(.enabled)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(8)
+                    Color.clear.frame(height: 1).id("end")
+                }
+                .background(Color(nsColor: .textBackgroundColor), in: RoundedRectangle(cornerRadius: 6))
+                .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(.separator))
+                .onChange(of: logState.wrappedValue) { proxy.scrollTo("end", anchor: .bottom) }
+            }
+            .frame(height: 260)
+            buttons
+        }
+        .padding(20)
+        .frame(width: 600)
+        .task(id: runState.wrappedValue) { await run() }
+        .onDisappear {
+            if let path = path { model.worktreeNotifier.unfollow(path) }
+        }
+    }
+
+    private var path: String? {
+        switch phase {
+        case .starting: nil
+        case let .running(path, _), let .ready(path): path
+        case let .failed(path, _): path
+        }
+    }
+
+    private var worktree: Status.Site? {
+        guard let path else { return nil }
+        return model.status?.sites.first { $0.isWorktree && $0.path == path }
+    }
+
+    @ViewBuilder private var headline: some View {
+        switch phase {
+        case .starting:
+            HStack(spacing: 6) { ProgressView().controlSize(.small); Text("Starting…") }
+        case let .running(_, step):
+            HStack(spacing: 6) {
+                ProgressView().controlSize(.small)
+                Text(step.isEmpty ? "Setting up…" : "\(step.prefix(1).uppercased())\(step.dropFirst())…")
+            }
+        case .ready:
+            Label("Ready\(worktree?.url.map { " at \($0)" } ?? "")", systemImage: "checkmark.circle.fill")
+                .foregroundStyle(.green)
+        case let .failed(_, error):
+            Label(error, systemImage: "exclamationmark.triangle.fill")
+                .foregroundStyle(.orange)
+                .textSelection(.enabled)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    @ViewBuilder private var buttons: some View {
+        HStack {
+            Spacer()
+            switch phase {
+            case .starting, .running:
+                Button("Hide") { close(nil) }
+                    .keyboardShortcut(.cancelAction)
+                    .help("The setup goes on; Flock tells you if it fails")
+            case .ready:
+                if let worktree, worktree.url != nil {
+                    Button("Open in Browser") { model.open(worktree) }
+                }
+                Button("Close") { close(worktree) }
+                    .keyboardShortcut(.defaultAction)
+            case let .failed(path, _):
+                if let path {
+                    Button("Run Setup Again") { restart(path) }
+                }
+                Button("Close") { close(nil) }
+                    .keyboardShortcut(.defaultAction)
+            }
+        }
+    }
+
+    /// The job's restart: its setup again, whatever started it.
+    private let restartState = State<String?>(initialValue: nil)
+
+    private func restart(_ path: String) {
+        restartState.wrappedValue = path
+        logState.wrappedValue = ""
+        phase = .starting
+        runState.wrappedValue += 1
+    }
+
+    private func run() async {
+        let client = model.client
+        let path: String
+        do {
+            if let again = restartState.wrappedValue {
+                _ = try await client.setupWorktree(path: again)
+                path = again
+            } else {
+                path = try await start(client)
+            }
+        } catch {
+            phase = .failed(path: nil, error: error.localizedDescription)
+            return
+        }
+        model.worktreeNotifier.follow(path)
+        phase = .running(path: path, step: "")
+        while !Task.isCancelled {
+            if let setup = try? await client.worktreeSetup(path: path) {
+                if !setup.log.isEmpty, let log = try? await client.serviceLog(setup.log, lines: 400) {
+                    logState.wrappedValue = log
+                }
+                switch setup.state {
+                case .ready:
+                    phase = .ready(path: path)
+                    return
+                case .failed:
+                    phase = .failed(path: path, error: "Setup failed: \(setup.error ?? "see the log")")
+                    return
+                default:
+                    phase = .running(path: path, step: setup.step)
+                }
+            }
+            try? await Task.sleep(for: .milliseconds(500))
+        }
+    }
+}
+
+/// A job of a worktree a sheet follows (see WorktreeJobView).
+private struct WorktreeJob: Identifiable {
+    let id = UUID()
+    let title: String
+    let start: @Sendable (FlockClient) async throws -> String
 }

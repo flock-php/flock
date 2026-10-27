@@ -97,13 +97,13 @@ public sealed class SitesService : IAsyncDisposable
         return (path, error);
     }
 
-    /// <summary>Sets the worktree (a site with a parent) up, or once more (again).</summary>
-    public Task<OperationOutcome> SetupWorktreeAsync(string worktree, string path, bool again, CancellationToken token = default) =>
-        MutateAsync(Key(worktree), worktree, (_, cancellationToken) => client.SetupWorktreeAsync(path, again, cancellationToken: cancellationToken), token);
+    /// <summary>Sets the worktree (a site with a parent) up, or once more (again); its progress dialog shows a failure.</summary>
+    public Task<string?> SetupWorktreeAsync(string worktree, string path, bool again, CancellationToken token = default) =>
+        RunInDialogAsync(Key(worktree), cancellationToken => client.SetupWorktreeAsync(path, again, cancellationToken: cancellationToken), token);
 
-    /// <summary>Gives the worktree a database by mode; the one Flock made for it before is dropped.</summary>
-    public Task<OperationOutcome> SwitchWorktreeDatabaseAsync(string worktree, string path, string db, CancellationToken token = default) =>
-        MutateAsync(Key(worktree), worktree, (_, cancellationToken) => client.SwitchWorktreeDatabaseAsync(path, db, cancellationToken), token);
+    /// <summary>Gives the worktree a database by mode (the one Flock made for it before is dropped); its progress dialog shows a failure.</summary>
+    public Task<string?> SwitchWorktreeDatabaseAsync(string worktree, string path, string db, CancellationToken token = default) =>
+        RunInDialogAsync(Key(worktree), cancellationToken => client.SwitchWorktreeDatabaseAsync(path, db, cancellationToken), token);
 
     /// <summary>
     /// Removes the worktree at path, and the database Flock made for it. Returns the error for the

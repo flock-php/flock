@@ -102,6 +102,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         return pendingLink
     }
 
+    /// Opens a link from inside the app (a notification), as if macOS had handed it over.
+    static func open(_ link: FlockLink) {
+        pendingLink = link
+        NotificationCenter.default.post(name: openLink, object: nil)
+    }
+
     /// flock:// links (CFBundleURLTypes in build-app.sh), e.g. from the website's install buttons,
     /// the page served for a site that isn't secured, or `flock update`.
     func application(_ application: NSApplication, open urls: [URL]) {
