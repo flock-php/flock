@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 )
 
 // Worktree is a git worktree of a site's repository, as git records it in <site>/.git/worktrees.
@@ -13,6 +14,17 @@ type Worktree struct {
 	Path   string // the worktree's folder
 	Branch string // the checked-out branch, "" when HEAD is detached
 	ID     string // git's name for it: the folder under .git/worktrees, usually the worktree's base name
+	// Created is when git created it: the time of its commondir file, which git writes once.
+	Created time.Time
+}
+
+// WorktreeEntry is a worktree Flock sets up, stored in config.json by path. Its Slug is kept, so
+// the worktree stays at the same URL when its branch changes; SetUp is set once its setup finished.
+type WorktreeEntry struct {
+	Path  string `json:"path"`
+	Site  string `json:"site"`
+	Slug  string `json:"slug"`
+	SetUp bool   `json:"set_up,omitempty"`
 }
 
 // Worktrees lists the worktrees of the repository checked out at repo. Only a main checkout has
@@ -57,7 +69,11 @@ func Worktrees(repo string) []Worktree {
 			}
 			branch = ""
 		}
-		out = append(out, Worktree{Path: path, Branch: branch, ID: e.Name()})
+		wt := Worktree{Path: path, Branch: branch, ID: e.Name()}
+		if info, err := os.Stat(filepath.Join(admin, "commondir")); err == nil {
+			wt.Created = info.ModTime()
+		}
+		out = append(out, wt)
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Path < out[j].Path })
 	return out
@@ -89,10 +105,43 @@ func WorktreeSlug(branch string) string {
 // IsWorktree reports whether the site is a git worktree served under its parent site.
 func (s Site) IsWorktree() bool { return s.Parent != "" }
 
+// WorktreeEntry looks up the stored entry of the worktree at path.
+func (c *Config) WorktreeEntry(path string) (WorktreeEntry, bool) {
+	for _, e := range c.Worktrees {
+		if samePath(e.Path, path) {
+			return e, true
+		}
+	}
+	return WorktreeEntry{}, false
+}
+
+// SetWorktreeEntry adds or replaces the entry of e.Path.
+func (c *Config) SetWorktreeEntry(e WorktreeEntry) {
+	for i := range c.Worktrees {
+		if samePath(c.Worktrees[i].Path, e.Path) {
+			c.Worktrees[i] = e
+			return
+		}
+	}
+	c.Worktrees = append(c.Worktrees, e)
+}
+
+// RemoveWorktreeEntry forgets the worktree at path and reports whether it was stored.
+func (c *Config) RemoveWorktreeEntry(path string) bool {
+	for i := range c.Worktrees {
+		if samePath(c.Worktrees[i].Path, path) {
+			c.Worktrees = append(c.Worktrees[:i], c.Worktrees[i+1:]...)
+			return true
+		}
+	}
+	return false
+}
+
 // worktreeSites finds the worktrees of the sites in byName and adds them to it as <slug>.<parent>,
-// so they are served at <slug>.<parent domain>. A folder linked as a site of its own stays that
-// site; a parked folder that is a worktree is served as the worktree instead, not twice.
-func worktreeSites(byName map[string]Site) {
+// so they are served at <slug>.<parent domain>; a stored entry keeps its slug. A folder linked as
+// a site of its own stays that site; a parked folder that is a worktree is served as the worktree
+// instead, not twice.
+func (c *Config) worktreeSites(byName map[string]Site) {
 	parents := make([]Site, 0, len(byName))
 	for _, s := range byName {
 		parents = append(parents, s)
@@ -119,6 +168,9 @@ func worktreeSites(byName map[string]Site) {
 			if slug == "" {
 				slug = WorktreeSlug(wt.ID)
 			}
+			if e, ok := c.WorktreeEntry(wt.Path); ok && e.Site == parent.Name && e.Slug != "" {
+				slug = e.Slug
+			}
 			if slug == "" {
 				continue
 			}
@@ -138,6 +190,13 @@ func worktreeSites(byName map[string]Site) {
 			}
 		}
 	}
+}
+
+// SamePath reports whether a and b are the same folder, also when one goes through a symlink.
+func SamePath(a, b string) bool { return samePath(a, b) }
+
+func samePath(a, b string) bool {
+	return filepath.Clean(a) == filepath.Clean(b) || realPath(a) == realPath(b)
 }
 
 // realPath resolves symlinks so a parked folder and the path git recorded compare equal

@@ -11,6 +11,7 @@ import (
 	"slices"
 	"sort"
 	"strings"
+	"time"
 )
 
 // Config is stored as JSON in <root>/config.json.
@@ -37,6 +38,11 @@ type Config struct {
 	Channel string   `json:"channel,omitempty"`
 	Parked  []string `json:"parked"`
 	Sites   []Site   `json:"sites"`
+
+	// Worktrees are the git worktrees Flock sets up (see package worktree). WorktreesSince is when
+	// Flock first looked for worktrees: older ones are served, but only set up when asked.
+	Worktrees      []WorktreeEntry `json:"worktrees,omitempty"`
+	WorktreesSince time.Time       `json:"worktrees_since,omitzero"`
 }
 
 // Ports are the local ports Flock's services listen on.
@@ -318,7 +324,7 @@ func (c *Config) AllSites() []Site {
 	for _, s := range c.Sites {
 		byName[s.Name] = s
 	}
-	worktreeSites(byName)
+	c.worktreeSites(byName)
 
 	sites := make([]Site, 0, len(byName))
 	for _, s := range byName {
@@ -339,21 +345,30 @@ func (c *Config) FindSite(name string) (Site, bool) {
 	return Site{}, false
 }
 
-// SiteForDir returns the site whose path contains dir (deepest match wins).
+// SiteForDir returns the site whose path contains dir (deepest match wins). Without a match it
+// tries again with symlinks resolved: git records a worktree's real path (/private/tmp/... on
+// macOS), a shell may be in /tmp/....
 func (c *Config) SiteForDir(dir string) (Site, bool) {
-	var best Site
-	found := false
+	sites := c.AllSites()
+	if s, ok := siteForDir(sites, dir, func(s Site) string { return s.Path }); ok {
+		return s, true
+	}
+	return siteForDir(sites, realPath(dir), func(s Site) string { return realPath(s.Path) })
+}
 
-	for _, s := range c.AllSites() {
-		rel, err := filepath.Rel(s.Path, dir)
+func siteForDir(sites []Site, dir string, pathOf func(Site) string) (Site, bool) {
+	var best Site
+	bestLen, found := 0, false
+	for _, s := range sites {
+		path := pathOf(s)
+		rel, err := filepath.Rel(path, dir)
 		if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
 			continue
 		}
-		if !found || len(s.Path) > len(best.Path) {
-			best, found = s, true
+		if !found || len(path) > bestLen {
+			best, bestLen, found = s, len(path), true
 		}
 	}
-
 	return best, found
 }
 

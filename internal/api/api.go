@@ -113,10 +113,12 @@ type SiteStatus struct {
 	Parked       bool   `json:"parked"`
 	// Parent is set on a git worktree of another site: that site's name, whose settings it uses.
 	// Branch is the worktree's branch ("" when HEAD is detached).
-	Parent  string `json:"parent,omitempty"`
-	Branch  string `json:"branch,omitempty"`
-	URL     string `json:"url,omitempty"`
-	Problem string `json:"problem,omitempty"`
+	Parent string `json:"parent,omitempty"`
+	Branch string `json:"branch,omitempty"`
+	// Worktree is the setup of a worktree Flock set up (nil for others).
+	Worktree *WorktreeStatus `json:"worktree,omitempty"`
+	URL      string          `json:"url,omitempty"`
+	Problem  string          `json:"problem,omitempty"`
 	// Notice is something about the site that needs a decision from the user but isn't broken,
 	// e.g. that Flock found no document root in it.
 	Notice string `json:"notice,omitempty"`
@@ -237,6 +239,14 @@ type Backend interface {
 	// that the site can be shared, with the app's debug mode on for visitors when debug is set.
 	Shares() *share.Manager
 	StartShare(site string, allow []string, debug bool) error
+	// SetupWorktree starts the setup of the git worktree at path (ErrNotWorktree when it isn't
+	// one of a site's), or joins the one that runs; one set up already is left alone unless again.
+	SetupWorktree(path string, again bool) (WorktreeStatus, error)
+	// WorktreeSetup is the state of the worktree's setup, nil when Flock hasn't set it up.
+	WorktreeSetup(path string) (*WorktreeStatus, error)
+	// RemoveWorktree runs the worktree's before_delete hook and removes it with git, returning
+	// what they printed.
+	RemoveWorktree(ctx context.Context, path string, force bool) (string, error)
 }
 
 // NewHandler builds the API routes. A non-empty token requires `Authorization: Bearer <token>`
@@ -282,6 +292,7 @@ func NewHandler(b Backend, token string) http.Handler {
 	registerMCP(mux, b)
 	registerBoost(mux, b)
 	registerShares(mux, b)
+	registerWorktrees(mux, b)
 
 	if token == "" {
 		return mux
