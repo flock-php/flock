@@ -111,8 +111,12 @@ type SiteStatus struct {
 	NodeShadowed string `json:"node_shadowed"`
 	Secured      bool   `json:"secured"`
 	Parked       bool   `json:"parked"`
-	URL          string `json:"url,omitempty"`
-	Problem      string `json:"problem,omitempty"`
+	// Parent is set on a git worktree of another site: that site's name, whose settings it uses.
+	// Branch is the worktree's branch ("" when HEAD is detached).
+	Parent  string `json:"parent,omitempty"`
+	Branch  string `json:"branch,omitempty"`
+	URL     string `json:"url,omitempty"`
+	Problem string `json:"problem,omitempty"`
 	// Notice is something about the site that needs a decision from the user but isn't broken,
 	// e.g. that Flock found no document root in it.
 	Notice string `json:"notice,omitempty"`

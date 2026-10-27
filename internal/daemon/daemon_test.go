@@ -7,6 +7,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -313,6 +314,68 @@ func TestFoldersInParkedPathsAreFollowed(t *testing.T) {
 		t.Fatal(err)
 	}
 	waitFor(false)
+}
+
+func TestGitWorktreesAreServedUnderTheirSite(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git is not installed")
+	}
+	projectWatchInterval = 50 * time.Millisecond
+	t.Cleanup(func() { projectWatchInterval = 3 * time.Second })
+
+	parked := t.TempDir()
+	repo := filepath.Join(parked, "acme")
+	git := func(args ...string) {
+		t.Helper()
+		cmd := exec.Command("git", append([]string{"-C", repo, "-c", "user.name=Flock", "-c", "user.email=flock@example.test"}, args...)...)
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v\n%s", args, err, out)
+		}
+	}
+	if err := os.Mkdir(repo, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	git("init", "-q")
+	git("commit", "-q", "--allow-empty", "-m", "init")
+
+	root, _ := testRoot(t, func(cfg *config.Config) { cfg.Parked = []string{parked} })
+	client := startDaemon(t, root)
+
+	sites := func() map[string]api.SiteStatus {
+		status, _ := client.Status(context.Background())
+		out := map[string]api.SiteStatus{}
+		for _, s := range status.Sites {
+			out[s.Name] = s
+		}
+		return out
+	}
+	waitFor := func(name string, want bool) api.SiteStatus {
+		t.Helper()
+		deadline := time.Now().Add(5 * time.Second)
+		for {
+			site, ok := sites()[name]
+			if ok == want {
+				return site
+			}
+			if time.Now().After(deadline) {
+				t.Fatalf("%s listed = %v, want %v: %v", name, ok, want, sites())
+			}
+			time.Sleep(20 * time.Millisecond)
+		}
+	}
+
+	// Next to the site, in the parked folder: the worktree, not a site acme-auth.test.
+	git("worktree", "add", "-q", "-b", "feature/auth", filepath.Join(parked, "acme-auth"))
+	wt := waitFor("feature-auth.acme", true)
+	if wt.Domain != "feature-auth.acme.test" || wt.Parent != "acme" || wt.Branch != "feature/auth" {
+		t.Errorf("unexpected worktree: %+v", wt)
+	}
+	if _, twice := sites()["acme-auth"]; twice {
+		t.Error("the worktree is also served as a parked site")
+	}
+
+	git("worktree", "remove", filepath.Join(parked, "acme-auth"))
+	waitFor("feature-auth.acme", false)
 }
 
 func containsText(list []string, needle string) bool {

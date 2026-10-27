@@ -12,6 +12,7 @@
     "pages": [
       { "slug": "sites", "title": "Linking & parking" },
       { "slug": "domains", "title": "Domains & subdomains" },
+      { "slug": "worktrees", "title": "Git worktrees" },
       { "slug": "https", "title": "HTTPS" },
       { "slug": "sharing", "title": "Sharing" }
     ]

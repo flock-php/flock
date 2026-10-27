@@ -590,6 +590,7 @@ func (d *daemon) reload() error {
 		version := phpVersion.Version
 		status := api.SiteStatus{
 			Name: site.Name, Domain: domain, Path: site.Path, Secured: site.Secured, Parked: site.Parked,
+			Parent: site.Parent, Branch: site.Branch,
 			PHP: version, PHPSource: phpVersion.Source, PHPPinned: phpVersion.Pinned, PHPFile: phpVersion.File,
 			Node: nodeVersion.Version, NodeSource: nodeVersion.Source, NodePinned: nodeVersion.Pinned, NodeFile: nodeVersion.File,
 			NodeShadowed: nodeVersion.Shadowed, Domains: []api.SiteDomain{},

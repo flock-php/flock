@@ -107,7 +107,9 @@ func pinSite(cfg *config.Config, site config.Site, tool, version string) error {
 		return err
 	}
 	if lifted {
-		cfg.Upsert(site)
+		if err := cfg.Upsert(site); err != nil {
+			return invalid("%v", err)
+		}
 	}
 	return nil
 }
@@ -230,7 +232,9 @@ func registerConfig(mux *http.ServeMux, b Backend) {
 			if name == "" {
 				name = filepath.Base(body.Path)
 			}
-			cfg.Upsert(config.Site{Name: config.SiteName(name), Path: filepath.Clean(body.Path), PHP: body.PHP, Secured: body.Secured})
+			if err := cfg.Upsert(config.Site{Name: config.SiteName(name), Path: filepath.Clean(body.Path), PHP: body.PHP, Secured: body.Secured}); err != nil {
+				return invalid("%v", err)
+			}
 			return nil
 		})
 	})
@@ -298,7 +302,9 @@ func registerConfig(mux *http.ServeMux, b Backend) {
 			}
 			// A parked site becomes linked so its settings can be stored.
 			site.Parked = false
-			cfg.Upsert(site)
+			if err := cfg.Upsert(site); err != nil {
+				return invalid("%v", err)
+			}
 			return nil
 		})
 	})
@@ -321,7 +327,9 @@ func registerConfig(mux *http.ServeMux, b Backend) {
 				return invalid("%v", err)
 			}
 			site.Parked = false // a parked site becomes linked so the domain can be stored
-			cfg.Upsert(site)
+			if err := cfg.Upsert(site); err != nil {
+				return invalid("%v", err)
+			}
 			return nil
 		})
 	})
@@ -335,7 +343,9 @@ func registerConfig(mux *http.ServeMux, b Backend) {
 			if !cfg.RemoveDomain(&site, r.PathValue("domain")) {
 				return invalid("%s is not an extra domain of %s", r.PathValue("domain"), site.Name)
 			}
-			cfg.Upsert(site)
+			if err := cfg.Upsert(site); err != nil {
+				return invalid("%v", err)
+			}
 			return nil
 		})
 	})
@@ -387,6 +397,9 @@ func registerConfig(mux *http.ServeMux, b Backend) {
 
 	mux.HandleFunc("DELETE /v1/sites/{name}", func(w http.ResponseWriter, r *http.Request) {
 		mutate(w, func(cfg *config.Config) error {
+			if site, ok := cfg.FindSite(r.PathValue("name")); ok && site.IsWorktree() {
+				return fmt.Errorf("%w: %s is a git worktree of %s; it stops being served when the worktree is removed", errConflict, site.Name, site.Parent)
+			}
 			if !cfg.Remove(r.PathValue("name")) {
 				return fmt.Errorf("%w: %s is served from a parked directory; remove its parent from the project folders instead", errConflict, r.PathValue("name"))
 			}

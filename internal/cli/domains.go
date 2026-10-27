@@ -48,7 +48,9 @@ needed where wildcard DNS is overridden (company DNS policies, VPNs), and for al
 					return err
 				}
 				site.Parked = false // a parked site becomes linked so the domain can be stored
-				s.cfg.Upsert(site)
+				if err := s.cfg.Upsert(site); err != nil {
+					return err
+				}
 				if err := s.commit(cmd.Context(), cmd.ErrOrStderr()); err != nil {
 					return err
 				}
@@ -77,7 +79,9 @@ needed where wildcard DNS is overridden (company DNS policies, VPNs), and for al
 				if !s.cfg.RemoveDomain(&site, args[0]) {
 					return fmt.Errorf("%s is not an extra domain of %s", args[0], site.Name)
 				}
-				s.cfg.Upsert(site)
+				if err := s.cfg.Upsert(site); err != nil {
+					return err
+				}
 				if err := s.commit(cmd.Context(), cmd.ErrOrStderr()); err != nil {
 					return err
 				}

@@ -120,6 +120,12 @@ type Site struct {
 	Domains []string `json:"domains,omitempty"`
 	Parked  bool     `json:"-"` // discovered from a parked directory rather than linked
 
+	// Parent is set on a git worktree of another site (see Worktrees): it is served as
+	// <slug>.<parent domain>, named <slug>.<parent>, and its settings follow the parent's.
+	// Branch is its branch ("" when HEAD is detached).
+	Parent string `json:"-"`
+	Branch string `json:"-"`
+
 	// Root is the document root set for the site on this machine, relative to Path ("src/www", "."
 	// for Path itself); empty means the project's .flockrc or detection decides (see project.RootFor).
 	Root string `json:"root,omitempty"`
@@ -289,8 +295,9 @@ func (c *Config) NodeFor(s Site) string {
 	return c.DefaultNode
 }
 
-// AllSites returns linked sites plus every directory found in parked paths.
-// A linked site wins over a parked directory with the same name. Sorted by name.
+// AllSites returns linked sites plus every directory found in parked paths, and the git worktrees
+// of both (see worktreeSites). A linked site wins over a parked directory with the same name.
+// Sorted by name, so a site's worktrees follow it.
 func (c *Config) AllSites() []Site {
 	byName := map[string]Site{}
 
@@ -311,6 +318,7 @@ func (c *Config) AllSites() []Site {
 	for _, s := range c.Sites {
 		byName[s.Name] = s
 	}
+	worktreeSites(byName)
 
 	sites := make([]Site, 0, len(byName))
 	for _, s := range byName {
@@ -349,15 +357,20 @@ func (c *Config) SiteForDir(dir string) (Site, bool) {
 	return best, found
 }
 
-// Upsert adds or replaces a linked site by name.
-func (c *Config) Upsert(site Site) {
+// Upsert adds or replaces a linked site by name. A worktree has no settings of its own to store:
+// it follows its parent site.
+func (c *Config) Upsert(site Site) error {
+	if site.IsWorktree() {
+		return fmt.Errorf("%s is a git worktree of %s and uses its settings — change them on %s", site.Name, site.Parent, site.Parent)
+	}
 	for i, s := range c.Sites {
 		if s.Name == site.Name {
 			c.Sites[i] = site
-			return
+			return nil
 		}
 	}
 	c.Sites = append(c.Sites, site)
+	return nil
 }
 
 // Remove deletes a linked site by name and reports whether it existed.

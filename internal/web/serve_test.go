@@ -247,12 +247,18 @@ func TestAnAliasUnderAnotherSiteWinsOverItsSubdomains(t *testing.T) {
 		_ = os.WriteFile(filepath.Join(d, "who.txt"), []byte(name), 0o644)
 		return d
 	}
-	shop, accounts := root("shop"), root("accounts")
+	shop, accounts, feature := root("shop"), root("accounts"), root("feature")
 	ca, err := certs.Ensure(filepath.Join(dir, "certs"), "test")
 	if err != nil {
 		t.Fatal(err)
 	}
 	certFile, keyFile, err := ca.SiteCert("shop.test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// A worktree of the shop is a site whose domain is one of the shop's subdomains; f.shop.test
+	// is exactly as long as *.shop.test.
+	featureCert, featureKey, err := ca.SiteCert("f.shop.test")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -272,6 +278,7 @@ func TestAnAliasUnderAnotherSiteWinsOverItsSubdomains(t *testing.T) {
 		Sites: []Site{
 			{Domain: "shop.test", Aliases: []string{"a-really-really-long-alias-of-the-shop.test"}, Root: shop, FPM: []string{"127.0.0.1:1"}, CertFile: certFile, KeyFile: keyFile},
 			{Domain: "accounts-shop.test", Aliases: []string{"accounts.shop.test"}, Root: accounts, FPM: []string{"127.0.0.1:1"}},
+			{Domain: "f.shop.test", Root: feature, FPM: []string{"127.0.0.1:1"}, CertFile: featureCert, KeyFile: featureKey},
 		},
 		Waiting: []Waiting{{Domain: "fresh.test", Aliases: []string{"fresh.shop.test"}, Name: "fresh", PHP: "8.5", State: WaitingInstalling}},
 	}
@@ -302,6 +309,9 @@ func TestAnAliasUnderAnotherSiteWinsOverItsSubdomains(t *testing.T) {
 		// accounts isn't secured: it says so rather than serving the shop.
 		secure("accounts.shop.test"):   `href="flock://secure/accounts-shop"`,
 		secure("x.accounts.shop.test"): `href="flock://secure/accounts-shop"`,
+		secure("f.shop.test"):          "feature",
+		secure("tenant1.f.shop.test"):  "feature",
+		secure("g.shop.test"):          "shop",
 		// fresh waits for its PHP on both schemes.
 		plain("fresh.shop.test"):    "installing PHP 8.5",
 		secure("x.fresh.shop.test"): "installing PHP 8.5",
