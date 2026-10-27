@@ -3,6 +3,7 @@ package cli
 import (
 	"cmp"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -22,16 +23,30 @@ import (
 )
 
 func newServicesCommand() *cobra.Command {
+	var asJSON bool
+
 	cmd := &cobra.Command{
 		Use:   "services",
 		Short: "List, install, update and remove PostgreSQL, MySQL, MariaDB, MongoDB, Valkey, Redis (macOS and Linux), Meilisearch, Typesense and RustFS",
-		Args:  cobra.NoArgs,
+		Long: `Lists the services and their versions. With --json, for scripts: every service with
+whether it is installed and running, its port, and the .env settings that connect a
+Laravel app to it (env).`,
+		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			s, err := load()
 			if err != nil {
 				return err
 			}
 			client := s.client()
+			if asJSON {
+				services, err := client.Services(cmd.Context())
+				if err != nil {
+					return err
+				}
+				enc := json.NewEncoder(cmd.OutOrStdout())
+				enc.SetIndent("", "  ")
+				return enc.Encode(services)
+			}
 			c, err := client.Catalog(cmd.Context())
 			if err != nil {
 				return err
@@ -44,6 +59,7 @@ func newServicesCommand() *cobra.Command {
 			return nil
 		},
 	}
+	cmd.Flags().BoolVar(&asJSON, "json", false, "print every service as JSON, for scripts")
 
 	var port int
 	install := &cobra.Command{

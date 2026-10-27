@@ -72,7 +72,7 @@ This page lists the `flock` commands. The other pages show where to find each ac
 
 | Command | Description |
 | --- | --- |
-| `flock services` | List services and their state |
+| `flock services [--json]` | List services and their state; `--json` for scripts: each with its port, whether it runs, and the `.env` settings to connect to it |
 | `flock services install <service> [version] [--port N]` | Install PostgreSQL, MySQL, MariaDB, MongoDB, Valkey, Redis (macOS), Meilisearch, Typesense (macOS and Linux) or RustFS. `--port` doesn't apply to PostgreSQL |
 | `flock services uninstall <service> [version] [--delete-data]` | Remove a version of a service (the active one unless given) |
 | `flock services use <service> <version>` | Switch a service to another installed version |
