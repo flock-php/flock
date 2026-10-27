@@ -84,8 +84,11 @@ type daemon struct {
 	catalog *catalog.Manager
 	// shares are the sites shared through tunnels (`flock share`); never kept across restarts.
 	shares *share.Manager
-	// worktrees sets up the sites' git worktrees (see syncWorktrees).
+	// worktrees sets up the sites' git worktrees (see syncWorktrees); pendingDB are the database
+	// modes asked for while their setup ran, by path (see setPendingDB).
 	worktrees *worktree.Manager
+	pendingMu sync.Mutex
+	pendingDB map[string]string
 
 	// leaves issues certificates for deep subdomains, aliases and unknown names during handshakes.
 	leaves *certs.Leaves

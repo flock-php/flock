@@ -23,8 +23,11 @@ import (
 // of a Flock site: setup scripts tell it from a setup that failed (1).
 const exitNotWorktree = 3
 
+// dbFlag is the help of --db.
+const dbFlag = "the worktree's database: shared (the site's), copy (a copy of it) or fresh (empty, migrated); default: worktrees.database in flock.yml, else shared"
+
 func newWorktreeAddCommand() *cobra.Command {
-	var from, path string
+	var from, path, db string
 
 	cmd := &cobra.Command{
 		Use:   "add <branch>",
@@ -88,7 +91,7 @@ until Flock has set it up.`,
 				return fmt.Errorf("git worktree add failed: %w", err)
 			}
 
-			if err := setupWorktree(cmd, s, path, false); err != nil {
+			if err := setupWorktree(cmd, s, path, false, db); err != nil {
 				return err
 			}
 			if s, err = load(); err == nil {
@@ -101,11 +104,13 @@ until Flock has set it up.`,
 	}
 	cmd.Flags().StringVar(&from, "from", "", "start a new branch from this commit or branch (default: HEAD)")
 	cmd.Flags().StringVar(&path, "path", "", "where to create the worktree (default: worktrees.path in flock.yml, else ../<folder>-<branch>)")
+	cmd.Flags().StringVar(&db, "db", "", dbFlag)
 	return cmd
 }
 
 func newWorktreeSetupCommand() *cobra.Command {
 	var again bool
+	var db string
 
 	cmd := &cobra.Command{
 		Use:   "setup [path]",
@@ -129,25 +134,74 @@ step failed, and 3 when the folder isn't a worktree of a Flock site.`,
 				cmd.PrintErrf("Error: %s is not in a git worktree of a Flock site\n", dir)
 				os.Exit(exitNotWorktree)
 			}
-			return setupWorktree(cmd, s, site.Path, again)
+			return setupWorktree(cmd, s, site.Path, again, db)
 		},
 	}
 	cmd.Flags().BoolVar(&again, "again", false, "set it up again although it is set up already")
+	cmd.Flags().StringVar(&db, "db", "", dbFlag)
 	return cmd
 }
 
-func newWorktreeRemoveCommand() *cobra.Command {
-	var force bool
+func newWorktreeDBCommand() *cobra.Command {
+	var keep bool
 
 	cmd := &cobra.Command{
-		Use:     "remove [name]",
-		Aliases: []string{"rm"},
-		Short:   "Run a worktree's before_delete hook and remove it with git (the branch stays)",
-		Args:    cobra.MaximumNArgs(1),
+		Use:   "db <shared|copy|fresh> [name]",
+		Short: "Switch a worktree's database (the one you're in, by default)",
+		Long: `Gives a worktree another database: shared uses the site's, copy a copy of the site's,
+fresh an empty one with the migrations run. The database Flock made for it before is
+dropped, unless --keep-db.`,
+		Args: cobra.RangeArgs(1, 2),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			s, err := load()
 			if err != nil {
 				return err
+			}
+			site, err := worktreeArg(s, args[1:])
+			if err != nil {
+				return err
+			}
+			if e, ok := s.cfg.WorktreeEntry(site.Path); ok && e.Database != "" && !keep && interactive() &&
+				!confirm(fmt.Sprintf("Drop %s, the database Flock made for %s?", e.Database, site.Name), false) {
+				return errors.New("nothing changed (--keep-db keeps the database)")
+			}
+			client := s.client()
+			st, err := client.SwitchWorktreeDatabase(cmd.Context(), site.Path, args[0], keep)
+			if err != nil {
+				return err
+			}
+			return followSetup(cmd.Context(), cmd.OutOrStdout(), s, client, site.Path, st)
+		},
+	}
+	cmd.Flags().BoolVar(&keep, "keep-db", false, "keep the database Flock made for the worktree before")
+	return cmd
+}
+
+func newWorktreeRemoveCommand() *cobra.Command {
+	var force, keepDB bool
+
+	cmd := &cobra.Command{
+		Use:     "remove [name]",
+		Aliases: []string{"rm"},
+		Short:   "Run a worktree's before_delete hook, remove it with git and drop its own database",
+		Long: `Runs the worktree's before_delete hook, removes it with git (the branch stays) and drops
+the database Flock made for it, unless --keep-db. Named by its path, it also drops the
+database of a worktree whose folder is gone (see flock worktree list).`,
+		Args: cobra.MaximumNArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			s, err := load()
+			if err != nil {
+				return err
+			}
+			if len(args) > 0 {
+				if e, ok := leftWorktree(s, args[0]); ok {
+					out, err := s.client().RemoveWorktree(cmd.Context(), e.Path, force, keepDB)
+					cmd.Print(out)
+					if err == nil {
+						cmd.Printf("forgot %s\n", e.Path)
+					}
+					return err
+				}
 			}
 			site, err := worktreeArg(s, args)
 			if err != nil {
@@ -160,7 +214,7 @@ func newWorktreeRemoveCommand() *cobra.Command {
 					return fmt.Errorf("you're in the worktree: run it from another folder, e.g. %s", filepath.Dir(site.Path))
 				}
 			}
-			out, err := s.client().RemoveWorktree(cmd.Context(), site.Path, force)
+			out, err := s.client().RemoveWorktree(cmd.Context(), site.Path, force, keepDB)
 			if out != "" && err == nil {
 				cmd.Print(out)
 			}
@@ -172,12 +226,27 @@ func newWorktreeRemoveCommand() *cobra.Command {
 		},
 	}
 	cmd.Flags().BoolVar(&force, "force", false, "remove it even when it has changes or the before_delete hook fails")
+	cmd.Flags().BoolVar(&keepDB, "keep-db", false, "keep the database Flock made for it")
 	return cmd
+}
+
+// leftWorktree finds a worktree whose folder is gone but whose database Flock kept, by its path.
+func leftWorktree(s *state, arg string) (config.WorktreeEntry, bool) {
+	path, err := filepath.Abs(arg)
+	if err != nil {
+		return config.WorktreeEntry{}, false
+	}
+	for _, e := range s.cfg.Worktrees {
+		if e.Gone && config.SamePath(e.Path, path) {
+			return e, true
+		}
+	}
+	return config.WorktreeEntry{}, false
 }
 
 // setupWorktree starts (or joins) the setup of the worktree at path and shows its log until it
 // ends. The daemon may not have seen a worktree git just created: it is asked to look first.
-func setupWorktree(cmd *cobra.Command, s *state, path string, again bool) error {
+func setupWorktree(cmd *cobra.Command, s *state, path string, again bool, db string) error {
 	client := s.client()
 	if _, err := client.Reload(cmd.Context()); err != nil {
 		if errors.Is(err, api.ErrDaemonNotRunning) {
@@ -185,13 +254,23 @@ func setupWorktree(cmd *cobra.Command, s *state, path string, again bool) error 
 		}
 		return err
 	}
-	st, err := client.SetupWorktree(cmd.Context(), path, again)
+	st, err := client.SetupWorktree(cmd.Context(), path, again, db)
 	if err != nil {
 		return err
 	}
 	if st.State == worktree.Ready && !again {
 		cmd.Printf("%s is set up already (--again sets it up once more)\n", path)
 		return nil
+	}
+	if err := followSetup(cmd.Context(), cmd.OutOrStdout(), s, client, path, st); err != nil || db == "" {
+		return err
+	}
+	// Asked for just as a setup the daemon started by itself ended: switched now.
+	if st, err = client.WorktreeSetup(cmd.Context(), path); err != nil || st.DBMode == db {
+		return err
+	}
+	if st, err = client.SetupWorktree(cmd.Context(), path, false, db); err != nil {
+		return err
 	}
 	return followSetup(cmd.Context(), cmd.OutOrStdout(), s, client, path, st)
 }
@@ -201,8 +280,9 @@ func followSetup(ctx context.Context, out io.Writer, s *state, client *api.Clien
 	logPath := filepath.Join(s.root, "log", st.Log+".log")
 	var offset int64
 	waiting := false
-	for {
-		if st.State == worktree.Queued && !waiting {
+	for polls := 0; ; polls++ {
+		// Every setup is queued for a moment; only a wait for others' says so.
+		if st.State == worktree.Queued && !waiting && polls >= 3 {
 			fmt.Fprintln(out, "waiting for other worktrees' setups to finish…")
 			waiting = true
 		}
@@ -256,7 +336,8 @@ are picked up within a few seconds and set up: Flock copies vendor/, node_module
 in from the site, points .env at the worktree, runs the installs and the project's hooks
 (see flock.yml).`,
 	}
-	cmd.AddCommand(newWorktreeAddCommand(), newWorktreeSetupCommand(), newWorktreeListCommand(), newWorktreeOpenCommand(), newWorktreeRemoveCommand())
+	cmd.AddCommand(newWorktreeAddCommand(), newWorktreeSetupCommand(), newWorktreeListCommand(), newWorktreeOpenCommand(),
+		newWorktreeDBCommand(), newWorktreeRemoveCommand())
 	return cmd
 }
 
@@ -279,7 +360,7 @@ func newWorktreeListCommand() *cobra.Command {
 			}
 
 			w := tabwriter.NewWriter(cmd.OutOrStdout(), 0, 0, 2, ' ', 0)
-			fmt.Fprintln(w, "SITE\tBRANCH\tURL\tPATH")
+			fmt.Fprintln(w, "SITE\tBRANCH\tURL\tDATABASE\tPATH")
 			// The daemon knows what is actually served; without it, show what the config says.
 			urls := map[string]string{}
 			if st, err := s.client().Status(cmd.Context()); err == nil {
@@ -298,9 +379,32 @@ func newWorktreeListCommand() *cobra.Command {
 				if !ok {
 					url = worktreeURL(s, site)
 				}
-				fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", site.Parent, branchColumn(site), url, site.Path)
+				db := "the site's"
+				if e, ok := s.cfg.WorktreeEntry(site.Path); ok && e.Database != "" {
+					db = e.Database
+				}
+				fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n", site.Parent, branchColumn(site), url, db, site.Path)
 			}
-			return w.Flush()
+			if err := w.Flush(); err != nil {
+				return err
+			}
+
+			var left []config.WorktreeEntry
+			for _, e := range s.cfg.Worktrees {
+				if e.Gone && (siteName == "" || e.Site == siteName) {
+					left = append(left, e)
+				}
+			}
+			if len(left) > 0 {
+				fmt.Fprintln(cmd.OutOrStdout(), "\nDatabases of worktrees that are gone (drop one with `flock worktree remove <path>`):")
+				w = tabwriter.NewWriter(cmd.OutOrStdout(), 0, 0, 2, ' ', 0)
+				fmt.Fprintln(w, "SITE\tDATABASE\tWAS AT")
+				for _, e := range left {
+					fmt.Fprintf(w, "%s\t%s\t%s\n", e.Site, e.Database, e.Path)
+				}
+				return w.Flush()
+			}
+			return nil
 		},
 	}
 	cmd.Flags().StringVar(&siteName, "site", "", "only this site's worktrees")

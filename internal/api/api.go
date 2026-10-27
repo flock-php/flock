@@ -240,13 +240,19 @@ type Backend interface {
 	Shares() *share.Manager
 	StartShare(site string, allow []string, debug bool) error
 	// SetupWorktree starts the setup of the git worktree at path (ErrNotWorktree when it isn't
-	// one of a site's), or joins the one that runs; one set up already is left alone unless again.
-	SetupWorktree(path string, again bool) (WorktreeStatus, error)
+	// one of a site's) with the database mode db ("" for flock.yml's), or joins the one that runs;
+	// one set up already is left alone unless again.
+	SetupWorktree(path string, again bool, db string) (WorktreeStatus, error)
+	// SwitchWorktreeDatabase gives the worktree a database by mode as its job, dropping the one
+	// Flock made for it unless keep.
+	SwitchWorktreeDatabase(path, mode string, keep bool) (WorktreeStatus, error)
 	// WorktreeSetup is the state of the worktree's setup, nil when Flock hasn't set it up.
 	WorktreeSetup(path string) (*WorktreeStatus, error)
-	// RemoveWorktree runs the worktree's before_delete hook and removes it with git, returning
-	// what they printed.
-	RemoveWorktree(ctx context.Context, path string, force bool) (string, error)
+	// LeftWorktrees are the worktrees whose folder is gone, whose database Flock kept.
+	LeftWorktrees() []LeftWorktree
+	// RemoveWorktree runs the worktree's before_delete hook, removes it with git and drops the
+	// database Flock made for it unless keepDB, returning what they printed.
+	RemoveWorktree(ctx context.Context, path string, force, keepDB bool) (string, error)
 }
 
 // NewHandler builds the API routes. A non-empty token requires `Authorization: Bearer <token>`

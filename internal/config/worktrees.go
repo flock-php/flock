@@ -25,6 +25,13 @@ type WorktreeEntry struct {
 	Site  string `json:"site"`
 	Slug  string `json:"slug"`
 	SetUp bool   `json:"set_up,omitempty"`
+	// DBMode is the database mode asked for ("" for flock.yml's). Database is the database Flock
+	// made for the worktree in Engine ("pgsql", "mysql", "mariadb"; for "sqlite" its file): only
+	// that one is ever dropped. Gone is set when the folder went away and the database was kept.
+	DBMode   string `json:"db_mode,omitempty"`
+	Database string `json:"database,omitempty"`
+	Engine   string `json:"engine,omitempty"`
+	Gone     bool   `json:"gone,omitempty"`
 }
 
 // Worktrees lists the worktrees of the repository checked out at repo. Only a main checkout has

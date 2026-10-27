@@ -31,6 +31,14 @@ type Job struct {
 	BinDirs []string
 	// AsRoot is set when the daemon runs as root: it then leaves the worktree alone.
 	AsRoot bool
+
+	// DBMode is the database mode (Shared, Copy, Fresh); Database the worktree's own database
+	// from an earlier setup, which is kept. Servers finds the database server Flock runs for an
+	// engine on a port (nil: none). OnDatabase is told the database the worktree ends up with.
+	DBMode     string
+	Database   Database
+	Servers    func(engine string, port int) Server
+	OnDatabase func(Database)
 }
 
 // Steps of a setup, as Status.Step names them.
@@ -39,6 +47,8 @@ const (
 	StepEnv      = "writing .env"
 	StepComposer = "composer install"
 	StepKey      = "generating the app key"
+	StepDatabase = "setting up the database"
+	StepMigrate  = "running the migrations"
 	StepJS       = "installing JS packages"
 	StepHooks    = "running hooks"
 )
@@ -51,7 +61,7 @@ func (j Job) Vars() Vars {
 	}
 	return Vars{
 		"domain": j.Domain, "url": scheme + "://" + j.Domain, "scheme": scheme, "branch": slugOf(j.Domain, j.ParentDomain),
-		"parent": j.Parent, "parent_domain": j.ParentDomain, "folder": filepath.Base(j.Site),
+		"parent": j.Parent, "parent_domain": j.ParentDomain, "folder": filepath.Base(j.Site), "database": j.Database.Name,
 	}
 }
 
@@ -62,6 +72,7 @@ func slugOf(domain, parentDomain string) string {
 // Run sets the worktree up, writing what it does to log and naming each step as it starts it.
 // Every step first checks whether it is needed, so running it again is safe.
 func (j Job) Run(ctx context.Context, log io.Writer, step func(string)) error {
+	// setUpDatabase sets j.Database for the hooks: this copy of the job.
 	if j.AsRoot {
 		// Files it wrote would belong to root, and installs and hooks are the project's own code.
 		fmt.Fprintln(log, "Flock runs as root here, so it doesn't set worktrees up: copy .env and run the installs in the worktree yourself.")
@@ -97,6 +108,11 @@ func (j Job) Run(ctx context.Context, log io.Writer, step func(string)) error {
 				return fmt.Errorf("php artisan key:generate failed: %w", err)
 			}
 		}
+	}
+
+	step(StepDatabase)
+	if err := j.setUpDatabase(ctx, log, step); err != nil {
+		return err
 	}
 
 	if err := j.installJS(ctx, log, step); err != nil {
@@ -183,8 +199,8 @@ func (j Job) copyIn(log io.Writer) (created bool, err error) {
 }
 
 // writeEnv points the worktree's .env at the worktree: APP_URL, the session and Sanctum domains
-// where they named the site, a SQLite database by the site's path (the worktree shares it), then
-// the `env:` values. Only keys that are there change, except those under `env:`.
+// where they named the site, then the `env:` values. Only keys that are there change, except
+// those under `env:`. The database is setUpDatabase's.
 func (j Job) writeEnv(log io.Writer) error {
 	path := filepath.Join(j.Path, ".env")
 	env, err := ReadDotenv(path)
@@ -195,18 +211,12 @@ func (j Job) writeEnv(log io.Writer) error {
 		return err
 	}
 	vars := j.Vars()
-	set := func(key, value string) {
-		if env.Get(key) != value {
-			env.Set(key, value)
-			fmt.Fprintf(log, ".env: %s=%s\n", key, value)
-		}
-	}
 
 	if env.Has("APP_URL") {
-		set("APP_URL", vars["url"])
+		set(env, log, "APP_URL", vars["url"])
 	}
 	if env.Get("SESSION_DOMAIN") == j.ParentDomain {
-		set("SESSION_DOMAIN", j.Domain)
+		set(env, log, "SESSION_DOMAIN", j.Domain)
 	}
 	if v := env.Get("SANCTUM_STATEFUL_DOMAINS"); v != "" {
 		parts := strings.Split(v, ",")
@@ -219,20 +229,10 @@ func (j Job) writeEnv(log io.Writer) error {
 				}
 			}
 		}
-		set("SANCTUM_STATEFUL_DOMAINS", strings.Join(parts, ","))
-	}
-	if env.Get("DB_CONNECTION") == "sqlite" {
-		db := env.Get("DB_DATABASE")
-		switch {
-		case db == "":
-			db = filepath.Join(j.Site, "database", "database.sqlite")
-		case !filepath.IsAbs(db) && db != ":memory:":
-			db = filepath.Join(j.Site, db)
-		}
-		set("DB_DATABASE", db)
+		set(env, log, "SANCTUM_STATEFUL_DOMAINS", strings.Join(parts, ","))
 	}
 	for _, key := range j.Settings.EnvKeys {
-		set(key, vars.Expand(j.Settings.Env[key]))
+		set(env, log, key, vars.Expand(j.Settings.Env[key]))
 	}
 	return env.Write(path)
 }
@@ -295,7 +295,7 @@ func (j Job) RunHooks(ctx context.Context, log io.Writer, name string, commands 
 		cmd.Dir, cmd.Stdout, cmd.Stderr = j.Path, log, log
 		cmd.Env = append(j.env(),
 			"FLOCK_WORKTREE_PATH="+j.Path, "FLOCK_WORKTREE_BRANCH="+j.Branch, "FLOCK_WORKTREE_DOMAIN="+j.Domain,
-			"FLOCK_WORKTREE_URL="+vars["url"], "FLOCK_WORKTREE_PARENT="+j.Parent)
+			"FLOCK_WORKTREE_URL="+vars["url"], "FLOCK_WORKTREE_PARENT="+j.Parent, "FLOCK_WORKTREE_DATABASE="+j.Database.Name)
 		if err := cmd.Run(); err != nil {
 			return fmt.Errorf("%s hook: `%s` failed: %w", name, command, err)
 		}

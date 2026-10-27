@@ -24,6 +24,10 @@ type Status struct {
 	Step  string `json:"step,omitempty"`  // what a running setup does now (see the Step constants)
 	Error string `json:"error,omitempty"` // why it failed
 	Log   string `json:"log"`             // name for /v1/logs/services/{name}
+	// DBMode is the database mode asked for ("": flock.yml's); Database the worktree's own
+	// database, "" when it uses the site's.
+	DBMode   string `json:"db_mode,omitempty"`
+	Database string `json:"database,omitempty"`
 }
 
 // LogName is the log of a worktree's setup, for `flock logs`: by the name it is served under.

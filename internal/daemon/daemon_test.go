@@ -406,7 +406,7 @@ func TestGitWorktreesAreServedUnderTheirSite(t *testing.T) {
 		t.Error("a worktree older than Flock's worktree support got a .env")
 	}
 
-	if _, err := client.RemoveWorktree(context.Background(), path, true); err != nil {
+	if _, err := client.RemoveWorktree(context.Background(), path, true, false); err != nil {
 		t.Fatal(err)
 	}
 	waitFor("feature-auth.acme", false)
