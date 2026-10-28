@@ -984,6 +984,8 @@ impl Inner {
             state.load();
         });
     }
+
+    fn switch_postgres(self: &Rc<Self>, versions: &PostgresVersions, target: &PostgresMajor) {
         let own = if target.has_data {
             format!("PostgreSQL {} uses its own databases.", target.major)
         } else {
