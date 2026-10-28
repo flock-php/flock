@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -62,6 +63,8 @@ func (f *fakeDaemon) PostgresExtensions(_ context.Context, major string) (api.Po
 	defer f.mu.Unlock()
 	out := f.pgExt
 	out.Major = major
+	// A copy, as the daemon's answer is: the background install changes f.pgExt meanwhile.
+	out.Extensions = slices.Clone(f.pgExt.Extensions)
 	return out, f.err()
 }
 func (f *fakeDaemon) InstallPostgresExtension(_ context.Context, major, name string) (api.PostgresExtensions, error) {
@@ -73,7 +76,9 @@ func (f *fakeDaemon) InstallPostgresExtension(_ context.Context, major, name str
 			f.pgExt.Extensions[i].Installed = e.Latest
 		}
 	}
-	return f.pgExt, nil
+	out := f.pgExt
+	out.Extensions = slices.Clone(f.pgExt.Extensions)
+	return out, nil
 }
 func (f *fakeDaemon) CheckPHP(ctx context.Context) (api.PHPVersions, error) {
 	return f.PHPVersions(ctx)
@@ -580,7 +585,10 @@ func TestPostgresExtension(t *testing.T) {
 			t.Errorf("install message lacks %q: %s", want, out.Message)
 		}
 	}
-	if got := d.changes[len(d.changes)-1]; got != `install postgres extension ["18","pgrouting"]` {
+	d.mu.Lock()
+	got := d.changes[len(d.changes)-1]
+	d.mu.Unlock()
+	if got != `install postgres extension ["18","pgrouting"]` {
 		t.Fatalf("asked the daemon: %s", got)
 	}
 
