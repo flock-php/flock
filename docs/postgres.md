@@ -78,7 +78,7 @@ Flock offers PostGIS, pgRouting, pgvector and TimescaleDB, each as a download of
 | PostGIS | geographic types, spatial indexes and queries | `postgis` | 14–18 |
 | pgRouting | shortest paths and routing on PostGIS networks | `pgrouting` | 14–18 |
 | pgvector | vector similarity search for embeddings | `vector` | 14–18 |
-| TimescaleDB | hypertables, compression and continuous aggregates | `timescaledb` | 15–18 (Windows: 16–18) |
+| TimescaleDB | hypertables, compression and continuous aggregates | `timescaledb` | 16–18 |
 
 :::app
 Click **Extensions…** next to a version, then **Install** next to the extension. When you install another version, Flock offers to install the extensions of the active one with it.
