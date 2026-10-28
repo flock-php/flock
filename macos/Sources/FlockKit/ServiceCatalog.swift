@@ -1,8 +1,8 @@
 import Foundation
 
-/// GET /v1/catalog — the services Flock installs on request besides PostgreSQL and Valkey:
-/// MySQL, MariaDB, Redis, MongoDB, Meilisearch, Typesense and RustFS. Their lines install side by
-/// side, and one of them (the active one) runs on the service's port.
+/// GET /v1/catalog — the services Flock installs on request besides PostgreSQL: MySQL, MariaDB,
+/// MongoDB, Valkey, Redis, Meilisearch, Typesense and RustFS. Their lines install side by side, and
+/// one of them (the active one) runs on the service's port.
 public struct ServiceCatalog: Decodable, Sendable, Equatable {
     public var checkedAt: Date?
     public var checkError: String
