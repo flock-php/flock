@@ -207,3 +207,26 @@ func TestLinkKeepsServerFilesAndFollowsCustomFolder(t *testing.T) {
 		t.Fatal("custom extension lost on update")
 	}
 }
+
+func TestLibraryDirs(t *testing.T) {
+	root := t.TempDir()
+	postgis := ExtensionDir(root, "postgis", "18", "3.6.4-build1")
+	for _, dir := range []string{filepath.Join(postgis, "extension"), filepath.Join(postgis, "deps"), filepath.Join(CustomDir(root, "18"), "deps")} {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// An empty custom deps/ isn't listed: creating the folder must not restart the server.
+	if got := LibraryDirs(root, "18"); !slices.Equal(got, []string{filepath.Join(postgis, "deps")}) {
+		t.Fatalf("got %v", got)
+	}
+	if err := os.WriteFile(filepath.Join(CustomDir(root, "18"), "deps", "libfoo.so"), nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if got := LibraryDirs(root, "18"); len(got) != 2 || got[1] != filepath.Join(CustomDir(root, "18"), "deps") {
+		t.Fatalf("got %v", got)
+	}
+	if got := LibraryDirs(root, "17"); len(got) != 0 {
+		t.Fatalf("17 got %v", got)
+	}
+}

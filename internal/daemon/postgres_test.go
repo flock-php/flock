@@ -69,6 +69,7 @@ func TestPostgresSpecLinksAndPreloadsExtensions(t *testing.T) {
 		filepath.Join(postgres.DataDir(root, "18"), "PG_VERSION"),
 		filepath.Join(timescale, "lib", "timescaledb"+module),
 		filepath.Join(timescale, "extension", "timescaledb.control"),
+		filepath.Join(timescale, "deps", "libdep.so"),
 		filepath.Join(custom, "lib", "hello"+module),
 		filepath.Join(custom, "extension", "hello.control"),
 	} {
@@ -90,6 +91,9 @@ func TestPostgresSpecLinksAndPreloadsExtensions(t *testing.T) {
 		if !strings.Contains(args, want) {
 			t.Errorf("args %q lack %s", args, want)
 		}
+	}
+	if runtime.GOOS == "linux" && !slices.ContainsFunc(spec.Env, func(e string) bool { return strings.HasPrefix(e, "LD_LIBRARY_PATH=") && strings.Contains(e, timescale) }) {
+		t.Errorf("env %q lacks TimescaleDB's deps/", spec.Env)
 	}
 	for _, linked := range []string{
 		filepath.Join(build, "lib", "postgresql", "timescaledb"+module),

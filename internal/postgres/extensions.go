@@ -24,9 +24,11 @@ import (
 // and Link makes it loadable by that major's server.
 //
 // A package has lib/ (the modules, which go into the server's pkglibdir), extension/ (control and
-// SQL files) and deps/ (the libraries the modules need: found through their rpath on macOS and
-// Linux, copied next to postgres.exe on Windows). Anything else, like PostGIS' share/proj, stays
-// where it is.
+// SQL files) and deps/ (the libraries the modules need). macOS finds deps/ through the modules'
+// rpath, since @loader_path follows the symlink to the real module; Linux expands $ORIGIN to the
+// symlink's folder instead, so the server gets deps/ on LD_LIBRARY_PATH (LibraryDirs); Windows
+// gets them copied next to postgres.exe. Anything else, like PostGIS' share/proj, stays where it
+// is: PROJ finds it from the real location of its library.
 type Extension struct {
 	Name        string   `json:"name"`        // package name without the major: "postgis"
 	Title       string   `json:"title"`       // "PostGIS"
@@ -80,7 +82,7 @@ and keeps them across updates.
 
 lib/        the extension's library (.so, .dylib or .dll)
 extension/  its .control and .sql files
-deps/       Windows only: DLLs the library needs
+deps/       Windows and Linux: libraries it needs
 
 With PGXS (macOS, Linux):
   PG_CONFIG=$(flock services extensions postgres pg-config --major %[1]s)
@@ -97,7 +99,7 @@ func EnsureCustomDir(root, major string) (string, error) {
 	}
 	dir := CustomDir(root, major)
 	subdirs := []string{"lib", "extension"}
-	if runtime.GOOS == "windows" {
+	if runtime.GOOS != "darwin" {
 		subdirs = append(subdirs, "deps")
 	}
 	for _, sub := range subdirs {
@@ -177,6 +179,24 @@ func InstalledExtensions(root, major string) []string {
 		}
 	}
 	return out
+}
+
+// LibraryDirs are the deps/ folders of a major's installed extensions, and of its custom folder
+// when that has any: on Linux the server finds the extensions' libraries through LD_LIBRARY_PATH.
+func LibraryDirs(root, major string) []string {
+	var dirs []string
+	for _, e := range Extensions {
+		if id := InstalledExtension(root, e.Name, major); id != "" {
+			if dir := filepath.Join(ExtensionDir(root, e.Name, major, id), "deps"); isDir(dir) {
+				dirs = append(dirs, dir)
+			}
+		}
+	}
+	custom := filepath.Join(CustomDir(root, major), "deps")
+	if entries, err := os.ReadDir(custom); err == nil && len(entries) > 0 {
+		dirs = append(dirs, custom)
+	}
+	return dirs
 }
 
 // PreloadLibraries are the installed extensions of a major that go into shared_preload_libraries.
