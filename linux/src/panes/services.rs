@@ -977,6 +977,12 @@ impl Inner {
             polling: Cell::new(false),
         });
         state.load();
+        // Then the newest manifest (the daemon fetches it only hourly), so a package published
+        // meanwhile doesn't show as "not available".
+        glib::spawn_future_local(async move {
+            let _ = gio::spawn_blocking(|| Client.check_postgres()).await;
+            state.load();
+        });
     }
         let own = if target.has_data {
             format!("PostgreSQL {} uses its own databases.", target.major)

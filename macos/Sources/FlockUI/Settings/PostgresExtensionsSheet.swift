@@ -55,7 +55,13 @@ struct PostgresExtensionsSheet: View {
         }
         .padding(20)
         .frame(width: 520)
-        .task { await load() }
+        .task {
+            // What the daemon has at once; then the newest manifest (it fetches only hourly), so a
+            // package published meanwhile doesn't show as "not available".
+            await load()
+            await model.settings.checkForUpdates()
+            await load()
+        }
         .task(id: isBusy) {
             // Follows operations (also started elsewhere: the CLI, another window) every second,
             // and otherwise what is put into the extensions folder.

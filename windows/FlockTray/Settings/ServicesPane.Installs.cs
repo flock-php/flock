@@ -420,7 +420,18 @@ internal sealed partial class ServicesPane
             await Load();
         }
 
-        _ = Load();
+        // What the daemon has at once; then the newest manifest (it fetches only hourly), so a
+        // package published meanwhile doesn't show as "not available".
+        _ = LoadThenCheck();
+        async Task LoadThenCheck()
+        {
+            await Load();
+            await Model.Postgres.CheckAsync();
+            if (!closed)
+            {
+                await Load();
+            }
+        }
         await dialog.ShowAsync();
     }
 
