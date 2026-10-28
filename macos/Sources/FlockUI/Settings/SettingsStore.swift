@@ -239,6 +239,29 @@ final class SettingsStore {
         await onChange?()
     }
 
+    /// The extensions of a major, for its Extensions sheet.
+    func postgresExtensions(_ major: String) async -> Result<PostgresExtensions, Error> {
+        do {
+            return .success(try await client.postgresExtensions(major))
+        } catch {
+            return .failure(error)
+        }
+    }
+
+    /// Installs, updates or removes an extension; the versions are reloaded afterwards, since a
+    /// major's row names its extensions.
+    func performOnPostgresExtension(_ change: @escaping @Sendable (FlockClient) async throws -> PostgresExtensions) async -> Result<PostgresExtensions, Error> {
+        let result: Result<PostgresExtensions, Error>
+        do {
+            result = .success(try await change(client))
+        } catch {
+            result = .failure(error)
+        }
+        await refreshInstalls()
+        await onChange?()
+        return result
+    }
+
     /// "Check for Updates": fetches the package manifest, for PostgreSQL and the catalog at once.
     func checkForUpdates() async {
         do {

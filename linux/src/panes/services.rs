@@ -12,7 +12,10 @@ use gtk::{gio, glib};
 use super::common::{PaneView, ask_link, code_block, group, info_row, report, status_dot};
 use super::versions::{MenuItem, badge, button, checked_text, confirm, more_menu, show_log};
 use super::{Data, Pane};
-use crate::api::{Catalog, CatalogEntry, CatalogLine, Client, Error, PostgresMajor, PostgresVersions, Service};
+use crate::api::{
+    Catalog, CatalogEntry, CatalogLine, Client, Error, PostgresCustomExtension, PostgresExtension, PostgresExtensions, PostgresMajor,
+    PostgresVersions, Service, extension_titles,
+};
 use crate::links::{self, Link};
 use crate::model::AppModel;
 use crate::paths;
@@ -858,6 +861,9 @@ impl Inner {
             "switching" => format!("Switching to PostgreSQL {}…", major.major),
             "uninstalling" => format!("Uninstalling PostgreSQL {}…", major.major),
             _ if installed && major.update => format!("{} → {} available", major.installed, major.latest),
+            _ if installed && !major.extensions.as_deref().unwrap_or_default().is_empty() => {
+                format!("{} · {}", major.installed, extension_titles(major.extensions.as_deref().unwrap_or_default()))
+            }
             _ if installed => major.installed.clone(),
             _ if major.has_data => format!("Not installed · {} of databases kept", bytes(major.data_size)),
             _ => "Not installed".to_owned(),
@@ -877,20 +883,115 @@ impl Inner {
             })
         };
         if !installed {
-            actions.append(&operation("Install", false, "install"));
+            let (this, v, target) = (self.clone(), versions.clone(), major.major.clone());
+            actions.append(&button("Install", false, move || this.install_postgres(&v, &target)));
         } else {
             if major.update {
-                actions.append(&operation(&format!("Update to {}", major.latest), true, "update"));
+                // "Update": the subtitle shows the version it goes to ("17.10 → 17.11 available").
+                actions.append(&operation("Update", true, "update"));
             }
             if !major.active {
                 let (this, v, target) = (self.clone(), versions.clone(), major.clone());
                 actions.append(&button("Switch…", false, move || this.switch_postgres(&v, &target)));
             }
+            // An icon, like ⋯: with Update and Switch, a third labelled button doesn't fit.
+            let extensions = gtk::Button::builder()
+                .icon_name("application-x-addon-symbolic")
+                .tooltip_text(format!("Extensions of PostgreSQL {}: PostGIS, pgRouting, pgvector, TimescaleDB and your own", major.major))
+                .valign(gtk::Align::Center)
+                .css_classes(["flat"])
+                .build();
+            let (this, target) = (self.clone(), major.major.clone());
+            extensions.connect_clicked(move |_| this.postgres_extensions(&target));
+            actions.append(&extensions);
             let (this, v, target) = (self.clone(), versions.clone(), major.clone());
             actions.append(&more_menu(vec![("Uninstall…".to_owned(), true, true, Box::new(move || this.uninstall_postgres(&v, &target)))]));
         }
         row.add_suffix(&actions);
         row
+    }
+
+    /// Installs a major; when the active one has extensions, asks whether the new one gets them too.
+    fn install_postgres(self: &Rc<Self>, versions: &PostgresVersions, major: &str) {
+        let active = versions.majors.iter().flatten().find(|m| m.active && !m.installed.is_empty());
+        let extensions = active.and_then(|m| m.extensions.clone()).unwrap_or_default();
+        let m = major.to_owned();
+        if extensions.is_empty() {
+            self.run_postgres(move |c| c.postgres_operation(&m, "install"));
+            return;
+        }
+        let dialog = adw::AlertDialog::new(
+            Some(&format!("Also install the extensions of PostgreSQL {}?", versions.active)),
+            Some(&format!(
+                "{} for PostgreSQL {major}, where they're available for it. You can change this later under Extensions….",
+                extension_titles(&extensions)
+            )),
+        );
+        dialog.add_responses(&[("cancel", "Cancel"), ("only", "PostgreSQL Only"), ("with", "Install with Extensions")]);
+        dialog.set_response_appearance("with", adw::ResponseAppearance::Suggested);
+        dialog.set_default_response(Some("with"));
+        let this = self.clone();
+        dialog.choose(Some(&self.detail.scrolled), gio::Cancellable::NONE, move |response| match response.as_str() {
+            "with" => {
+                let (m, extensions) = (m.clone(), extensions.clone());
+                this.run_postgres(move |c| c.install_postgres_with(&m, &extensions));
+            }
+            "only" => {
+                let m = m.clone();
+                this.run_postgres(move |c| c.postgres_operation(&m, "install"));
+            }
+            _ => {}
+        });
+    }
+
+    /// The extensions of one major: Flock's own (each a download of its own) and the folder for yours.
+    fn postgres_extensions(self: &Rc<Self>, major: &str) {
+        let status = gtk::Label::builder()
+            .label("After installing one, run CREATE EXTENSION in each database that uses it.")
+            .wrap(true)
+            .xalign(0.0)
+            .css_classes(["dim-label"])
+            .build();
+        let list = adw::PreferencesGroup::new();
+        let folder = group("Your own extensions", "");
+        let column = gtk::Box::builder()
+            .orientation(gtk::Orientation::Vertical)
+            .spacing(18)
+            .margin_top(12)
+            .margin_bottom(18)
+            .margin_start(18)
+            .margin_end(18)
+            .build();
+        column.append(&status);
+        column.append(&list);
+        column.append(&folder);
+        let view = adw::ToolbarView::new();
+        view.add_top_bar(&adw::HeaderBar::new());
+        view.set_content(Some(&gtk::ScrolledWindow::builder().child(&column).vexpand(true).build()));
+        let dialog = adw::Dialog::builder()
+            .title(format!("PostgreSQL {major} Extensions"))
+            .content_width(560)
+            .content_height(520)
+            .child(&view)
+            .build();
+        dialog.present(Some(&self.stack));
+
+        let state = Rc::new(ExtensionsDialog {
+            pane: self.clone(),
+            major: major.to_owned(),
+            list,
+            folder,
+            status,
+            rows: RefCell::new(vec![]),
+            polling: Cell::new(false),
+        });
+        state.load();
+        // Then the newest manifest (the daemon fetches it only hourly), so a package published
+        // meanwhile doesn't show as "not available".
+        glib::spawn_future_local(async move {
+            let _ = gio::spawn_blocking(|| Client.check_postgres()).await;
+            state.load();
+        });
     }
 
     fn switch_postgres(self: &Rc<Self>, versions: &PostgresVersions, target: &PostgresMajor) {
@@ -939,6 +1040,178 @@ impl Inner {
             if response == "keep" || response == "delete" {
                 let (m2, delete) = (m.clone(), response == "delete");
                 this.run_postgres(move |c| c.uninstall_postgres(&m2, delete));
+            }
+        });
+    }
+}
+
+/// One of your own extensions: read only, with what to run or what is in the way.
+fn custom_row(ext: &PostgresCustomExtension) -> adw::ActionRow {
+    let title = if ext.version.is_empty() { ext.name.clone() } else { format!("{} {}", ext.name, ext.version) };
+    let detail = if ext.linked { format!("CREATE EXTENSION {};", ext.name) } else { ext.problem.clone() };
+    let row = adw::ActionRow::builder()
+        .title(glib::markup_escape_text(&title))
+        .subtitle(glib::markup_escape_text(&detail))
+        .subtitle_selectable(ext.linked)
+        .build();
+    row.add_suffix(&badge("Yours", ""));
+    if !ext.linked {
+        row.add_prefix(&gtk::Image::builder().icon_name("dialog-warning-symbolic").css_classes(["warning"]).build());
+    }
+    row
+}
+
+/// The open extensions dialog of a major: reloads itself after every change.
+struct ExtensionsDialog {
+    pane: Rc<Inner>,
+    major: String,
+    list: adw::PreferencesGroup,
+    folder: adw::PreferencesGroup,
+    status: gtk::Label,
+    rows: RefCell<Vec<gtk::Widget>>,
+    /// A reload is scheduled while something runs or waits: one at a time.
+    polling: Cell<bool>,
+}
+
+impl ExtensionsDialog {
+    fn load(self: &Rc<Self>) {
+        let (this, major) = (self.clone(), self.major.clone());
+        glib::spawn_future_local(async move {
+            let result = gio::spawn_blocking(move || Client.postgres_extensions(&major)).await.expect("extensions request");
+            this.show(result);
+        });
+    }
+
+    fn show(self: &Rc<Self>, result: Result<PostgresExtensions, Error>) {
+        for row in self.rows.borrow_mut().drain(..) {
+            if let Some(group) = row.parent().and_then(|p| p.ancestor(adw::PreferencesGroup::static_type())) {
+                group.downcast::<adw::PreferencesGroup>().expect("group").remove(&row);
+            }
+        }
+        let state = match result {
+            Ok(state) => state,
+            Err(e) => {
+                self.status.set_label(&e.to_string());
+                self.status.add_css_class("error");
+                return;
+            }
+        };
+        self.status.remove_css_class("error");
+        self.status.set_label("After installing one, run CREATE EXTENSION in each database that uses it.");
+        let extensions = state.extensions.clone().unwrap_or_default();
+        let busy = extensions.iter().any(|e| !e.busy.is_empty());
+        let mut rows = vec![];
+        for ext in &extensions {
+            let row = self.row(ext);
+            self.list.add(&row);
+            rows.push(row.upcast());
+        }
+        for ext in state.custom.clone().unwrap_or_default() {
+            let row = custom_row(&ext);
+            self.folder.add(&row);
+            rows.push(row.upcast());
+        }
+        let open = adw::ActionRow::builder()
+            .title("Extensions folder")
+            .subtitle(glib::markup_escape_text(&format!(
+                "Put a library in lib/ and its .control and .sql files in extension/. Flock keeps them across updates of PostgreSQL {}.",
+                self.major
+            )))
+            .build();
+        let dir = state.custom_dir.clone();
+        open.add_suffix(&button("Open", false, move || {
+            gtk::FileLauncher::new(Some(&gio::File::for_path(&dir))).launch(gtk::Window::NONE, gio::Cancellable::NONE, |_| {});
+        }));
+        self.folder.add(&open);
+        rows.push(open.upcast());
+        self.rows.replace(rows);
+        if !self.polling.replace(true) {
+            // Every two seconds while anything runs or waits (also started elsewhere: the CLI, the
+            // other window), otherwise every few seconds for what is put into the extensions folder.
+            // Until the dialog is gone: then the rows have no window any more.
+            let this = self.clone();
+            let interval = if busy { ACTIVE_INTERVAL } else { Duration::from_secs(4) };
+            glib::timeout_add_local_once(interval, move || {
+                this.polling.set(false);
+                if this.list.root().is_some() {
+                    this.load();
+                }
+            });
+        }
+    }
+
+    /// Every row stays usable while another one works: the daemon queues the operations, so several
+    /// extensions can be installed in a row (the queued ones are "waiting").
+    fn row(self: &Rc<Self>, ext: &PostgresExtension) -> adw::ActionRow {
+        let mut caption = vec![ext.description.clone()];
+        if !ext.supported {
+            caption = vec![format!("Not available for PostgreSQL {}", self.major)];
+        } else if ext.discontinued {
+            caption.push(format!("No longer updated for PostgreSQL {}", self.major));
+        }
+        if ext.supported && !ext.installed.is_empty() {
+            caption.push(format!("CREATE EXTENSION {};", ext.creates));
+        } else if ext.supported && ext.preload {
+            caption.push(format!("PostgreSQL {} restarts to load it", self.major));
+        }
+        let title = match (ext.installed.is_empty(), ext.update) {
+            (true, _) => ext.title.clone(),
+            (false, true) => format!("{} {} → {}", ext.title, ext.installed, ext.latest),
+            (false, false) => format!("{} {}", ext.title, ext.installed),
+        };
+        let row = adw::ActionRow::builder()
+            .title(glib::markup_escape_text(&title))
+            .subtitle(glib::markup_escape_text(&caption.join(" · ")))
+            .sensitive(ext.supported || !ext.installed.is_empty())
+            .build();
+        if !ext.license.is_empty() {
+            row.set_tooltip_text(Some(&format!("License: {}", ext.license)));
+        }
+        if ext.prerelease {
+            row.add_suffix(&badge("Pre-release", "warning"));
+        }
+        if !ext.busy.is_empty() {
+            let mut busy = ext.busy.clone();
+            busy[..1].make_ascii_uppercase();
+            row.add_suffix(&gtk::Label::builder().label(format!("{busy}…")).css_classes(["dim-label"]).build());
+            row.add_suffix(&gtk::Spinner::builder().spinning(true).build());
+            return row;
+        }
+        let actions = gtk::Box::builder().spacing(6).build();
+        let operation = |label: &str, suggested: bool, op: &'static str| {
+            let (this, name) = (self.clone(), ext.name.clone());
+            button(label, suggested, move || this.run(&name, op))
+        };
+        if ext.installed.is_empty() {
+            actions.append(&operation("Install", false, "install"));
+        } else {
+            if ext.update {
+                actions.append(&operation("Update", true, "update"));
+            }
+            let (this, name) = (self.clone(), ext.name.clone());
+            let items: Vec<MenuItem> =
+                vec![(format!("Uninstall {}", ext.title), true, true, Box::new(move || this.run(&name, "uninstall")))];
+            actions.append(&more_menu(items));
+        }
+        row.add_suffix(&actions);
+        row
+    }
+
+    fn run(self: &Rc<Self>, name: &str, operation: &'static str) {
+        let (this, major, name) = (self.clone(), self.major.clone(), name.to_owned());
+        // Shows it running, or waiting behind another one, while the request is out.
+        glib::timeout_add_local_once(Duration::from_millis(300), {
+            let this = self.clone();
+            move || this.load()
+        });
+        glib::spawn_future_local(async move {
+            let result = gio::spawn_blocking(move || Client.postgres_extension(&major, &name, operation)).await.expect("extension request");
+            this.show(result);
+            // A major's row names its extensions.
+            let pane = this.pane.clone();
+            if let Ok(versions) = gio::spawn_blocking(|| Client.postgres_versions()).await.expect("versions request") {
+                pane.postgres.replace(Some(versions));
+                pane.render();
             }
         });
     }

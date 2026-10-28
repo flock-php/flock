@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -16,6 +17,7 @@ import (
 	"flock/internal/catalog"
 	"flock/internal/php"
 	"flock/internal/phpext"
+	"flock/internal/postgres"
 )
 
 // fakeDaemon answers like the daemon and records the changes asked of it.
@@ -27,6 +29,8 @@ type fakeDaemon struct {
 	services []api.Service
 	catalog  api.Catalog
 	php      api.PHPVersions
+	pg       api.PostgresVersions
+	pgExt    api.PostgresExtensions
 	// phpPolls is how many PHPVersions calls a PHP install takes to finish (0: never).
 	phpPolls int
 	polled   int
@@ -52,7 +56,29 @@ func (f *fakeDaemon) Config(context.Context) (api.ConfigView, error)  { return f
 func (f *fakeDaemon) Services(context.Context) ([]api.Service, error) { return f.services, f.err() }
 func (f *fakeDaemon) Catalog(context.Context) (api.Catalog, error)    { return f.catalog, f.err() }
 func (f *fakeDaemon) PostgresVersions(context.Context) (api.PostgresVersions, error) {
-	return api.PostgresVersions{}, f.err()
+	return f.pg, f.err()
+}
+func (f *fakeDaemon) PostgresExtensions(_ context.Context, major string) (api.PostgresExtensions, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	out := f.pgExt
+	out.Major = major
+	// A copy, as the daemon's answer is: the background install changes f.pgExt meanwhile.
+	out.Extensions = slices.Clone(f.pgExt.Extensions)
+	return out, f.err()
+}
+func (f *fakeDaemon) InstallPostgresExtension(_ context.Context, major, name string) (api.PostgresExtensions, error) {
+	f.record("install postgres extension", major, name)
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	for i, e := range f.pgExt.Extensions {
+		if e.Name == name {
+			f.pgExt.Extensions[i].Installed = e.Latest
+		}
+	}
+	out := f.pgExt
+	out.Extensions = slices.Clone(f.pgExt.Extensions)
+	return out, nil
 }
 func (f *fakeDaemon) CheckPHP(ctx context.Context) (api.PHPVersions, error) {
 	return f.PHPVersions(ctx)
@@ -100,7 +126,7 @@ func (f *fakeDaemon) InstallService(_ context.Context, id, line string, port int
 	return f.catalog, nil
 }
 
-func (f *fakeDaemon) InstallPostgres(_ context.Context, major string) (api.PostgresVersions, error) {
+func (f *fakeDaemon) InstallPostgres(_ context.Context, major string, _ ...string) (api.PostgresVersions, error) {
 	f.record("install postgres", major)
 	return api.PostgresVersions{}, nil
 }
@@ -217,12 +243,12 @@ func TestToolsAndAnnotations(t *testing.T) {
 			t.Errorf("%s should be a read-only tool", name)
 		}
 	}
-	for _, name := range []string{"service", "install_version", "link_site", "update_site", "set_debugging", "create_database"} {
+	for _, name := range []string{"service", "install_version", "link_site", "update_site", "set_debugging", "create_database", "postgres_extension"} {
 		if ro, ok := readOnly[name]; !ok || ro {
 			t.Errorf("%s should be a tool that changes things (listed: %v)", name, ok)
 		}
 	}
-	if len(res.Tools) != 19 {
+	if len(res.Tools) != 20 {
 		t.Errorf("got %d tools", len(res.Tools))
 	}
 }
@@ -529,5 +555,52 @@ func TestPHPExtensionsOfTheCurrentSite(t *testing.T) {
 	var out phpext.Report
 	if e := callTool(t, cs, "php_extensions", nil, &out); e != "" || out.PHP != "8.4" || len(out.Extensions) != 1 || out.Extensions[0].Name != "intl" {
 		t.Fatalf("%q %+v", e, out)
+	}
+}
+
+func TestPostgresExtension(t *testing.T) {
+	d, opts := fixture(t)
+	cs := connect(t, opts)
+	if e := callTool(t, cs, "postgres_extension", map[string]any{"action": "list"}, nil); !strings.Contains(e, "isn't installed") {
+		t.Fatalf("without PostgreSQL: %q", e)
+	}
+
+	d.pg = api.PostgresVersions{Active: "18"}
+	ext := func(name string) postgres.ExtensionState {
+		e, _ := postgres.FindExtension(name)
+		return postgres.ExtensionState{Extension: e, Supported: true, Latest: "1.0"}
+	}
+	d.pgExt = api.PostgresExtensions{
+		Extensions: []postgres.ExtensionState{ext("postgis"), ext("pgrouting"), ext("pgvector")},
+		CustomDir:  "/flock/custom/18",
+		Custom:     []postgres.CustomExtension{{Name: "hello", Linked: true}, {Name: "broken", Problem: "its library broken isn't in lib/"}},
+	}
+
+	var out actionOut
+	if e := callTool(t, cs, "postgres_extension", map[string]any{"action": "install", "extension": "pgrouting"}, &out); e != "" || !out.Done {
+		t.Fatalf("%q %+v", e, out)
+	}
+	for _, want := range []string{"pgRouting for PostgreSQL 18 is installed", "CREATE EXTENSION IF NOT EXISTS postgis;", "CREATE EXTENSION IF NOT EXISTS pgrouting;", "DB::statement("} {
+		if !strings.Contains(out.Message, want) {
+			t.Errorf("install message lacks %q: %s", want, out.Message)
+		}
+	}
+	d.mu.Lock()
+	got := d.changes[len(d.changes)-1]
+	d.mu.Unlock()
+	if got != `install postgres extension ["18","pgrouting"]` {
+		t.Fatalf("asked the daemon: %s", got)
+	}
+
+	if e := callTool(t, cs, "postgres_extension", map[string]any{"action": "list", "major": "17"}, &out); e != "" {
+		t.Fatal(e)
+	}
+	for _, want := range []string{"PostgreSQL 17 extensions", "pgrouting 1.0: installed (CREATE EXTENSION pgrouting)", "vector", "hello: CREATE EXTENSION hello", "broken: can't be used"} {
+		if !strings.Contains(out.Message, want) {
+			t.Errorf("list lacks %q: %s", want, out.Message)
+		}
+	}
+	if e := callTool(t, cs, "postgres_extension", map[string]any{"action": "install", "extension": "plv8"}, nil); e == "" {
+		t.Fatal("an unknown extension must be rejected by the schema")
 	}
 }
