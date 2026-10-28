@@ -9,6 +9,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"flock/internal/binaries"
+	"flock/internal/config"
 )
 
 // Flock's apt and dnf repository (packages.flockphp.com, see linux/packaging/repository.md), which
@@ -37,6 +38,26 @@ func repoSuite(ch binaries.Channel) string {
 	return "beta"
 }
 
+// packageSuite is the suite the package's install starts on: a beta's (any prerelease version, and
+// dev builds) is beta, so a beta installed before the first stable release finds a suite.
+func packageSuite(version string) string {
+	if strings.Contains(version, "-") || version == "dev" {
+		return "beta"
+	}
+	return "stable"
+}
+
+// adoptRepoChannel moves a user still on the default channel to beta when the repository's file
+// is on the beta suite (the install of a beta), so the app's Beta versions switch shows it.
+func adoptRepoChannel(cfg *config.Config) {
+	if cfg.Channel != "" || !packaged() || aurPackage() != "" {
+		return
+	}
+	if fileHas(aptSources, aptSourcesContent("beta")) || fileHas(dnfRepo, dnfRepoContent("beta")) {
+		cfg.Channel = string(binaries.Beta)
+	}
+}
+
 func aptSourcesContent(suite string) string {
 	return fmt.Sprintf(`# Managed by Flock: `+"`flock channel`"+` switches the suite (stable or beta).
 Types: deb
@@ -60,7 +81,11 @@ gpgkey=file://%s
 
 // writeRepo points the system's package manager at suite: apt's sources where apt is, dnf's repo
 // where dnf is. ifMissing leaves an existing file alone (the package's install keeps the channel).
+// "auto" is packageSuite of this flock's version.
 func writeRepo(suite string, ifMissing bool) error {
+	if suite == "auto" {
+		suite = packageSuite(Version)
+	}
 	if suite != "stable" && suite != "beta" {
 		return fmt.Errorf("invalid suite %q", suite)
 	}

@@ -499,7 +499,7 @@ func newPrivilegedSetupCommand() *cobra.Command {
 				return fmt.Errorf("must run as root")
 			}
 			// --repo <suite>: Flock's package repository (`flock channel`, and the package's
-			// install with --if-missing). Not per user.
+			// install with auto and --if-missing). Not per user.
 			if repo != "" {
 				return writeRepo(repo, ifMissing)
 			}
