@@ -3,13 +3,16 @@ import FlockKit
 import SwiftUI
 
 /// PostgreSQL: install a major, see the one that runs, switch between installed majors (each
-/// keeps its own databases), update and uninstall. The command-line tools come with every major.
+/// keeps its own databases), update and uninstall, and pick each major's extensions. The
+/// command-line tools come with every major.
 struct PostgresDetail: View {
     @Environment(AppModel.self) private var model
     let service: Service
 
     private let switchState = State<PostgresMajor?>(initialValue: nil)
     private let uninstallState = State<PostgresMajor?>(initialValue: nil)
+    private let extensionsState = State<PostgresMajor?>(initialValue: nil)
+    private let installWithState = State<PostgresMajor?>(initialValue: nil)
 
     var body: some View {
         let store = model.settings
@@ -51,6 +54,36 @@ struct PostgresDetail: View {
                 Task { await store.performOnPostgres(id, .uninstalling) { try await $0.uninstallPostgres(id, deleteData: deleteData) } }
             }
         }
+        .sheet(item: extensionsState.projectedValue) { major in
+            PostgresExtensionsSheet(major: major.major)
+        }
+        .alert("Also install the extensions of PostgreSQL \(store.postgres?.active ?? "")?",
+               isPresented: Binding(get: { installWithState.wrappedValue != nil }, set: { if !$0 { installWithState.wrappedValue = nil } }),
+               presenting: installWithState.wrappedValue) { target in
+            let id = target.major
+            let extensions = store.postgres?.activeMajor?.extensions ?? []
+            Button("Install with Extensions") {
+                Task { await store.performOnPostgres(id, .installing) { try await $0.installPostgres(id, extensions: extensions) } }
+            }
+            .keyboardShortcut(.defaultAction)
+            Button("PostgreSQL Only") {
+                Task { await store.performOnPostgres(id, .installing) { try await $0.installPostgres(id) } }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: { target in
+            let names = PostgresExtensions.titles(store.postgres?.activeMajor?.extensions ?? [])
+            Text("\(names) for PostgreSQL \(target.major), where they're available for it. You can change this later under Extensions….")
+        }
+    }
+
+    /// Installs another major; when the active one has extensions, asks whether it gets them too.
+    private func install(_ major: PostgresMajor) {
+        if model.settings.postgres?.activeMajor?.extensions.isEmpty == false {
+            installWithState.wrappedValue = major
+            return
+        }
+        let id = major.major
+        Task { await model.settings.performOnPostgres(id, .installing) { try await $0.installPostgres(id) } }
     }
 
     /// Something runs on a major: other PostgreSQL actions wait.
@@ -89,6 +122,10 @@ struct PostgresDetail: View {
                         switchState.wrappedValue = major
                     } uninstall: {
                         uninstallState.wrappedValue = major
+                    } extensions: {
+                        extensionsState.wrappedValue = major
+                    } install: {
+                        install(major)
                     }
                 }
             }
@@ -235,6 +272,8 @@ private struct PostgresMajorRow: View {
     let activeMajor: String
     let switchTo: () -> Void
     let uninstall: () -> Void
+    let extensions: () -> Void
+    let install: () -> Void
 
     var body: some View {
         HStack(spacing: 10) {
@@ -287,7 +326,13 @@ private struct PostgresMajorRow: View {
 
     @ViewBuilder
     private var caption: some View {
-        if !major.isInstalled && major.hasData {
+        if major.isInstalled && !major.extensions.isEmpty {
+            Text(PostgresExtensions.titles(major.extensions))
+                .font(.caption)
+                .lineLimit(1)
+                .foregroundStyle(.secondary)
+                .help("Extensions installed for PostgreSQL \(major.major)")
+        } else if !major.isInstalled && major.hasData {
             Text("\(Formats.bytes(major.dataSize)) kept")
                 .font(.caption)
                 .lineLimit(1)
@@ -300,10 +345,7 @@ private struct PostgresMajorRow: View {
     private var actions: some View {
         let store = model.settings
         if !major.isInstalled {
-            Button("Install") {
-                let id = major.major
-                Task { await store.performOnPostgres(id, .installing) { try await $0.installPostgres(id) } }
-            }
+            Button("Install", action: install)
             .controlSize(.small)
             .disabled(locked)
             .help(major.latest.isEmpty ? "Downloads the newest PostgreSQL \(major.major)" : "Downloads PostgreSQL \(major.latest)")
@@ -320,6 +362,9 @@ private struct PostgresMajorRow: View {
                     .disabled(locked)
                     .help("Installs \(major.latest) in place of \(major.installed). Your databases stay.")
                 }
+                Button("Extensions…", action: extensions)
+                    .controlSize(.small)
+                    .help("PostGIS, pgRouting, pgvector, TimescaleDB and your own extensions for PostgreSQL \(major.major)")
                 if !major.active {
                     Button("Switch…", action: switchTo)
                         .controlSize(.small)

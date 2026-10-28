@@ -100,7 +100,7 @@ func (f *fakeDaemon) InstallService(_ context.Context, id, line string, port int
 	return f.catalog, nil
 }
 
-func (f *fakeDaemon) InstallPostgres(_ context.Context, major string) (api.PostgresVersions, error) {
+func (f *fakeDaemon) InstallPostgres(_ context.Context, major string, _ ...string) (api.PostgresVersions, error) {
 	f.record("install postgres", major)
 	return api.PostgresVersions{}, nil
 }

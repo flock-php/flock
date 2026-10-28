@@ -69,6 +69,70 @@ flock services uninstall postgres 16 --delete-data
 ```
 :::
 
+## Extensions
+
+Flock offers PostGIS, pgRouting, pgvector and TimescaleDB, each as a download of its own. You pick them per version, since not every extension is built for every version.
+
+| Extension | What it adds | `CREATE EXTENSION` | Versions |
+|---|---|---|---|
+| PostGIS | geographic types, spatial indexes and queries | `postgis` | 14–18 |
+| pgRouting | shortest paths and routing on PostGIS networks | `pgrouting` | 14–18 |
+| pgvector | vector similarity search for embeddings | `vector` | 14–18 |
+| TimescaleDB | hypertables, compression and continuous aggregates | `timescaledb` | 15–18 (Windows: 16–18) |
+
+:::app
+Click **Extensions…** next to a version, then **Install** next to the extension. When you install another version, Flock offers to install the extensions of the active one with it.
+:::
+
+:::cli
+```bash
+flock services extensions postgres                    # the active version's extensions
+flock services extensions postgres install postgis    # for the active version
+flock services extensions postgres install timescaledb --major 17
+flock services extensions postgres uninstall pgvector
+flock services install postgres 19 --with-extensions  # a new version with the active one's extensions
+```
+:::
+
+Then enable it in each database that uses it, for example in a migration:
+
+```php
+DB::statement('CREATE EXTENSION IF NOT EXISTS postgis');
+```
+
+Updates keep the extensions of a version. Uninstalling a version removes its extensions, but not your databases unless you choose so.
+
+TimescaleDB is loaded when PostgreSQL starts, so installing or removing it restarts that version. Flock turns its telemetry off. TimescaleDB's compression, continuous aggregates and policies are under the [Timescale License](https://github.com/timescale/timescaledb/blob/main/tsl/LICENSE-TIMESCALE), which allows using them for development but not offering TimescaleDB as a database service.
+
+PostGIS comes without raster support (`postgis_raster`) and without `ST_AsMVT` and `ST_AsGeobuf`.
+
+## Your own extensions
+
+Every version has a folder for extensions Flock doesn't offer. Flock makes what you put there available to that version and keeps it across updates and when you uninstall Flock. The library goes in `lib/`, the `.control` and `.sql` files in `extension/`.
+
+:::app
+Click **Extensions…** next to a version, then **Open Extensions Folder**.
+:::
+
+:::cli
+```bash
+flock services extensions postgres dir --open
+```
+:::
+
+On macOS and Linux, build an extension with PGXS against Flock's PostgreSQL and install it into that folder:
+
+```bash
+PG_CONFIG=$(flock services extensions postgres pg-config)
+FOLDER=$(flock services extensions postgres dir)
+make PG_CONFIG=$PG_CONFIG
+make install PG_CONFIG=$PG_CONFIG pkglibdir="$FOLDER/lib" datadir="$FOLDER"
+```
+
+On Windows, put the extension's DLL for that PostgreSQL version in `lib\`, and the DLLs it needs in `deps\`.
+
+New files are picked up within a few seconds; then run `CREATE EXTENSION`. An extension that has to be preloaded (`shared_preload_libraries`) isn't supported from this folder.
+
 ## Client tools
 
 `psql`, `pg_dump`, `pg_restore`, `pg_dumpall`, `createdb` and `dropdb` come with PostgreSQL. They're on your PATH and connect to Flock's server by default (`PGHOST`, `PGPORT` and `PGUSER` still win when you set them).
