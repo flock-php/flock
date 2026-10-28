@@ -38,10 +38,11 @@ var (
 	// so ensurePrivileged can check it.
 	polkitRule = "/usr/share/polkit-1/rules.d/50-flock.rules"
 	// caAnchors are the system trust store's source directories and the command that rebuilds the
-	// store from them: Debian and Ubuntu, then Fedora and RHEL.
+	// store from them: Debian and Ubuntu, then Fedora and RHEL, then Arch.
 	caAnchors = []struct{ dir, update string }{
 		{"/usr/local/share/ca-certificates", "update-ca-certificates"},
 		{"/etc/pki/ca-trust/source/anchors", "update-ca-trust"},
+		{"/etc/ca-certificates/trust-source/anchors", "update-ca-trust"},
 	}
 )
 
@@ -384,7 +385,7 @@ func ensurePrivileged(cmd *cobra.Command, s *state, _ string, ca *certs.CA) erro
 		certs.FirefoxPolicyInstalled(name, ca.CertPath())
 	if !ok {
 		if !dns.ResolvedRunning() {
-			return errors.New("systemd-resolved isn't running: Flock sends ." + s.cfg.TLD + " lookups to its DNS server through it")
+			return errors.New(resolvedMissing(s.cfg.TLD))
 		}
 		cmd.Printf("→ setting up the background service, *.%s DNS and the local CA (needs your password)…\n", s.cfg.TLD)
 		self, err := os.Executable()
@@ -410,6 +411,16 @@ func ensurePrivileged(cmd *cobra.Command, s *state, _ string, ca *certs.CA) erro
 		cmd.Println("✓ Firefox, Chrome and other Chromium browsers trust it")
 	}
 	return nil
+}
+
+// resolvedMissing says how to switch to systemd-resolved, which Flock sends tld's lookups through:
+// Ubuntu and Fedora use it, Arch doesn't until it is enabled. The link makes programs that read
+// /etc/resolv.conf themselves (Chrome) ask it too, and NetworkManager hands it the network's DNS.
+func resolvedMissing(tld string) string {
+	return "systemd-resolved isn't running: Flock sends ." + tld + " lookups to its DNS server through it. " +
+		"Switch to it, then run `flk install` again:\n" +
+		"  sudo systemctl enable --now systemd-resolved\n" +
+		"  sudo ln -sf ../run/systemd/resolve/stub-resolv.conf /etc/resolv.conf"
 }
 
 // caAnchorPath is where the privileged setup puts user's CA in the system trust store, "" when

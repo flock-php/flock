@@ -302,7 +302,7 @@ func Run(ctx context.Context, cfg Config) error {
 	}
 	// What the first reload served, taken before the API answers: a folder parked once a client
 	// can see the daemon is a change.
-	files := d.projectFiles()
+	files, extFiles := d.projectFiles(), d.postgresExtensionFiles()
 	// The first run installs the default PHP and Node.js once a manifest arrives (reload already
 	// started it from the cached one).
 	d.binaries.OnChange(d.ensureDefaults)
@@ -369,8 +369,9 @@ loop:
 		case <-wildcard.C:
 			go d.recheckWildcard()
 		case <-watch.C:
-			if current := d.projectFiles(); current != files {
-				files = current
+			current, ext := d.projectFiles(), d.postgresExtensionFiles()
+			if current != files || ext != extFiles {
+				files, extFiles = current, ext
 				if err := d.reload(); err != nil {
 					d.setWarnings([]string{err.Error()})
 				}
@@ -382,6 +383,18 @@ loop:
 	defer cancel()
 
 	return apiServer.Shutdown(shutdownCtx)
+}
+
+// postgresExtensionFiles fingerprints the active PostgreSQL major's custom extensions folder, so
+// what is added to it is linked into the server without a restart.
+func (d *daemon) postgresExtensionFiles() string {
+	d.mu.Lock()
+	cfg := d.cfg
+	d.mu.Unlock()
+	if cfg == nil || cfg.Services.Postgres == "" {
+		return ""
+	}
+	return postgres.CustomFiles(d.root, postgres.MajorOf(cfg.Services.Postgres))
 }
 
 // projectWatchInterval is how often the sites and their project files are checked for changes.
@@ -727,7 +740,10 @@ func (d *daemon) reload() error {
 	}
 
 	if v := cfg.Services.Postgres; v != "" && cfg.Services.Running("postgres") {
-		spec, err := d.postgresSpec(cfg, v)
+		spec, pgWarnings, err := d.postgresSpec(cfg, v)
+		for _, w := range pgWarnings {
+			warnings = append(warnings, "postgres: "+w)
+		}
 		switch {
 		case err != nil:
 			warnings = append(warnings, "postgres: "+err.Error())
@@ -854,22 +870,32 @@ func (d *daemon) procUp(name string) bool {
 	return false
 }
 
-func (d *daemon) postgresSpec(cfg *config.Config, id string) (supervisor.Spec, error) {
+func (d *daemon) postgresSpec(cfg *config.Config, id string) (supervisor.Spec, []string, error) {
 	if !postgres.Installed(d.root, id) {
-		return supervisor.Spec{}, fmt.Errorf("version %s is not installed — reinstall it with `flock services install postgres`", id)
+		return supervisor.Spec{}, nil, fmt.Errorf("version %s is not installed — reinstall it with `flock services install postgres`", id)
 	}
-	bin, data := postgres.BinDir(d.root, id), postgres.DataDir(d.root, postgres.MajorOf(id))
+	major := postgres.MajorOf(id)
+	bin, data := postgres.BinDir(d.root, id), postgres.DataDir(d.root, major)
 	if err := postgres.InitDB(bin, data); err != nil {
-		return supervisor.Spec{}, err
+		return supervisor.Spec{}, nil, err
+	}
+	// Every reload: the custom folder may have changed (see the watch in Run).
+	_, warnings, err := postgres.Link(d.root, id)
+	if err != nil {
+		warnings = append(warnings, "extensions: "+err.Error())
 	}
 	run := "" // Windows has no unix sockets: clients connect over TCP
 	if runtime.GOOS != "windows" {
 		var err error
 		if run, err = paths.EnsureRun(d.root); err != nil {
-			return supervisor.Spec{}, err
+			return supervisor.Spec{}, nil, err
 		}
 	}
-	return postgres.Spec(bin, data, run, filepath.Join(d.root, "log", "postgres.log"), cfg.Ports.Postgres), nil
+	preload := postgres.PreloadLibraries(d.root, major)
+	spec := postgres.Spec(bin, data, run, filepath.Join(d.root, "log", "postgres.log"), cfg.Ports.Postgres, preload...)
+	// A changed environment restarts the server (the supervisor compares Env), so new libraries load.
+	spec.Env = postgres.ServerEnv(d.root, major)
+	return spec, warnings, nil
 }
 
 // PostgresVersions implements api.Backend.
@@ -936,6 +962,8 @@ func (s pgService) Port() int {
 
 func (s pgService) Live() bool { return true }
 
+func (s pgService) Reload() error { return s.d.reload() }
+
 // Status implements api.Backend.
 func (d *daemon) Status() api.Status {
 	d.mu.Lock()
@@ -976,9 +1004,6 @@ func (d *daemon) Status() api.Status {
 		st.HTTPPort, st.HTTPSPort = d.cfg.Ports.HTTP, d.cfg.Ports.HTTPS
 		if d.cfg.Services.Postgres != "" {
 			st.Postgres = fmt.Sprintf("%s on 127.0.0.1:%d", postgres.VersionOf(d.cfg.Services.Postgres), d.cfg.Ports.Postgres)
-		}
-		if x, ok := d.cfg.Services.Extra("valkey"); ok {
-			st.Valkey = fmt.Sprintf("%s on 127.0.0.1:%d", x.Version, x.Port)
 		}
 		if d.catalog != nil {
 			for _, k := range d.catalog.Kinds() {

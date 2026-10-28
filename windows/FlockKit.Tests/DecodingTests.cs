@@ -37,7 +37,6 @@ public class DecodingTests
 
         Assert.Equal(443, status.HttpsPort);
         Assert.Equal("beta", status.Channel);
-        Assert.Null(status.Valkey);
         Assert.Equal(["redis", "mysql"], status.Extras.Select(e => e.Id));
         Assert.True(status.Extras[0].Up);
         Assert.Equal(6379, status.Extras[0].Port);
@@ -249,7 +248,6 @@ public class DecodingTests
             """);
 
         Assert.Null(status.Postgres);
-        Assert.Null(status.Valkey);
         Assert.Empty(status.Extras);
         Assert.Empty(status.Sites);
         Assert.Empty(status.Warnings);

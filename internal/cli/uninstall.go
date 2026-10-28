@@ -107,7 +107,8 @@ func cleanUp(root string, purge bool) ([]string, error) {
 // outsideDirs are the app's own files, outside the data dir.
 var outsideDirs = appDirs
 
-// cleanServices deletes the installed service binaries and keeps each service's data/.
+// cleanServices deletes the installed service binaries and keeps each service's data/, and
+// PostgreSQL's extensions/custom/ (extensions the user put there).
 func cleanServices(dir string) ([]string, error) {
 	services, err := os.ReadDir(dir)
 	if err != nil {
@@ -129,6 +130,15 @@ func cleanServices(dir string) ([]string, error) {
 				kept = append(kept, filepath.Join(serviceDir, e.Name()))
 				continue
 			}
+			if e.Name() == "extensions" && e.IsDir() {
+				custom, err := cleanExtensions(filepath.Join(serviceDir, e.Name()))
+				errs = append(errs, err)
+				if custom != "" {
+					hasData = true
+					kept = append(kept, custom)
+				}
+				continue
+			}
 			errs = append(errs, remove(filepath.Join(serviceDir, e.Name())))
 		}
 		if !hasData {
@@ -139,6 +149,28 @@ func cleanServices(dir string) ([]string, error) {
 		errs = append(errs, remove(dir))
 	}
 	return kept, errors.Join(errs...)
+}
+
+// cleanExtensions deletes the installed extensions under dir and keeps custom/, which it returns
+// ("" when there is none).
+func cleanExtensions(dir string) (string, error) {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return "", remove(dir)
+	}
+	custom := ""
+	var errs []error
+	for _, e := range entries {
+		if e.Name() == "custom" && e.IsDir() {
+			custom = filepath.Join(dir, e.Name())
+			continue
+		}
+		errs = append(errs, remove(filepath.Join(dir, e.Name())))
+	}
+	if custom == "" {
+		errs = append(errs, remove(dir))
+	}
+	return custom, errors.Join(errs...)
 }
 
 // remove deletes path. Processes the daemon ran may still be exiting, so it retries for a moment;

@@ -200,10 +200,6 @@ public sealed class PanelViewModel : ObservableObject, IDisposable
         {
             values.Add(new("postgres", "PostgreSQL", postgres, status.Processes.FirstOrDefault(p => p.Name == "postgres")?.Up ?? false));
         }
-        if (status.Valkey is { } valkey)
-        {
-            values.Add(new("valkey", "Valkey", valkey, status.Processes.FirstOrDefault(p => p.Name == "valkey")?.Up ?? false));
-        }
         foreach (var extra in status.Extras)
         {
             values.Add(new(extra.Name, extra.Name, extra.Enabled ? $"{extra.Version} on 127.0.0.1:{extra.Port}" : "stopped", extra.Up));

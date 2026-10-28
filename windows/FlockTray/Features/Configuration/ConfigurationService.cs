@@ -94,7 +94,7 @@ public sealed class ConfigurationService : IAsyncDisposable
         left.Xdebug == right.Xdebug && left.Dumps == right.Dumps && left.Channel == right.Channel && left.Root == right.Root &&
         left.DumpsInPage == right.DumpsInPage && left.CaptureOff.SequenceEqual(right.CaptureOff) &&
         left.Ports.Http == right.Ports.Http && left.Ports.Https == right.Ports.Https && left.Ports.Dns == right.Ports.Dns &&
-        left.Ports.Smtp == right.Ports.Smtp && left.Ports.Postgres == right.Ports.Postgres && left.Ports.Valkey == right.Ports.Valkey &&
+        left.Ports.Smtp == right.Ports.Smtp && left.Ports.Postgres == right.Ports.Postgres &&
         left.Ports.Dumps == right.Ports.Dumps && left.Ports.Api == right.Ports.Api &&
         left.Parked.SequenceEqual(right.Parked) && left.Node.SequenceEqual(right.Node) &&
         left.Php.Select(p => (p.Version, p.FullVersion, p.Ini, p.XdebugAvailable)).SequenceEqual(

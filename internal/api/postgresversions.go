@@ -13,6 +13,14 @@ import (
 // PostgresVersions is the PostgreSQL pane's data: every offered major with its install state.
 type PostgresVersions = postgres.Versions
 
+// PostgresExtensions is the extensions sheet's data: every extension for one major.
+type PostgresExtensions = postgres.MajorExtensions
+
+// PostgresInstall is the optional body of POST /v1/postgres/versions/{major}/install.
+type PostgresInstall struct {
+	Extensions []string `json:"extensions"` // installed for the major too, where it has a build
+}
+
 func registerPostgresVersions(mux *http.ServeMux, b Backend) {
 	manager := func(w http.ResponseWriter) *postgres.Manager {
 		m := b.PostgresVersions()
@@ -60,9 +68,15 @@ func registerPostgresVersions(mux *http.ServeMux, b Backend) {
 		}
 	}
 
-	// Installs the newest build of a major (or updates to it).
+	// Installs the newest build of a major (or updates to it), with the extensions in the body.
 	mux.HandleFunc("POST /v1/postgres/versions/{major}/install", operation(10*time.Minute, func(ctx context.Context, m *postgres.Manager, r *http.Request) error {
-		return m.Install(ctx, r.PathValue("major"))
+		var body PostgresInstall
+		if r.ContentLength != 0 {
+			if err := decodeBody(r, &body); err != nil {
+				return err
+			}
+		}
+		return m.Install(ctx, r.PathValue("major"), body.Extensions...)
 	}))
 	mux.HandleFunc("POST /v1/postgres/versions/{major}/update", operation(10*time.Minute, func(ctx context.Context, m *postgres.Manager, r *http.Request) error {
 		return m.Update(ctx, r.PathValue("major"))
@@ -74,13 +88,57 @@ func registerPostgresVersions(mux *http.ServeMux, b Backend) {
 		deleteData := r.URL.Query().Get("delete_data")
 		return m.Uninstall(ctx, r.PathValue("major"), deleteData == "1" || deleteData == "true")
 	}))
+
+	// The extensions of one major. The custom folder is created on the first look, so the apps
+	// can open it.
+	extensions := func(w http.ResponseWriter, m *postgres.Manager, major string, err error) {
+		if err == nil {
+			_, err = postgres.EnsureCustomDir(m.Installer.Root, major)
+		}
+		var state PostgresExtensions
+		if err == nil {
+			state, err = m.Extensions(major)
+		}
+		if err != nil {
+			writeError(w, postgresStatus(err), err)
+			return
+		}
+		writeJSON(w, http.StatusOK, state)
+	}
+	extensionOperation := func(do func(ctx context.Context, m *postgres.Manager, major, name string) error) http.HandlerFunc {
+		return func(w http.ResponseWriter, r *http.Request) {
+			m := manager(w)
+			if m == nil {
+				return
+			}
+			ctx, cancel := context.WithTimeout(context.WithoutCancel(r.Context()), 10*time.Minute)
+			defer cancel()
+			major := r.PathValue("major")
+			extensions(w, m, major, do(ctx, m, major, r.PathValue("name")))
+		}
+	}
+	mux.HandleFunc("GET /v1/postgres/versions/{major}/extensions", func(w http.ResponseWriter, r *http.Request) {
+		if m := manager(w); m != nil {
+			extensions(w, m, r.PathValue("major"), nil)
+		}
+	})
+	mux.HandleFunc("POST /v1/postgres/versions/{major}/extensions/{name}/install", extensionOperation(func(ctx context.Context, m *postgres.Manager, major, name string) error {
+		return m.InstallExtension(ctx, major, name)
+	}))
+	mux.HandleFunc("POST /v1/postgres/versions/{major}/extensions/{name}/update", extensionOperation(func(ctx context.Context, m *postgres.Manager, major, name string) error {
+		return m.UpdateExtension(ctx, major, name)
+	}))
+	mux.HandleFunc("DELETE /v1/postgres/versions/{major}/extensions/{name}", extensionOperation(func(ctx context.Context, m *postgres.Manager, major, name string) error {
+		return m.UninstallExtension(ctx, major, name)
+	}))
 }
 
 func postgresStatus(err error) int {
 	switch {
-	case errors.Is(err, postgres.ErrInvalidMajor):
+	case errors.Is(err, postgres.ErrInvalidMajor), errors.Is(err, postgres.ErrUnknownExtension):
 		return http.StatusBadRequest
-	case errors.Is(err, postgres.ErrBusy), errors.Is(err, postgres.ErrNotInstalled), errors.Is(err, postgres.ErrPortTaken):
+	case errors.Is(err, postgres.ErrBusy), errors.Is(err, postgres.ErrNotInstalled), errors.Is(err, postgres.ErrPortTaken),
+		errors.Is(err, postgres.ErrExtensionInUse):
 		return http.StatusConflict
 	}
 	return statusFor(err)
@@ -100,10 +158,14 @@ func (c *Client) CheckPostgres(ctx context.Context) (PostgresVersions, error) {
 	return out, err
 }
 
-// InstallPostgres installs the newest build of a major.
-func (c *Client) InstallPostgres(ctx context.Context, major string) (PostgresVersions, error) {
+// InstallPostgres installs the newest build of a major, with extensions.
+func (c *Client) InstallPostgres(ctx context.Context, major string, extensions ...string) (PostgresVersions, error) {
 	var out PostgresVersions
-	err := c.timeout(10*time.Minute).do(ctx, http.MethodPost, "/v1/postgres/versions/"+url.PathEscape(major)+"/install", &out)
+	var body any
+	if len(extensions) > 0 {
+		body = PostgresInstall{Extensions: extensions}
+	}
+	err := c.timeout(10*time.Minute).send(ctx, http.MethodPost, "/v1/postgres/versions/"+url.PathEscape(major)+"/install", body, &out)
 	return out, err
 }
 
@@ -129,5 +191,37 @@ func (c *Client) UninstallPostgres(ctx context.Context, major string, deleteData
 	}
 	var out PostgresVersions
 	err := c.timeout(2*time.Minute).do(ctx, http.MethodDelete, path, &out)
+	return out, err
+}
+
+func extensionPath(major, name string) string {
+	return "/v1/postgres/versions/" + url.PathEscape(major) + "/extensions/" + url.PathEscape(name)
+}
+
+// PostgresExtensions fetches the extensions of a major, creating its custom folder.
+func (c *Client) PostgresExtensions(ctx context.Context, major string) (PostgresExtensions, error) {
+	var out PostgresExtensions
+	err := c.get(ctx, "/v1/postgres/versions/"+url.PathEscape(major)+"/extensions", &out)
+	return out, err
+}
+
+// InstallPostgresExtension installs an extension for a major.
+func (c *Client) InstallPostgresExtension(ctx context.Context, major, name string) (PostgresExtensions, error) {
+	var out PostgresExtensions
+	err := c.timeout(10*time.Minute).do(ctx, http.MethodPost, extensionPath(major, name)+"/install", &out)
+	return out, err
+}
+
+// UpdatePostgresExtension updates an extension of a major to its newest build.
+func (c *Client) UpdatePostgresExtension(ctx context.Context, major, name string) (PostgresExtensions, error) {
+	var out PostgresExtensions
+	err := c.timeout(10*time.Minute).do(ctx, http.MethodPost, extensionPath(major, name)+"/update", &out)
+	return out, err
+}
+
+// UninstallPostgresExtension removes an extension from a major.
+func (c *Client) UninstallPostgresExtension(ctx context.Context, major, name string) (PostgresExtensions, error) {
+	var out PostgresExtensions
+	err := c.timeout(10*time.Minute).do(ctx, http.MethodDelete, extensionPath(major, name), &out)
 	return out, err
 }
