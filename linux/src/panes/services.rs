@@ -1180,7 +1180,8 @@ impl ExtensionsDialog {
                 actions.append(&operation("Update", true, "update"));
             }
             let (this, name) = (self.clone(), ext.name.clone());
-            let items: Vec<MenuItem> = vec![(format!("Uninstall {}", ext.title), true, true, Box::new(move || this.run(&name, "uninstall")))];
+            let items: Vec<MenuItem> =
+                vec![(format!("Uninstall {}", ext.title), true, true, Box::new(move || this.run(&name, "uninstall")))];
             actions.append(&more_menu(items));
         }
         row.add_suffix(&actions);

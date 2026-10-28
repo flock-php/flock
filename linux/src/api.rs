@@ -1160,9 +1160,10 @@ mod tests {
 
     #[test]
     fn decodes_postgres_extensions() {
-        let versions: PostgresVersions =
-            serde_json::from_str(r#"{"active":"18","majors":[{"major":"18","installed":"18.6","extensions":["postgis","pgvector"]},{"major":"17"}]}"#)
-                .unwrap();
+        let versions: PostgresVersions = serde_json::from_str(
+            r#"{"active":"18","majors":[{"major":"18","installed":"18.6","extensions":["postgis","pgvector"]},{"major":"17"}]}"#,
+        )
+        .unwrap();
         let majors = versions.majors.unwrap();
         assert_eq!(extension_titles(majors[0].extensions.as_deref().unwrap_or_default()), "PostGIS, pgvector");
         assert!(majors[1].extensions.is_none());
