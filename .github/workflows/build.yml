@@ -475,7 +475,7 @@ jobs:
         # makepkg (as a user, as AUR helpers do). Arch has no arm64 image.
         if: matrix.arch == 'amd64'
         run: |
-          docker run --rm -e VERSION -v "$PWD/build/linux:/pkgs:ro" -v "$PWD/linux/packaging/aur/flockphp-bin:/aur:ro" archlinux:latest sh -ec '
+          docker run --rm -e VERSION -v "$PWD/build/linux:/pkgs:ro" -v "$PWD/linux/packaging/aur/flockphp:/aur:ro" archlinux:latest sh -ec '
             pacman -Syu --noconfirm --needed base-devel >/dev/null
             useradd -m builder
             cp -r /aur /home/builder/pkg && cp /pkgs/flockphp_*_amd64.deb /home/builder/pkg/

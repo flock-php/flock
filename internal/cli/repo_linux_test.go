@@ -64,3 +64,19 @@ func TestRepoSuite(t *testing.T) {
 		}
 	}
 }
+
+// On Arch, a channel names its AUR package, unless that one is installed already.
+func TestAurChannelHint(t *testing.T) {
+	if hint := aurChannelHint(aurStable, binaries.Beta); !strings.Contains(hint, "`yay -S flockphp-beta-bin`") || !strings.Contains(hint, "replaces flockphp-bin") {
+		t.Fatalf("stable to beta: %q", hint)
+	}
+	if hint := aurChannelHint(aurBeta, binaries.Stable); !strings.Contains(hint, "`yay -S flockphp-bin`") || !strings.Contains(hint, "replaces flockphp-beta-bin") {
+		t.Fatalf("beta to stable: %q", hint)
+	}
+	if hint := aurChannelHint(aurBeta, binaries.Experimental); hint != "" {
+		t.Fatalf("experimental on the beta package: %q", hint)
+	}
+	if hint := aurChannelHint(aurStable, binaries.Stable); hint != "" {
+		t.Fatalf("stable on the stable package: %q", hint)
+	}
+}

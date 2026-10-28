@@ -115,8 +115,15 @@ impl GeneralPane {
         let group = group("Updates", "");
         // The version in the title: as a value next to the subtitle and the button, it got squeezed.
         let version = adw::ActionRow::builder().title(glib::markup_escape_text(&format!("Flock {}", status.version))).build();
-        version.set_subtitle("New versions come with your system's updates. `flock update` installs one right away.");
-        if let Some((name, updater)) = system_updater() {
+        let aur = installation::aur_package();
+        match aur {
+            // The desktop's updater doesn't update AUR packages.
+            Some(package) => version.set_subtitle(&glib::markup_escape_text(&format!(
+                "New versions come from the AUR package {package}: update it with your AUR helper, e.g. `yay -Syu`."
+            ))),
+            None => version.set_subtitle("New versions come with your system's updates. `flock update` installs one right away."),
+        }
+        if let Some((name, updater)) = system_updater().filter(|_| aur.is_none()) {
             let open =
                 gtk::Button::builder().label("Check for Updates…").tooltip_text(format!("Opens {name}")).valign(gtk::Align::Center).build();
             let banner = self.banner.clone();
@@ -129,7 +136,8 @@ impl GeneralPane {
         }
         group.add(&version);
         // `flock channel`: on Linux, Flock's own betas come from its package repository's beta
-        // suite, which the system's file names, so the switch asks for a password.
+        // suite, which the system's file names, so the switch asks for a password. On Arch, they are
+        // an AUR package of their own, which `flock channel` names.
         let beta = adw::SwitchRow::builder()
             .title("Beta versions")
             .subtitle("Get new versions of Flock, PHP and services earlier, including pre-releases. They may not work yet.")
@@ -148,7 +156,11 @@ impl GeneralPane {
                 let channel = if on { "beta" } else { "stable" };
                 let out = gio::spawn_blocking(move || installation::run(&["channel", channel])).await.expect("flock channel");
                 row.set_sensitive(true);
-                if !out.ok {
+                if out.ok {
+                    if let Some(hint) = out.text.lines().find(|line| line.contains("AUR package")) {
+                        report(&banner, Some(hint.to_owned()));
+                    }
+                } else {
                     if !installation::declined(&out) {
                         report(&banner, Some(out.text));
                     }

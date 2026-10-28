@@ -3,6 +3,8 @@ package cli
 import (
 	"errors"
 	"fmt"
+	"os/exec"
+	"strings"
 
 	"github.com/spf13/cobra"
 
@@ -78,11 +80,50 @@ func writeRepo(suite string, ifMissing bool) error {
 	return errors.Join(errs...)
 }
 
+// On Arch, Flock is an AUR package instead, one per channel: flockphp-bin and flockphp-beta-bin
+// (linux/packaging/aur), which AUR helpers update.
+const (
+	aurStable = "flockphp-bin"
+	aurBeta   = "flockphp-beta-bin"
+)
+
+// aurPackage is the AUR package Flock is installed from, or "" (not Arch, or not from the AUR). A
+// variable: tests replace it.
+var aurPackage = func() string {
+	if !hasCommand("pacman") {
+		return ""
+	}
+	out, err := exec.Command("pacman", "-Qqo", packagedBinary).Output()
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(out))
+}
+
+// aurChannelHint tells how Flock itself follows the channel on Arch, where switching means
+// installing the channel's AUR package; "" when the one installed is it already.
+func aurChannelHint(installed string, ch binaries.Channel) string {
+	want, versions := aurStable, "stable versions"
+	if ch != binaries.Stable {
+		want, versions = aurBeta, "betas"
+	}
+	if installed == want {
+		return ""
+	}
+	return fmt.Sprintf("Flock's own %s are the AUR package %s: install it with your AUR helper (e.g. `yay -S %s`), which replaces %s.", versions, want, want, installed)
+}
+
 // followChannel switches the repository's suite with the channel, so Flock itself updates from it
 // as on macOS and Windows: the file belongs to the system, so it asks for a password. Only the
-// package's Flock has the repository.
+// package's Flock has the repository; on Arch, it tells which AUR package to install instead.
 func followChannel(cmd *cobra.Command, ch binaries.Channel) error {
 	if !packaged() {
+		return nil
+	}
+	if pkg := aurPackage(); pkg != "" {
+		if hint := aurChannelHint(pkg, ch); hint != "" {
+			cmd.Println(hint)
+		}
 		return nil
 	}
 	suite := repoSuite(ch)
