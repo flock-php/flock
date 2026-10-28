@@ -139,3 +139,30 @@ jobs:
           version: ${{ env.VERSION }}
           signing-key: ${{ secrets.REPO_SIGNING_KEY }}
           token: ${{ github.token }}
+
+  # A job of its own: the release is out either way, and a failed AUR push can run again from here.
+  aur:
+    name: AUR
+    needs: [prepare, publish]
+    runs-on: ubuntu-latest
+    # AUR_SSH_KEY, which pushes to the AUR packages.
+    environment: release
+    permissions:
+      contents: read
+    env:
+      VERSION: ${{ needs.prepare.outputs.version }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.prepare.outputs.sha }}
+
+      - name: Download the .debs
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release download "v$VERSION" --repo "$GITHUB_REPOSITORY" --pattern 'flockphp_*.deb' --dir dist
+
+      - uses: ./.github/actions/aur
+        with:
+          version: ${{ env.VERSION }}
+          ssh-key: ${{ secrets.AUR_SSH_KEY }}
+          token: ${{ github.token }}

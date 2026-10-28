@@ -502,7 +502,6 @@ pub struct Status {
     pub dump_count: u32,
     pub event_count: u32,
     pub postgres: Option<String>,
-    pub valkey: Option<String>,
     pub extras: Vec<ExtraStatus>,
     pub xdebug: bool,
     pub xdebug_breakpoints: bool,
