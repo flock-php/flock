@@ -43,6 +43,33 @@ public sealed class SitesWorkflowTests : IDisposable
     }
 
     [Fact]
+    public async Task FailedLinkKeepsItsActionErrorAfterTheStatusRefresh()
+    {
+        handler.FailLink = true;
+
+        var outcome = await service.LinkAsync(@"C:\code\shop");
+
+        Assert.Equal(OperationOutcome.Failed, outcome);
+        Assert.Equal("link failed", service.ErrorFor(@"C:\code\shop"));
+        Assert.Equal(1, handler.LinkWrites);
+        Assert.Equal(1, handler.StatusReads);
+    }
+
+    [Fact]
+    public async Task DuplicateLinksAreRejectedUntilTheFirstLinkCompletes()
+    {
+        handler.HoldLink = true;
+        var first = service.LinkAsync(@"C:\code\shop");
+        await handler.LinkStarted.Task.WaitAsync(TimeSpan.FromSeconds(5));
+
+        Assert.Equal(OperationOutcome.Rejected, await service.LinkAsync(@"C:\code\shop"));
+
+        handler.ReleaseLink.TrySetResult();
+        Assert.Equal(OperationOutcome.Succeeded, await first);
+        Assert.Equal(1, handler.LinkWrites);
+    }
+
+    [Fact]
     public async Task ANewExtensionSelectionRetiresTheOlderReport()
     {
         var old = service.SiteExtensionsAsync("old");
@@ -174,6 +201,70 @@ public sealed class SitesWorkflowTests : IDisposable
     }
 
     [Fact]
+    public void SiteSummaryUsesTheOrderedDiagnostics()
+    {
+        var model = new SitesViewModel(service);
+        model.Apply(new Status
+        {
+            Sites =
+            [
+                Site("problem", "8.3", problem: "site problem", notice: "site notice", domains: [Domain("tenant1", "tenant1.problem.test", "domain problem")], server: Status.SiteServer.FrankenPhp, frankenPhp: Franken("franken problem")),
+                Site("notice", "8.3", notice: "site notice"),
+                Site("domain", "8.3", domains: [Domain("tenant1", "tenant1.domain.test", "domain problem")]),
+                Site("franken", "8.3", server: Status.SiteServer.FrankenPhp, frankenPhp: Franken("franken problem"))
+            ]
+        });
+
+        Assert.Equal("site problem", model.Sites[0].Problem);
+        Assert.Equal("site notice", model.Sites[1].Problem);
+        Assert.Equal("tenant1.domain.test: domain problem", model.Sites[2].Problem);
+        Assert.Equal("franken problem", model.Sites[3].Problem);
+    }
+
+    [Fact]
+    public void UnrelatedStatusRefreshDoesNotChangeSelectedDetail()
+    {
+        var model = new SitesViewModel(service);
+        Assert.True(model.Apply(new Status { Sites = [Site("selected", "8.3"), Site("other", "8.2")] }));
+        var selected = Assert.Single(model.Sites, row => row.Name == "selected");
+
+        Assert.False(model.Apply(new Status { Sites = [Site("selected", "8.3"), Site("other", "8.4")] }));
+
+        Assert.Same(selected, model.Selected);
+    }
+
+    [Fact]
+    public void DomainRefreshRetainsRowsAndUsesServerOrder()
+    {
+        var model = new SitesViewModel(service);
+        model.Apply(new Status
+        {
+            Sites = [Site("site", "8.3", domains: [Domain("first", "first.site.test"), Domain("second", "second.site.test")])]
+        });
+        var site = Assert.Single(model.Sites);
+        var first = site.Domains[0];
+        var second = site.Domains[1];
+
+        Assert.True(model.Apply(new Status
+        {
+            Sites = [Site("site", "8.3", domains: [Domain("second", "second.site.test", "changed"), Domain("third", "third.site.test")])]
+        }));
+
+        Assert.Equal(["second", "third"], site.Domains.Select(domain => domain.Entry));
+        Assert.Same(second, site.Domains[0]);
+        Assert.Equal("changed", site.Domains[0].Problem);
+        Assert.NotSame(first, site.Domains[1]);
+
+        Assert.True(model.Apply(new Status
+        {
+            Sites = [Site("site", "8.3", domains: [Domain("third", "third.site.test"), Domain("second", "second.site.test", "changed")])]
+        }));
+
+        Assert.Equal(["third", "second"], site.Domains.Select(domain => domain.Entry));
+        Assert.Same(second, site.Domains[1]);
+    }
+
+    [Fact]
     public async Task FailedSiteDraftCanRollBackWhileTheActionErrorStaysVisible()
     {
         handler.FailUpdate = true;
@@ -190,14 +281,32 @@ public sealed class SitesWorkflowTests : IDisposable
         Assert.Equal("write failed", service.ErrorFor("site"));
     }
 
-    private static Status.Site Site(string name, string php) => new() { Name = name, Domain = name + ".test", Php = php };
+    private static Status.Site Site(string name, string php, string? problem = null, string? notice = null,
+        List<Status.SiteDomain>? domains = null, string server = Status.SiteServer.FastCgi, Status.SiteFrankenPhp? frankenPhp = null) => new()
+    {
+        Name = name,
+        Domain = name + ".test",
+        Php = php,
+        Problem = problem,
+        Notice = notice,
+        Domains = domains ?? [],
+        Server = server,
+        FrankenPhp = frankenPhp
+    };
+    private static Status.SiteDomain Domain(string entry, string host, string? problem = null) => new() { Entry = entry, Host = host, Problem = problem };
+    private static Status.SiteFrankenPhp Franken(string problem) => new() { State = "failed", Problem = problem };
 
     private sealed class Handler : HttpMessageHandler
     {
+        public bool FailLink { get; set; }
         public bool FailUpdate { get; set; }
         public bool FailShare { get; set; }
+        public bool HoldLink { get; set; }
         public bool HoldShare { get; set; }
+        public int LinkWrites { get; private set; }
         public int ShareWrites { get; private set; }
+        public TaskCompletionSource LinkStarted { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public TaskCompletionSource ReleaseLink { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
         public TaskCompletionSource ShareStarted { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
         public TaskCompletionSource ReleaseShare { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
         public int StatusReads { get; private set; }
@@ -207,6 +316,18 @@ public sealed class SitesWorkflowTests : IDisposable
         protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {
             var path = request.RequestUri!.AbsolutePath;
+            if (path == "/v1/sites" && request.Method == HttpMethod.Post)
+            {
+                LinkWrites++;
+                LinkStarted.TrySetResult();
+                if (HoldLink)
+                {
+                    await ReleaseLink.Task.WaitAsync(cancellationToken);
+                }
+                return FailLink
+                    ? Json("{\"error\":\"link failed\"}", HttpStatusCode.BadRequest)
+                    : Json("{\"sites\":[{\"name\":\"shop\",\"domain\":\"shop.test\",\"php\":\"8.3\"}]}");
+            }
             if (path.StartsWith("/v1/shares/", StringComparison.Ordinal))
             {
                 ShareWrites++;

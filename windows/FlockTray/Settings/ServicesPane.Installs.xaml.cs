@@ -140,7 +140,7 @@ internal sealed partial class ServicesPane
         var verb = major is { Busy: PostgresBusy.Uninstalling } ? "Uninstalling" : "Installing";
         return Inner(Ui.Column(10,
                 Ui.Text($"{verb} {name}…", "BodyStrongTextBlockStyle"),
-                new ProgressBar { IsIndeterminate = true },
+                new OperationProgress { Text = "Downloading and creating the database cluster…", IsIndeterminate = true },
                 Ui.Caption("Downloading the server and creating its database cluster. This takes a minute or two; you can close this window meanwhile.")),
             new Thickness(16, 14, 16, 14));
     }

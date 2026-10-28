@@ -31,6 +31,7 @@ internal sealed partial class SettingsWindow : FlockWindow
     private SettingsPane current = SettingsPane.General;
     private readonly bool initialized;
     private bool unsubscribed;
+    private SettingsPane? failedPane;
 
     public SettingsWindow(RuntimeService model, DeepLinkCoordinator? deepLinks = null) : base("Flock Settings", 980, 680, 820, 520)
     {
@@ -102,8 +103,20 @@ internal sealed partial class SettingsWindow : FlockWindow
         PaneTitle.Text = panes[pane].Title;
         Subtitle.Text = panes[pane].Subtitle;
         Scroller.ChangeView(null, 0, null, true);
-        ShowPane();
-        await panes[pane].ActivateAsync(hidden);
+        try
+        {
+            failedPane = null;
+            ShowPane();
+            await panes[pane].ActivateAsync(hidden);
+        }
+        catch (OperationCanceledException) when (hidden.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception error)
+        {
+            ShowPaneFailure(error);
+        }
     }
 
     private void NavigationSelectionChanged(NavigationView sender, NavigationViewSelectionChangedEventArgs args)
@@ -120,11 +133,22 @@ internal sealed partial class SettingsWindow : FlockWindow
         {
             return;
         }
-        ShowPane();
+        try
+        {
+            ShowPane();
+        }
+        catch (Exception error)
+        {
+            ShowPaneFailure(error);
+        }
     }
 
     private void ShowPane()
     {
+        if (failedPane == current)
+        {
+            return;
+        }
         UpdateError();
         var pane = panes[current];
         var fills = pane.ScrollsItself && model.Status is not null;
@@ -143,6 +167,16 @@ internal sealed partial class SettingsWindow : FlockWindow
         }
         PaneHost.Children.Clear();
         PaneHost.Children.Add(pane.Root);
+    }
+
+    private void ShowPaneFailure(Exception error)
+    {
+        App.Log(error);
+        failedPane = current;
+        ErrorBar.IsOpen = false;
+        PaneHost.Children.Clear();
+        PaneHost.Children.Add(Ui.EmptyState(Ui.GlyphWarning, "Settings could not be shown",
+            "Try again, or select another settings page.", Ui.Button("Try again", () => _ = viewModel.Navigation.RetryAsync(), true)));
     }
 
     private void UpdateError()

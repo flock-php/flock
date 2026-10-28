@@ -73,12 +73,6 @@ public sealed class SharedRead<T>(IUiDispatcher? dispatcher = null) : IAsyncDisp
         }
     }
 
-    public void StartRead(Func<CancellationToken, Task<T>> load, Action<T> publish,
-        Action<Exception> publishFailure, CancellationToken applicationToken = default, CancellationToken lifetimeToken = default)
-    {
-        _ = RunReadAsync(load, publish, publishFailure, applicationToken, lifetimeToken);
-    }
-
     private Task StartLocked(Func<CancellationToken, Task<T>> load, Action<T> publish, Action<Exception> publishFailure,
         CancellationToken applicationToken, CancellationToken lifetimeToken)
     {

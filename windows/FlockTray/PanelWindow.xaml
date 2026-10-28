@@ -54,12 +54,16 @@
                     <ItemsControl ItemsSource="{Binding Status.Warnings}">
                         <ItemsControl.ItemTemplate>
                             <DataTemplate>
-                                <StackPanel Orientation="Horizontal" Spacing="6">
+                                <Grid ColumnSpacing="6">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
                                     <FontIcon Glyph="{StaticResource GlyphWarning}" FontFamily="{StaticResource SymbolsFont}" FontSize="12"
-                                              Foreground="{ThemeResource SystemFillColorCautionBrush}" />
-                                    <TextBlock Text="{Binding}" Style="{StaticResource CaptionTextBlockStyle}" Foreground="{ThemeResource SystemFillColorCautionBrush}"
+                                               Foreground="{ThemeResource SystemFillColorCautionBrush}" />
+                                    <TextBlock Grid.Column="1" Text="{Binding}" Style="{StaticResource CaptionTextBlockStyle}" Foreground="{ThemeResource SystemFillColorCautionBrush}"
                                                TextWrapping="Wrap" />
-                                </StackPanel>
+                                </Grid>
                             </DataTemplate>
                         </ItemsControl.ItemTemplate>
                     </ItemsControl>
@@ -186,7 +190,7 @@
                         <ColumnDefinition Width="*" />
                         <ColumnDefinition Width="*" />
                     </Grid.ColumnDefinitions>
-                    <Button Grid.Column="0" Command="{Binding OpenMailCommand}" Padding="4,8">
+                    <Button Grid.Column="0" Command="{Binding OpenMailCommand}" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center" Padding="4,8">
                         <StackPanel Spacing="4" HorizontalAlignment="Center">
                             <FontIcon Glyph="{StaticResource GlyphMail}" FontFamily="{StaticResource SymbolsFont}" FontSize="18" />
                             <StackPanel Orientation="Horizontal" Spacing="4" HorizontalAlignment="Center">
@@ -198,7 +202,7 @@
                             </StackPanel>
                         </StackPanel>
                     </Button>
-                    <Button Grid.Column="1" Command="{Binding OpenDumpsCommand}" Padding="4,8">
+                    <Button Grid.Column="1" Command="{Binding OpenDumpsCommand}" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center" Padding="4,8">
                         <StackPanel Spacing="4" HorizontalAlignment="Center">
                             <FontIcon Glyph="{StaticResource GlyphBug}" FontFamily="{StaticResource SymbolsFont}" FontSize="18" />
                             <StackPanel Orientation="Horizontal" Spacing="4" HorizontalAlignment="Center">
@@ -210,7 +214,7 @@
                             </StackPanel>
                         </StackPanel>
                     </Button>
-                    <Button Grid.Column="2" Command="{Binding OpenLogsCommand}" Padding="4,8">
+                    <Button Grid.Column="2" Command="{Binding OpenLogsCommand}" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center" Padding="4,8">
                         <StackPanel Spacing="4" HorizontalAlignment="Center">
                             <FontIcon Glyph="{StaticResource GlyphDocument}" FontFamily="{StaticResource SymbolsFont}" FontSize="18" />
                             <TextBlock Text="Logs" FontSize="12" HorizontalAlignment="Center" />
@@ -243,7 +247,7 @@
                 <StackPanel Orientation="Horizontal" Spacing="4">
                     <HyperlinkButton Content="Restart" Command="{Binding RestartCommand}" Padding="4,2" Visibility="{Binding FooterVisibility}"
                                      IsEnabled="{Binding RestartEnabled}" />
-                    <HyperlinkButton Content="Settings…" Command="{Binding OpenSettingsCommand}" Padding="4,2" Visibility="{Binding FooterVisibility}" />
+                    <HyperlinkButton Content="Settings…" Command="{Binding OpenSettingsCommand}" Padding="4,2" />
                 </StackPanel>
                 <HyperlinkButton Grid.Column="1" Content="Quit Flock" Command="{Binding QuitCommand}" Padding="4,2" />
             </Grid>

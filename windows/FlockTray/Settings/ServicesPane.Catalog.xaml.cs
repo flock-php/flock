@@ -81,13 +81,13 @@ internal sealed partial class ServicesPane
             var verb = job.Action == "update" ? "Updating" : "Installing";
             var percent = job.HasProgress ? $"{Math.Round(job.Progress * 100)} %" : "";
             content.Children.Add(Ui.Spread(Ui.Text($"{verb} {target}", "BodyStrongTextBlockStyle"), Ui.Caption(percent, wrap: false)));
-            content.Children.Add(new ProgressBar { Minimum = 0, Maximum = 1, Value = job.HasProgress ? job.Progress : 0, IsIndeterminate = !job.HasProgress });
             var phase = job.PhaseText + (job.StartedAt is { Year: > 2000 } started ? $" · started {Ui.Relative(started)}" : "");
+            content.Children.Add(new OperationProgress { Text = phase, Value = job.Progress, IsIndeterminate = !job.HasProgress });
             foreach (var command in row.JobCommands)
             {
                 actions.Children.Add(CatalogJobCommand(entry, job, command));
             }
-            content.Children.Add(Ui.Spread(Ui.Caption(phase), actions));
+            content.Children.Add(actions);
             return Inner(content);
         }
 

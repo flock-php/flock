@@ -41,8 +41,6 @@ internal sealed class Screenshots(Screenshots.Options options)
         new("settings-sites-pin", app => app.ShowSiteMenu("shop")),
         new("settings-php", app => app.ShowSettings(SettingsPane.Php)),
         new("settings-node", app => app.ShowSettings(SettingsPane.Node)),
-        new("settings-services-single-update", app => app.ShowService("postgres")),
-        new("settings-services-all-updates", app => app.ShowService("mysql")),
         new("settings-services-postgres", app => app.ShowService("postgres")),
         new("settings-services-install", app => app.ShowService("mariadb")),
         new("settings-debugger", app => app.ShowSettings(SettingsPane.Debugger)),
@@ -60,12 +58,12 @@ internal sealed class Screenshots(Screenshots.Options options)
     public async Task RunAsync(App app)
     {
         var session = new ScreenshotSession(app);
+        await app.State.RefreshAsync();
         foreach (var shot in All.Where(s => options.Only?.Contains(s.Id) ?? true))
         {
             var file = Path.Combine(options.Out, $"{shot.Id}-windows-{options.Theme}.png");
             try
             {
-                await app.State.RefreshAsync();
                 var window = await shot.Show(session);
                 var hwnd = Microsoft.UI.Win32Interop.GetWindowFromWindowId(window.AppWindow.Id);
                 Capture.Prepare(hwnd);

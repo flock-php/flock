@@ -37,6 +37,7 @@ internal sealed partial class GeneralPane : UserControl, ISettingsPane
     public bool ScrollsItself => false;
     public Task ActivateAsync(CancellationToken hidden)
     {
+        Startup.IsOn = Native.StartsAtSignIn;
         return viewModel.RefreshAsync(hidden);
     }
     public void Hidden() { }
@@ -161,13 +162,13 @@ internal sealed partial class GeneralPane : UserControl, ISettingsPane
 
     private void StartupToggled(object sender, RoutedEventArgs args)
     {
-        if (!loaded)
+        if (!loaded || sender is not ToggleSwitch toggle || toggle.IsOn == Native.StartsAtSignIn)
         {
             return;
         }
         try
         {
-            Native.StartsAtSignIn = Startup.IsOn;
+            Native.StartsAtSignIn = toggle.IsOn;
         }
         catch (Exception e) when (e is UnauthorizedAccessException or SecurityException or IOException)
         {

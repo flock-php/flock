@@ -64,7 +64,8 @@ On macOS, the active version's update is the **Update** button in the card at th
 
 A build that turns out to be broken is replaced by a fixed one automatically, and your databases stay. To remove a version, open **More** and choose **Uninstall PostgreSQL 16…** (macOS) or **Uninstall…** (Windows). When an update is ready, **Uninstall…** is also in **More**. Tick **Also delete its databases** to remove its data as well.
 
-![Updating one PostgreSQL major](screenshot:settings-services-single-update)
+On Linux, **Check now** looks for new versions, and **Uninstall…** asks whether to keep the databases (**Uninstall, Keep Databases** or **Uninstall and Delete Databases**).
+
 :::
 
 :::cli

@@ -25,6 +25,7 @@ public sealed class RuntimeService
     private readonly IShellLauncher shell;
     private readonly OperationErrors operationErrors = new();
     private SecureLink? pendingSecure;
+    private InstallLink? pendingInstall;
 
     public RuntimeService(FlockClient client, UpdateService updates, InstallationService installation, CliProcessRunner processRunner,
         StatusPollingService statusPolling, OperationRunner operations, MailService mail, PreferencesService preferences,
@@ -77,7 +78,19 @@ public sealed class RuntimeService
     public string? RuntimeError { get; private set; }
     public bool IsRestarting { get; private set; }
     public bool NeedsSetup { get; set; }
-    public InstallLink? PendingInstall { get; set; }
+    public InstallLink? PendingInstall
+    {
+        get => pendingInstall;
+        set
+        {
+            if (pendingInstall == value)
+            {
+                return;
+            }
+            pendingInstall = value;
+            NotifyChanged();
+        }
+    }
     public SecureLink? PendingSecure
     {
         get => pendingSecure;

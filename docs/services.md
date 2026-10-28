@@ -39,8 +39,6 @@ Once a service is installed:
   Catalog service lines update one at a time. A failed or canceled line stops the batch, and the job card keeps its retry, dismiss, cancel, and log controls when those actions apply.
 :::
 
-![Installing all available service updates](screenshot:settings-services-all-updates)
-
 :::cli
 ```bash
 flock services                         # list services and their state

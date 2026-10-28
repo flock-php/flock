@@ -12,6 +12,7 @@ public sealed class NodeService : IAsyncDisposable
     private readonly ConfigurationService configuration;
     private readonly SharedRead<NodeCatalog> request;
     private readonly Dictionary<string, OperationErrors> resourceErrors = [];
+    private readonly Dictionary<string, string> runningActions = [];
     private readonly OperationErrors catalogErrors = new();
     private NodeCatalog? current;
 
@@ -32,19 +33,20 @@ public sealed class NodeService : IAsyncDisposable
     public Func<Task>? OnChange { get; set; }
 
     public bool IsRunning(string major) => runner.IsRunning(Key(major));
+    public string? RunningAction(string major) => runningActions.GetValueOrDefault(major);
     public bool IsChecking => runner.IsRunning("node:catalog");
 
     public Task RefreshAsync(CancellationToken observerToken = default, CancellationToken lifetimeToken = default) =>
         request.JoinReadAsync(client.NodeVersionsAsync, Apply, error => catalogErrors.SetRefresh(error), observerToken, lifetimeToken: lifetimeToken);
 
     public Task<OperationOutcome> InstallAsync(string major, CancellationToken token = default) =>
-        MutateAsync(major, cancellation => client.InstallNodeMajorAsync(major, cancellation), token);
+        MutateAsync(major, "Downloading and installing…", cancellation => client.InstallNodeMajorAsync(major, cancellation), token);
 
     public Task<OperationOutcome> UpdateNpmAsync(string major, CancellationToken token = default) =>
-        MutateAsync(major, cancellation => client.UpdateNpmAsync(major, cancellation), token);
+        MutateAsync(major, "Updating npm…", cancellation => client.UpdateNpmAsync(major, cancellation), token);
 
     public Task<OperationOutcome> UninstallAsync(string major, CancellationToken token = default) =>
-        MutateAsync(major, cancellation => client.UninstallNodeAsync(major, cancellation), token);
+        MutateAsync(major, "Uninstalling…", cancellation => client.UninstallNodeAsync(major, cancellation), token);
 
     public Task<OperationOutcome> CheckAsync(CancellationToken token = default) =>
         MutateCatalogAsync(cancellation => client.CheckNodeReleasesAsync(cancellation), token);
@@ -80,10 +82,12 @@ public sealed class NodeService : IAsyncDisposable
         await request.DisposeAsync();
     }
 
-    private async Task<OperationOutcome> MutateAsync(string major, Func<CancellationToken, Task<NodeCatalog>> mutation, CancellationToken applicationToken)
+    private async Task<OperationOutcome> MutateAsync(string major, string action, Func<CancellationToken, Task<NodeCatalog>> mutation, CancellationToken applicationToken)
     {
         var outcome = await runner.RunMutationAsync(Key(major), ErrorsFor(major), async token =>
         {
+            runningActions[major] = action;
+            Changed?.Invoke();
             request.Invalidate();
             try
             {
@@ -154,6 +158,10 @@ public sealed class NodeService : IAsyncDisposable
     {
         if (key == "node:catalog" || key.StartsWith("node:", StringComparison.Ordinal))
         {
+            if (!running && key != "node:catalog")
+            {
+                runningActions.Remove(key["node:".Length..]);
+            }
             Changed?.Invoke();
         }
     }

@@ -63,9 +63,27 @@ internal sealed partial class LogsWindow : FlockWindow
 
     private async void ClearClicked(object sender, RoutedEventArgs args)
     {
-        if (viewModel.Selection is LogsViewModel.SiteSource site && await Confirm($"Clear the log of {site.Name}?",
-                $"The Laravel log files in storage\\logs of {site.Name} are emptied. This can't be undone.", "Clear", true))
-            await viewModel.ClearCommand.ExecuteAsync(null);
+        await ObserveClearAsync(async () =>
+        {
+            if (viewModel.Selection is LogsViewModel.SiteSource site && await Confirm($"Clear the log of {site.Name}?",
+                    $"The Laravel log files in storage\\logs of {site.Name} are emptied. This can't be undone.", "Clear", true))
+                await viewModel.ClearCommand.ExecuteAsync(null);
+        }, App.Log);
+    }
+
+    internal static async Task ObserveClearAsync(Func<Task> clear, Action<Exception> log)
+    {
+        try
+        {
+            await clear();
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        catch (Exception error)
+        {
+            log(error);
+        }
     }
 
     private void DismissError(InfoBar sender, object args)

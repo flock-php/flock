@@ -4,6 +4,30 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:local="using:Flock.Tray">
     <Grid x:Name="WindowRoot">
+        <Grid.Resources>
+            <local:LogLevelBrushConverter x:Key="LogLevelBrushConverter" />
+            <local:LogLevelTextConverter x:Key="LogLevelTextConverter" />
+            <local:LogTimeConverter x:Key="LogTimeConverter" />
+            <local:StringVisibilityConverter x:Key="StringVisibilityConverter" />
+            <DataTemplate x:Key="SiteSourceTemplate">
+                <Button HorizontalAlignment="Stretch" HorizontalContentAlignment="Left" Padding="8,7" Click="SourceClicked"
+                        AutomationProperties.Name="{Binding Name}">
+                    <StackPanel Orientation="Horizontal" Spacing="10">
+                        <FontIcon Glyph="{StaticResource GlyphGlobe}" FontFamily="{StaticResource SymbolsFont}" FontSize="14" />
+                        <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis" />
+                    </StackPanel>
+                </Button>
+            </DataTemplate>
+            <DataTemplate x:Key="ServiceSourceTemplate">
+                <Button HorizontalAlignment="Stretch" HorizontalContentAlignment="Left" Padding="8,7" Click="SourceClicked"
+                        AutomationProperties.Name="{Binding Name}">
+                    <StackPanel Orientation="Horizontal" Spacing="10">
+                        <FontIcon Glyph="{StaticResource GlyphSettings}" FontFamily="{StaticResource SymbolsFont}" FontSize="14" />
+                        <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis" />
+                    </StackPanel>
+                </Button>
+            </DataTemplate>
+        </Grid.Resources>
         <Grid.RowDefinitions>
             <RowDefinition Height="48" /><RowDefinition Height="*" />
         </Grid.RowDefinitions>
@@ -39,21 +63,9 @@
                 <ScrollViewer Grid.Column="0" VerticalScrollBarVisibility="Auto">
                     <StackPanel Padding="8,0,8,8" Spacing="4">
                         <TextBlock Text="SITES" Style="{StaticResource CaptionTextBlockStyle}" FontWeight="SemiBold" Margin="8,10,0,2" />
-                        <ListView x:Name="SiteList" ItemsSource="{Binding SiteSources}" SelectionMode="Single">
-                            <ListView.ItemTemplate>
-                                <DataTemplate>
-                                    <Button Content="{Binding Name}" HorizontalAlignment="Stretch" HorizontalContentAlignment="Left" Padding="8,7" Click="SourceClicked" />
-                                </DataTemplate>
-                            </ListView.ItemTemplate>
-                        </ListView>
+                        <ListView x:Name="SiteList" ItemsSource="{Binding SiteSources}" ItemTemplate="{StaticResource SiteSourceTemplate}" SelectionMode="Single" />
                         <TextBlock Text="SERVICES" Style="{StaticResource CaptionTextBlockStyle}" FontWeight="SemiBold" Margin="8,18,0,2" />
-                        <ListView x:Name="ServiceList" ItemsSource="{Binding ServiceSources}" SelectionMode="Single">
-                            <ListView.ItemTemplate>
-                                <DataTemplate>
-                                    <Button Content="{Binding Name}" HorizontalAlignment="Stretch" HorizontalContentAlignment="Left" Padding="8,7" Click="SourceClicked" />
-                                </DataTemplate>
-                            </ListView.ItemTemplate>
-                        </ListView>
+                        <ListView x:Name="ServiceList" ItemsSource="{Binding ServiceSources}" ItemTemplate="{StaticResource ServiceSourceTemplate}" SelectionMode="Single" />
                     </StackPanel>
                 </ScrollViewer>
                 <Border Grid.Column="1" Background="{ThemeResource LayerFillColorDefaultBrush}" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
@@ -65,14 +77,15 @@
                                 <DataTemplate>
                                     <StackPanel Spacing="4" Padding="0,8">
                                         <StackPanel Orientation="Horizontal" Spacing="8">
-                                            <Border Background="{ThemeResource AccentFillColorDefaultBrush}" CornerRadius="4" Padding="6,1,6,2">
-                                                <TextBlock Text="{Binding Level}" FontSize="10" FontWeight="Bold" Foreground="White" />
+                                            <Border Background="{Binding Level, Converter={StaticResource LogLevelBrushConverter}}" CornerRadius="4" Padding="6,1,6,2">
+                                                <TextBlock Text="{Binding Level, Converter={StaticResource LogLevelTextConverter}}" FontSize="10" FontWeight="Bold" Foreground="White" />
                                             </Border>
-                                            <TextBlock Text="{Binding Time}" Style="{StaticResource CaptionTextBlockStyle}" />
-                                            <TextBlock Text="{Binding Env}" Style="{StaticResource CaptionTextBlockStyle}" />
+                                            <TextBlock Text="{Binding Time, Converter={StaticResource LogTimeConverter}}" Style="{StaticResource CaptionTextBlockStyle}" />
+                                            <TextBlock Text="{Binding Env}" Style="{StaticResource CaptionTextBlockStyle}"
+                                                       Visibility="{Binding Env, Converter={StaticResource StringVisibilityConverter}}" />
                                         </StackPanel>
                                         <TextBlock Text="{Binding Message}" TextWrapping="Wrap" IsTextSelectionEnabled="True" MaxLines="3" />
-                                        <Expander Header="Details">
+                                        <Expander Header="Details" Visibility="{Binding Details, Converter={StaticResource StringVisibilityConverter}}">
                                             <ScrollViewer MaxHeight="360" HorizontalScrollBarVisibility="Auto">
                                                 <TextBlock Text="{Binding Details}" FontFamily="Cascadia Mono, Consolas" FontSize="12" IsTextSelectionEnabled="True" />
                                             </ScrollViewer>

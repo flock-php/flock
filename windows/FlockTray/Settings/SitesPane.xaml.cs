@@ -56,8 +56,7 @@ internal sealed partial class SitesPane : UserControl, ISettingsPane
         active = true;
         activeLifetime?.Dispose();
         activeLifetime = CancellationTokenSource.CreateLinkedTokenSource(hidden);
-        viewModel.Apply(Model.Status);
-        UpdateRetained();
+        ApplyStatus();
         await HandlePendingSecureAsync(hidden);
     }
 
@@ -78,8 +77,7 @@ internal sealed partial class SitesPane : UserControl, ISettingsPane
 
     private void StateChanged()
     {
-        viewModel.Apply(Model.Status);
-        UpdateRetained();
+        ApplyStatus();
         if (active && Model.PendingSecure is not null && pendingSecure.IsCompleted)
         {
             pendingSecure = ObservePendingSecureAsync(activeLifetime?.Token ?? CancellationToken.None);
@@ -222,6 +220,15 @@ internal sealed partial class SitesPane : UserControl, ISettingsPane
         RefreshDetail();
     }
 
+    private void ApplyStatus()
+    {
+        var selectedBefore = viewModel.Selected;
+        if (viewModel.Apply(Model.Status) && ReferenceEquals(selectedBefore, viewModel.Selected))
+        {
+            RefreshDetail();
+        }
+    }
+
     private void Rerender()
     {
         RefreshDetail();
@@ -236,7 +243,7 @@ internal sealed partial class SitesPane : UserControl, ISettingsPane
         if (viewModel.Selected is not { } row)
         {
             DetailHost.Content = Ui.EmptyState(Ui.GlyphGlobe, "No sites", "Add a single site here, or add a project folder in General.",
-                Ui.Button("Add Site…", () => _ = AddSiteAsync(), true));
+                Ui.Button("Add Site…", () => Start("add-site", AddSiteAsync, refreshAfter: false), true));
             return;
         }
         if (!ReferenceEquals(SiteList.SelectedItem, row))
@@ -248,7 +255,7 @@ internal sealed partial class SitesPane : UserControl, ISettingsPane
 
     private void AddSiteClicked(object sender, RoutedEventArgs args)
     {
-        _ = AddSiteAsync();
+        Start("add-site", AddSiteAsync, refreshAfter: false);
     }
 
     private void SiteSelectionChanged(object sender, SelectionChangedEventArgs args)
@@ -257,15 +264,6 @@ internal sealed partial class SitesPane : UserControl, ISettingsPane
         {
             Select(row.Name);
         }
-    }
-
-    /// <summary>What a site's list row warns about: the site, its document root, one of its domains, or its FrankenPHP.</summary>
-    private static string? Problem(Status.Site site)
-    {
-        return site.Problem
-               ?? site.Notice
-               ?? site.Domains.Select(d => d.Problem is { } p ? $"{d.Host}: {p}" : null).FirstOrDefault(p => p is not null)
-               ?? (site.IsFrankenPhp && site.FrankenPhp is { IsRunning: false, IsInstalling: false, Problem.Length: > 0 } f ? f.Problem : null);
     }
 
     /// <summary>The selected site: its address, then Site, Versions and Server sections of labelled settings.</summary>

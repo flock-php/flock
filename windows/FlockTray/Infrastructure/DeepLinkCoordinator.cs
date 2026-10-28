@@ -80,8 +80,12 @@ public sealed class DeepLinkCoordinator(RuntimeService model)
         {
             return null;
         }
-        model.PendingInstall = null;
-        return link.Resolve(model.Services.Current, model.Catalog.Current, model.Postgres.Current);
+        var resolution = link.Resolve(model.Services.Current, model.Catalog.Current, model.Postgres.Current);
+        if (resolution is not null && ReferenceEquals(model.PendingInstall, link))
+        {
+            model.PendingInstall = null;
+        }
+        return resolution;
     }
 
     internal static bool HasRequiredSnapshots(InstallLink link, bool servicesReady, bool postgresReady, bool catalogReady) =>

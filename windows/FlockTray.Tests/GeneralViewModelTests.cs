@@ -62,6 +62,7 @@ public sealed class GeneralViewModelTests : IDisposable
         await viewModel.RefreshAsync();
 
         Assert.Equal("*.test", viewModel.DomainValue);
+        Assert.Equal("Every folder inside a project folder is served as <folder>.test — the same as `flock park`.", viewModel.ProjectFoldersDescription);
         Assert.Equal("C:\\Flock", viewModel.Root);
         Assert.Equal(["C:\\Projects"], viewModel.Config!.Parked);
         Assert.Equal(Visibility.Visible, viewModel.PortsVisibility);

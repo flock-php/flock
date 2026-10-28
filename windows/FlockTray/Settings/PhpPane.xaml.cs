@@ -14,6 +14,9 @@ internal sealed partial class PhpPane : UserControl, ISettingsPane
     private readonly RuntimeService model;
     private readonly PhpPaneViewModel phpRows;
     private readonly SettingsWindow window;
+    private CancellationToken activeToken;
+    private bool active;
+    private Task pendingConfirmation = Task.CompletedTask;
 
     public PhpPane(SettingsWindow window, RuntimeService model)
     {
@@ -23,6 +26,7 @@ internal sealed partial class PhpPane : UserControl, ISettingsPane
         frankenRows = new FrankenPhpPaneViewModel(model.FrankenPhp);
         InitializeComponent();
         DataContext = new PhpBindingViewModel(phpRows, frankenRows);
+        model.Changed += ModelChanged;
     }
 
     public string Title => "PHP";
@@ -32,6 +36,8 @@ internal sealed partial class PhpPane : UserControl, ISettingsPane
 
     public async Task ActivateAsync(CancellationToken hidden)
     {
+        active = true;
+        activeToken = hidden;
         while (!hidden.IsCancellationRequested)
         {
             await Task.WhenAll(phpRows.RefreshAsync(hidden), frankenRows.RefreshAsync(hidden));
@@ -50,12 +56,22 @@ internal sealed partial class PhpPane : UserControl, ISettingsPane
 
     public Task ReleaseAsync()
     {
+        active = false;
+        model.Changed -= ModelChanged;
         phpRows.Dispose();
         frankenRows.Dispose();
         return Task.CompletedTask;
     }
 
-    public void Hidden() { }
+    public void Hidden() => active = false;
+
+    private void ModelChanged()
+    {
+        if (active)
+        {
+            ConfirmPendingLink(activeToken);
+        }
+    }
 
     private void CheckPhp(object sender, RoutedEventArgs args)
     {
@@ -68,23 +84,67 @@ internal sealed partial class PhpPane : UserControl, ISettingsPane
 
     private void ConfirmPendingLink(CancellationToken token)
     {
+        if (token.IsCancellationRequested || !pendingConfirmation.IsCompleted)
+        {
+            return;
+        }
         if (model.PendingInstall is not { Service: InstallLink.Php } link || link.ResolvePhp(phpRows.Current) is not { } request)
         {
             return;
         }
-        model.PendingInstall = null;
-        window.DispatcherQueue.TryEnqueue(async () =>
+        if (!ReferenceEquals(model.PendingInstall, link))
         {
-            if (request.Target is not { } target)
+            return;
+        }
+        model.PendingInstall = null;
+        pendingConfirmation = ConfirmPendingLinkAsync(request, token);
+    }
+
+    private async Task ConfirmPendingLinkAsync(InstallLinkResolution request, CancellationToken token)
+    {
+        try
+        {
+            var completion = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            if (!window.DispatcherQueue.TryEnqueue(async () =>
             {
-                await Ui.Inform(window.XamlRoot, request.Title, request.Message);
+                try
+                {
+                    if (request.Target is not { } target)
+                    {
+                        if (!token.IsCancellationRequested)
+                        {
+                            await Ui.Inform(window.XamlRoot, request.Title, request.Message);
+                        }
+                        completion.TrySetResult();
+                        return;
+                    }
+                    if (token.IsCancellationRequested || !await window.Confirm(request.Title, request.Message, "Install") || token.IsCancellationRequested)
+                    {
+                        completion.TrySetResult();
+                        return;
+                    }
+                    App.Current.StartAcceptedInstall(cancellation => model.Php.InstallAsync(target.Line, cancellation));
+                    completion.TrySetResult();
+                }
+                catch (OperationCanceledException) when (token.IsCancellationRequested)
+                {
+                    completion.TrySetCanceled(token);
+                }
+                catch (Exception error)
+                {
+                    App.Log(error);
+                    completion.TrySetResult();
+                }
+            }))
+            {
                 return;
             }
-            if (await window.Confirm(request.Title, request.Message, "Install"))
-            {
-                await model.Php.InstallAsync(target.Line, token);
-            }
-        });
+            using var cancellation = token.Register(() => completion.TrySetCanceled(token));
+            await completion.Task;
+        }
+        catch (OperationCanceledException) when (token.IsCancellationRequested)
+        {
+        }
     }
 
     private void OpenPhpActions(object sender, RoutedEventArgs args)
@@ -92,6 +152,12 @@ internal sealed partial class PhpPane : UserControl, ISettingsPane
         if (sender is Button button && Row(button) is { } row)
         {
             var menu = new MenuFlyout();
+            var ini = model.Configuration.Current?.Php.FirstOrDefault(version => version.Version == row.Minor)?.Ini;
+            if (ini is { Length: > 0 })
+            {
+                menu.Items.Add(Item("Open php.ini", () => model.Open(ini)));
+                menu.Items.Add(Item("Show php.ini in Explorer", () => model.Reveal(ini)));
+            }
             if (row.HasRunningJob)
             {
                 menu.Items.Add(Item("Show log", () => ShowPhpLog(row)));
@@ -109,6 +175,7 @@ internal sealed partial class PhpPane : UserControl, ISettingsPane
             else
             {
                 if (row.CanMakeDefault) menu.Items.Add(Item("Make default", () => MakePhpDefault(row)));
+                if (row.IsInstalled) menu.Items.Add(Item("Show Last Install Log", () => ShowPhpLog(row)));
                 if (row.CanUninstall && row.HasUpdate) menu.Items.Add(Item("Uninstall…", () => _ = UninstallPhpAsync(row)));
             }
             button.Flyout = menu;
@@ -118,7 +185,13 @@ internal sealed partial class PhpPane : UserControl, ISettingsPane
 
     private void MakePhpDefault(PhpVersionViewModel row)
     {
-        _ = RunAsync(row.Minor, () => model.Configuration.SetDefaultPhpAsync(row.Minor));
+        _ = RunAsync(row.Minor, async () =>
+        {
+            if (await model.Configuration.SetDefaultPhpAsync(row.Minor) == OperationOutcome.Succeeded)
+            {
+                await phpRows.RefreshAsync();
+            }
+        });
     }
 
     private void UninstallPhp(object sender, RoutedEventArgs args)

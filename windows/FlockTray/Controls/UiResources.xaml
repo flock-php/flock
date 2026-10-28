@@ -4,11 +4,15 @@
     <FontFamily x:Key="SymbolsFont">Segoe Fluent Icons, Segoe MDL2 Assets</FontFamily>
     <FontFamily x:Key="MonoFont">Cascadia Mono, Consolas</FontFamily>
     <x:String x:Key="GlyphBug">&#xEBE8;</x:String>
+    <x:String x:Key="GlyphCheck">&#xE73E;</x:String>
     <x:String x:Key="GlyphDocument">&#xE8A5;</x:String>
     <x:String x:Key="GlyphDownload">&#xE896;</x:String>
     <x:String x:Key="GlyphGlobe">&#xE774;</x:String>
     <x:String x:Key="GlyphLock">&#xE72E;</x:String>
     <x:String x:Key="GlyphMail">&#xE715;</x:String>
+    <x:String x:Key="GlyphSettings">&#xE713;</x:String>
+    <x:String x:Key="GlyphServer">&#xE968;</x:String>
+    <x:String x:Key="GlyphTerminal">&#xE756;</x:String>
     <x:String x:Key="GlyphWarning">&#xE7BA;</x:String>
     <Thickness x:Key="CardPadding">16,12,16,12</Thickness>
     <CornerRadius x:Key="CardCornerRadius">6</CornerRadius>

@@ -10,6 +10,9 @@ internal sealed partial class NodePane : UserControl, ISettingsPane
     private readonly RuntimeService model;
     private readonly NodePaneViewModel rows;
     private readonly SettingsWindow window;
+    private CancellationToken activeToken;
+    private bool active;
+    private Task pendingConfirmation = Task.CompletedTask;
 
     public NodePane(SettingsWindow window, RuntimeService model)
     {
@@ -18,6 +21,7 @@ internal sealed partial class NodePane : UserControl, ISettingsPane
         rows = new NodePaneViewModel(model.Node);
         InitializeComponent();
         DataContext = rows;
+        model.Changed += ModelChanged;
     }
 
     public string Title => "Node";
@@ -27,6 +31,8 @@ internal sealed partial class NodePane : UserControl, ISettingsPane
 
     public async Task ActivateAsync(CancellationToken hidden)
     {
+        active = true;
+        activeToken = hidden;
         while (!hidden.IsCancellationRequested)
         {
             await rows.RefreshAsync(hidden);
@@ -44,11 +50,21 @@ internal sealed partial class NodePane : UserControl, ISettingsPane
 
     public Task ReleaseAsync()
     {
+        active = false;
+        model.Changed -= ModelChanged;
         rows.Dispose();
         return Task.CompletedTask;
     }
 
-    public void Hidden() { }
+    public void Hidden() => active = false;
+
+    private void ModelChanged()
+    {
+        if (active)
+        {
+            ConfirmPendingLink(activeToken);
+        }
+    }
 
     private void CheckNode(object sender, RoutedEventArgs args)
     {
@@ -98,23 +114,67 @@ internal sealed partial class NodePane : UserControl, ISettingsPane
 
     private void ConfirmPendingLink(CancellationToken token)
     {
+        if (token.IsCancellationRequested || !pendingConfirmation.IsCompleted)
+        {
+            return;
+        }
         var installing = (model.Node.Current?.Versions ?? []).Where(release => model.Node.IsRunning(release.Major)).Select(release => release.Major).ToList();
         if (model.PendingInstall is not { Service: InstallLink.Node } link || link.ResolveNode(rows.Current, installing) is not { } request)
         {
             return;
         }
-        model.PendingInstall = null;
-        window.DispatcherQueue.TryEnqueue(async () =>
+        if (!ReferenceEquals(model.PendingInstall, link))
         {
-            if (request.Target is not { } target)
+            return;
+        }
+        model.PendingInstall = null;
+        pendingConfirmation = ConfirmPendingLinkAsync(request, token);
+    }
+
+    private async Task ConfirmPendingLinkAsync(InstallLinkResolution request, CancellationToken token)
+    {
+        try
+        {
+            var completion = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            if (!window.DispatcherQueue.TryEnqueue(async () =>
             {
-                await Ui.Inform(window.XamlRoot, request.Title, request.Message);
+                try
+                {
+                    if (request.Target is not { } target)
+                    {
+                        if (!token.IsCancellationRequested)
+                        {
+                            await Ui.Inform(window.XamlRoot, request.Title, request.Message);
+                        }
+                        completion.TrySetResult();
+                        return;
+                    }
+                    if (token.IsCancellationRequested || !await window.Confirm(request.Title, request.Message, "Install") || token.IsCancellationRequested)
+                    {
+                        completion.TrySetResult();
+                        return;
+                    }
+                    App.Current.StartAcceptedInstall(cancellation => model.Node.InstallAsync(target.Line, cancellation));
+                    completion.TrySetResult();
+                }
+                catch (OperationCanceledException) when (token.IsCancellationRequested)
+                {
+                    completion.TrySetCanceled(token);
+                }
+                catch (Exception error)
+                {
+                    App.Log(error);
+                    completion.TrySetResult();
+                }
+            }))
+            {
                 return;
             }
-            if (await window.Confirm(request.Title, request.Message, "Install"))
-            {
-                await model.Node.InstallAsync(target.Line, token);
-            }
-        });
+            using var cancellation = token.Register(() => completion.TrySetCanceled(token));
+            await completion.Task;
+        }
+        catch (OperationCanceledException) when (token.IsCancellationRequested)
+        {
+        }
     }
 }

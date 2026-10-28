@@ -16,7 +16,7 @@
             </Grid.ColumnDefinitions>
             <TextBlock Text="Versions" Style="{StaticResource BodyStrongTextBlockStyle}" />
             <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8">
-                <TextBlock Text="{Binding Current.CheckedAt}" Style="{StaticResource CaptionTextBlockStyle}" />
+                <TextBlock Text="{Binding CheckedText}" Style="{StaticResource CaptionTextBlockStyle}" />
                 <Button Content="Check now" Click="CheckNode" Visibility="{Binding IsChecking, Converter={StaticResource InverseBooleanVisibilityConverter}}" />
                 <ProgressRing Width="14" Height="14" IsActive="True" Visibility="{Binding IsChecking, Converter={StaticResource BooleanVisibilityConverter}}" />
             </StackPanel>
@@ -31,14 +31,27 @@
                             </Grid.ColumnDefinitions>
                             <StackPanel Spacing="2">
                                 <StackPanel Orientation="Horizontal" Spacing="8">
-                                    <TextBlock Text="{Binding Major}" Style="{StaticResource BodyStrongTextBlockStyle}" />
-                                    <TextBlock Text="Default" Visibility="{Binding IsDefault, Converter={StaticResource BooleanVisibilityConverter}}" />
-                                </StackPanel>
-                                <TextBlock Text="{Binding Installed}" Style="{StaticResource CaptionTextBlockStyle}"
+                                        <TextBlock Text="{Binding DisplayName}" Style="{StaticResource BodyStrongTextBlockStyle}" />
+                                        <Border Style="{StaticResource BadgeStyle}" Visibility="{Binding IsDefault, Converter={StaticResource BooleanVisibilityConverter}}">
+                                            <TextBlock Text="Default" FontSize="11" />
+                                        </Border>
+                                    </StackPanel>
+                                    <StackPanel Orientation="Horizontal" Spacing="6">
+                                        <TextBlock Text="{Binding VersionText}" Style="{StaticResource CaptionTextBlockStyle}"
                                            Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                                <TextBlock Text="{Binding Npm}" Style="{StaticResource CaptionTextBlockStyle}"
-                                           Visibility="{Binding Npm, Converter={StaticResource StringVisibilityConverter}}" />
-                            </StackPanel>
+                                        <TextBlock Text="{Binding StatusText}" Style="{StaticResource CaptionTextBlockStyle}"
+                                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                    </StackPanel>
+                                     <StackPanel Orientation="Horizontal" Spacing="6">
+                                         <TextBlock Text="{Binding NpmText}" Style="{StaticResource CaptionTextBlockStyle}"
+                                                    Visibility="{Binding NpmText, Converter={StaticResource StringVisibilityConverter}}" />
+                                        <TextBlock Text="{Binding NpmLatestText}" Style="{StaticResource CaptionTextBlockStyle}"
+                                                    Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}"
+                                                    Visibility="{Binding NpmLatestText, Converter={StaticResource StringVisibilityConverter}}" />
+                                     </StackPanel>
+                                     <local:OperationProgress Text="{Binding JobProgressText}" IsIndeterminate="{Binding IsJobProgressIndeterminate}"
+                                                              Visibility="{Binding HasRunningJob, Converter={StaticResource BooleanVisibilityConverter}}" />
+                             </StackPanel>
                             <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
                                 <Button Content="Install" Command="{Binding InstallCommand}"
                                         Visibility="{Binding ShowPrimaryInstall, Converter={StaticResource BooleanVisibilityConverter}}" />
@@ -58,8 +71,8 @@
         </ItemsControl>
         <TextBlock Text="No Node.js versions to show yet." Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                    Visibility="{Binding IsEmpty, Converter={StaticResource BooleanVisibilityConverter}}" />
-        <TextBlock Text="{Binding Current.CheckError}" Foreground="{ThemeResource SystemFillColorCautionBrush}" TextWrapping="Wrap"
-                   Visibility="{Binding Current.CheckError, Converter={StaticResource StringVisibilityConverter}}" />
+        <TextBlock Text="{Binding CheckErrorText}" Foreground="{ThemeResource SystemFillColorCautionBrush}" TextWrapping="Wrap"
+                   Visibility="{Binding CheckErrorText, Converter={StaticResource StringVisibilityConverter}}" />
         <TextBlock
             Text="Official Node.js builds, the newest release of each major. A project that pins a version in .nvmrc gets that major offered when you run node, npm or npx there. Global packages belong to a Node line and survive its updates; those of the default version are on your PATH."
             Style="{StaticResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" Margin="2,6,0,0" />

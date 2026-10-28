@@ -52,6 +52,9 @@ public sealed partial class GeneralViewModel : ObservableObject, IDisposable
         ? "Every name, any subdomain included, is resolved by Flock's DNS server. Site domains are also in the hosts file."
         : $"Only site domains and the domains added to sites resolve (the hosts file){(Status?.Dns?.WildcardProblem is { Length: > 0 } problem ? $": {problem}" : string.Empty)}.";
     public string DomainValue => Config is { } config ? $"*.{config.Tld}" : "";
+    public string ProjectFoldersDescription => Config is { } config
+        ? $"Every folder inside a project folder is served as <folder>.{config.Tld} — the same as `flock park`."
+        : "";
     public string Root => Config?.Root ?? "";
     public string PortsDescription => Config is { } config && (config.Ports.Http != 80 || config.Ports.Https != 443)
         ? $"Sites use ports {config.Ports.Http} (HTTP) and {config.Ports.Https} (HTTPS), set in config.json, so their addresses include the port."
@@ -105,6 +108,7 @@ public sealed partial class GeneralViewModel : ObservableObject, IDisposable
         OnPropertyChanged(nameof(ConfigVisibility));
         OnPropertyChanged(nameof(DomainDescription));
         OnPropertyChanged(nameof(DomainValue));
+        OnPropertyChanged(nameof(ProjectFoldersDescription));
         OnPropertyChanged(nameof(Root));
         OnPropertyChanged(nameof(PortsDescription));
         OnPropertyChanged(nameof(PortsVisibility));

@@ -20,19 +20,29 @@ internal sealed partial class SitesViewModel(SitesService service) : ObservableO
 
     public event Action? SelectionChanged;
 
-    public void Apply(Status? status)
+    public bool Apply(Status? status)
     {
         if (status is null)
         {
-            return;
+            return false;
         }
+        var selectedBefore = Selected;
+        var selectedChanged = false;
         _synchronizer.Synchronize(Sites, status.Sites, site => site.Name, site => site.Name,
-            site => new SiteRowViewModel(site), (row, site) => row.Apply(site));
+            site => new SiteRowViewModel(site), (row, site) =>
+            {
+                var changed = row.Apply(site);
+                if (ReferenceEquals(row, selectedBefore))
+                {
+                    selectedChanged = changed;
+                }
+            });
         if (Selected is null || !Sites.Contains(Selected))
         {
             Select(Sites.FirstOrDefault());
         }
         OnPropertyChanged(nameof(Error));
+        return !ReferenceEquals(selectedBefore, Selected) || selectedChanged;
     }
 
     public void Select(SiteRowViewModel? row)
@@ -85,7 +95,7 @@ public sealed partial class SiteRowViewModel : ObservableObject
     public string NodePinned => Snapshot.NodePinned;
     public string NodeFile => Snapshot.NodeFile;
     public string NodeShadowed => Snapshot.NodeShadowed;
-    public string? Problem => Snapshot.Problem;
+    public string? Problem => Summary(Snapshot);
     public bool OctaneAvailable => Snapshot.OctaneAvailable;
     public Status.SiteFrankenPhp? FrankenPhp => Snapshot.FrankenPhp;
     public string Boost => Snapshot.Boost;
@@ -129,29 +139,34 @@ public sealed partial class SiteRowViewModel : ObservableObject
         return () => RestoreDraft(ref draftWorker, previous, nameof(Worker));
     }
 
-    internal void Apply(Status.Site value)
+    internal bool Apply(Status.Site value)
     {
+        var renderedChanged = RenderedFieldsChanged(Snapshot, value);
         Snapshot = value;
         if (draftSecured == value.Secured) draftSecured = null;
         if (draftPhp == value.Php) draftPhp = null;
         if (draftNode == Major(value.Node ?? "")) draftNode = null;
         if (draftServer == value.Server) draftServer = null;
         if (draftWorker == value.Worker) draftWorker = null;
-        var incoming = value.Domains.ToDictionary(domain => domain.Entry);
+        var incoming = value.Domains.Select(domain => domain.Entry).ToHashSet();
+        var existing = Domains.ToDictionary(domain => domain.Entry);
         for (var index = Domains.Count - 1; index >= 0; index--)
         {
-            if (!incoming.ContainsKey(Domains[index].Entry)) Domains.RemoveAt(index);
+            if (!incoming.Contains(Domains[index].Entry)) Domains.RemoveAt(index);
         }
         for (var index = 0; index < value.Domains.Count; index++)
         {
             var domain = value.Domains[index];
-            var row = Domains.FirstOrDefault(item => item.Entry == domain.Entry);
-            if (row is null)
-                Domains.Insert(index, new DomainRowViewModel(domain));
+            if (!existing.TryGetValue(domain.Entry, out var row))
+            {
+                row = new DomainRowViewModel(domain);
+                existing[domain.Entry] = row;
+                Domains.Insert(index, row);
+            }
             else
             {
                 row.Apply(domain);
-                if (Domains.IndexOf(row) == index)
+                if (ReferenceEquals(Domains[index], row))
                     continue;
 
                 Domains.Remove(row);
@@ -162,6 +177,73 @@ public sealed partial class SiteRowViewModel : ObservableObject
         {
             OnPropertyChanged(property);
         }
+        return renderedChanged;
+    }
+
+    private static string? Summary(Status.Site site)
+    {
+        return site.Problem
+               ?? site.Notice
+               ?? site.Domains.Select(domain => domain.Problem is { } problem ? $"{domain.Host}: {problem}" : null).FirstOrDefault(problem => problem is not null)
+               ?? (site.IsFrankenPhp && site.FrankenPhp is { IsRunning: false, IsInstalling: false, Problem.Length: > 0 } frankenPhp ? frankenPhp.Problem : null);
+    }
+
+    private static bool RenderedFieldsChanged(Status.Site previous, Status.Site current)
+    {
+        return previous.Name != current.Name
+               || previous.Domain != current.Domain
+               || previous.Path != current.Path
+               || previous.Php != current.Php
+               || previous.PhpSource != current.PhpSource
+               || previous.PhpPinned != current.PhpPinned
+               || previous.PhpFile != current.PhpFile
+               || previous.Node != current.Node
+               || previous.NodeSource != current.NodeSource
+               || previous.NodePinned != current.NodePinned
+               || previous.NodeFile != current.NodeFile
+               || previous.NodeShadowed != current.NodeShadowed
+               || previous.Secured != current.Secured
+               || previous.Parked != current.Parked
+               || previous.Url != current.Url
+               || previous.Problem != current.Problem
+               || previous.Notice != current.Notice
+               || previous.Root != current.Root
+               || previous.RootSource != current.RootSource
+               || previous.RootPinned != current.RootPinned
+               || previous.RootFile != current.RootFile
+               || previous.RootState != current.RootState
+               || !previous.RootSuggestions.SequenceEqual(current.RootSuggestions)
+               || !DomainsEqual(previous.Domains, current.Domains)
+               || previous.Server != current.Server
+               || previous.Worker != current.Worker
+               || previous.OctaneAvailable != current.OctaneAvailable
+               || !FrankenPhpEqual(previous.FrankenPhp, current.FrankenPhp)
+               || previous.Boost != current.Boost
+               || !ShareEqual(previous.Share, current.Share);
+    }
+
+    private static bool DomainsEqual(IReadOnlyList<Status.SiteDomain> previous, IReadOnlyList<Status.SiteDomain> current)
+    {
+        return previous.Count == current.Count && previous.Zip(current).All(pair =>
+            pair.First.Entry == pair.Second.Entry && pair.First.Host == pair.Second.Host && pair.First.Alias == pair.Second.Alias &&
+            pair.First.Url == pair.Second.Url && pair.First.Problem == pair.Second.Problem);
+    }
+
+    private static bool FrankenPhpEqual(Status.SiteFrankenPhp? previous, Status.SiteFrankenPhp? current)
+    {
+        return previous is null && current is null || previous is not null && current is not null &&
+            previous.State == current.State && previous.Version == current.Version && previous.PhpVersion == current.PhpVersion &&
+            previous.Port == current.Port && previous.Progress == current.Progress && previous.Problem == current.Problem && previous.Log == current.Log;
+    }
+
+    private static bool ShareEqual(Status.SiteShare? previous, Status.SiteShare? current)
+    {
+        return previous is null && current is null || previous is not null && current is not null &&
+            previous.Site == current.Site && previous.State == current.State && previous.Url == current.Url &&
+            previous.Allow.SequenceEqual(current.Allow) && previous.Debug == current.Debug && previous.StartedAt == current.StartedAt &&
+            previous.ExpiresAt == current.ExpiresAt && previous.Built == current.Built && previous.CanRebuild == current.CanRebuild &&
+            previous.Rebuilding == current.Rebuilding && previous.RebuildError == current.RebuildError && previous.Error == current.Error &&
+            previous.Warning == current.Warning && previous.Log == current.Log && previous.Qr == current.Qr;
     }
 
     private void SetDraft<T>(ref T? field, T value, string property) where T : struct

@@ -137,7 +137,7 @@
                     </StackPanel>
                 </StackPanel>
             </Border>
-            <TextBlock Text="Every folder inside a project folder is served as &lt;folder&gt;.test — the same as `flock park`."
+            <TextBlock Text="{Binding ProjectFoldersDescription}"
                        Style="{StaticResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" Margin="2,6,0,0" TextWrapping="Wrap" />
         </StackPanel>
     </StackPanel>

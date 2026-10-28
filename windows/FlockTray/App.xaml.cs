@@ -19,6 +19,7 @@ public sealed partial class App : Application
     /// <summary>Command line argument of the sign-in autostart.</summary>
     public const string BackgroundArgument = "--background";
     private DispatcherQueue? dispatcher;
+    private readonly AcceptedInstallTracker acceptedInstalls = new(Log);
 
     private AppHost? host;
     private Task? launchTask;
@@ -65,6 +66,8 @@ public sealed partial class App : Application
     public RuntimeService State => host?.RuntimeService ?? throw new InvalidOperationException("The application has not launched.");
 
     public ApplicationRuntime Runtime => host?.Runtime ?? throw new InvalidOperationException("The application has not launched.");
+
+    internal void StartAcceptedInstall(Func<CancellationToken, Task> install) => acceptedInstalls.Start(install);
 
     internal AppOptions Options { get; }
 
@@ -425,6 +428,7 @@ public sealed partial class App : Application
     {
         try
         {
+            await acceptedInstalls.StopAsync();
             if (host is not null)
             {
                 await host.QuitAsync();

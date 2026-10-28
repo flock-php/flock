@@ -10,6 +10,7 @@ internal sealed partial class ServicesPane : UserControl, ISettingsPane
     private readonly DeepLinkCoordinator deepLinks;
     private readonly ServicesPaneViewModel rows;
     private CancellationToken activeToken;
+    private bool active;
     private CancellationTokenSource? installCancellation;
     private Task? installConfirmation;
     private bool installConfirmationQueued;
@@ -38,6 +39,7 @@ internal sealed partial class ServicesPane : UserControl, ISettingsPane
 
     public async Task ActivateAsync(CancellationToken hidden)
     {
+        active = true;
         activeToken = hidden;
         while (!hidden.IsCancellationRequested)
         {
@@ -47,6 +49,7 @@ internal sealed partial class ServicesPane : UserControl, ISettingsPane
 
     public async Task ReleaseAsync()
     {
+        active = false;
         await StopInstallConfirmationAsync();
         Model.Changed -= ModelChanged;
         rows.SelectedServiceChanged -= SelectedServiceChanged;
@@ -56,6 +59,7 @@ internal sealed partial class ServicesPane : UserControl, ISettingsPane
 
     public async void Hidden()
     {
+        active = false;
         nap?.Cancel();
         try
         {
@@ -83,7 +87,7 @@ internal sealed partial class ServicesPane : UserControl, ISettingsPane
 
     private void ModelChanged()
     {
-        if (Model.PendingInstall is not null)
+        if (active && Model.PendingInstall is not null)
         {
             ConfirmPendingLink();
         }
@@ -257,7 +261,7 @@ internal sealed partial class ServicesPane : UserControl, ISettingsPane
                         completion.TrySetResult();
                         return;
                     }
-                    await Model.ReleaseActions.InstallDeepLinkAsync(target.Service, target.Line);
+                    App.Current.StartAcceptedInstall(token => Model.ReleaseActions.InstallDeepLinkAsync(target.Service, target.Line, token));
                     completion.TrySetResult();
                 }
                 catch (OperationCanceledException) when (token.IsCancellationRequested)
