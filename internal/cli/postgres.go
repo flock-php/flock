@@ -385,4 +385,15 @@ func printPostgresExtensions(out io.Writer, v postgres.MajorExtensions) {
 	}
 	_ = tw.Flush()
 	fmt.Fprintf(out, "\nYour own extensions: %s\n", v.CustomDir)
+	if len(v.Custom) > 0 {
+		tw = tabwriter.NewWriter(out, 0, 0, 2, ' ', 0)
+		for _, x := range v.Custom {
+			state := "CREATE EXTENSION " + x.Name + ";"
+			if !x.Linked {
+				state = x.Problem
+			}
+			fmt.Fprintf(tw, "  %s\t%s\t%s\t\n", x.Name, dash(x.Version), state)
+		}
+		_ = tw.Flush()
+	}
 }

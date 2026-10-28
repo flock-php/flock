@@ -51,7 +51,8 @@ public class ServiceVersionsTests
              "extensions":[
               {"name":"timescaledb","title":"TimescaleDB","creates":"timescaledb","preload":true,"supported":true,
                "installed":"2.30.2","latest":"2.30.2","discontinued":true,"busy":"updating","size":123},
-              {"name":"pgvector","supported":false}]}
+              {"name":"pgvector","supported":false}],
+             "custom":[{"name":"hello","version":"1.2","linked":true,"problem":""},{"name":"broken","problem":"its library broken isn't in lib/"}]}
             """);
         Assert.EndsWith(@"custom\17", state.CustomDir);
         Assert.True(state.AnyBusy);
@@ -60,6 +61,11 @@ public class ServiceVersionsTests
         Assert.Equal(123, timescale.Size);
         Assert.False(state.Extensions[1].Supported);
         Assert.False(state.Extensions[1].IsInstalled);
+        Assert.Equal(["hello", "broken"], state.Custom.Select(c => c.Name));
+        Assert.True(state.Custom[0].Linked);
+        Assert.Equal("1.2", state.Custom[0].Version);
+        Assert.False(state.Custom[1].Linked);
+        Assert.Contains("lib/", state.Custom[1].Problem);
     }
 
     [Fact]

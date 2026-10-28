@@ -131,7 +131,7 @@ make install PG_CONFIG=$PG_CONFIG pkglibdir="$FOLDER/lib" datadir="$FOLDER"
 
 On Windows, put the extension's DLL for that PostgreSQL version in `lib\`. On Windows and Linux, libraries the extension needs go in `deps`; on Linux, PostgreSQL restarts once to pick them up.
 
-New files are picked up within a few seconds; then run `CREATE EXTENSION`. An extension that has to be preloaded (`shared_preload_libraries`) isn't supported from this folder.
+New files are picked up within a few seconds; then run `CREATE EXTENSION`. The Extensions… sheet (and `flock services extensions postgres`) lists them, with what is in the way when one can't be used: a file name the server already has, or a library missing from `lib/`. An extension that has to be preloaded (`shared_preload_libraries`) isn't supported from this folder.
 
 ## Client tools
 

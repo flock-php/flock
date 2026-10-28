@@ -13,8 +13,8 @@ use super::common::{PaneView, ask_link, code_block, group, info_row, report, sta
 use super::versions::{MenuItem, badge, button, checked_text, confirm, more_menu, show_log};
 use super::{Data, Pane};
 use crate::api::{
-    Catalog, CatalogEntry, CatalogLine, Client, Error, PostgresExtension, PostgresExtensions, PostgresMajor, PostgresVersions, Service,
-    extension_titles,
+    Catalog, CatalogEntry, CatalogLine, Client, Error, PostgresCustomExtension, PostgresExtension, PostgresExtensions, PostgresMajor,
+    PostgresVersions, Service, extension_titles,
 };
 use crate::links::{self, Link};
 use crate::model::AppModel;
@@ -1028,6 +1028,22 @@ impl Inner {
     }
 }
 
+/// One of your own extensions: read only, with what to run or what is in the way.
+fn custom_row(ext: &PostgresCustomExtension) -> adw::ActionRow {
+    let title = if ext.version.is_empty() { ext.name.clone() } else { format!("{} {}", ext.name, ext.version) };
+    let detail = if ext.linked { format!("CREATE EXTENSION {};", ext.name) } else { ext.problem.clone() };
+    let row = adw::ActionRow::builder()
+        .title(glib::markup_escape_text(&title))
+        .subtitle(glib::markup_escape_text(&detail))
+        .subtitle_selectable(ext.linked)
+        .build();
+    row.add_suffix(&badge("Yours", ""));
+    if !ext.linked {
+        row.add_prefix(&gtk::Image::builder().icon_name("dialog-warning-symbolic").css_classes(["warning"]).build());
+    }
+    row
+}
+
 /// The open extensions dialog of a major: reloads itself after every change.
 struct ExtensionsDialog {
     pane: Rc<Inner>,
@@ -1073,6 +1089,11 @@ impl ExtensionsDialog {
             self.list.add(&row);
             rows.push(row.upcast());
         }
+        for ext in state.custom.clone().unwrap_or_default() {
+            let row = custom_row(&ext);
+            self.folder.add(&row);
+            rows.push(row.upcast());
+        }
         let open = adw::ActionRow::builder()
             .title("Extensions folder")
             .subtitle(glib::markup_escape_text(&format!(
@@ -1087,12 +1108,17 @@ impl ExtensionsDialog {
         self.folder.add(&open);
         rows.push(open.upcast());
         self.rows.replace(rows);
-        if busy && !self.polling.replace(true) {
-            // While anything runs or waits (also started elsewhere: the CLI, the other window).
+        if !self.polling.replace(true) {
+            // Every two seconds while anything runs or waits (also started elsewhere: the CLI, the
+            // other window), otherwise every few seconds for what is put into the extensions folder.
+            // Until the dialog is gone: then the rows have no window any more.
             let this = self.clone();
-            glib::timeout_add_local_once(ACTIVE_INTERVAL, move || {
+            let interval = if busy { ACTIVE_INTERVAL } else { Duration::from_secs(4) };
+            glib::timeout_add_local_once(interval, move || {
                 this.polling.set(false);
-                this.load();
+                if this.list.root().is_some() {
+                    this.load();
+                }
             });
         }
     }

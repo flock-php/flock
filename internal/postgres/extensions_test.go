@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -285,5 +286,70 @@ func TestExtensionOperationsQueue(t *testing.T) {
 	<-m.op
 	if e := extension(t, m, "18", "pgvector"); e.Busy != "" {
 		t.Fatalf("cancelled operation still marked: %q", e.Busy)
+	}
+}
+
+func TestCustomExtensions(t *testing.T) {
+	m, svc, srv := newTestManager(t)
+	ctx := context.Background()
+	srv.Publish(Package, "18.6", 1, pgPackage(t), nil)
+	if err := m.Install(ctx, "18"); err != nil {
+		t.Fatal(err)
+	}
+	custom, err := EnsureCustomDir(m.root(), "18")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for name, content := range map[string]string{
+		"lib/hello.so":              "",
+		"extension/hello.control":   "# hello\ndefault_version = '1.2'\nmodule_pathname = '$libdir/hello'\n",
+		"extension/plain.control":   "default_version = '0.1'\n", // SQL only
+		"extension/broken.control":  "module_pathname = '$libdir/broken'\n",
+		"extension/plpgsql.control": "default_version = '9'\n", // the server's own
+		"extension/hello--1.2.sql":  "",
+	} {
+		if err := os.WriteFile(filepath.Join(custom, name), []byte(content), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, _, err := Link(m.root(), svc.current()); err != nil {
+		t.Fatal(err)
+	}
+
+	got := map[string]CustomExtension{}
+	for _, x := range CustomExtensions(m.root(), "18", svc.current()) {
+		got[x.Name] = x
+	}
+	if len(got) != 4 {
+		t.Fatalf("got %v", got)
+	}
+	if x := got["hello"]; !x.Linked || x.Version != "1.2" || x.Problem != "" {
+		t.Errorf("hello: %+v", x)
+	}
+	if x := got["plain"]; !x.Linked || x.Version != "0.1" {
+		t.Errorf("plain: %+v", x)
+	}
+	if x := got["broken"]; x.Linked || !strings.Contains(x.Problem, "broken isn't in lib/") {
+		t.Errorf("broken: %+v", x)
+	}
+	if x := got["plpgsql"]; x.Linked || !strings.Contains(x.Problem, "has a plpgsql.control") {
+		t.Errorf("plpgsql: %+v", x)
+	}
+
+	state, err := m.Extensions("18")
+	if err != nil || len(state.Custom) != 4 {
+		t.Fatalf("Extensions(18).Custom: %v %v", state.Custom, err)
+	}
+	if x := CustomExtensions(m.root(), "17", ""); len(x) != 0 {
+		t.Errorf("17 has no folder: %v", x)
+	}
+	if _, err := EnsureCustomDir(m.root(), "17"); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(CustomDir(m.root(), "17"), "extension", "x.control"), nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if x := CustomExtensions(m.root(), "17", ""); len(x) != 1 || x[0].Linked || !strings.Contains(x[0].Problem, "isn't installed") {
+		t.Errorf("17 not installed: %v", x)
 	}
 }

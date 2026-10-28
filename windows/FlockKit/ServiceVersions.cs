@@ -236,6 +236,8 @@ public sealed class PostgresExtensions
     public List<PostgresExtension> Extensions { get; init; } = [];
     /// <summary>The folder for extensions of your own: lib\, extension\ and deps\.</summary>
     public string CustomDir { get; init; } = "";
+    /// <summary>What is in that folder, read only.</summary>
+    public List<PostgresCustomExtension> Custom { get; init; } = [];
 
     [JsonIgnore]
     public bool AnyBusy => Extensions.Any(e => e.IsBusy);
@@ -279,4 +281,16 @@ public sealed class PostgresExtension
 
     [JsonIgnore]
     public bool IsBusy => Busy.Length > 0;
+}
+
+/// <summary>An extension in a major's own extensions folder: what Flock found, and whether the server has it.</summary>
+public sealed class PostgresCustomExtension
+{
+    /// <summary>What CREATE EXTENSION takes.</summary>
+    public string Name { get; init; } = "";
+    /// <summary>Its control file's default_version; empty when it has none.</summary>
+    public string Version { get; init; } = "";
+    public bool Linked { get; init; }
+    /// <summary>Why it can't be used; empty when nothing is in the way.</summary>
+    public string Problem { get; init; } = "";
 }

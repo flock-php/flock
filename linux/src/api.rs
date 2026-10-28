@@ -769,6 +769,19 @@ pub struct PostgresExtensions {
     pub major: String,
     pub extensions: Option<Vec<PostgresExtension>>,
     pub custom_dir: String,
+    /// What is in the custom folder, read only.
+    pub custom: Option<Vec<PostgresCustomExtension>>,
+}
+
+/// An extension in a major's own extensions folder: what Flock found, and whether the server has it.
+#[derive(Deserialize, Debug, Clone, PartialEq, Default)]
+#[serde(default)]
+pub struct PostgresCustomExtension {
+    pub name: String,
+    pub version: String,
+    pub linked: bool,
+    /// Why it can't be used; empty when nothing is in the way.
+    pub problem: String,
 }
 
 #[derive(Deserialize, Debug, Clone, PartialEq, Default)]
@@ -1158,11 +1171,15 @@ mod tests {
         let json = r#"{"major":"17","custom_dir":"/home/demo/.local/share/flock/services/postgres/extensions/custom/17",
             "extensions":[{"name":"timescaledb","title":"TimescaleDB","creates":"timescaledb","preload":true,"supported":true,
               "installed":"2.30.2","latest":"2.30.2","discontinued":true,"busy":"updating","size":123},
-              {"name":"pgvector","supported":false}]}"#;
+              {"name":"pgvector","supported":false}],
+            "custom":[{"name":"hello","version":"1.2","linked":true},{"name":"broken","problem":"its library broken isn't in lib/"}]}"#;
         let state: PostgresExtensions = serde_json::from_str(json).unwrap();
         let extensions = state.extensions.unwrap();
         assert!(state.custom_dir.ends_with("/custom/17"));
         assert!(extensions[0].preload && extensions[0].discontinued && extensions[0].busy == "updating" && extensions[0].size == 123);
         assert!(!extensions[1].supported && extensions[1].installed.is_empty());
+        let custom = state.custom.unwrap();
+        assert!(custom[0].linked && custom[0].version == "1.2" && custom[0].problem.is_empty());
+        assert!(!custom[1].linked && custom[1].problem.contains("lib/"));
     }
 }

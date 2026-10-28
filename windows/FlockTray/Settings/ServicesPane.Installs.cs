@@ -321,6 +321,7 @@ internal sealed partial class ServicesPane
     private async Task ExtensionsDialogAsync(string major)
     {
         var list = Ui.Column(0);
+        var custom = Ui.Column(0);
         var status = Ui.Caption("After installing one, run CREATE EXTENSION in each database that uses it.");
         var folderText = Ui.Caption($"Your own extensions for PostgreSQL {major}: put the library in lib\\, its .control and .sql files in extension\\ and the DLLs it needs in deps\\. Flock keeps them across updates.");
         string customDir = "";
@@ -328,7 +329,7 @@ internal sealed partial class ServicesPane
         var dialog = new ContentDialog
         {
             Title = $"PostgreSQL {major} Extensions",
-            Content = new ScrollViewer { Content = Ui.Column(14, status, list, Ui.Column(6, folderText, open)), MaxHeight = 520 },
+            Content = new ScrollViewer { Content = Ui.Column(14, status, list, Ui.Column(6, custom, folderText, open)), MaxHeight = 520 },
             CloseButtonText = "Done",
             DefaultButton = ContentDialogButton.Close,
             XamlRoot = Window.Content.XamlRoot,
@@ -351,42 +352,47 @@ internal sealed partial class ServicesPane
                 status.Foreground = Ui.Caution;
                 return;
             }
+            Render(state);
+            if (!polling)
+            {
+                _ = Poll();
+            }
+        }
+
+        void Render(PostgresExtensions state)
+        {
             customDir = state.CustomDir;
             list.Children.Clear();
             foreach (var ext in state.Extensions)
             {
                 list.Children.Add(ExtensionRow(major, ext, Run));
             }
-            if (state.AnyBusy && !polling)
+            custom.Children.Clear();
+            foreach (var ext in state.Custom)
             {
-                _ = Poll();
+                custom.Children.Add(CustomExtensionRow(ext));
             }
         }
 
-        // While anything runs or waits (also started elsewhere: the CLI, another window), follow it.
-        // One loop at a time, however many operations were started.
+        // While the dialog is open: every second while anything runs or waits (also started
+        // elsewhere: the CLI, another window), otherwise every few seconds for what is put into
+        // the extensions folder. One loop at a time.
         async Task Poll()
         {
             polling = true;
+            var busy = true;
             try
             {
                 while (!closed)
                 {
-                    await Task.Delay(TimeSpan.FromSeconds(1));
+                    await Task.Delay(TimeSpan.FromSeconds(busy ? 1 : 3));
                     if (closed)
                     {
                         break;
                     }
                     var state = await Model.Postgres.ExtensionsAsync(major);
-                    list.Children.Clear();
-                    foreach (var ext in state.Extensions)
-                    {
-                        list.Children.Add(ExtensionRow(major, ext, Run));
-                    }
-                    if (!state.AnyBusy)
-                    {
-                        break;
-                    }
+                    Render(state);
+                    busy = state.AnyBusy;
                 }
             }
             catch (Exception)
@@ -416,6 +422,23 @@ internal sealed partial class ServicesPane
 
         _ = Load();
         await dialog.ShowAsync();
+    }
+
+    /// <summary>One of your own extensions: read only, with what to run or what is in the way.</summary>
+    private static StackPanel CustomExtensionRow(PostgresCustomExtension ext)
+    {
+        var title = Ui.Row(8, Ui.Text(ext.Name, "BodyStrongTextBlockStyle", wrap: false));
+        if (ext.Version.Length > 0)
+        {
+            title.Children.Add(Ui.Caption(ext.Version, wrap: false));
+        }
+        title.Children.Add(Ui.Badge("Yours"));
+        UIElement detail = ext.Linked
+            ? Ui.Caption($"CREATE EXTENSION {ext.Name};")
+            : Ui.Row(6, Ui.Icon(Ui.GlyphWarning, 12, Ui.Caution), Ui.Caption(ext.Problem, Ui.Caution));
+        var row = Ui.Column(2, title, detail);
+        row.Padding = new Thickness(0, 6, 0, 6);
+        return row;
     }
 
     /// <summary>An extension with its version, what it adds, and Install, Update or Uninstall.</summary>

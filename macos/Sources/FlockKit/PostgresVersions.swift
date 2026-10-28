@@ -145,14 +145,17 @@ public struct PostgresExtensions: Decodable, Sendable, Equatable {
     public var extensions: [PostgresExtension]
     /// The folder for extensions of your own: lib/ and extension/.
     public var customDir: String
+    /// What is in that folder, read only.
+    public var custom: [PostgresCustomExtension]
 
-    enum CodingKeys: String, CodingKey { case major, extensions, customDir }
+    enum CodingKeys: String, CodingKey { case major, extensions, customDir, custom }
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         major = try c.decodeIfPresent(String.self, forKey: .major) ?? ""
         extensions = try c.decodeIfPresent([PostgresExtension]?.self, forKey: .extensions).flatMap { $0 } ?? []
         customDir = try c.decodeIfPresent(String.self, forKey: .customDir) ?? ""
+        custom = try c.decodeIfPresent([PostgresCustomExtension]?.self, forKey: .custom).flatMap { $0 } ?? []
     }
 
     public var isBusy: Bool { extensions.contains(where: \.isBusy) }
@@ -214,5 +217,28 @@ public struct PostgresExtension: Decodable, Sendable, Equatable, Identifiable {
         prerelease = try c.decodeIfPresent(Bool.self, forKey: .prerelease) ?? false
         yanked = try c.decodeIfPresent(String.self, forKey: .yanked) ?? ""
         busy = try c.decodeIfPresent(String.self, forKey: .busy) ?? ""
+    }
+}
+
+/// An extension in a major's own extensions folder: what Flock found, and whether the server has it.
+public struct PostgresCustomExtension: Decodable, Sendable, Equatable, Identifiable {
+    /// What CREATE EXTENSION takes.
+    public var name: String
+    /// Its control file's default_version; empty when it has none.
+    public var version: String
+    public var linked: Bool
+    /// Why it can't be used; empty when nothing is in the way.
+    public var problem: String
+
+    public var id: String { name }
+
+    enum CodingKeys: String, CodingKey { case name, version, linked, problem }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        name = try c.decode(String.self, forKey: .name)
+        version = try c.decodeIfPresent(String.self, forKey: .version) ?? ""
+        linked = try c.decodeIfPresent(Bool.self, forKey: .linked) ?? false
+        problem = try c.decodeIfPresent(String.self, forKey: .problem) ?? ""
     }
 }

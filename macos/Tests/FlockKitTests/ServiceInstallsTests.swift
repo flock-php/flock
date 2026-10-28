@@ -48,7 +48,8 @@ import Testing
       {"name":"timescaledb","title":"TimescaleDB","creates":"timescaledb","preload":true,"supported":true,
        "installed":"2.30.2","latest":"2.30.2","discontinued":true,"busy":"updating"},
       {"name":"pgvector","supported":false}
-     ]}
+     ],
+     "custom":[{"name":"hello","version":"1.2","linked":true,"problem":""},{"name":"broken","problem":"its library broken isn't in lib/"}]}
     """.utf8))
     #expect(state.major == "17" && state.customDir.hasSuffix("/custom/17") && state.extensions.count == 3 && state.isBusy)
     let postgis = state.extensions[0]
@@ -57,6 +58,9 @@ import Testing
     #expect(timescale.preload && timescale.discontinued && timescale.isBusy && timescale.description.isEmpty)
     let vector = state.extensions[2]
     #expect(!vector.supported && !vector.isInstalled && vector.title == "pgvector" && vector.creates == "pgvector")
+    #expect(state.custom.map(\.name) == ["hello", "broken"])
+    #expect(state.custom[0].linked && state.custom[0].version == "1.2" && state.custom[0].problem.isEmpty)
+    #expect(!state.custom[1].linked && state.custom[1].version.isEmpty && state.custom[1].problem.contains("lib/"))
 }
 
 @Test func decodesPostgresVersionsNeverCheckedAndEmpty() throws {

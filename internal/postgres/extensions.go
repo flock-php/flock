@@ -436,3 +436,88 @@ func isDir(path string) bool {
 	info, err := os.Stat(path)
 	return err == nil && info.IsDir()
 }
+
+// CustomExtension is an extension in a major's custom folder: its control file, and whether Link
+// made it available to the server.
+type CustomExtension struct {
+	Name    string `json:"name"`    // the control file's name: what CREATE EXTENSION takes
+	Version string `json:"version"` // its default_version, "" when it has none
+	Linked  bool   `json:"linked"`  // the server has it (false while the major isn't installed)
+	Problem string `json:"problem"` // why it can't be used, "" when nothing is in the way
+}
+
+// CustomExtensions lists the extensions in a major's custom folder, in name order. id is the
+// major's installed build ("" when none is), whose links tell what the server has.
+func CustomExtensions(root, major, id string) []CustomExtension {
+	dir := CustomDir(root, major)
+	entries, err := os.ReadDir(filepath.Join(dir, "extension"))
+	if err != nil {
+		return []CustomExtension{}
+	}
+	var links map[string]string
+	var libDir, extDir string
+	if id != "" {
+		links = readLinks(Dir(root, id))
+		libDir, extDir = serverDirs(Dir(root, id))
+	}
+	linkedTo := func(serverDir, name string) bool {
+		if serverDir == "" {
+			return false
+		}
+		rel, err := filepath.Rel(Dir(root, id), filepath.Join(serverDir, name))
+		return err == nil && links[rel] != ""
+	}
+	out := []CustomExtension{}
+	for _, e := range entries {
+		file := e.Name()
+		if e.IsDir() || !strings.HasSuffix(file, ".control") {
+			continue
+		}
+		control := readControl(filepath.Join(dir, "extension", file))
+		x := CustomExtension{Name: strings.TrimSuffix(file, ".control"), Version: control["default_version"]}
+		module := strings.TrimPrefix(control["module_pathname"], "$libdir/")
+		hasModule := module == "" || moduleFile(filepath.Join(dir, "lib"), module) != ""
+		switch {
+		case id == "":
+			x.Problem = fmt.Sprintf("PostgreSQL %s isn't installed", major)
+		case !linkedTo(extDir, file):
+			x.Problem = fmt.Sprintf("not used: PostgreSQL %s or another extension has a %s", major, file)
+		case !hasModule && (libDir == "" || moduleFile(libDir, module) == ""):
+			x.Problem = fmt.Sprintf("its library %s isn't in lib/", module)
+		case module != "" && hasModule && !linkedTo(libDir, moduleFile(filepath.Join(dir, "lib"), module)):
+			x.Problem = fmt.Sprintf("its library is not used: PostgreSQL %s or another extension has a %s", major, moduleFile(filepath.Join(dir, "lib"), module))
+		default:
+			x.Linked = true
+		}
+		out = append(out, x)
+	}
+	return out
+}
+
+// readControl reads the key = 'value' lines of an extension's control file.
+func readControl(path string) map[string]string {
+	out := map[string]string{}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return out
+	}
+	for _, line := range strings.Split(string(data), "\n") {
+		line = strings.TrimSpace(line)
+		key, value, ok := strings.Cut(line, "=")
+		if !ok || strings.HasPrefix(line, "#") {
+			continue
+		}
+		out[strings.TrimSpace(key)] = strings.Trim(strings.TrimSpace(value), "'\"")
+	}
+	return out
+}
+
+// moduleFile is the file name of a module in dir (name.so, name.dylib or name.dll), "" if it isn't there.
+func moduleFile(dir, name string) string {
+	for _, suffix := range []string{"", ".so", ".dylib", ".dll"} {
+		if _, err := os.Stat(filepath.Join(dir, name+suffix)); err == nil {
+			return name + suffix
+		}
+	}
+	return ""
+}

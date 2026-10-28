@@ -21,9 +21,10 @@ var (
 // MajorExtensions is the state of every extension for one major
 // (GET /v1/postgres/versions/{major}/extensions).
 type MajorExtensions struct {
-	Major      string           `json:"major"`
-	Extensions []ExtensionState `json:"extensions"`
-	CustomDir  string           `json:"custom_dir"`
+	Major      string            `json:"major"`
+	Extensions []ExtensionState  `json:"extensions"`
+	CustomDir  string            `json:"custom_dir"`
+	Custom     []CustomExtension `json:"custom"` // what is in CustomDir, read only
 }
 
 // ExtensionState is one extension for one major.
@@ -83,7 +84,9 @@ func (m *Manager) Extensions(major string) (MajorExtensions, error) {
 		return MajorExtensions{}, fmt.Errorf("%w %q: give a major version like %s", ErrInvalidMajor, major, DefaultMajor)
 	}
 	manifest := m.manifest()
-	out := MajorExtensions{Major: major, Extensions: []ExtensionState{}, CustomDir: CustomDir(m.root(), major)}
+	active, _ := m.Service.Active()
+	out := MajorExtensions{Major: major, Extensions: []ExtensionState{}, CustomDir: CustomDir(m.root(), major),
+		Custom: CustomExtensions(m.root(), major, m.installedByMajor(active)[major])}
 
 	m.mu.Lock()
 	defer m.mu.Unlock()

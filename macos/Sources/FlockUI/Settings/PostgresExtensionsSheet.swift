@@ -57,9 +57,10 @@ struct PostgresExtensionsSheet: View {
         .frame(width: 520)
         .task { await load() }
         .task(id: isBusy) {
-            // An operation started elsewhere (the CLI, another window): follow it.
-            while isBusy, !Task.isCancelled {
-                try? await Task.sleep(for: .seconds(1))
+            // Follows operations (also started elsewhere: the CLI, another window) every second,
+            // and otherwise what is put into the extensions folder.
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(isBusy ? 1 : 3))
                 await load()
             }
         }
@@ -170,6 +171,49 @@ struct PostgresExtensionsSheet: View {
     // MARK: Your own
 
     private func customFolder(_ state: PostgresExtensions) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            if !state.custom.isEmpty {
+                VStack(spacing: 0) {
+                    ForEach(Array(state.custom.enumerated()), id: \.element.id) { index, ext in
+                        if index > 0 {
+                            Divider().padding(.leading, 10)
+                        }
+                        customRow(ext)
+                    }
+                }
+                .card(padding: 0)
+            }
+            folderHint(state)
+        }
+    }
+
+    /// One of your extensions: read only, with what to run or what is in the way.
+    private func customRow(_ ext: PostgresCustomExtension) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            HStack(spacing: 6) {
+                Text(ext.name).fontWeight(.medium)
+                if !ext.version.isEmpty {
+                    Text(ext.version).monospacedDigit().foregroundStyle(.secondary)
+                }
+                Badge(text: "Yours")
+            }
+            .font(.callout)
+            if ext.linked {
+                Text("CREATE EXTENSION \(ext.name);")
+                    .font(.caption).foregroundStyle(.secondary)
+                    .textSelection(.enabled)
+            } else {
+                Label(ext.problem, systemImage: "exclamationmark.triangle.fill")
+                    .font(.caption).foregroundStyle(.orange)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+    }
+
+    private func folderHint(_ state: PostgresExtensions) -> some View {
         HStack(alignment: .top, spacing: 10) {
             Image(systemName: "folder").foregroundStyle(.secondary)
             VStack(alignment: .leading, spacing: 4) {

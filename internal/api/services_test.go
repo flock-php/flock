@@ -108,11 +108,12 @@ func TestPostgresExtensionsEndpoints(t *testing.T) {
 		Major      string           `json:"major"`
 		CustomDir  string           `json:"custom_dir"`
 		Extensions []map[string]any `json:"extensions"`
+		Custom     []map[string]any `json:"custom"`
 	}
 	if err := json.Unmarshal([]byte(body), &v); err != nil {
 		t.Fatal(err)
 	}
-	if v.Major != "18" || v.CustomDir != postgres.CustomDir(b.root, "18") || len(v.Extensions) != len(postgres.Extensions) {
+	if v.Major != "18" || v.CustomDir != postgres.CustomDir(b.root, "18") || len(v.Extensions) != len(postgres.Extensions) || v.Custom == nil {
 		t.Fatalf("got %s", body)
 	}
 	if _, err := os.Stat(filepath.Join(v.CustomDir, "README.txt")); err != nil {
