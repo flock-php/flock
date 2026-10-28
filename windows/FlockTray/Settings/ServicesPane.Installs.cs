@@ -226,6 +226,8 @@ internal sealed partial class ServicesPane
                 actions.Children.Add(Ui.Button($"Update to {major.Latest}", () => _ = RunAsync(major.Major, "Updating…", () => Model.Postgres.UpdateAsync(major.Major)),
                 glyph: Ui.GlyphDownload, tooltip: $"Installs {major.Latest} in place of {major.Installed}. Your databases stay{restart}."));
             }
+            actions.Children.Add(Ui.Button("Extensions…", () => _ = ExtensionsDialogAsync(major.Major),
+                tooltip: $"PostGIS, pgRouting, pgvector, TimescaleDB and your own extensions for PostgreSQL {major.Major}"));
             if (!major.Active)
             {
                 actions.Children.Add(Ui.Button("Switch…", () => _ = SwitchAsync(versions, major),
@@ -275,6 +277,10 @@ internal sealed partial class ServicesPane
         {
             Add(major.IsInstalled ? $"{Ui.Bytes(major.DataSize)} of data" : $"databases kept ({Ui.Bytes(major.DataSize)})");
         }
+        if (major.IsInstalled && major.Extensions.Count > 0)
+        {
+            Add(PostgresExtensions.Titles(major.Extensions));
+        }
         return text;
     }
 
@@ -288,8 +294,162 @@ internal sealed partial class ServicesPane
         return button;
     }
 
-    private Task InstallAsync(PostgresVersions versions, PostgresMajor major) =>
-        RunAsync(major.Major, versions.AnyInstalled ? "Downloading and installing…" : "Installing…", () => Model.Postgres.InstallAsync(major.Major));
+    /// <summary>Installs another major; when the active one has extensions, offers them for it too.</summary>
+    private async Task InstallAsync(PostgresVersions versions, PostgresMajor major)
+    {
+        var extensions = versions.ActiveMajor?.Extensions ?? [];
+        if (extensions.Count == 0)
+        {
+            await RunAsync(major.Major, versions.AnyInstalled ? "Downloading and installing…" : "Installing…", () => Model.Postgres.InstallAsync(major.Major));
+            return;
+        }
+        var with = new CheckBox { Content = $"Also install {PostgresExtensions.Titles(extensions)}", IsChecked = true };
+        var note = Ui.Caption($"Like PostgreSQL {versions.Active}, where they're available for {major.Major}. You can change this later under Extensions….");
+        note.Margin = new Thickness(28, -4, 0, 0);
+        if (!await Window.Confirm($"Install PostgreSQL {major.Major}?", $"PostgreSQL {versions.Active} stays active until you switch.", "Install", extra: Ui.Column(4, with, note)))
+        {
+            return;
+        }
+        await RunAsync(major.Major, "Downloading and installing…",
+            () => with.IsChecked == true ? Model.Postgres.InstallAsync(major.Major, extensions) : Model.Postgres.InstallAsync(major.Major));
+    }
+
+    /// <summary>
+    /// The extensions of one major: Flock's own, each a download of its own, and the folder for
+    /// yours. The dialog stays open and reloads after every change.
+    /// </summary>
+    private async Task ExtensionsDialogAsync(string major)
+    {
+        var list = Ui.Column(0);
+        var status = Ui.Caption("After installing one, run CREATE EXTENSION in each database that uses it.");
+        var folderText = Ui.Caption($"Your own extensions for PostgreSQL {major}: put the library in lib\\, its .control and .sql files in extension\\ and the DLLs it needs in deps\\. Flock keeps them across updates.");
+        string customDir = "";
+        var open = Ui.Button("Open Extensions Folder", () => { if (customDir.Length > 0) Model.Open(customDir); }, glyph: Ui.GlyphFolder);
+        var dialog = new ContentDialog
+        {
+            Title = $"PostgreSQL {major} Extensions",
+            Content = new ScrollViewer { Content = Ui.Column(14, status, list, Ui.Column(6, folderText, open)), MaxHeight = 520 },
+            CloseButtonText = "Done",
+            DefaultButton = ContentDialogButton.Close,
+            XamlRoot = Window.Content.XamlRoot,
+        };
+
+        var closed = false;
+        dialog.Closed += (_, _) => closed = true;
+
+        async Task Load()
+        {
+            PostgresExtensions state;
+            try
+            {
+                state = await Model.Postgres.ExtensionsAsync(major);
+            }
+            catch (Exception e)
+            {
+                status.Text = e.Message;
+                status.Foreground = Ui.Caution;
+                return;
+            }
+            customDir = state.CustomDir;
+            list.Children.Clear();
+            foreach (var ext in state.Extensions)
+            {
+                list.Children.Add(ExtensionRow(major, ext, state.AnyBusy, Run));
+            }
+            if (state.AnyBusy && !closed)
+            {
+                // An operation started elsewhere (the CLI, another window): follow it.
+                await Task.Delay(TimeSpan.FromSeconds(1));
+                if (!closed)
+                {
+                    await Load();
+                }
+            }
+        }
+
+        async Task Run(string name, string operation)
+        {
+            Ui.SetEnabled(list, false);
+            await Model.Postgres.ExtensionAsync(major, name, operation);
+            if (Model.Postgres.ActionError is { } error)
+            {
+                status.Text = error;
+                status.Foreground = Ui.Caution;
+            }
+            Ui.SetEnabled(list, true);
+            Rerender();
+            await Load();
+        }
+
+        _ = Load();
+        await dialog.ShowAsync();
+    }
+
+    /// <summary>An extension with its version, what it adds, and Install, Update or Uninstall.</summary>
+    private static Grid ExtensionRow(string major, PostgresExtension ext, bool busy, Func<string, string, Task> run)
+    {
+        var title = Ui.Row(8, Ui.Text(ext.Title, "BodyStrongTextBlockStyle", wrap: false));
+        if (ext.IsInstalled)
+        {
+            title.Children.Add(Ui.Caption(ext.Update ? $"{ext.Installed} → {ext.Latest}" : ext.Installed, ext.Update ? Ui.Accent : null, wrap: false));
+        }
+        var caption = new List<string>();
+        if (!ext.Supported)
+        {
+            caption.Add($"Not available for PostgreSQL {major}");
+        }
+        else
+        {
+            caption.Add(ext.Description);
+            if (ext.Discontinued)
+            {
+                caption.Add($"No longer updated for PostgreSQL {major}");
+            }
+            if (ext.IsInstalled)
+            {
+                caption.Add($"CREATE EXTENSION {ext.Creates};");
+            }
+            else if (ext.Preload)
+            {
+                caption.Add($"PostgreSQL {major} restarts to load it");
+            }
+        }
+        var info = Ui.Column(2, title, Ui.Caption(string.Join(" · ", caption)));
+        if (ext.License.Length > 0)
+        {
+            ToolTipService.SetToolTip(info, $"License: {ext.License}");
+        }
+        var actions = Ui.Row(8);
+        if (ext.IsBusy)
+        {
+            actions.Children.Add(new ProgressRing { Width = 14, Height = 14 });
+            actions.Children.Add(Ui.Caption(char.ToUpperInvariant(ext.Busy[0]) + ext.Busy[1..] + "…", wrap: false));
+        }
+        else if (!ext.IsInstalled)
+        {
+            var install = Ui.Button("Install", () => _ = run(ext.Name, "install"), glyph: Ui.GlyphDownload,
+                tooltip: ext.Size > 0 ? $"Downloads {ext.Title} {ext.Latest} ({Ui.Bytes(ext.Size)})" : $"Downloads {ext.Title}");
+            install.IsEnabled = ext.Supported && !busy;
+            actions.Children.Add(install);
+        }
+        else
+        {
+            if (ext.Update)
+            {
+                actions.Children.Add(Ui.Button("Update", () => _ = run(ext.Name, "update"), accent: true, tooltip: $"Installs {ext.Title} {ext.Latest}"));
+            }
+            var menu = new MenuFlyout();
+            menu.Items.Add(new MenuFlyoutItem { Text = $"Uninstall {ext.Title}" });
+            ((MenuFlyoutItem)menu.Items[0]).Click += (_, _) => _ = run(ext.Name, "uninstall");
+            var more = Ui.IconButton(Ui.GlyphMore, "More", () => { });
+            more.Flyout = menu;
+            actions.Children.Add(more);
+            Ui.SetEnabled(actions, !busy);
+        }
+        var row = Ui.Spread(info, actions);
+        row.Padding = new Thickness(0, 8, 0, 8);
+        return row;
+    }
 
     private async Task SwitchAsync(PostgresVersions versions, PostgresMajor major)
     {

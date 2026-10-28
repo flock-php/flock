@@ -39,6 +39,23 @@ public sealed class PostgresService : IAsyncDisposable
     public Task<OperationOutcome> InstallAsync(string major, CancellationToken token = default) =>
         MutateAsync(cancellation => client.InstallPostgresAsync(major, cancellation), token);
 
+    /// <summary>Installs a major with extensions (those it has a build of).</summary>
+    public Task<OperationOutcome> InstallAsync(string major, IReadOnlyList<string> extensions, CancellationToken token = default) =>
+        MutateAsync(cancellation => client.InstallPostgresAsync(major, extensions, cancellation), token);
+
+    /// <summary>The extensions of a major, for its Extensions dialog; a read, outside the mutation lane.</summary>
+    public Task<PostgresExtensions> ExtensionsAsync(string major, CancellationToken token = default) =>
+        client.PostgresExtensionsAsync(major, token);
+
+    /// <summary>Installs, updates or uninstalls an extension of a major, in the PostgreSQL lane (it may restart the server).</summary>
+    public Task<OperationOutcome> ExtensionAsync(string major, string name, string operation, CancellationToken token = default) =>
+        MutateAsync(cancellation => operation switch
+        {
+            "install" => client.InstallPostgresExtensionAsync(major, name, cancellation),
+            "update" => client.UpdatePostgresExtensionAsync(major, name, cancellation),
+            _ => client.UninstallPostgresExtensionAsync(major, name, cancellation),
+        }, token);
+
     public Task<OperationOutcome> StartAsync(CancellationToken token = default) =>
         MutateAsync(cancellation => client.StartServiceAsync("postgres", cancellation), token);
 
