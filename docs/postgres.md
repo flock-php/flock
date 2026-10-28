@@ -58,7 +58,7 @@ flock services use postgres 17
 ## Updating and removing
 
 :::app
-Click **Update to …** next to a version to get its newest minor release (or a new build of the one you have), and **Check for Updates** to look for new ones. On macOS, the active version's update is the **Update** button in the card at the top. A build that turns out to be broken is replaced by a fixed one automatically, and your databases stay. To remove a version, open its **⋯** menu and choose **Uninstall PostgreSQL 16…** (macOS) or **Uninstall…** (Windows). Tick **Also delete its databases** to remove its data as well. On Linux, **Check now** looks for new versions, and **Uninstall…** asks whether to keep the databases (**Uninstall, Keep Databases** or **Uninstall and Delete Databases**).
+Click **Update** next to a version to get its newest minor release (or a new build of the one you have), and **Check for Updates** to look for new ones. On macOS, the active version's update is the **Update** button in the card at the top. A build that turns out to be broken is replaced by a fixed one automatically, and your databases stay. To remove a version, open its **⋯** menu and choose **Uninstall PostgreSQL 16…** (macOS) or **Uninstall…** (Windows). Tick **Also delete its databases** to remove its data as well. On Linux, **Check now** looks for new versions, and **Uninstall…** asks whether to keep the databases (**Uninstall, Keep Databases** or **Uninstall and Delete Databases**).
 :::
 
 :::cli
@@ -81,7 +81,7 @@ Flock offers PostGIS, pgRouting, pgvector and TimescaleDB, each as a download of
 | TimescaleDB | hypertables, compression and continuous aggregates | `timescaledb` | 16–18 |
 
 :::app
-Click **Extensions…** next to a version, then **Install** next to the extension. When you install another version, Flock offers to install the extensions of the active one with it.
+Click the extensions button (the puzzle piece) next to a version, then **Install** next to the extension. When you install another version, Flock offers to install the extensions of the active one with it.
 :::
 
 :::cli
@@ -111,7 +111,7 @@ PostGIS comes without raster support (`postgis_raster`) and without `ST_AsMVT` a
 Every version has a folder for extensions Flock doesn't offer. Flock makes what you put there available to that version and keeps it across updates and when you uninstall Flock. The library goes in `lib/`, the `.control` and `.sql` files in `extension/`.
 
 :::app
-Click **Extensions…** next to a version, then **Open Extensions Folder**.
+Click the extensions button (the puzzle piece) next to a version, then **Open Extensions Folder**.
 :::
 
 :::cli
@@ -131,7 +131,7 @@ make install PG_CONFIG=$PG_CONFIG pkglibdir="$FOLDER/lib" datadir="$FOLDER"
 
 On Windows, put the extension's DLL for that PostgreSQL version in `lib\`. On Windows and Linux, libraries the extension needs go in `deps`; on Linux, PostgreSQL restarts once to pick them up.
 
-New files are picked up within a few seconds; then run `CREATE EXTENSION`. The Extensions… sheet (and `flock services extensions postgres`) lists them, with what is in the way when one can't be used: a file name the server already has, or a library missing from `lib/`. An extension that has to be preloaded (`shared_preload_libraries`) isn't supported from this folder.
+New files are picked up within a few seconds; then run `CREATE EXTENSION`. The extensions sheet (and `flock services extensions postgres`) lists them, with what is in the way when one can't be used: a file name the server already has, or a library missing from `lib/`. An extension that has to be preloaded (`shared_preload_libraries`) isn't supported from this folder.
 
 ## Client tools
 

@@ -887,14 +887,23 @@ impl Inner {
             actions.append(&button("Install", false, move || this.install_postgres(&v, &target)));
         } else {
             if major.update {
-                actions.append(&operation(&format!("Update to {}", major.latest), true, "update"));
+                // "Update": the subtitle shows the version it goes to ("17.10 → 17.11 available").
+                actions.append(&operation("Update", true, "update"));
             }
-            let (this, target) = (self.clone(), major.major.clone());
-            actions.append(&button("Extensions…", false, move || this.postgres_extensions(&target)));
             if !major.active {
                 let (this, v, target) = (self.clone(), versions.clone(), major.clone());
                 actions.append(&button("Switch…", false, move || this.switch_postgres(&v, &target)));
             }
+            // An icon, like ⋯: with Update and Switch, a third labelled button doesn't fit.
+            let extensions = gtk::Button::builder()
+                .icon_name("application-x-addon-symbolic")
+                .tooltip_text(format!("Extensions of PostgreSQL {}: PostGIS, pgRouting, pgvector, TimescaleDB and your own", major.major))
+                .valign(gtk::Align::Center)
+                .css_classes(["flat"])
+                .build();
+            let (this, target) = (self.clone(), major.major.clone());
+            extensions.connect_clicked(move |_| this.postgres_extensions(&target));
+            actions.append(&extensions);
             let (this, v, target) = (self.clone(), versions.clone(), major.clone());
             actions.append(&more_menu(vec![("Uninstall…".to_owned(), true, true, Box::new(move || this.uninstall_postgres(&v, &target)))]));
         }

@@ -353,7 +353,8 @@ private struct PostgresMajorRow: View {
             HStack(spacing: 4) {
                 // The active major's update is in the card above.
                 if major.update, !major.latest.isEmpty, !major.active {
-                    Button("Update to \(major.latest)") {
+                    // "Update": the row shows the version it goes to ("17.10 → 17.11").
+                    Button("Update") {
                         let id = major.major
                         Task { await store.performOnPostgres(id, .updating) { try await $0.updatePostgres(id) } }
                     }
@@ -362,15 +363,19 @@ private struct PostgresMajorRow: View {
                     .disabled(locked)
                     .help("Installs \(major.latest) in place of \(major.installed). Your databases stay.")
                 }
-                Button("Extensions…", action: extensions)
-                    .controlSize(.small)
-                    .help("PostGIS, pgRouting, pgvector, TimescaleDB and your own extensions for PostgreSQL \(major.major)")
                 if !major.active {
                     Button("Switch…", action: switchTo)
                         .controlSize(.small)
                         .disabled(locked)
                         .help("Stops PostgreSQL \(activeMajor) and runs \(major.major) with its own databases")
                 }
+                // An icon, like ⋯: with Update and Switch, a third labelled button doesn't fit.
+                Button(action: extensions) {
+                    Image(systemName: "puzzlepiece.extension")
+                }
+                .buttonStyle(.borderless)
+                .accessibilityLabel("Extensions")
+                .help("Extensions of PostgreSQL \(major.major): PostGIS, pgRouting, pgvector, TimescaleDB and your own")
                 Menu {
                     if major.update, !major.latest.isEmpty {
                         Button("Update to \(major.latest)") {

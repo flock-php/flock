@@ -223,16 +223,19 @@ internal sealed partial class ServicesPane
             if (major.Update)
             {
                 var restart = major.Active && versions.Running ? "; PostgreSQL restarts for a moment" : "";
-                actions.Children.Add(Ui.Button($"Update to {major.Latest}", () => _ = RunAsync(major.Major, "Updating…", () => Model.Postgres.UpdateAsync(major.Major)),
+                // "Update": the facts show the version it goes to ("17.11 available").
+                actions.Children.Add(Ui.Button("Update", () => _ = RunAsync(major.Major, "Updating…", () => Model.Postgres.UpdateAsync(major.Major)),
                 glyph: Ui.GlyphDownload, tooltip: $"Installs {major.Latest} in place of {major.Installed}. Your databases stay{restart}."));
             }
-            actions.Children.Add(Ui.Button("Extensions…", () => _ = ExtensionsDialogAsync(major.Major),
-                tooltip: $"PostGIS, pgRouting, pgvector, TimescaleDB and your own extensions for PostgreSQL {major.Major}"));
             if (!major.Active)
             {
                 actions.Children.Add(Ui.Button("Switch…", () => _ = SwitchAsync(versions, major),
                     tooltip: versions.Active.Length > 0 ? $"Stops PostgreSQL {versions.Active} and starts {major.Major} with its own databases" : $"Starts PostgreSQL {major.Major}"));
             }
+            // An icon, like ⋯: with Update and Switch, a third labelled button doesn't fit.
+            actions.Children.Add(Ui.IconButton(Ui.GlyphPuzzle,
+                $"Extensions of PostgreSQL {major.Major}: PostGIS, pgRouting, pgvector, TimescaleDB and your own",
+                () => _ = ExtensionsDialogAsync(major.Major)));
             actions.Children.Add(More(versions, major));
         }
         // One PostgreSQL operation at a time.
