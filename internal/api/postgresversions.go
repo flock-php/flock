@@ -137,7 +137,8 @@ func postgresStatus(err error) int {
 	switch {
 	case errors.Is(err, postgres.ErrInvalidMajor), errors.Is(err, postgres.ErrUnknownExtension):
 		return http.StatusBadRequest
-	case errors.Is(err, postgres.ErrBusy), errors.Is(err, postgres.ErrNotInstalled), errors.Is(err, postgres.ErrPortTaken):
+	case errors.Is(err, postgres.ErrBusy), errors.Is(err, postgres.ErrNotInstalled), errors.Is(err, postgres.ErrPortTaken),
+		errors.Is(err, postgres.ErrExtensionInUse):
 		return http.StatusConflict
 	}
 	return statusFor(err)

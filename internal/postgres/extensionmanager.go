@@ -6,12 +6,17 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 
 	"flock/internal/binaries"
 )
 
-// ErrUnknownExtension is returned for an extension Flock doesn't offer.
-var ErrUnknownExtension = errors.New("unknown extension")
+var (
+	// ErrUnknownExtension is returned for an extension Flock doesn't offer.
+	ErrUnknownExtension = errors.New("unknown extension")
+	// ErrExtensionInUse is returned when another installed extension requires the one to remove.
+	ErrExtensionInUse = errors.New("needed by")
+)
 
 // MajorExtensions is the state of every extension for one major
 // (GET /v1/postgres/versions/{major}/extensions).
@@ -136,6 +141,15 @@ func (m *Manager) InstallExtension(ctx context.Context, major, name string) erro
 		return err
 	}
 	defer done()
+	for _, required := range e.Requires {
+		if InstalledExtension(m.root(), required, major) != "" {
+			continue
+		}
+		r, _ := FindExtension(required)
+		if err := m.installExtension(ctx, r, major); err != nil {
+			return fmt.Errorf("%s needs %s: %w", e.Title, r.Title, err)
+		}
+	}
 	if err := m.installExtension(ctx, e, major); err != nil {
 		return err
 	}
@@ -168,6 +182,11 @@ func (m *Manager) UninstallExtension(ctx context.Context, major, name string) er
 	defer done()
 	if InstalledExtension(m.root(), name, major) == "" {
 		return fmt.Errorf("%s for PostgreSQL %s is %w", e.Title, major, ErrNotInstalled)
+	}
+	for _, other := range Extensions {
+		if slices.Contains(other.Requires, name) && InstalledExtension(m.root(), other.Name, major) != "" {
+			return fmt.Errorf("%s is %w %s: uninstall %s first", e.Title, ErrExtensionInUse, other.Title, other.Title)
+		}
 	}
 	if err := os.RemoveAll(filepath.Join(ExtensionsRoot(m.root()), name, major)); err != nil {
 		return err
@@ -286,7 +305,21 @@ func (m *Manager) updateExtensionInDatabases(ctx context.Context, major string) 
 // Extensions without a build for major are skipped.
 func (m *Manager) installExtensions(ctx context.Context, major string, names []string) error {
 	var errs []error
+	// What they require goes first.
+	var ordered []string
 	for _, name := range names {
+		if e, ok := FindExtension(name); ok {
+			for _, required := range e.Requires {
+				if !slices.Contains(ordered, required) {
+					ordered = append(ordered, required)
+				}
+			}
+		}
+		if !slices.Contains(ordered, name) {
+			ordered = append(ordered, name)
+		}
+	}
+	for _, name := range ordered {
 		e, ok := FindExtension(name)
 		if !ok {
 			errs = append(errs, fmt.Errorf("%w %q", ErrUnknownExtension, name))

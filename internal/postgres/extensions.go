@@ -28,18 +28,19 @@ import (
 // Linux, copied next to postgres.exe on Windows). Anything else, like PostGIS' share/proj, stays
 // where it is.
 type Extension struct {
-	Name        string `json:"name"`        // package name without the major: "postgis"
-	Title       string `json:"title"`       // "PostGIS"
-	Description string `json:"description"` // one line for the apps
-	Creates     string `json:"creates"`     // what CREATE EXTENSION takes: "vector" for pgvector
-	License     string `json:"license"`
-	Preload     bool   `json:"preload"` // needs shared_preload_libraries: installing it restarts the server
+	Name        string   `json:"name"`        // package name without the major: "postgis"
+	Title       string   `json:"title"`       // "PostGIS"
+	Description string   `json:"description"` // one line for the apps
+	Creates     string   `json:"creates"`     // what CREATE EXTENSION takes: "vector" for pgvector
+	License     string   `json:"license"`
+	Preload     bool     `json:"preload"`  // needs shared_preload_libraries: installing it restarts the server
+	Requires    []string `json:"requires"` // extensions it needs (its control file's requires), installed with it
 }
 
 // Extensions are the extensions Flock offers, in the order the apps list them.
 var Extensions = []Extension{
 	{Name: "postgis", Title: "PostGIS", Description: "Geographic types, spatial indexes and queries", Creates: "postgis", License: "GPL-2.0"},
-	{Name: "pgrouting", Title: "pgRouting", Description: "Shortest paths and routing on PostGIS networks", Creates: "pgrouting", License: "GPL-2.0"},
+	{Name: "pgrouting", Title: "pgRouting", Description: "Shortest paths and routing on PostGIS networks", Creates: "pgrouting", License: "GPL-2.0", Requires: []string{"postgis"}},
 	{Name: "pgvector", Title: "pgvector", Description: "Vector similarity search for embeddings", Creates: "vector", License: "PostgreSQL"},
 	{Name: "timescaledb", Title: "TimescaleDB", Description: "Hypertables, compression and continuous aggregates for time series", Creates: "timescaledb", License: "Apache-2.0, Timescale License", Preload: true},
 }

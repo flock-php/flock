@@ -2,6 +2,7 @@ package postgres
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"slices"
@@ -121,6 +122,28 @@ func TestExtensionsPerMajor(t *testing.T) {
 	}
 	if err := m.InstallExtension(ctx, "18", "nope"); err == nil {
 		t.Fatal("installed an unknown extension")
+	}
+
+	// pgRouting needs PostGIS: it comes along, and can't be removed from under it.
+	srv.Publish(ExtensionPackage("postgis", "18"), "3.6.4", 1, extPackage(t, "postgis-3"), nil)
+	srv.Publish(ExtensionPackage("pgrouting", "18"), "4.0.2", 1, extPackage(t, "libpgrouting-4.0"), nil)
+	if _, err := m.Catalog.Check(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if err := m.InstallExtension(ctx, "18", "pgrouting"); err != nil {
+		t.Fatal(err)
+	}
+	if got := InstalledExtensions(m.root(), "18"); !slices.Equal(got, []string{"postgis", "pgrouting", "timescaledb"}) {
+		t.Fatalf("18 has %v", got)
+	}
+	if err := m.UninstallExtension(ctx, "18", "postgis"); !errors.Is(err, ErrExtensionInUse) {
+		t.Fatalf("removed PostGIS from under pgRouting: %v", err)
+	}
+	if err := m.UninstallExtension(ctx, "18", "pgrouting"); err != nil {
+		t.Fatal(err)
+	}
+	if err := m.UninstallExtension(ctx, "18", "postgis"); err != nil {
+		t.Fatal(err)
 	}
 
 	// Uninstalling a major takes its extensions, but not its custom folder.
