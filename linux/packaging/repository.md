@@ -12,6 +12,10 @@ so Flock updates with the system's other updates. `flock update` runs apt or dnf
 Each suite lists one version: apt and dnf update to it and never down. `flock channel beta|stable`
 (and the app's Beta versions switch) points the repository file at the other suite.
 
+The package's install adds the file on the suite of its own version (`--repo auto`): a beta's is
+`beta`, so a beta installed before the first stable release finds its suite. `flk install` then
+moves a user still on the default channel to beta, to match.
+
 ## Layout
 
 Everything is a GitHub release asset; `packages.flockphp.com` only redirects
