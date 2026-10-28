@@ -90,7 +90,7 @@ type Manager struct {
 	Service   Service
 	platform  string
 
-	op    sync.Mutex // held for the duration of an operation
+	op    chan struct{} // holds a token for the duration of an operation
 	mu    sync.Mutex
 	busy  map[string]string
 	sizes map[string]sizeEntry
@@ -104,7 +104,7 @@ type sizeEntry struct {
 // NewManager creates a manager for the PostgreSQL installs under root. A withdrawn (yanked) build
 // is replaced by the next good one as soon as the manifest has it.
 func NewManager(root string, catalog *binaries.Catalog, service Service) *Manager {
-	m := &Manager{Installer: NewInstaller(root), Catalog: catalog, Service: service, platform: binaries.Platform()}
+	m := &Manager{Installer: NewInstaller(root), Catalog: catalog, Service: service, platform: binaries.Platform(), op: make(chan struct{}, 1)}
 	if catalog != nil {
 		catalog.OnChange(m.replaceYanked)
 		catalog.OnChange(m.replaceYankedExtensions)
@@ -275,18 +275,31 @@ func (m *Manager) begin(major, what string) (func(), error) {
 	if !majorPattern.MatchString(major) {
 		return nil, fmt.Errorf("%w %q: give a major version like %s", ErrInvalidMajor, major, DefaultMajor)
 	}
-	return m.claim(major, what)
+	return m.claim(context.Background(), major, what, false)
 }
 
-// claim takes the operation lock and marks key (a major, or "<major>/<extension>") busy.
-func (m *Manager) claim(key, what string) (func(), error) {
-	if !m.op.TryLock() {
-		return nil, ErrBusy
+// claim takes the operation lock and marks key (a major, or "<major>/<extension>") busy. With
+// wait, it waits for the operation that runs to end (key is "waiting" meanwhile); without, it
+// fails with ErrBusy.
+func (m *Manager) claim(ctx context.Context, key, what string, wait bool) (func(), error) {
+	select {
+	case m.op <- struct{}{}:
+	default:
+		if !wait {
+			return nil, ErrBusy
+		}
+		m.setBusy(key, "waiting")
+		select {
+		case m.op <- struct{}{}:
+		case <-ctx.Done():
+			m.clearBusy(key)
+			return nil, ctx.Err()
+		}
 	}
 	m.setBusy(key, what)
 	return func() {
 		m.clearBusy(key)
-		m.op.Unlock()
+		<-m.op
 	}, nil
 }
 

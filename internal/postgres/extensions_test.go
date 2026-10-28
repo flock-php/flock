@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"slices"
 	"testing"
+	"time"
 
 	"flock/internal/binaries/binariestest"
 )
@@ -228,5 +229,61 @@ func TestLibraryDirs(t *testing.T) {
 	}
 	if got := LibraryDirs(root, "17"); len(got) != 0 {
 		t.Fatalf("17 got %v", got)
+	}
+}
+
+// Extension operations queue behind the one that runs instead of failing; the queued one is
+// "waiting", and a second click on it is refused.
+func TestExtensionOperationsQueue(t *testing.T) {
+	m, _, srv := newTestManager(t)
+	ctx := context.Background()
+	srv.Publish(Package, "18.6", 1, pgPackage(t), nil)
+	srv.Publish(ExtensionPackage("pgvector", "18"), "0.8.7", 1, extPackage(t, "vector"), nil)
+	srv.Publish(ExtensionPackage("postgis", "18"), "3.6.4", 1, extPackage(t, "postgis-3"), nil)
+	if err := m.Install(ctx, "18"); err != nil {
+		t.Fatal(err)
+	}
+
+	m.op <- struct{}{} // an operation runs
+	errs := make(chan error, 2)
+	go func() { errs <- m.InstallExtension(ctx, "18", "pgvector") }()
+	go func() { errs <- m.InstallExtension(ctx, "18", "postgis") }()
+	deadline := time.Now().Add(5 * time.Second)
+	for extension(t, m, "18", "pgvector").Busy != "waiting" || extension(t, m, "18", "postgis").Busy != "waiting" {
+		if time.Now().After(deadline) {
+			t.Fatal("installs are not waiting")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if err := m.InstallExtension(ctx, "18", "pgvector"); !errors.Is(err, ErrBusy) {
+		t.Fatalf("second install of a waiting extension: %v", err)
+	}
+	if err := m.Install(ctx, "17"); !errors.Is(err, ErrBusy) {
+		t.Fatalf("a version operation must not wait: %v", err)
+	}
+
+	<-m.op // it ends: both queued installs run, one after the other
+	for range 2 {
+		if err := <-errs; err != nil {
+			t.Fatal(err)
+		}
+	}
+	if got := InstalledExtensions(m.root(), "18"); !slices.Equal(got, []string{"postgis", "pgvector"}) {
+		t.Fatalf("installed %v", got)
+	}
+	if e := extension(t, m, "18", "pgvector"); e.Busy != "" {
+		t.Fatalf("still busy: %q", e.Busy)
+	}
+
+	// A waiting operation gives up with its context.
+	m.op <- struct{}{}
+	cancelled, cancel := context.WithCancel(ctx)
+	cancel()
+	if err := m.UninstallExtension(cancelled, "18", "pgvector"); !errors.Is(err, context.Canceled) {
+		t.Fatalf("cancelled wait: %v", err)
+	}
+	<-m.op
+	if e := extension(t, m, "18", "pgvector"); e.Busy != "" {
+		t.Fatalf("cancelled operation still marked: %q", e.Busy)
 	}
 }

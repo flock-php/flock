@@ -335,6 +335,7 @@ internal sealed partial class ServicesPane
         };
 
         var closed = false;
+        var polling = false;
         dialog.Closed += (_, _) => closed = true;
 
         async Task Load()
@@ -354,29 +355,61 @@ internal sealed partial class ServicesPane
             list.Children.Clear();
             foreach (var ext in state.Extensions)
             {
-                list.Children.Add(ExtensionRow(major, ext, state.AnyBusy, Run));
+                list.Children.Add(ExtensionRow(major, ext, Run));
             }
-            if (state.AnyBusy && !closed)
+            if (state.AnyBusy && !polling)
             {
-                // An operation started elsewhere (the CLI, another window): follow it.
-                await Task.Delay(TimeSpan.FromSeconds(1));
-                if (!closed)
-                {
-                    await Load();
-                }
+                _ = Poll();
             }
         }
 
+        // While anything runs or waits (also started elsewhere: the CLI, another window), follow it.
+        // One loop at a time, however many operations were started.
+        async Task Poll()
+        {
+            polling = true;
+            try
+            {
+                while (!closed)
+                {
+                    await Task.Delay(TimeSpan.FromSeconds(1));
+                    if (closed)
+                    {
+                        break;
+                    }
+                    var state = await Model.Postgres.ExtensionsAsync(major);
+                    list.Children.Clear();
+                    foreach (var ext in state.Extensions)
+                    {
+                        list.Children.Add(ExtensionRow(major, ext, Run));
+                    }
+                    if (!state.AnyBusy)
+                    {
+                        break;
+                    }
+                }
+            }
+            catch (Exception)
+            {
+                // The next Load shows what went wrong.
+            }
+            finally
+            {
+                polling = false;
+            }
+        }
+
+        // The other rows stay usable: the daemon queues the operations ("waiting").
         async Task Run(string name, string operation)
         {
-            Ui.SetEnabled(list, false);
-            await Model.Postgres.ExtensionAsync(major, name, operation);
+            var running = Model.Postgres.ExtensionAsync(major, name, operation);
+            await Load(); // shows it installing, or waiting behind another one
+            await running;
             if (Model.Postgres.ActionError is { } error)
             {
                 status.Text = error;
                 status.Foreground = Ui.Caution;
             }
-            Ui.SetEnabled(list, true);
             Rerender();
             await Load();
         }
@@ -386,7 +419,7 @@ internal sealed partial class ServicesPane
     }
 
     /// <summary>An extension with its version, what it adds, and Install, Update or Uninstall.</summary>
-    private static Grid ExtensionRow(string major, PostgresExtension ext, bool busy, Func<string, string, Task> run)
+    private static Grid ExtensionRow(string major, PostgresExtension ext, Func<string, string, Task> run)
     {
         var title = Ui.Row(8, Ui.Text(ext.Title, "BodyStrongTextBlockStyle", wrap: false));
         if (ext.IsInstalled)
@@ -429,7 +462,7 @@ internal sealed partial class ServicesPane
         {
             var install = Ui.Button("Install", () => _ = run(ext.Name, "install"), glyph: Ui.GlyphDownload,
                 tooltip: ext.Size > 0 ? $"Downloads {ext.Title} {ext.Latest} ({Ui.Bytes(ext.Size)})" : $"Downloads {ext.Title}");
-            install.IsEnabled = ext.Supported && !busy;
+            install.IsEnabled = ext.Supported;
             actions.Children.Add(install);
         }
         else
@@ -444,7 +477,6 @@ internal sealed partial class ServicesPane
             var more = Ui.IconButton(Ui.GlyphMore, "More", () => { });
             more.Flyout = menu;
             actions.Children.Add(more);
-            Ui.SetEnabled(actions, !busy);
         }
         var row = Ui.Spread(info, actions);
         row.Padding = new Thickness(0, 8, 0, 8);

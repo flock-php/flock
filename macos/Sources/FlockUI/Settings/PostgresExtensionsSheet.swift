@@ -134,13 +134,14 @@ struct PostgresExtensionsSheet: View {
         return parts.joined(separator: " · ")
     }
 
+    /// Every row stays usable while another one works: the daemon queues the operations, so several
+    /// extensions can be installed in a row (the queued ones are "waiting").
     @ViewBuilder
     private func actions(_ ext: PostgresExtension) -> some View {
-        let locked = isBusy || !pendingState.wrappedValue.isEmpty
         if !ext.isInstalled {
             Button("Install") { run(ext, "installing") { try await $0.installPostgresExtension(major, ext.name) } }
                 .controlSize(.small)
-                .disabled(!ext.supported || locked)
+                .disabled(!ext.supported)
                 .help(ext.size > 0 ? "Downloads \(ext.title) \(ext.latest) (\(Formats.bytes(ext.size)))" : "Downloads \(ext.title)")
         } else {
             HStack(spacing: 4) {
@@ -148,7 +149,6 @@ struct PostgresExtensionsSheet: View {
                     Button("Update") { run(ext, "updating") { try await $0.updatePostgresExtension(major, ext.name) } }
                         .buttonStyle(.borderedProminent)
                         .controlSize(.small)
-                        .disabled(locked)
                         .help("Installs \(ext.title) \(ext.latest)")
                 }
                 Menu {
@@ -162,7 +162,6 @@ struct PostgresExtensionsSheet: View {
                 .menuStyle(.borderlessButton)
                 .menuIndicator(.hidden)
                 .fixedSize()
-                .disabled(locked)
                 .help("More")
             }
         }
@@ -201,7 +200,9 @@ struct PostgresExtensionsSheet: View {
 
     private func run(_ ext: PostgresExtension, _ pending: String, _ change: @escaping @Sendable (FlockClient) async throws -> PostgresExtensions) {
         let name = ext.name
-        pendingState.wrappedValue[name] = pending
+        // Behind another operation it waits; the daemon reports the same once polled.
+        let others = isBusy || !pendingState.wrappedValue.isEmpty
+        pendingState.wrappedValue[name] = others ? "waiting" : pending
         errorState.wrappedValue = nil
         Task {
             let result = await model.settings.performOnPostgresExtension(change)

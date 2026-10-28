@@ -967,7 +967,15 @@ impl Inner {
             .build();
         dialog.present(Some(&self.stack));
 
-        let state = Rc::new(ExtensionsDialog { pane: self.clone(), major: major.to_owned(), list, folder, status, rows: RefCell::new(vec![]) });
+        let state = Rc::new(ExtensionsDialog {
+            pane: self.clone(),
+            major: major.to_owned(),
+            list,
+            folder,
+            status,
+            rows: RefCell::new(vec![]),
+            polling: Cell::new(false),
+        });
         state.load();
     }
         let own = if target.has_data {
@@ -1028,6 +1036,8 @@ struct ExtensionsDialog {
     folder: adw::PreferencesGroup,
     status: gtk::Label,
     rows: RefCell<Vec<gtk::Widget>>,
+    /// A reload is scheduled while something runs or waits: one at a time.
+    polling: Cell<bool>,
 }
 
 impl ExtensionsDialog {
@@ -1059,7 +1069,7 @@ impl ExtensionsDialog {
         let busy = extensions.iter().any(|e| !e.busy.is_empty());
         let mut rows = vec![];
         for ext in &extensions {
-            let row = self.row(ext, busy);
+            let row = self.row(ext);
             self.list.add(&row);
             rows.push(row.upcast());
         }
@@ -1077,14 +1087,19 @@ impl ExtensionsDialog {
         self.folder.add(&open);
         rows.push(open.upcast());
         self.rows.replace(rows);
-        if busy {
-            // An operation started elsewhere (the CLI, the other window): follow it.
+        if busy && !self.polling.replace(true) {
+            // While anything runs or waits (also started elsewhere: the CLI, the other window).
             let this = self.clone();
-            glib::timeout_add_local_once(ACTIVE_INTERVAL, move || this.load());
+            glib::timeout_add_local_once(ACTIVE_INTERVAL, move || {
+                this.polling.set(false);
+                this.load();
+            });
         }
     }
 
-    fn row(self: &Rc<Self>, ext: &PostgresExtension, busy: bool) -> adw::ActionRow {
+    /// Every row stays usable while another one works: the daemon queues the operations, so several
+    /// extensions can be installed in a row (the queued ones are "waiting").
+    fn row(self: &Rc<Self>, ext: &PostgresExtension) -> adw::ActionRow {
         let mut caption = vec![ext.description.clone()];
         if !ext.supported {
             caption = vec![format!("Not available for PostgreSQL {}", self.major)];
@@ -1113,10 +1128,13 @@ impl ExtensionsDialog {
             row.add_suffix(&badge("Pre-release", "warning"));
         }
         if !ext.busy.is_empty() {
+            let mut busy = ext.busy.clone();
+            busy[..1].make_ascii_uppercase();
+            row.add_suffix(&gtk::Label::builder().label(format!("{busy}…")).css_classes(["dim-label"]).build());
             row.add_suffix(&gtk::Spinner::builder().spinning(true).build());
             return row;
         }
-        let actions = gtk::Box::builder().spacing(6).sensitive(!busy).build();
+        let actions = gtk::Box::builder().spacing(6).build();
         let operation = |label: &str, suggested: bool, op: &'static str| {
             let (this, name) = (self.clone(), ext.name.clone());
             button(label, suggested, move || this.run(&name, op))
@@ -1136,11 +1154,14 @@ impl ExtensionsDialog {
     }
 
     fn run(self: &Rc<Self>, name: &str, operation: &'static str) {
-        self.list.set_sensitive(false);
         let (this, major, name) = (self.clone(), self.major.clone(), name.to_owned());
+        // Shows it running, or waiting behind another one, while the request is out.
+        glib::timeout_add_local_once(Duration::from_millis(300), {
+            let this = self.clone();
+            move || this.load()
+        });
         glib::spawn_future_local(async move {
             let result = gio::spawn_blocking(move || Client.postgres_extension(&major, &name, operation)).await.expect("extension request");
-            this.list.set_sensitive(true);
             this.show(result);
             // A major's row names its extensions.
             let pane = this.pane.clone();

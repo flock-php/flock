@@ -120,8 +120,10 @@ func (m *Manager) yankedExtension(manifest *binaries.Manifest, name, major, id s
 
 func extensionKey(major, name string) string { return major + "/" + name }
 
-// beginExtension claims the operation lock for an extension of major, or fails with ErrBusy.
-func (m *Manager) beginExtension(major, name, what string) (Extension, func(), error) {
+// beginExtension claims the operation lock for an extension of major. Extension operations queue:
+// one clicked while another runs waits for it ("waiting"), so several can be installed at once.
+// A second operation on the same extension fails with ErrBusy.
+func (m *Manager) beginExtension(ctx context.Context, major, name, what string) (Extension, func(), error) {
 	e, ok := FindExtension(name)
 	if !ok {
 		return Extension{}, nil, fmt.Errorf("%w %q", ErrUnknownExtension, name)
@@ -129,14 +131,25 @@ func (m *Manager) beginExtension(major, name, what string) (Extension, func(), e
 	if !majorPattern.MatchString(major) {
 		return Extension{}, nil, fmt.Errorf("%w %q: give a major version like %s", ErrInvalidMajor, major, DefaultMajor)
 	}
-	done, err := m.claim(extensionKey(major, name), what)
+	key := extensionKey(major, name)
+	m.mu.Lock()
+	if m.busy[key] != "" {
+		m.mu.Unlock()
+		return Extension{}, nil, ErrBusy
+	}
+	if m.busy == nil {
+		m.busy = map[string]string{}
+	}
+	m.busy[key] = "waiting" // marked here, so a second click on it is refused right away
+	m.mu.Unlock()
+	done, err := m.claim(ctx, key, what, true)
 	return e, done, err
 }
 
 // InstallExtension installs the newest build of an extension for major, or updates to it, and
 // makes it available to that major's server.
 func (m *Manager) InstallExtension(ctx context.Context, major, name string) error {
-	e, done, err := m.beginExtension(major, name, "installing")
+	e, done, err := m.beginExtension(ctx, major, name, "installing")
 	if err != nil {
 		return err
 	}
@@ -158,7 +171,7 @@ func (m *Manager) InstallExtension(ctx context.Context, major, name string) erro
 
 // UpdateExtension updates an installed extension of major to its newest build.
 func (m *Manager) UpdateExtension(ctx context.Context, major, name string) error {
-	e, done, err := m.beginExtension(major, name, "updating")
+	e, done, err := m.beginExtension(ctx, major, name, "updating")
 	if err != nil {
 		return err
 	}
@@ -175,7 +188,7 @@ func (m *Manager) UpdateExtension(ctx context.Context, major, name string) error
 // UninstallExtension removes an extension from major. Databases that created it keep it in their
 // catalog: its functions fail until it is installed again or dropped.
 func (m *Manager) UninstallExtension(ctx context.Context, major, name string) error {
-	e, done, err := m.beginExtension(major, name, "uninstalling")
+	e, done, err := m.beginExtension(ctx, major, name, "uninstalling")
 	if err != nil {
 		return err
 	}

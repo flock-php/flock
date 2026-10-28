@@ -47,9 +47,12 @@ public sealed class PostgresService : IAsyncDisposable
     public Task<PostgresExtensions> ExtensionsAsync(string major, CancellationToken token = default) =>
         client.PostgresExtensionsAsync(major, token);
 
-    /// <summary>Installs, updates or uninstalls an extension of a major, in the PostgreSQL lane (it may restart the server).</summary>
+    /// <summary>
+    /// Installs, updates or uninstalls an extension of a major. Each extension has a lane of its
+    /// own: the daemon queues them behind whatever runs, so several can be started at once.
+    /// </summary>
     public Task<OperationOutcome> ExtensionAsync(string major, string name, string operation, CancellationToken token = default) =>
-        MutateAsync(cancellation => operation switch
+        MutateAsync($"{Key}-ext:{major}/{name}", cancellation => operation switch
         {
             "install" => client.InstallPostgresExtensionAsync(major, name, cancellation),
             "update" => client.UpdatePostgresExtensionAsync(major, name, cancellation),
@@ -100,9 +103,12 @@ public sealed class PostgresService : IAsyncDisposable
         await request.DisposeAsync();
     }
 
-    private async Task<OperationOutcome> MutateAsync(Func<CancellationToken, Task> mutation, CancellationToken applicationToken)
+    private Task<OperationOutcome> MutateAsync(Func<CancellationToken, Task> mutation, CancellationToken applicationToken) =>
+        MutateAsync(Key, mutation, applicationToken);
+
+    private async Task<OperationOutcome> MutateAsync(string key, Func<CancellationToken, Task> mutation, CancellationToken applicationToken)
     {
-        var outcome = await runner.RunMutationAsync(Key, errors, async token =>
+        var outcome = await runner.RunMutationAsync(key, errors, async token =>
         {
             request.Invalidate();
             try
