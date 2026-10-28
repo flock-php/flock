@@ -893,10 +893,8 @@ func (d *daemon) postgresSpec(cfg *config.Config, id string) (supervisor.Spec, [
 	}
 	preload := postgres.PreloadLibraries(d.root, major)
 	spec := postgres.Spec(bin, data, run, filepath.Join(d.root, "log", "postgres.log"), cfg.Ports.Postgres, preload...)
-	if dirs := postgres.LibraryDirs(d.root, major); runtime.GOOS == "linux" && len(dirs) > 0 {
-		// A changed list restarts the server (the supervisor compares Env), so new libraries load.
-		spec.Env = []string{"LD_LIBRARY_PATH=" + strings.Join(dirs, string(os.PathListSeparator))}
-	}
+	// A changed environment restarts the server (the supervisor compares Env), so new libraries load.
+	spec.Env = postgres.ServerEnv(d.root, major)
 	return spec, warnings, nil
 }
 

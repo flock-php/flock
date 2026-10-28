@@ -28,7 +28,8 @@ import (
 // rpath, since @loader_path follows the symlink to the real module; Linux expands $ORIGIN to the
 // symlink's folder instead, so the server gets deps/ on LD_LIBRARY_PATH (LibraryDirs); Windows
 // gets them copied next to postgres.exe. Anything else, like PostGIS' share/proj, stays where it
-// is: PROJ finds it from the real location of its library.
+// is: PROJ finds it from the real location of its library, and on Windows through PROJ_DATA
+// (ServerEnv).
 type Extension struct {
 	Name        string   `json:"name"`        // package name without the major: "postgis"
 	Title       string   `json:"title"`       // "PostGIS"
@@ -197,6 +198,28 @@ func LibraryDirs(root, major string) []string {
 		dirs = append(dirs, custom)
 	}
 	return dirs
+}
+
+// ServerEnv is what a major's server needs in its environment for its extensions: on Linux their
+// deps/ on LD_LIBRARY_PATH; on Windows, where an extension's DLLs are copied next to postgres.exe
+// and PROJ would look for its data next to bin\, PROJ_DATA on the share\proj of the package that
+// has one (PostGIS). macOS needs nothing: @loader_path follows the symlinks to the packages.
+func ServerEnv(root, major string) []string {
+	switch runtime.GOOS {
+	case "linux":
+		if dirs := LibraryDirs(root, major); len(dirs) > 0 {
+			return []string{"LD_LIBRARY_PATH=" + strings.Join(dirs, string(os.PathListSeparator))}
+		}
+	case "windows":
+		for _, e := range Extensions {
+			if id := InstalledExtension(root, e.Name, major); id != "" {
+				if proj := filepath.Join(ExtensionDir(root, e.Name, major, id), "share", "proj"); isDir(proj) {
+					return []string{"PROJ_DATA=" + proj}
+				}
+			}
+		}
+	}
+	return nil
 }
 
 // PreloadLibraries are the installed extensions of a major that go into shared_preload_libraries.
