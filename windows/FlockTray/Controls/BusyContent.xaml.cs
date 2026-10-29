@@ -1,24 +1,32 @@
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
-
 namespace Flock.Tray;
 
-/// <summary>A button's content that shows a spinner and <see cref="BusyText"/> while <see cref="IsBusy"/>.</summary>
+/// <summary>A button's content that shows a spinner and <see cref="BusyText" /> while <see cref="IsBusy" />.</summary>
 public sealed partial class BusyContent : UserControl
 {
+    public static readonly DependencyProperty TextProperty = DependencyProperty.Register(
+        nameof(Text),
+        typeof(string),
+        typeof(BusyContent),
+        new PropertyMetadata("", (control, _) => ((BusyContent)control).Apply()));
+
+    public static readonly DependencyProperty BusyTextProperty = DependencyProperty.Register(
+        nameof(BusyText),
+        typeof(string),
+        typeof(BusyContent),
+        new PropertyMetadata("", (control, _) => ((BusyContent)control).Apply()));
+
+    public static readonly DependencyProperty IsBusyProperty = DependencyProperty.Register(
+        nameof(IsBusy),
+        typeof(bool),
+        typeof(BusyContent),
+        new PropertyMetadata(false, (control, _) => ((BusyContent)control).Apply()));
+
     public BusyContent()
     {
         InitializeComponent();
     }
-
-    public static readonly DependencyProperty TextProperty = DependencyProperty.Register(
-        nameof(Text), typeof(string), typeof(BusyContent), new PropertyMetadata("", (control, _) => ((BusyContent)control).Apply()));
-
-    public static readonly DependencyProperty BusyTextProperty = DependencyProperty.Register(
-        nameof(BusyText), typeof(string), typeof(BusyContent), new PropertyMetadata("", (control, _) => ((BusyContent)control).Apply()));
-
-    public static readonly DependencyProperty IsBusyProperty = DependencyProperty.Register(
-        nameof(IsBusy), typeof(bool), typeof(BusyContent), new PropertyMetadata(false, (control, _) => ((BusyContent)control).Apply()));
 
     public string Text
     {
@@ -41,7 +49,11 @@ public sealed partial class BusyContent : UserControl
     private void Apply()
     {
         Ring.IsActive = IsBusy;
-        Ring.Visibility = IsBusy ? Visibility.Visible : Visibility.Collapsed;
-        Label.Text = IsBusy && BusyText.Length > 0 ? BusyText : Text;
+        Ring.Visibility = IsBusy
+            ? Visibility.Visible
+            : Visibility.Collapsed;
+        Label.Text = IsBusy && BusyText.Length > 0
+            ? BusyText
+            : Text;
     }
 }
