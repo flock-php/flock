@@ -176,8 +176,7 @@ impl Inner {
                 gio::Cancellable::NONE,
                 move |result| {
                     if let Some(path) = result.ok().and_then(|f| f.path()) {
-                        let path = path.to_string_lossy().into_owned();
-                        this.perform(move |c| c.link_site(&path));
+                        this.add_site(path.to_string_lossy().into_owned());
                     }
                 },
             );
@@ -363,6 +362,31 @@ impl Inner {
             group.add(&row);
         }
         group
+    }
+
+    /// Asks for the domain to serve a chosen folder as; left empty, it is served as <folder>.test, as
+    /// `flock link` does.
+    fn add_site(self: &Rc<Self>, path: String) {
+        let tld = self.status.borrow().as_ref().map(|s| s.dns.tld.clone()).filter(|t| !t.is_empty());
+        let tld = tld.as_deref().unwrap_or("test");
+        let folder = file_name(&path);
+        let name = site_name(&folder);
+        let default = format!("{name}.{tld}");
+        let entry = gtk::Entry::builder().placeholder_text(default.as_str()).activates_default(true).build();
+        let help = format!("Serve it as {default}, or as a domain of your choosing, like {name}.my-project.{tld}.");
+        let dialog = adw::AlertDialog::new(Some(&format!("Add {folder}")), Some(&help));
+        dialog.set_extra_child(Some(&entry));
+        dialog.add_responses(&[("cancel", "Cancel"), ("add", "Add")]);
+        dialog.set_response_appearance("add", adw::ResponseAppearance::Suggested);
+        dialog.set_default_response(Some("add"));
+        let this = self.clone();
+        dialog.choose(Some(&self.stack), gio::Cancellable::NONE, move |response| {
+            let domain = entry.text().trim().to_owned();
+            if response == "add" {
+                let path = path.clone();
+                this.perform(move |c| c.link_site(&path, &domain));
+            }
+        });
     }
 
     fn add_domain(self: &Rc<Self>, site: &str, dns: &crate::api::DnsStatus) {
@@ -1125,6 +1149,13 @@ fn version_row(
 /// "src/www", or "Project folder" for ".".
 fn root_label(root: &str) -> String {
     if root == "." { "Project folder".to_owned() } else { root.to_owned() }
+}
+
+/// A folder's name as a hostname label, the site name Flock gives it (config.SiteName).
+fn site_name(folder: &str) -> String {
+    let label: String = folder.to_lowercase().chars().map(|c| if c.is_ascii_alphanumeric() || c == '-' { c } else { '-' }).collect();
+    let label = label.trim_matches('-');
+    if label.is_empty() { "app".to_owned() } else { label.to_owned() }
 }
 
 fn file_name(path: &str) -> String {

@@ -6,6 +6,7 @@
 package web
 
 import (
+	"cmp"
 	"crypto/tls"
 	_ "embed"
 	"fmt"
@@ -24,6 +25,7 @@ import (
 
 // Site is one served application.
 type Site struct {
+	Name    string   // the site's name; empty: the name the domain gives (see siteName)
 	Domain  string   // e.g. watchtower.test
 	Aliases []string // other names served like Domain, e.g. watchtower-2.test
 	Root    string   // document root, e.g. <path>/public
@@ -151,7 +153,7 @@ func Caddyfile(cfg Config) string {
 			fmt.Fprintf(&b, "\n%s {\n\timport flock_site\n%s}\n", addresses("http", hosts, cfg), app(s))
 			// Over HTTPS, a site that isn't secured names itself, so the page asks to secure it rather than link it.
 			fmt.Fprintf(&b, "\n%s {\n\timport flock_site\n%s\tvars flock_site %s\n%s}\n",
-				addresses("https", hosts, cfg), tlsBlock, quote(siteName(s.Domain, cfg.TLD)), unlinked(cfg))
+				addresses("https", hosts, cfg), tlsBlock, quote(cmp.Or(s.Name, siteName(s.Domain, cfg.TLD))), unlinked(cfg))
 		}
 	}
 

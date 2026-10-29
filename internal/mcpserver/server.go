@@ -40,7 +40,7 @@ type Daemon interface {
 	InstallPHP(ctx context.Context, minor string) (api.PHPVersions, error)
 	InstallNode(ctx context.Context, major string) (api.NodeVersions, error)
 
-	LinkSite(ctx context.Context, dir, name string) (api.Status, error)
+	LinkSite(ctx context.Context, dir, name, domain string) (api.Status, error)
 	UpdateSite(ctx context.Context, name string, change api.SiteChange) (api.Status, error)
 	AddDomain(ctx context.Context, name, domain string) (api.Status, error)
 	PinSite(ctx context.Context, name, tool, version string) (api.Status, error)

@@ -59,7 +59,7 @@ func (s *server) addWriteTools(srv *mcp.Server) {
 
 	mcp.AddTool(srv, &mcp.Tool{
 		Name:        "link_site",
-		Description: "Serve a project folder as a Flock site at https://<name>.test (by default the project Flock was started in, named after its folder).",
+		Description: "Serve a project folder as a Flock site at https://<name>.test, or at a domain of its own (by default the project Flock was started in, named after its folder).",
 		Annotations: additive(true),
 	}, s.linkSite)
 
@@ -596,6 +596,8 @@ func (s *server) installNode(ctx context.Context, req *mcp.CallToolRequest, vers
 type linkSiteIn struct {
 	Path string `json:"path,omitempty" jsonschema:"the project folder (absolute); defaults to the folder Flock was started in"`
 	Name string `json:"name,omitempty" jsonschema:"the site's name, which makes its domain <name>.test; defaults to the folder's name"`
+	// Domain is for names of more labels, which a name can't give.
+	Domain string `json:"domain,omitempty" jsonschema:"the domain to serve the site as instead, e.g. filament.ui-playground.test (the .test is optional); names the site after it"`
 }
 
 type siteActionOut struct {
@@ -610,7 +612,7 @@ func (s *server) linkSite(ctx context.Context, _ *mcp.CallToolRequest, in linkSi
 	}
 	dir = filepath.Clean(dir)
 
-	if in.Name == "" {
+	if in.Name == "" && in.Domain == "" {
 		if st, err := s.Daemon.Status(ctx); err == nil {
 			for _, site := range st.Sites {
 				if site.Path == dir {
@@ -621,13 +623,14 @@ func (s *server) linkSite(ctx context.Context, _ *mcp.CallToolRequest, in linkSi
 		}
 	}
 
-	st, err := s.Daemon.LinkSite(ctx, dir, in.Name)
+	st, err := s.Daemon.LinkSite(ctx, dir, in.Name, in.Domain)
 	if err != nil {
 		return nil, siteActionOut{}, err
 	}
 	name := config.SiteName(cmpOr(in.Name, filepath.Base(dir)))
 	for _, site := range st.Sites {
-		if site.Name == name {
+		// A domain names the site after it (see config.SetDomain), so that site is found by its folder.
+		if in.Domain == "" && site.Name == name || in.Domain != "" && site.Path == dir {
 			info := siteInfoOf(site)
 			msg := fmt.Sprintf("Linked: %s is served at %s.", dir, info.URL)
 			if info.Problem != "" {
@@ -636,7 +639,7 @@ func (s *server) linkSite(ctx context.Context, _ *mcp.CallToolRequest, in linkSi
 			return nil, siteActionOut{Message: msg, Site: &info}, nil
 		}
 	}
-	return nil, siteActionOut{Message: "Linked " + dir + " as " + name + "."}, nil
+	return nil, siteActionOut{Message: "Linked " + dir + " as " + cmpOr(in.Domain, name) + "."}, nil
 }
 
 type updateSiteIn struct {

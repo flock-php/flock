@@ -71,9 +71,10 @@ public sealed class FlockClient : IDisposable
     public Task<List<Service>> SetServicePortAsync(string id, int port, CancellationToken cancellationToken = default) =>
         Send<List<Service>>(HttpMethod.Patch, $"/v1/services/{Escape(id)}", new { port }, cancellationToken: cancellationToken);
 
-    /// <summary>Links a directory as a site (the name defaults to the directory name on the daemon side).</summary>
-    public Task<Status> LinkSiteAsync(string path, string? name = null, string? php = null, bool secured = false, CancellationToken cancellationToken = default) =>
-        Send<Status>(HttpMethod.Post, "/v1/sites", new { path, name, php, secured }, cancellationToken: cancellationToken);
+    /// <summary>Links a directory as a site (the name defaults to the directory name on the daemon side). A domain
+    /// ("filament.ui-playground") serves it as that domain instead, and names the site after it.</summary>
+    public Task<Status> LinkSiteAsync(string path, string? name = null, string? domain = null, string? php = null, bool secured = false, CancellationToken cancellationToken = default) =>
+        Send<Status>(HttpMethod.Post, "/v1/sites", new { path, name, domain, php, secured }, cancellationToken: cancellationToken);
 
     /// <summary>Switching the server or worker mode reloads the web server and may start FrankenPHP, so it gets longer.</summary>
     public Task<Status> UpdateSiteAsync(string name, SiteChange change, CancellationToken cancellationToken = default) =>

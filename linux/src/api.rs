@@ -242,8 +242,10 @@ impl Client {
     }
 
     /// Serves a folder as a site (`flock link`); the daemon names it after the folder.
-    pub fn link_site(&self, path: &str) -> Result<Status, Error> {
-        self.request("POST", "/v1/sites", Some(&serde_json::json!({ "path": path, "secured": false })), DEFAULT_TIMEOUT)
+    /// Links a folder as a site, served as `domain` ("filament.ui-playground") when it's not empty,
+    /// otherwise as <folder>.test.
+    pub fn link_site(&self, path: &str, domain: &str) -> Result<Status, Error> {
+        self.request("POST", "/v1/sites", Some(&serde_json::json!({ "path": path, "domain": domain, "secured": false })), DEFAULT_TIMEOUT)
     }
 
     pub fn update_site(&self, name: &str, change: &SiteChange) -> Result<Status, Error> {

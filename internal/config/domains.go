@@ -173,3 +173,57 @@ func (c *Config) NormalizeDomain(s Site, name string) (string, error) {
 	}
 	return name, nil
 }
+
+// SetDomain names the new site s after domain, the name it is served as: "shop" or "shop.test"
+// serves it as shop.test, and a name of more labels ("filament.ui-playground", with or without
+// the TLD) becomes s.Domain, the site named after it (filament-ui-playground). The site can't take
+// another site's name, nor a name another site serves; under another site's name, the more
+// specific name wins, as with aliases.
+func (c *Config) SetDomain(s *Site, domain string) error {
+	name := strings.TrimSuffix(strings.ToLower(strings.TrimSpace(domain)), ".")
+	name = strings.TrimSuffix(name, "."+c.TLD)
+
+	switch {
+	case name == "" || name == c.TLD:
+		return fmt.Errorf("the domain is empty")
+	case strings.Contains(name, "*"):
+		return fmt.Errorf("wildcards aren't needed: every subdomain up to %d levels below the site's domain is served already", MaxDepth)
+	case strings.Contains(name, "://") || strings.ContainsAny(name, "/: "):
+		return fmt.Errorf("%q is not a domain name (leave out the scheme, port and path)", domain)
+	case len(name)+len(c.TLD) >= 253:
+		return fmt.Errorf("%s.%s is too long", name, c.TLD)
+	}
+	labels := strings.Split(name, ".")
+	for _, l := range labels {
+		if !hostLabel.MatchString(l) {
+			return fmt.Errorf("%q is not a valid domain name: %q may only contain a-z, 0-9 and inner hyphens", domain, l)
+		}
+	}
+
+	site := *s
+	site.Name, site.Domain = SiteName(name), ""
+	if len(labels) > 1 {
+		site.Domain = name + "." + c.TLD
+	}
+	host := c.Domain(site)
+
+	for _, o := range c.AllSites() {
+		if o.Name == site.Name {
+			if o.Path != site.Path {
+				return fmt.Errorf("another site is already named %s (%s)", o.Name, o.Path)
+			}
+			continue // the same site, linked again
+		}
+		if c.Domain(o) == host {
+			return fmt.Errorf("%s is already served by %s", host, o.Name)
+		}
+		for _, e := range c.ExtraDomains(o) {
+			if e.Host == host {
+				return fmt.Errorf("%s is already served by %s", host, o.Name)
+			}
+		}
+	}
+
+	*s = site
+	return nil
+}
