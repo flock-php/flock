@@ -7,14 +7,12 @@ namespace Flock.Tray;
 internal sealed partial class DebuggerPane : UserControl, ISettingsPane
 {
     private readonly DebuggerViewModel viewModel;
-    private bool loaded;
 
     public DebuggerPane(SettingsWindow window, RuntimeService model)
     {
         InitializeComponent();
         viewModel = new DebuggerViewModel(model);
         DataContext = viewModel;
-        loaded = true;
     }
 
     public string Title => "Debugger";
@@ -30,21 +28,5 @@ internal sealed partial class DebuggerPane : UserControl, ISettingsPane
     {
         viewModel.Dispose();
         return Task.CompletedTask;
-    }
-
-    private async void XdebugToggled(object sender, RoutedEventArgs args)
-    {
-        if (loaded && sender is ToggleSwitch toggle && toggle.IsOn != viewModel.Enabled)
-        {
-            await viewModel.SetXdebugCommand.ExecuteAsync(toggle.IsOn);
-        }
-    }
-
-    private async void BreakpointsToggled(object sender, RoutedEventArgs args)
-    {
-        if (loaded && sender is ToggleSwitch toggle && toggle.IsOn != viewModel.Breakpoints)
-        {
-            await viewModel.SetBreakpointsCommand.ExecuteAsync(toggle.IsOn);
-        }
     }
 }

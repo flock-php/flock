@@ -166,7 +166,7 @@
                             <FontIcon Glyph="{StaticResource GlyphBug}" FontFamily="{StaticResource SymbolsFont}" FontSize="14" />
                             <TextBlock Text="Xdebug" />
                         </StackPanel>
-                        <ToggleSwitch Grid.Column="1" IsOn="{Binding Status.Xdebug}" OnContent="" OffContent="" MinWidth="0" Toggled="XdebugToggled" />
+                        <ToggleSwitch Grid.Column="1" IsOn="{Binding Xdebug, Mode=TwoWay}" OnContent="" OffContent="" MinWidth="0" />
                     </Grid>
                     <Grid>
                         <Grid.ColumnDefinitions>
@@ -177,8 +177,7 @@
                             <FontIcon Glyph="{StaticResource GlyphDownload}" FontFamily="{StaticResource SymbolsFont}" FontSize="14" />
                             <TextBlock Text="Capture dumps" />
                         </StackPanel>
-                        <ToggleSwitch Grid.Column="1" IsOn="{Binding Status.Dumps}" IsEnabled="{Binding CaptureEnabled}" OnContent="" OffContent="" MinWidth="0"
-                                      Toggled="DumpsToggled" />
+                        <ToggleSwitch Grid.Column="1" IsOn="{Binding Dumps, Mode=TwoWay}" IsEnabled="{Binding CaptureEnabled}" OnContent="" OffContent="" MinWidth="0" />
                     </Grid>
                 </StackPanel>
 

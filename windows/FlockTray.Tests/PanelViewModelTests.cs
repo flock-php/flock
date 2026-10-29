@@ -57,4 +57,80 @@ public sealed class PanelViewModelTests
         Assert.False(row.Up);
         Assert.Contains(string.Empty, changed);
     }
+
+    [Fact]
+    public async Task DaemonSwitchShowsTheRequestThenFollowsTheDaemon()
+    {
+        var notified = 0;
+        var daemon = false;
+        var change = new TaskCompletionSource();
+        var toggle = new DaemonSwitch(() => notified++);
+
+        var running = toggle.ChangeAsync(true, value =>
+        {
+            Assert.True(value);
+            return change.Task;
+        });
+
+        Assert.True(toggle.Show(daemon));
+        Assert.Equal(0, notified);
+
+        daemon = true;
+        change.SetResult();
+        await running;
+
+        Assert.True(toggle.Show(daemon));
+        Assert.Equal(1, notified);
+
+        // A later change from the CLI shows straight away.
+        daemon = false;
+        Assert.False(toggle.Show(daemon));
+    }
+
+    [Fact]
+    public async Task DaemonSwitchSnapsBackWhenTheChangeIsRefused()
+    {
+        var notified = 0;
+        var toggle = new DaemonSwitch(() => notified++);
+
+        await toggle.ChangeAsync(true, _ => Task.CompletedTask);
+
+        Assert.False(toggle.Show(false));
+        Assert.Equal(1, notified);
+    }
+
+    [Fact]
+    public async Task DaemonSwitchSnapsBackWhenTheChangeThrows()
+    {
+        var notified = 0;
+        var toggle = new DaemonSwitch(() => notified++);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => toggle.ChangeAsync(true, _ => throw new InvalidOperationException()));
+
+        Assert.False(toggle.Show(false));
+        Assert.Equal(1, notified);
+    }
+
+    [Fact]
+    public async Task DaemonSwitchKeepsTheLatestRequestWhileItRuns()
+    {
+        var notified = 0;
+        var first = new TaskCompletionSource();
+        var second = new TaskCompletionSource();
+        var toggle = new DaemonSwitch(() => notified++);
+
+        var firstRun = toggle.ChangeAsync(true, _ => first.Task);
+        var secondRun = toggle.ChangeAsync(false, _ => second.Task);
+        first.SetResult();
+        await firstRun;
+
+        Assert.False(toggle.Show(true));
+        Assert.Equal(0, notified);
+
+        second.SetResult();
+        await secondRun;
+
+        Assert.True(toggle.Show(true));
+        Assert.Equal(1, notified);
+    }
 }

@@ -13,6 +13,7 @@ public sealed class DumpsViewModel : ObservableObject, IDisposable
     private readonly DumpsService service;
     private readonly PreferencesService preferences;
     private readonly RuntimeService? model;
+    private readonly DaemonSwitch capture;
     private string query = "";
     private bool released;
 
@@ -21,6 +22,7 @@ public sealed class DumpsViewModel : ObservableObject, IDisposable
         this.service = service;
         this.preferences = preferences;
         this.model = model;
+        capture = new DaemonSwitch(() => OnPropertyChanged(nameof(Capturing)));
         service.Changed += NotifyState;
         preferences.StateChanged += NotifyState;
         model.Changed += NotifyState;
@@ -43,7 +45,19 @@ public sealed class DumpsViewModel : ObservableObject, IDisposable
         DumpTimeline.Filter(LatestOnly ? DumpTimeline.LatestGroup(service.Dumps, service.Events).Events : service.Events.Where(e => e.IsKnown).ToList(), Query);
     public string? Header => service.Header;
     public bool HeaderMissing => service.HeaderMissing;
-    public bool Capturing => model?.Status?.Dumps == true;
+    /// <summary>The capture switch, bound two-way: setting it asks the daemon, reading it follows the daemon.</summary>
+    public bool Capturing
+    {
+        get => capture.Show(model?.Status?.Dumps == true);
+        set
+        {
+            if (value != Capturing)
+            {
+                SetDumpsCommand.Execute(value);
+            }
+        }
+    }
+
     public int Count => model?.Status?.DumpCount ?? service.Dumps.Count;
     public string Editor => preferences.Snapshot.Editor;
     public bool LatestOnly => preferences.Snapshot.DumpsLatestOnly;
@@ -68,7 +82,7 @@ public sealed class DumpsViewModel : ObservableObject, IDisposable
     public IAsyncRelayCommand<bool> SetDumpsCommand { get; }
     public IAsyncRelayCommand ClearCommand { get; }
 
-    public Task SetDumpsAsync(bool enabled) => service.SetCaptureAsync(enabled);
+    public Task SetDumpsAsync(bool enabled) => capture.ChangeAsync(enabled, value => service.SetCaptureAsync(value));
 
     public Task SetCaptureAsync(string kind, bool enabled)
     {

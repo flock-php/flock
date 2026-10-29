@@ -9,16 +9,44 @@ namespace Flock.Tray.ViewModels;
 public sealed partial class DebuggerViewModel : ObservableObject, IDisposable
 {
     private readonly RuntimeService _model;
+    private readonly DaemonSwitch _xdebug;
+    private readonly DaemonSwitch _breakpoints;
 
     public DebuggerViewModel(RuntimeService model)
     {
         _model = model;
+        _xdebug = new DaemonSwitch(NotifyState);
+        _breakpoints = new DaemonSwitch(NotifyState);
         _model.Changed += NotifyState;
         _model.Configuration.Changed += NotifyState;
     }
 
-    public bool Enabled => _model.Status?.Xdebug == true;
-    public bool Breakpoints => _model.Status?.XdebugBreakpoints == true;
+    /// <summary>The Xdebug switch, bound two-way: setting it asks the daemon, reading it follows the daemon.</summary>
+    public bool Enabled
+    {
+        get => _xdebug.Show(_model.Status?.Xdebug == true);
+        set
+        {
+            if (value != Enabled)
+            {
+                SetXdebugCommand.Execute(value);
+            }
+        }
+    }
+
+    /// <summary>The PhpStorm breakpoints switch, bound two-way like <see cref="Enabled" />.</summary>
+    public bool Breakpoints
+    {
+        get => _breakpoints.Show(_model.Status?.XdebugBreakpoints == true);
+        set
+        {
+            if (value != Breakpoints)
+            {
+                SetBreakpointsCommand.Execute(value);
+            }
+        }
+    }
+
     public Flock.Kit.FlockConfig? Config => _model.Configuration.Current;
     public IReadOnlyList<string> DebuggingSites => Enabled && Breakpoints
         ? (_model.Status?.Sites ?? []).Where(site => site.Debugging).Select(site => site.Domain).ToList()
@@ -28,10 +56,10 @@ public sealed partial class DebuggerViewModel : ObservableObject, IDisposable
         ? Visibility.Visible
         : Visibility.Collapsed;
     [RelayCommand]
-    public Task SetXdebugAsync(bool enabled) => _model.SetXdebugAsync(enabled);
+    public Task SetXdebugAsync(bool enabled) => _xdebug.ChangeAsync(enabled, _model.SetXdebugAsync);
 
     [RelayCommand]
-    public Task SetBreakpointsAsync(bool enabled) => _model.SetXdebugBreakpointsAsync(enabled);
+    public Task SetBreakpointsAsync(bool enabled) => _breakpoints.ChangeAsync(enabled, _model.SetXdebugBreakpointsAsync);
 
     public void Dispose()
     {
@@ -54,11 +82,13 @@ public sealed partial class DebuggerViewModel : ObservableObject, IDisposable
         public PhpAvailability(string version, bool available)
         {
             Version = version;
+            Label = $"PHP {version}";
             AvailableVisibility = available ? Visibility.Visible : Visibility.Collapsed;
             UnavailableVisibility = available ? Visibility.Collapsed : Visibility.Visible;
         }
 
         public string Version { get; }
+        public string Label { get; }
         public Visibility AvailableVisibility { get; }
         public Visibility UnavailableVisibility { get; }
     }

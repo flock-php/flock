@@ -14,7 +14,7 @@
                         <TextBlock Text="Xdebug loads only for requests that ask for it, so everything else stays fast." Style="{StaticResource CaptionTextBlockStyle}"
                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
                     </StackPanel>
-                    <ToggleSwitch Grid.Column="1" MinWidth="0" IsOn="{Binding Enabled}" Toggled="XdebugToggled" OnContent="" OffContent="" />
+                    <ToggleSwitch Grid.Column="1" MinWidth="0" IsOn="{Binding Enabled, Mode=TwoWay}" OnContent="" OffContent="" />
                 </Grid>
             </Border>
             <Border Style="{StaticResource CardStyle}">
@@ -27,8 +27,8 @@
                         <TextBlock Text="While a project has breakpoints in PhpStorm, every request to its site is debugged."
                                    Style="{StaticResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
                     </StackPanel>
-                    <ToggleSwitch x:Name="Breakpoints" Grid.Column="1" MinWidth="0" IsOn="{Binding Breakpoints}" IsEnabled="{Binding Enabled}"
-                                  Toggled="BreakpointsToggled" OnContent="" OffContent="" />
+                    <ToggleSwitch x:Name="Breakpoints" Grid.Column="1" MinWidth="0" IsOn="{Binding Breakpoints, Mode=TwoWay}" IsEnabled="{Binding Enabled}"
+                                  OnContent="" OffContent="" />
                 </Grid>
             </Border>
         </StackPanel>
@@ -90,11 +90,18 @@
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" />
                                 </Grid.ColumnDefinitions>
-                                <TextBlock Text="{Binding Version}" />
-                                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6">
-                                    <TextBlock Text="Available" Visibility="{Binding AvailableVisibility}" Foreground="{ThemeResource SystemFillColorSuccessBrush}" />
-                                    <TextBlock Text="Not in this build" Visibility="{Binding UnavailableVisibility}"
-                                               Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                <TextBlock Text="{Binding Label}" VerticalAlignment="Center" />
+                                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center"
+                                            Visibility="{Binding AvailableVisibility}">
+                                    <FontIcon Glyph="{StaticResource GlyphCheck}" FontFamily="{StaticResource SymbolsFont}" FontSize="12"
+                                              Foreground="{ThemeResource SystemFillColorSuccessBrush}" VerticalAlignment="Center" />
+                                    <TextBlock Text="Available" VerticalAlignment="Center" />
+                                </StackPanel>
+                                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center"
+                                            Visibility="{Binding UnavailableVisibility}">
+                                    <FontIcon Glyph="{StaticResource GlyphCancel}" FontFamily="{StaticResource SymbolsFont}" FontSize="12"
+                                              Foreground="{ThemeResource TextFillColorSecondaryBrush}" VerticalAlignment="Center" />
+                                    <TextBlock Text="Not in this build" Foreground="{ThemeResource TextFillColorSecondaryBrush}" VerticalAlignment="Center" />
                                 </StackPanel>
                             </Grid>
                         </Border>

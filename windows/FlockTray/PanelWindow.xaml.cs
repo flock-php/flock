@@ -217,24 +217,6 @@ internal sealed partial class PanelWindow : Window
         TrayIcon.Source = new BitmapImage(new Uri(file));
     }
 
-    private async void XdebugToggled(object sender, RoutedEventArgs args)
-    {
-        if (!loaded || sender is not ToggleSwitch toggle || viewModel.Status?.Xdebug == toggle.IsOn)
-        {
-            return;
-        }
-        await viewModel.ToggleXdebugCommand.ExecuteAsync(toggle.IsOn);
-    }
-
-    private async void DumpsToggled(object sender, RoutedEventArgs args)
-    {
-        if (!loaded || sender is not ToggleSwitch toggle || viewModel.Status?.Dumps == toggle.IsOn)
-        {
-            return;
-        }
-        await viewModel.ToggleDumpsCommand.ExecuteAsync(toggle.IsOn);
-    }
-
     private void DismissError(InfoBar sender, object args)
     {
         viewModel.DismissError();

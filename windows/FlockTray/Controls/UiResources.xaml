@@ -4,6 +4,7 @@
     <FontFamily x:Key="SymbolsFont">Segoe Fluent Icons, Segoe MDL2 Assets</FontFamily>
     <FontFamily x:Key="MonoFont">Cascadia Mono, Consolas</FontFamily>
     <x:String x:Key="GlyphBug">&#xEBE8;</x:String>
+    <x:String x:Key="GlyphCancel">&#xE711;</x:String>
     <x:String x:Key="GlyphCheck">&#xE73E;</x:String>
     <x:String x:Key="GlyphDocument">&#xE8A5;</x:String>
     <x:String x:Key="GlyphDownload">&#xE896;</x:String>

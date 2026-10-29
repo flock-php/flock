@@ -14,11 +14,15 @@ public sealed class PanelViewModel : ObservableObject, IDisposable
     private readonly RuntimeService model;
     private readonly CollectionSynchronizer<string, PanelSiteRow> siteSynchronizer = new();
     private readonly CollectionSynchronizer<string, PanelServiceRow> serviceSynchronizer = new();
+    private readonly DaemonSwitch xdebug;
+    private readonly DaemonSwitch dumps;
     private bool released;
 
     public PanelViewModel(RuntimeService model)
     {
         this.model = model;
+        xdebug = new DaemonSwitch(() => OnPropertyChanged(nameof(Xdebug)));
+        dumps = new DaemonSwitch(() => OnPropertyChanged(nameof(Dumps)));
         model.Changed += ModelChanged;
         model.Dumps.Changed += DumpsChanged;
         ToggleDumpsCommand = new AsyncRelayCommand<bool>(SetDumpsAsync, _ => !model.Dumps.IsCaptureBusy);
@@ -37,6 +41,32 @@ public sealed class PanelViewModel : ObservableObject, IDisposable
     public RuntimeService Model => model;
     public Status? Status => model.Status;
     public string? Error => model.Error;
+
+    /// <summary>The Xdebug switch, bound two-way: setting it asks the daemon, reading it follows the daemon.</summary>
+    public bool Xdebug
+    {
+        get => xdebug.Show(Status?.Xdebug == true);
+        set
+        {
+            if (value != Xdebug)
+            {
+                ToggleXdebugCommand.Execute(value);
+            }
+        }
+    }
+
+    /// <summary>The dump capture switch, bound two-way like <see cref="Xdebug" />.</summary>
+    public bool Dumps
+    {
+        get => dumps.Show(Status?.Dumps == true);
+        set
+        {
+            if (value != Dumps)
+            {
+                ToggleDumpsCommand.Execute(value);
+            }
+        }
+    }
     public string? ActionError => model.RuntimeError ?? model.ActionError ?? model.Dumps.ActionError;
     public bool IsRunning => model.IsRunning;
     public bool IsDegraded => model.IsDegraded;
@@ -87,9 +117,9 @@ public sealed class PanelViewModel : ObservableObject, IDisposable
     public IRelayCommand OpenSettingsCommand { get; }
     public IRelayCommand QuitCommand { get; }
 
-    public Task SetDumpsAsync(bool enabled) => model.SetDumpsAsync(enabled);
+    public Task SetDumpsAsync(bool enabled) => dumps.ChangeAsync(enabled, model.SetDumpsAsync);
 
-    public Task SetXdebugAsync(bool enabled) => model.SetXdebugAsync(enabled);
+    public Task SetXdebugAsync(bool enabled) => xdebug.ChangeAsync(enabled, model.SetXdebugAsync);
 
     public void OpenSite(string url) => model.Open(url);
 
@@ -114,6 +144,8 @@ public sealed class PanelViewModel : ObservableObject, IDisposable
     {
         RefreshRows();
         OnPropertyChanged(nameof(Status));
+        OnPropertyChanged(nameof(Xdebug));
+        OnPropertyChanged(nameof(Dumps));
         OnPropertyChanged(nameof(Error));
         OnPropertyChanged(nameof(ActionError));
         OnPropertyChanged(nameof(IsRunning));
@@ -284,3 +316,37 @@ public sealed class PanelServiceRow(PanelServiceValue value) : ObservableObject
 }
 
 public sealed record PanelServiceValue(string Id, string Name, string Detail, bool Up);
+
+/// <summary>
+///     Backs a switch bound two-way to daemon state. While a change runs the switch keeps the requested value;
+///     once it ends the switch shows the daemon's state again, so a refused or failed change snaps back.
+/// </summary>
+public sealed class DaemonSwitch(Action notify)
+{
+    private bool? pending;
+    private int generation;
+
+    /// <summary>The value the switch shows: the requested one while a change runs, otherwise <paramref name="actual" />.</summary>
+    public bool Show(bool actual) => pending ?? actual;
+
+    public async Task ChangeAsync(bool value, Func<bool, Task> change)
+    {
+        var current = ++generation;
+        pending = value;
+        try
+        {
+            await change(value);
+        }
+        finally
+        {
+            // A change that ends at once would otherwise notify while the binding is still writing the
+            // switch, and the binding ignores that.
+            await Task.Yield();
+            if (current == generation)
+            {
+                pending = null;
+                notify();
+            }
+        }
+    }
+}

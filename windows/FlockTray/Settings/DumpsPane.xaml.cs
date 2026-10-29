@@ -38,14 +38,6 @@ internal sealed partial class DumpsPane : UserControl, ISettingsPane
         return Task.CompletedTask;
     }
 
-    private async void CaptureToggled(object sender, RoutedEventArgs args)
-    {
-        if (sender is ToggleSwitch toggle && loaded && toggle.IsOn != viewModel.Capturing)
-        {
-            await viewModel.SetDumpsCommand.ExecuteAsync(toggle.IsOn);
-        }
-    }
-
     private void OpenDumps(object sender, RoutedEventArgs args)
     {
         App.Current.Open(WindowKind.Dumps);
