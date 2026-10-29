@@ -42,6 +42,7 @@ public sealed partial class GeneralViewModel : ObservableObject, IDisposable
     public Status? Status => statusValue();
     public string? Error => configuration.Error ?? runtimeErrorValue();
     public bool IsBusy => configuration.IsRunning || isRestarting();
+    public bool IsRestarting => isRestarting();
     public Visibility StatusVisibility => Status is null ? Visibility.Collapsed : Visibility.Visible;
     public string StatusText => Status?.IsDegraded == true ? "Needs attention" : "Running";
     public Brush StatusBrush => Status?.IsDegraded == true ? Ui.Caution : Ui.Success;
@@ -100,6 +101,7 @@ public sealed partial class GeneralViewModel : ObservableObject, IDisposable
         OnPropertyChanged(nameof(Status));
         OnPropertyChanged(nameof(Error));
         OnPropertyChanged(nameof(IsBusy));
+        OnPropertyChanged(nameof(IsRestarting));
         OnPropertyChanged(nameof(StatusVisibility));
         OnPropertyChanged(nameof(StatusText));
         OnPropertyChanged(nameof(StatusBrush));

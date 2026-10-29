@@ -56,7 +56,6 @@ internal sealed partial class GeneralPane : UserControl, ISettingsPane
         {
             UpdateParked();
         }
-        RestartButton.IsEnabled = viewModel.RestartCommand.CanExecute(null);
     }
 
     private void UpdateParked()
@@ -153,11 +152,6 @@ internal sealed partial class GeneralPane : UserControl, ISettingsPane
                  ul, ol { padding-left: 1.4em; } li { margin: .2em 0; } code { font: 12px Consolas, monospace; padding: .1em .3em; border-radius: 3px; background: rgba(128, 128, 128, .18); } img { max-width: 100%; }
                  </style></head><body>{{notes}}</body></html>
                  """;
-    }
-
-    private void RestartClicked(object sender, RoutedEventArgs args)
-    {
-        _ = viewModel.RestartCommand.ExecuteAsync(null);
     }
 
     private void StartupToggled(object sender, RoutedEventArgs args)

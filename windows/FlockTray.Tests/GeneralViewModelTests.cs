@@ -68,6 +68,28 @@ public sealed class GeneralViewModelTests : IDisposable
         Assert.Equal(Visibility.Visible, viewModel.PortsVisibility);
     }
 
+    [Fact]
+    public async Task RestartReEnablesOnceTheRestartHasFinished()
+    {
+        var restarting = false;
+        var finish = new TaskCompletionSource();
+        using var restartable = new GeneralViewModel(configuration, () => finish.Task, () => restarting);
+        restarting = true;
+        var restart = restartable.RestartCommand.ExecuteAsync(null);
+        Assert.True(restartable.IsRestarting);
+        Assert.False(restartable.RestartCommand.CanExecute(null));
+
+        var notified = 0;
+        restartable.RestartCommand.CanExecuteChanged += (_, _) => notified++;
+        restarting = false;
+        finish.SetResult();
+        await restart;
+
+        Assert.False(restartable.IsRestarting);
+        Assert.True(restartable.RestartCommand.CanExecute(null));
+        Assert.True(notified > 0);
+    }
+
     private sealed class Handler : HttpMessageHandler
     {
         public bool FailWrites { get; set; }

@@ -16,9 +16,10 @@
             </Grid.ColumnDefinitions>
             <TextBlock Text="Versions" Style="{StaticResource BodyStrongTextBlockStyle}" />
             <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8">
-                <TextBlock Text="{Binding CheckedText}" Style="{StaticResource CaptionTextBlockStyle}" />
-                <Button Content="Check now" Click="CheckNode" Visibility="{Binding IsChecking, Converter={StaticResource InverseBooleanVisibilityConverter}}" />
-                <ProgressRing Width="14" Height="14" IsActive="True" Visibility="{Binding IsChecking, Converter={StaticResource BooleanVisibilityConverter}}" />
+                <TextBlock Text="{Binding CheckedText}" Style="{StaticResource CaptionTextBlockStyle}" VerticalAlignment="Center" />
+                <Button Command="{Binding CheckCommand}">
+                    <local:BusyContent Text="Check now" BusyText="Checking…" IsBusy="{Binding IsChecking}" />
+                </Button>
             </StackPanel>
         </Grid>
         <ItemsControl ItemsSource="{Binding Versions}">

@@ -1,7 +1,8 @@
 <UserControl
     x:Class="Flock.Tray.GeneralPane"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:local="using:Flock.Tray">
     <StackPanel Spacing="0">
         <StackPanel Spacing="4" Margin="0,0,0,24">
             <TextBlock Text="Daemon" Style="{StaticResource BodyStrongTextBlockStyle}" Margin="1,0,0,6" />
@@ -46,7 +47,9 @@
                         <TextBlock Text="Restarts the daemon and every service it runs." Style="{StaticResource CaptionTextBlockStyle}"
                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
                     </StackPanel>
-                    <Button x:Name="RestartButton" Grid.Column="1" Content="Restart Daemon" Click="RestartClicked" />
+                    <Button Grid.Column="1" Command="{Binding RestartCommand}">
+                        <local:BusyContent Text="Restart Daemon" BusyText="Restarting…" IsBusy="{Binding IsRestarting}" />
+                    </Button>
                 </Grid>
             </Border>
         </StackPanel>

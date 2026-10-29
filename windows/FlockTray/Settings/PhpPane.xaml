@@ -17,9 +17,10 @@
                 </Grid.ColumnDefinitions>
                 <TextBlock Text="PHP-CGI" Style="{StaticResource BodyStrongTextBlockStyle}" />
                 <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8">
-                    <TextBlock Text="{Binding CheckedText}" Style="{StaticResource CaptionTextBlockStyle}" />
-                    <Button Content="Check now" Click="CheckPhp" Visibility="{Binding IsChecking, Converter={StaticResource InverseBooleanVisibilityConverter}}" />
-                    <ProgressRing Width="14" Height="14" IsActive="True" Visibility="{Binding IsChecking, Converter={StaticResource BooleanVisibilityConverter}}" />
+                    <TextBlock Text="{Binding CheckedText}" Style="{StaticResource CaptionTextBlockStyle}" VerticalAlignment="Center" />
+                    <Button Command="{Binding CheckCommand}">
+                        <local:BusyContent Text="Check now" BusyText="Checking…" IsBusy="{Binding IsChecking}" />
+                    </Button>
                 </StackPanel>
             </Grid>
             <ItemsControl ItemsSource="{Binding Versions}">
@@ -89,11 +90,12 @@
                     <ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
                 <TextBlock Text="FrankenPHP" Style="{StaticResource BodyStrongTextBlockStyle}" />
-                <Grid Grid.Column="1">
-                    <Button Content="Check now" Click="CheckFranken"
-                            Visibility="{Binding IsFrankenChecking, Converter={StaticResource InverseBooleanVisibilityConverter}}" />
-                    <ProgressRing Width="14" Height="14" IsActive="True" Visibility="{Binding IsFrankenChecking, Converter={StaticResource BooleanVisibilityConverter}}" />
-                </Grid>
+                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8">
+                    <TextBlock Text="{Binding FrankenCheckedText}" Style="{StaticResource CaptionTextBlockStyle}" VerticalAlignment="Center" />
+                    <Button Command="{Binding FrankenCheckCommand}">
+                        <local:BusyContent Text="Check now" BusyText="Checking…" IsBusy="{Binding IsFrankenChecking}" />
+                    </Button>
+                </StackPanel>
             </Grid>
             <ItemsControl ItemsSource="{Binding Builds}">
                 <ItemsControl.ItemTemplate>
@@ -104,8 +106,10 @@
                                     <ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" />
                                 </Grid.ColumnDefinitions>
                                 <StackPanel Spacing="2">
-                                    <TextBlock Text="{Binding Php}" Style="{StaticResource BodyStrongTextBlockStyle}" />
-                                    <TextBlock Text="{Binding Installed}" Style="{StaticResource CaptionTextBlockStyle}" />
+                                    <TextBlock Text="{Binding DisplayName}" Style="{StaticResource BodyStrongTextBlockStyle}" />
+                                    <TextBlock Text="{Binding DetailText}" Style="{StaticResource CaptionTextBlockStyle}"
+                                               Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                               Visibility="{Binding ShowDetail, Converter={StaticResource BooleanVisibilityConverter}}" />
                                     <local:OperationProgress Text="{Binding JobProgressText}" Value="{Binding JobProgress}"
                                                              IsIndeterminate="{Binding IsJobProgressIndeterminate}"
                                                              Visibility="{Binding HasRunningJob, Converter={StaticResource BooleanVisibilityConverter}}" />
@@ -115,7 +119,7 @@
                                             Visibility="{Binding ShowPrimaryInstall, Converter={StaticResource BooleanVisibilityConverter}}" />
                                     <Button Content="Update" Style="{StaticResource AccentButtonStyle}" Command="{Binding InstallCommand}"
                                             Visibility="{Binding ShowPrimaryUpdate, Converter={StaticResource BooleanVisibilityConverter}}" />
-                                    <Button Content="Uninstall" Command="{Binding UninstallCommand}"
+                                    <Button Content="Uninstall…" Click="UninstallFrankenPhp"
                                             Visibility="{Binding ShowPrimaryUninstall, Converter={StaticResource BooleanVisibilityConverter}}" />
                                     <Button Content="Cancel" Command="{Binding CancelCommand}"
                                             Visibility="{Binding ShowPrimaryCancel, Converter={StaticResource BooleanVisibilityConverter}}" />
@@ -132,8 +136,8 @@
                     </DataTemplate>
                 </ItemsControl.ItemTemplate>
             </ItemsControl>
-            <TextBlock Text="{Binding FrankenCurrent.CheckError}" Foreground="{ThemeResource SystemFillColorCautionBrush}" TextWrapping="Wrap"
-                       Visibility="{Binding FrankenCurrent.CheckError, Converter={StaticResource StringVisibilityConverter}}" />
+            <TextBlock Text="{Binding FrankenCheckErrorText}" Foreground="{ThemeResource SystemFillColorCautionBrush}" TextWrapping="Wrap"
+                       Visibility="{Binding FrankenCheckErrorText, Converter={StaticResource StringVisibilityConverter}}" />
         </StackPanel>
     </StackPanel>
 </UserControl>

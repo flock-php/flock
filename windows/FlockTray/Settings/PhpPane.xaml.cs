@@ -1,6 +1,7 @@
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.Input;
 using Flock.Kit;
 using Flock.Tray.Infrastructure;
 using Flock.Tray.ViewModels;
@@ -71,15 +72,6 @@ internal sealed partial class PhpPane : UserControl, ISettingsPane
         {
             ConfirmPendingLink(activeToken);
         }
-    }
-
-    private void CheckPhp(object sender, RoutedEventArgs args)
-    {
-        _ = phpRows.CheckAsync();
-    }
-    private void CheckFranken(object sender, RoutedEventArgs args)
-    {
-        _ = frankenRows.CheckAsync();
     }
 
     private void ConfirmPendingLink(CancellationToken token)
@@ -233,17 +225,32 @@ internal sealed partial class PhpPane : UserControl, ISettingsPane
                 menu.Items.Add(Item("Show log", () => ShowFrankenLog(row)));
                 menu.Items.Add(Item("Dismiss", () => _ = row.DismissCommand.ExecuteAsync(null)));
             }
-            else if (row.HasJob)
-            {
-                menu.Items.Add(Item("Show log", () => ShowFrankenLog(row)));
-            }
             else
             {
-                if (row.CanUninstall && row.HasUpdate) menu.Items.Add(Item("Uninstall", () => _ = row.UninstallCommand.ExecuteAsync(null)));
+                menu.Items.Add(Item("Show log", () => ShowFrankenLog(row)));
+                if (row.CanUninstall && row.HasUpdate) menu.Items.Add(Item("Uninstall…", () => _ = UninstallFrankenPhpAsync(row)));
             }
             button.Flyout = menu;
             menu.ShowAt(button);
         }
+    }
+
+    private void UninstallFrankenPhp(object sender, RoutedEventArgs args)
+    {
+        if ((sender as FrameworkElement)?.DataContext is FrankenPhpVersionViewModel row)
+        {
+            _ = UninstallFrankenPhpAsync(row);
+        }
+    }
+
+    private async Task UninstallFrankenPhpAsync(FrankenPhpVersionViewModel row)
+    {
+        if (!await window.Confirm($"Uninstall FrankenPHP for PHP {row.Php}?",
+                "Sites that run on FrankenPHP with this version are served by PHP-CGI until it has downloaded again by itself.", "Uninstall"))
+        {
+            return;
+        }
+        await row.UninstallCommand.ExecuteAsync(null);
     }
 
     private void ShowFrankenLog(FrankenPhpVersionViewModel row)
@@ -293,7 +300,13 @@ internal sealed partial class PhpPane : UserControl, ISettingsPane
         public PhpCatalog? Current => php.Current;
         public FrankenPhpState? FrankenCurrent => franken.Current;
         public bool IsChecking => php.IsChecking;
+        public string CheckedText => php.CheckedText;
+        public string CheckErrorText => php.CheckErrorText;
+        public IAsyncRelayCommand CheckCommand => php.CheckCommand;
         public bool IsFrankenChecking => franken.IsChecking;
+        public string FrankenCheckedText => franken.CheckedText;
+        public string FrankenCheckErrorText => franken.CheckErrorText;
+        public IAsyncRelayCommand FrankenCheckCommand => franken.CheckCommand;
         public Visibility FrankenPhpVisibility => franken.Current?.Available == true ? Visibility.Visible : Visibility.Collapsed;
 
         private void Changed(object? sender, PropertyChangedEventArgs args)
@@ -303,6 +316,8 @@ internal sealed partial class PhpPane : UserControl, ISettingsPane
                 OnPropertyChanged(nameof(Builds));
                 OnPropertyChanged(nameof(FrankenCurrent));
                 OnPropertyChanged(nameof(IsFrankenChecking));
+                OnPropertyChanged(nameof(FrankenCheckedText));
+                OnPropertyChanged(nameof(FrankenCheckErrorText));
                 OnPropertyChanged(nameof(FrankenPhpVisibility));
                 return;
             }

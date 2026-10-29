@@ -18,7 +18,8 @@ internal sealed partial class NodePane : UserControl, ISettingsPane
     {
         this.window = window;
         this.model = model;
-        rows = new NodePaneViewModel(model.Node);
+        rows = new NodePaneViewModel(model.Node,
+            () => model.Status?.Defaults?.Node is { IsInstalling: true, Version.Length: > 0 } node ? node.Version : null);
         InitializeComponent();
         DataContext = rows;
         model.Changed += ModelChanged;
@@ -60,15 +61,11 @@ internal sealed partial class NodePane : UserControl, ISettingsPane
 
     private void ModelChanged()
     {
+        rows.DefaultInstallChanged();
         if (active)
         {
             ConfirmPendingLink(activeToken);
         }
-    }
-
-    private void CheckNode(object sender, RoutedEventArgs args)
-    {
-        _ = rows.CheckAsync();
     }
 
     private void OpenNodeActions(object sender, RoutedEventArgs args)
@@ -118,7 +115,7 @@ internal sealed partial class NodePane : UserControl, ISettingsPane
         {
             return;
         }
-        var installing = (model.Node.Current?.Versions ?? []).Where(release => model.Node.IsRunning(release.Major)).Select(release => release.Major).ToList();
+        var installing = rows.Versions.Where(row => row.IsWorking).Select(row => row.Major).ToList();
         if (model.PendingInstall is not { Service: InstallLink.Node } link || link.ResolveNode(rows.Current, installing) is not { } request)
         {
             return;

@@ -18,6 +18,7 @@ public sealed class PhpPaneViewModel : ObservableObject, IDisposable
     public PhpPaneViewModel(PhpService service)
     {
         this.service = service;
+        CheckCommand = new AsyncRelayCommand(() => CheckAsync(), () => !IsChecking);
         service.Changed += RefreshRows;
         RefreshRows();
     }
@@ -26,8 +27,9 @@ public sealed class PhpPaneViewModel : ObservableObject, IDisposable
     public PhpCatalog? Current => service.Current;
     public string? Error => service.Error;
     public bool IsChecking => service.IsChecking;
-    public string CheckedText => Current?.CheckedAt is { } checkedAt ? $"Checked {Ui.Relative(checkedAt)}" : "Not checked yet";
+    public string CheckedText => Current?.CheckedAt is { } checkedAt ? $"Last checked {Ui.Relative(checkedAt)}" : "Not checked yet";
     public string CheckErrorText => Current?.CheckError is { Length: > 0 } error ? $"Couldn't check for updates: {error}" : "";
+    public IAsyncRelayCommand CheckCommand { get; }
 
     public Task RefreshAsync(CancellationToken token = default) => service.RefreshAsync(token);
     public Task<OperationOutcome> CheckAsync(CancellationToken token = default) => service.CheckAsync(token);
@@ -42,6 +44,7 @@ public sealed class PhpPaneViewModel : ObservableObject, IDisposable
         OnPropertyChanged(nameof(IsChecking));
         OnPropertyChanged(nameof(CheckedText));
         OnPropertyChanged(nameof(CheckErrorText));
+        CheckCommand.NotifyCanExecuteChanged();
     }
 }
 /// <summary>Retained state and per-minor actions for one PHP release.</summary>
@@ -159,6 +162,7 @@ public sealed class FrankenPhpPaneViewModel : ObservableObject, IDisposable
     public FrankenPhpPaneViewModel(FrankenPhpService service)
     {
         this.service = service;
+        CheckCommand = new AsyncRelayCommand(() => CheckAsync(), () => !IsChecking);
         service.Changed += RefreshRows;
         RefreshRows();
     }
@@ -167,6 +171,9 @@ public sealed class FrankenPhpPaneViewModel : ObservableObject, IDisposable
     public FrankenPhpState? Current => service.Current;
     public string? Error => service.Error;
     public bool IsChecking => service.IsChecking;
+    public string CheckedText => Current?.CheckedAt is { } checkedAt ? $"Last checked {Ui.Relative(checkedAt)}" : "Not checked yet";
+    public string CheckErrorText => Current?.CheckError is { Length: > 0 } error ? $"Couldn't check for updates: {error}" : "";
+    public IAsyncRelayCommand CheckCommand { get; }
 
     public Task RefreshAsync(CancellationToken token = default) => service.RefreshAsync(token);
     public Task<OperationOutcome> CheckAsync(CancellationToken token = default) => service.CheckAsync(token);
@@ -179,6 +186,9 @@ public sealed class FrankenPhpPaneViewModel : ObservableObject, IDisposable
         OnPropertyChanged(nameof(Current));
         OnPropertyChanged(nameof(Error));
         OnPropertyChanged(nameof(IsChecking));
+        OnPropertyChanged(nameof(CheckedText));
+        OnPropertyChanged(nameof(CheckErrorText));
+        CheckCommand.NotifyCanExecuteChanged();
     }
 }
 
@@ -200,8 +210,11 @@ public sealed class FrankenPhpVersionViewModel : ObservableObject
 
     public string Php => value.Php;
     public FrankenPhpBuild Value => value;
+    public string DisplayName => $"PHP {Php}";
     public string Latest => value.Latest;
     public string Installed => value.Installed;
+    public string DetailText => IsInstalled ? $"FrankenPHP {Installed} (PHP {value.PhpVersion})" : "Not installed · downloads by itself when a site uses it";
+    public bool ShowDetail => !HasRunningJob && !HasFailedJob;
     public bool IsInstalled => value.IsInstalled;
     public bool HasUpdate => value.Update;
     public ComponentJob? Job => value.Job;
@@ -221,7 +234,7 @@ public sealed class FrankenPhpVersionViewModel : ObservableObject
     public bool ShowPrimaryUninstall => CanUninstall && !HasUpdate;
     public bool ShowPrimaryCancel => HasRunningJob;
     public bool ShowPrimaryRetry => HasFailedJob;
-    public bool HasMoreActions => HasJob || (CanUninstall && HasUpdate);
+    public bool HasMoreActions => HasJob || IsInstalled;
     public IAsyncRelayCommand InstallCommand { get; }
     public IAsyncRelayCommand CancelCommand { get; }
     public IAsyncRelayCommand DismissCommand { get; }
@@ -236,6 +249,8 @@ public sealed class FrankenPhpVersionViewModel : ObservableObject
         value = next;
         OnPropertyChanged(nameof(Latest));
         OnPropertyChanged(nameof(Installed));
+        OnPropertyChanged(nameof(DetailText));
+        OnPropertyChanged(nameof(ShowDetail));
         OnPropertyChanged(nameof(IsInstalled));
         OnPropertyChanged(nameof(HasUpdate));
         OnPropertyChanged(nameof(Job));
@@ -267,11 +282,17 @@ public sealed class FrankenPhpVersionViewModel : ObservableObject
 public sealed class NodePaneViewModel : ObservableObject, IDisposable
 {
     private readonly NodeService service;
+    private readonly Func<string?> defaultInstalling;
     private readonly CollectionSynchronizer<string, NodeVersionViewModel> synchronizer = new();
+    private string? installingDefault;
 
-    public NodePaneViewModel(NodeService service)
+    /// <param name="defaultInstalling">The major the first run is installing as the default, or null.</param>
+    public NodePaneViewModel(NodeService service, Func<string?>? defaultInstalling = null)
     {
         this.service = service;
+        this.defaultInstalling = defaultInstalling ?? (() => null);
+        installingDefault = this.defaultInstalling();
+        CheckCommand = new AsyncRelayCommand(() => CheckAsync(), () => !IsChecking);
         service.Changed += RefreshRows;
         RefreshRows();
     }
@@ -281,23 +302,40 @@ public sealed class NodePaneViewModel : ObservableObject, IDisposable
     public string? Error => service.Error;
     public bool IsChecking => service.IsChecking;
     public bool IsEmpty => Current?.Versions.Count == 0;
-    public string CheckedText => Current?.CheckedAt is { } checkedAt ? $"Checked {Ui.Relative(checkedAt)}" : "Not checked yet";
+    public IAsyncRelayCommand CheckCommand { get; }
+    public string CheckedText => Current?.CheckedAt is { } checkedAt ? $"Last checked {Ui.Relative(checkedAt)}" : "Not checked yet";
     public string CheckErrorText => Current?.CheckError is { Length: > 0 } error ? $"Couldn't check for updates: {error}" : "";
 
     public Task RefreshAsync(CancellationToken token = default) => service.RefreshAsync(token);
     public Task<OperationOutcome> CheckAsync(CancellationToken token = default) => service.CheckAsync(token);
     public void Dispose() => service.Changed -= RefreshRows;
 
+    /// <summary>Follows the first run's install of the default; once it's done (or failed), the versions show the result.</summary>
+    public void DefaultInstallChanged()
+    {
+        var installing = defaultInstalling();
+        if (installingDefault is not null && installing != installingDefault)
+        {
+            _ = service.RefreshAsync();
+        }
+        installingDefault = installing;
+        foreach (var row in Versions)
+        {
+            row.Update(row.Value);
+        }
+    }
+
     private void RefreshRows()
     {
         synchronizer.Synchronize(Versions, service.Current?.Versions ?? [], row => row.Major, value => value.Major,
-            value => new NodeVersionViewModel(service, value), (row, value) => row.Update(value));
+            value => new NodeVersionViewModel(service, value, defaultInstalling), (row, value) => row.Update(value));
         OnPropertyChanged(nameof(Current));
         OnPropertyChanged(nameof(Error));
         OnPropertyChanged(nameof(IsChecking));
         OnPropertyChanged(nameof(IsEmpty));
         OnPropertyChanged(nameof(CheckedText));
         OnPropertyChanged(nameof(CheckErrorText));
+        CheckCommand.NotifyCanExecuteChanged();
     }
 }
 
@@ -305,12 +343,14 @@ public sealed class NodePaneViewModel : ObservableObject, IDisposable
 public sealed class NodeVersionViewModel : ObservableObject
 {
     private readonly NodeService service;
+    private readonly Func<string?> defaultInstalling;
     private NodeRelease value;
 
-    public NodeVersionViewModel(NodeService service, NodeRelease value)
+    public NodeVersionViewModel(NodeService service, NodeRelease value, Func<string?>? defaultInstalling = null)
     {
         this.service = service;
         this.value = value;
+        this.defaultInstalling = defaultInstalling ?? (() => null);
         InstallCommand = new AsyncRelayCommand(() => service.InstallAsync(Major), CanRun);
         UpdateNpmCommand = new AsyncRelayCommand(() => service.UpdateNpmAsync(Major), CanRun);
         UninstallCommand = new AsyncRelayCommand(() => service.UninstallAsync(Major), CanRun);
@@ -331,10 +371,11 @@ public sealed class NodeVersionViewModel : ObservableObject
     public bool IsDefault => value.IsDefault;
     public bool IsInstalled => value.IsInstalled;
     public bool HasUpdate => value.Update;
-    public bool IsWorking => service.IsRunning(Major);
+    public bool IsDefaultInstalling => !IsInstalled && defaultInstalling() == Major;
+    public bool IsWorking => service.IsRunning(Major) || IsDefaultInstalling;
     public bool HasRunningJob => IsWorking;
     public bool IsJobProgressIndeterminate => true;
-    public string JobProgressText => service.RunningAction(Major) ?? "Working…";
+    public string JobProgressText => service.RunningAction(Major) ?? (IsDefaultInstalling ? $"Downloading Node.js {Latest}…" : "Working…");
     public bool CanInstall => !IsInstalled && !IsWorking;
     public bool CanUpdate => IsInstalled && HasUpdate && !IsWorking;
     public bool CanMakeDefault => IsInstalled && !IsDefault && !IsWorking;
@@ -367,6 +408,7 @@ public sealed class NodeVersionViewModel : ObservableObject
         OnPropertyChanged(nameof(IsDefault));
         OnPropertyChanged(nameof(IsInstalled));
         OnPropertyChanged(nameof(HasUpdate));
+        OnPropertyChanged(nameof(IsDefaultInstalling));
         OnPropertyChanged(nameof(IsWorking));
         OnPropertyChanged(nameof(HasRunningJob));
         OnPropertyChanged(nameof(IsJobProgressIndeterminate));
@@ -386,5 +428,5 @@ public sealed class NodeVersionViewModel : ObservableObject
         SetDefaultCommand.NotifyCanExecuteChanged();
     }
 
-    private bool CanRun() => !service.IsRunning(Major);
+    private bool CanRun() => !IsWorking;
 }

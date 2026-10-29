@@ -202,6 +202,43 @@ public sealed class VersionServicesTests : IDisposable
     }
 
     [Fact]
+    public async Task NodeRowBusyWhileTheFirstRunInstallsItAsTheDefault()
+    {
+        await using var configuration = new ConfigurationService(client, new OperationRunner());
+        await using var service = new NodeService(client, new OperationRunner(), configuration);
+        string? installing = "22";
+
+        var row = new NodeVersionViewModel(service, new NodeRelease { Major = "22", Latest = "22.1.0" }, () => installing);
+
+        Assert.True(row.IsWorking);
+        Assert.Equal("Downloading Node.js 22.1.0…", row.JobProgressText);
+        Assert.False(row.ShowPrimaryInstall);
+        Assert.False(row.InstallCommand.CanExecute(null));
+
+        installing = null;
+        row.Update(row.Value);
+
+        Assert.False(row.IsWorking);
+        Assert.True(row.ShowPrimaryInstall);
+        Assert.True(row.InstallCommand.CanExecute(null));
+    }
+
+    [Fact]
+    public async Task FrankenPhpRowsNameThePhpVersionAndOfferTheLogOnceInstalled()
+    {
+        await using var service = new FrankenPhpService(client, new OperationRunner());
+
+        var available = new FrankenPhpVersionViewModel(service, new FrankenPhpBuild { Php = "8.4", Latest = "8.4.5" });
+        var installed = new FrankenPhpVersionViewModel(service, new FrankenPhpBuild { Php = "8.4", Installed = "1.9.0", PhpVersion = "8.4.5", Latest = "8.4.5" });
+
+        Assert.Equal("PHP 8.4", available.DisplayName);
+        Assert.Equal("Not installed · downloads by itself when a site uses it", available.DetailText);
+        Assert.False(available.HasMoreActions);
+        Assert.Equal("FrankenPHP 1.9.0 (PHP 8.4.5)", installed.DetailText);
+        Assert.True(installed.HasMoreActions);
+    }
+
+    [Fact]
     public async Task NodeVersionRowsShowAnIndeterminateProgressIndicatorDuringInstallation()
     {
         await using var configuration = new ConfigurationService(client, new OperationRunner());
@@ -237,9 +274,9 @@ public sealed class VersionServicesTests : IDisposable
         await phpRows.RefreshAsync();
         await nodeRows.RefreshAsync();
 
-        Assert.StartsWith("Checked ", phpRows.CheckedText);
+        Assert.StartsWith("Last checked ", phpRows.CheckedText);
         Assert.Equal("Couldn't check for updates: PHP manifest unavailable", phpRows.CheckErrorText);
-        Assert.StartsWith("Checked ", nodeRows.CheckedText);
+        Assert.StartsWith("Last checked ", nodeRows.CheckedText);
         Assert.Equal("Couldn't check for updates: Node manifest unavailable", nodeRows.CheckErrorText);
         phpRows.Dispose();
         nodeRows.Dispose();
