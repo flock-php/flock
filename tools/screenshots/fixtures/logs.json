@@ -1,0 +1,4 @@
+{
+  "services": ["daemon", "web", "postgres", "mysql", "valkey", "php8.5-cgi", "php8.4-cgi"],
+  "sites": ["acme", "blog", "shop"]
+}

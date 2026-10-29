@@ -1,5 +1,5 @@
 # Labels pull requests by the files they change, as .github/labeler.yml says: "documentation" for
-# changes to docs/.
+# PRs that change only docs/. Checked again on every push, and taken off once that's no longer true.
 name: Labeler
 
 on:
@@ -17,3 +17,5 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/labeler@v7
+        with:
+          sync-labels: true

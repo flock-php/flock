@@ -42,9 +42,6 @@ ChangesAssociations=yes
 SignTool=flock
 #endif
 
-[Tasks]
-Name: startup; Description: "Open Flock when I sign in"
-
 [Files]
 Source: "..\dist\FlockTray-{#Arch}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "..\..\dist\windows-{#GoArch}\flock.exe"; DestDir: "{app}"; Flags: ignoreversion
@@ -64,9 +61,6 @@ Type: files; Name: "{app}\Assets\FlockWarning.ico"
 Name: "{userprograms}\Flock"; Filename: "{app}\FlockTray.exe"
 
 [Registry]
-; The same value the app's "Open Flock at sign-in" setting writes (removed again on uninstall). Not
-; on the app's own updates (/RELAUNCH): they keep what the user set in the app.
-Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: string; ValueName: "Flock"; ValueData: """{app}\FlockTray.exe"" --background"; Tasks: startup; Check: not HasParam('/RELAUNCH')
 ; flock://install/<service>/<version> links from the website; the app asks before installing.
 Root: HKCU; Subkey: "Software\Classes\flock"; ValueType: string; ValueName: ""; ValueData: "URL:Flock"; Flags: uninsdeletekey
 Root: HKCU; Subkey: "Software\Classes\flock"; ValueType: string; ValueName: "URL Protocol"; ValueData: ""
@@ -79,20 +73,10 @@ Filename: "{app}\FlockTray.exe"; Description: "Open Flock"; Flags: postinstall n
 Filename: "{app}\FlockTray.exe"; Parameters: "--background"; Flags: nowait; Check: HasParam('/RELAUNCH')
 
 [Code]
-// The running tray app locks its files; an update replaces them, and the new app starts afterwards.
-function PrepareToInstall(var NeedsRestart: Boolean): String;
-var
-  ResultCode: Integer;
-begin
-  Exec(ExpandConstant('{sys}\taskkill.exe'), '/F /IM FlockTray.exe', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
-  if ResultCode = 0 then
-    Sleep(500);
-  Result := '';
-end;
-
 // /PURGE: the app's uninstall dialog, when the user also wants their data deleted.
 // /SKIPFLOCK: `flock uninstall` started this uninstaller after removing Flock itself.
 // /RELAUNCH: the app's updater runs this installer (silently) and wants the app back afterwards.
+// /RESULT=<file>: the app's updater reads from there why setup stopped before installing.
 function HasParam(Name: String): Boolean;
 var
   I: Integer;
@@ -101,6 +85,59 @@ begin
   for I := 1 to ParamCount do
     if CompareText(ParamStr(I), Name) = 0 then
       Result := True;
+end;
+
+// Over a set-up Flock, the new flock.exe first updates what needs administrator rights: the DNS
+// rule, the hosts helper and the CA's trust (Windows asks only when one of them changed). When the
+// user declines, setup stops before replacing anything and the installed version stays as it was.
+function UpdatePrivileged(): String;
+var
+  ResultCode, I: Integer;
+  Lines: TArrayOfString;
+  Flock, Output: String;
+begin
+  Result := '';
+  if not FileExists(ExpandConstant('{userappdata}\Flock\bin\flock.exe')) then
+    Exit;
+  ExtractTemporaryFile('flock.exe');
+  ExtractTemporaryFile('flock-helper.exe');
+  Flock := ExpandConstant('{tmp}\flock.exe');
+  Output := ExpandConstant('{tmp}\privileged.txt');
+  if Exec(ExpandConstant('{cmd}'), '/S /C ""' + Flock + '" install --privileged-only > "' + Output + '" 2>&1"',
+          '', SW_HIDE, ewWaitUntilTerminated, ResultCode) and (ResultCode = 0) then
+    Exit;
+
+  Result := 'the steps that need administrator permission failed';
+  if LoadStringsFromFile(Output, Lines) then
+    for I := 0 to GetArrayLength(Lines) - 1 do
+      if Pos('Error: ', Lines[I]) = 1 then
+        Result := Copy(Lines[I], 8, Length(Lines[I]));
+  if Pos('declined', Result) > 0 then
+    Result := 'Flock needs administrator permission to update its DNS rule, hosts helper or certificate authority. ' +
+              'The update was not installed; Flock stays at its current version.'
+  else
+    Result := 'The update was not installed: ' + Result;
+end;
+
+// The running tray app locks its files; an update replaces them, and the new app starts afterwards.
+function PrepareToInstall(var NeedsRestart: Boolean): String;
+var
+  ResultCode: Integer;
+begin
+  Result := UpdatePrivileged();
+  if Result <> '' then
+  begin
+    if ExpandConstant('{param:RESULT|}') <> '' then
+      SaveStringToFile(ExpandConstant('{param:RESULT|}'), Result, False);
+    // The app's updater waits for setup, except in versions before this check, which quit already.
+    if HasParam('/RELAUNCH') and not CheckForMutexes('Local\Flock.Tray') then
+      Exec(ExpandConstant('{app}\FlockTray.exe'), '--background', '', SW_SHOW, ewNoWait, ResultCode);
+    Exit;
+  end;
+
+  Exec(ExpandConstant('{sys}\taskkill.exe'), '/F /IM FlockTray.exe', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+  if ResultCode = 0 then
+    Sleep(500);
 end;
 
 // Runs at uninstall time, before the app's files go: `flock uninstall` removes the daemon, PATH
@@ -122,6 +159,7 @@ begin
       Exec(ExpandConstant('{app}\flock.exe'), Params, '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
     end;
   end;
+  // The app's "Open Flock at sign-in" (asked in its setup, changed in Settings → General).
   if CurUninstallStep = usPostUninstall then
     RegDeleteValue(HKEY_CURRENT_USER, 'Software\Microsoft\Windows\CurrentVersion\Run', 'Flock');
 end;

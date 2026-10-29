@@ -76,7 +76,8 @@ public static class UpdateFeed
 
     /// <summary>
     /// The update for this app: the newest Windows item the channel allows that runs on this
-    /// Windows version, when it is newer than the running version. Null for a development build.
+    /// Windows version, when it is newer than the running version. A beta takes betas on any
+    /// channel, until the release it leads to. Null for a development build.
     /// </summary>
     public static Item? Pick(IEnumerable<Item> items, AppVersion? current, bool beta, Version osVersion)
     {
@@ -84,6 +85,7 @@ public static class UpdateFeed
         {
             return null;
         }
+        beta |= current.IsBeta;
         var best = items
             .Where(i => i.Os == "windows" && (i.Channel.Length == 0 || (beta && i.Channel == "beta")))
             .Where(i => i.MinimumSystemVersion is null || i.MinimumSystemVersion <= osVersion)

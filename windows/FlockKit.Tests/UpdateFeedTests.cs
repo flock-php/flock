@@ -101,10 +101,15 @@ public class UpdateFeedTests
     }
 
     [Fact]
+    public void BetasGetTheNextBetaOnAnyChannel() =>
+        // Back on stable while running a beta: it keeps getting betas until the release is out.
+        Assert.Equal("1.1.0-beta.2", UpdateFeed.Pick(UpdateFeed.Parse(Feed), AppVersion.Parse("1.1.0-beta.1"), beta: false, Windows11)?.Version.ToString());
+
+    [Fact]
     public void NeverOffersAnOlderVersion()
     {
-        // Back on stable while running a beta: 1.0.1 is older, so there is nothing to install.
-        Assert.Null(UpdateFeed.Pick(UpdateFeed.Parse(Feed), AppVersion.Parse("1.1.0-beta.1"), beta: false, Windows11));
+        // Back on stable while running the newest beta: 1.0.1 is older, so there is nothing to install.
+        Assert.Null(UpdateFeed.Pick(UpdateFeed.Parse(Feed), AppVersion.Parse("1.1.0-beta.2"), beta: false, Windows11));
         Assert.Null(UpdateFeed.Pick(UpdateFeed.Parse(Feed), AppVersion.Parse("1.0.1"), beta: false, Windows11));
     }
 
@@ -162,6 +167,12 @@ public class AppVersionTests
         Assert.True(AppVersion.Parse("1.1.0")! > AppVersion.Parse("1.1.0-beta.10")!);
         Assert.True(AppVersion.Parse("1.1.0-beta.1")! > AppVersion.Parse("1.0.9")!);
         Assert.Equal(0, AppVersion.Parse("1.1.0")!.CompareTo(AppVersion.Parse("1.1.0")));
+    }
+
+    [Fact]
+    public void StableSortsAboveTheLargestBetaNumber()
+    {
+        Assert.True(AppVersion.Parse("1.1.0")! > AppVersion.Parse("1.1.0-beta.2147483647")!);
     }
 }
 

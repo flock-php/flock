@@ -20,6 +20,8 @@ import (
 //	isolate / unisolate   set for the site in Flock, on this machine only
 //	pin / unpin           written into the project (.flockrc, .nvmrc), committed with it
 //	                      and otherwise Flock's default
+//
+// pin and unpin also take the document root (see docroot.go).
 
 func toolArg(tool string) error {
 	if tool != project.PHP && tool != project.Node {
@@ -167,14 +169,19 @@ func newIsolatedCommand() *cobra.Command {
 func newPinCommand() *cobra.Command {
 	var siteName string
 	cmd := &cobra.Command{
-		Use:   "pin <php|node> [version]",
-		Short: "Write a PHP or Node.js version into the project (.flockrc, .nvmrc), for everyone working on it",
+		Use:   "pin <php|node|root> [version|folder]",
+		Short: "Write a PHP or Node.js version, or the document root, into the project (.flockrc, .nvmrc), for everyone working on it",
 		Long: "PHP goes into .flockrc; Node.js into the file the project already uses (.flockrc's node=,\n" +
 			".node-version or .nvmrc), else a new .nvmrc. Node.js is pinned by major, so patch updates just work.\n" +
-			"Without a version, the one the site uses now is pinned. A site's isolation for the tool is lifted.",
+			"Without a version, the one the site uses now is pinned. A site's isolation for the tool is lifted.\n" +
+			"`flock pin root <folder>` writes the folder the site is served from (relative to the project,\n" +
+			"e.g. src/www) into .flockrc; the root set on this machine (`flock root`) is lifted.",
 		Args: cobra.RangeArgs(1, 2),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			tool := args[0]
+			if tool == project.Root {
+				return pinRoot(cmd, siteName, args[1:])
+			}
 			if err := toolArg(tool); err != nil {
 				return err
 			}
@@ -226,13 +233,15 @@ func newPinCommand() *cobra.Command {
 func newUnpinCommand() *cobra.Command {
 	var siteName string
 	cmd := &cobra.Command{
-		Use:   "unpin <php|node>",
-		Short: "Remove a PHP or Node.js version from the project's files (.flockrc, and for Node .nvmrc / .node-version)",
+		Use:   "unpin <php|node|root>",
+		Short: "Remove a PHP or Node.js version, or the document root, from the project's files (.flockrc, and for Node .nvmrc / .node-version)",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			tool := args[0]
-			if err := toolArg(tool); err != nil {
-				return err
+			if tool != project.Root {
+				if err := toolArg(tool); err != nil {
+					return err
+				}
 			}
 			s, err := load()
 			if err != nil {
@@ -247,12 +256,19 @@ func newUnpinCommand() *cobra.Command {
 				return err
 			}
 			if len(changed) == 0 {
+				if tool == project.Root {
+					return fmt.Errorf("no document root is pinned in %s", dir)
+				}
 				return fmt.Errorf("no %s version is pinned in %s", toolName(tool), dir)
 			}
 			if err := s.commit(cmd.Context(), cmd.ErrOrStderr()); err != nil {
 				return err
 			}
 			for _, file := range changed {
+				if tool == project.Root {
+					cmd.Printf("removed the document root from %s\n", file)
+					continue
+				}
 				cmd.Printf("removed the %s version from %s\n", toolName(tool), file)
 			}
 			return nil
@@ -320,9 +336,11 @@ func describeSource(v project.Version) string {
 
 // pinnedValue reads back what a pin wrote, for the confirmation message.
 func pinnedValue(file, tool string) string {
-	v := project.NodeFor(config.Default(), nil, filepath.Dir(file))
-	if tool == project.PHP {
-		v = project.PHPFor(config.Default(), nil, filepath.Dir(file))
+	switch tool {
+	case project.PHP:
+		return project.PHPFor(config.Default(), nil, filepath.Dir(file)).Pinned
+	case project.Root:
+		return project.RootFor(&config.Site{Path: filepath.Dir(file)}).Pinned
 	}
-	return v.Pinned
+	return project.NodeFor(config.Default(), nil, filepath.Dir(file)).Pinned
 }

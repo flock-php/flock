@@ -1,5 +1,5 @@
 # Outside contributors open an issue first; a PR from them stays open only when it targets develop
-# and references an open issue that a maintainer has approved for it:
+# and references an open issue, here or in flock-php/binaries, that a maintainer has approved for it:
 #   - labelled "help wanted": anyone may send a PR for it, or
 #   - assigned to the PR's author: only they may (only maintainers can assign issues).
 # A PR that changes only files in docs/ needs no issue; it's checked again on every push, so it
@@ -72,27 +72,31 @@ jobs:
             }
             const pushed = context.payload.action === 'synchronize';
 
-            // Issues the PR body references: "#123" or a link to one of this repo's issues.
+            // Issues the PR body references: "#123", or one in this repo or the other Flock repo
+            // ("flock-php/binaries#123" or a link to it). Work on Flock often spans both, so an
+            // approved issue in either one counts.
+            const REPOS = ['flock', 'binaries'];
             const body = pr.body ?? '';
-            const numbers = new Set();
-            for (const m of body.matchAll(/(?:^|[^\w/])#(\d+)\b/g)) numbers.add(Number(m[1]));
-            const link = new RegExp(`github\\.com/${owner}/${repo}/issues/(\\d+)`, 'gi');
-            for (const m of body.matchAll(link)) numbers.add(Number(m[1]));
+            const refs = new Map();
+            const add = (r, n) => refs.set(`${r}#${n}`, { repo: r, issue_number: Number(n) });
+            for (const m of body.matchAll(/(?:^|[^\w/])#(\d+)\b/g)) add(repo, m[1]);
+            const ref = new RegExp(`${owner}/(${REPOS.join('|')})(?:#|/issues/)(\\d+)\\b`, 'gi');
+            for (const m of body.matchAll(ref)) add(m[1].toLowerCase(), m[2]);
 
-            for (const issue_number of numbers) {
+            for (const [name, { repo: issueRepo, issue_number }] of refs) {
               let issue;
               try {
-                ({ data: issue } = await github.rest.issues.get({ owner, repo, issue_number }));
+                ({ data: issue } = await github.rest.issues.get({ owner, repo: issueRepo, issue_number }));
               } catch {
                 continue;
               }
               if (issue.pull_request || issue.state !== 'open') continue;
               if (issue.labels.some(l => l.name === OPEN_TO_ANYONE)) {
-                core.info(`#${issue_number} is labelled "${OPEN_TO_ANYONE}"`);
+                core.info(`${name} is labelled "${OPEN_TO_ANYONE}"`);
                 return;
               }
               if (issue.assignees.some(a => a.login === author)) {
-                core.info(`#${issue_number} is assigned to ${author}`);
+                core.info(`${name} is assigned to ${author}`);
                 return;
               }
             }

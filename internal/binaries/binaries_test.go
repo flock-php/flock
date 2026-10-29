@@ -230,7 +230,7 @@ func TestEmbeddedKeyAndPlatforms(t *testing.T) {
 	if len(PublicKey()) != ed25519.PublicKeySize {
 		t.Fatal("embedded key")
 	}
-	for _, c := range [][3]string{{"darwin", "arm64", "macos-arm64"}, {"darwin", "amd64", ""}, {"windows", "amd64", "windows-x64"}, {"linux", "amd64", ""}} {
+	for _, c := range [][3]string{{"darwin", "arm64", "macos-arm64"}, {"darwin", "amd64", ""}, {"windows", "amd64", "windows-x64"}, {"linux", "amd64", "linux-x64"}, {"linux", "arm64", "linux-arm64"}, {"linux", "386", ""}} {
 		if got := platform(c[0], c[1]); got != c[2] {
 			t.Errorf("%s/%s: %q, want %q", c[0], c[1], got, c[2])
 		}

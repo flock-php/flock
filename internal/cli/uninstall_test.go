@@ -18,9 +18,11 @@ func fakeRoot(t *testing.T) (root, cache string) {
 	for _, f := range []string{
 		"config.json", "api.json", "hosts.txt", "notes.txt",
 		"bin/flock.exe", "php/8.4/bin/php.exe", "node/22.11.0/node.exe", "certs/ca.key", "log/daemon.log",
-		"mail/1.eml", "tools/composer.phar",
+		"mail/1.eml", "tools/composer.phar", "frankenphp/8.4/frankenphp.exe", "cloudflared/cloudflared.exe",
 		"services/postgres/18.6/bin/postgres.exe", "services/postgres/data/PG_VERSION",
 		"services/valkey/8.1/valkey-server", "services/postgres/18.6-build1/bin/psql.exe",
+		"services/postgres/extensions/postgis/18/3.6.4-build1/lib/postgis-3.so",
+		"services/postgres/extensions/custom/18/lib/hello.so",
 	} {
 		path := filepath.Join(root, f)
 		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
@@ -53,11 +55,11 @@ func TestUninstallKeepsSettingsAndDatabases(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := []string{"config.json", "notes.txt", "services/postgres/data/PG_VERSION"}
+	want := []string{"config.json", "notes.txt", "services/postgres/data/PG_VERSION", "services/postgres/extensions/custom/18/lib/hello.so"}
 	if got := remaining(t, root); !slices.Equal(got, want) {
 		t.Fatalf("left %v, want %v", got, want)
 	}
-	if !slices.Equal(kept, []string{filepath.Join(root, "config.json"), filepath.Join(root, "services", "postgres", "data")}) {
+	if !slices.Equal(kept, []string{filepath.Join(root, "config.json"), filepath.Join(root, "services", "postgres", "data"), filepath.Join(root, "services", "postgres", "extensions", "custom")}) {
 		t.Fatalf("reported kept %v", kept)
 	}
 	if _, err := os.Stat(cache); !os.IsNotExist(err) {
@@ -96,5 +98,25 @@ func TestUninstallPurgeOnlyDeletesWhatFlockKnows(t *testing.T) {
 	// A file Flock didn't create stays, and so does the folder holding it.
 	if got := remaining(t, root); !slices.Equal(got, []string{"notes.txt"}) {
 		t.Fatalf("left %v", got)
+	}
+}
+
+// Finder's .DS_Store (Explorer's Thumbs.db, desktop.ini) doesn't keep the data dir around.
+func TestUninstallPurgeRemovesTheDataDir(t *testing.T) {
+	root, _ := fakeRoot(t)
+	if err := os.Remove(filepath.Join(root, "notes.txt")); err != nil {
+		t.Fatal(err)
+	}
+	for _, f := range clutter {
+		if err := os.WriteFile(filepath.Join(root, f), nil, 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	if _, err := cleanUp(root, true); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(root); !os.IsNotExist(err) {
+		t.Fatalf("the data dir must be removed, left %v", remaining(t, root))
 	}
 }

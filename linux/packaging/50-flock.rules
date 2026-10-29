@@ -1,0 +1,8 @@
+// Managed by Flock
+polkit.addRule(function(action, subject) {
+    if (action.id == "org.freedesktop.systemd1.manage-units" &&
+        action.lookup("unit") == "flock@" + subject.user + ".service" &&
+        ["start", "stop", "restart"].indexOf(action.lookup("verb")) >= 0) {
+        return polkit.Result.YES;
+    }
+});

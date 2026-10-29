@@ -20,7 +20,7 @@ import (
 const composerURL = "https://getcomposer.org/download/latest-stable/composer.phar"
 
 func newInstallCommand() *cobra.Command {
-	var skipPrivileged bool
+	var skipPrivileged, privilegedOnly, ignoreConflicts bool
 
 	cmd := &cobra.Command{
 		Use:   "install",
@@ -31,12 +31,43 @@ func newInstallCommand() *cobra.Command {
 			if err != nil {
 				return err
 			}
+
+			// Another local environment on Flock's ports would leave it half working. Only the first
+			// install checks: an update runs this command too, and the daemon reports busy ports.
+			if !serviceInstalled() && !privilegedOnly && !ignoreConflicts {
+				if found := findConflicts(s); len(found) > 0 {
+					return conflictsError(found)
+				}
+			}
+
+			// With privilegedFirst, the steps that need an administrator come before anything is
+			// replaced: declining them leaves the installed version as it was.
+			var ca *certs.CA
+			if privilegedFirst {
+				if ca, err = ensureCA(cmd, s); err != nil {
+					return err
+				}
+				if !skipPrivileged {
+					if err := ensurePrivileged(cmd, s, "", ca); err != nil {
+						return err
+					}
+				}
+				if privilegedOnly {
+					return nil
+				}
+			}
+
+			// Linux: a beta's package put the repository on its beta suite; the channel follows.
+			adoptRepoChannel(s.cfg)
 			if err := s.cfg.Save(s.root); err != nil {
 				return err
 			}
 
 			bin, err := installBinary(s.root)
 			if err != nil {
+				return fmt.Errorf("install flock binary: %w", err)
+			}
+			if err := installHelperBinary(bin); err != nil {
 				return fmt.Errorf("install flock binary: %w", err)
 			}
 			cmd.Printf("✓ flock binary → %s\n", bin)
@@ -51,26 +82,32 @@ func newInstallCommand() *cobra.Command {
 			}
 			cmd.Println("✓ composer")
 
-			ca, err := certs.Ensure(filepath.Join(s.root, "certs"), s.cfg.TLD)
-			if err != nil {
-				return err
+			if !privilegedFirst {
+				if ca, err = ensureCA(cmd, s); err != nil {
+					return err
+				}
 			}
-			cmd.Printf("✓ local certificate authority (%s)\n", ca.Fingerprint())
 
 			// Flock's shims first, then the commands of the default Node.js version's global packages.
 			if err := addToShellPath(filepath.Join(s.root, "bin"), node.GlobalBin(node.CurrentGlobalDir(s.root))); err != nil {
 				cmd.Printf("! could not update your shell profile: %v\n", err)
 			}
 
+			// Until the first install gets through its privileged steps, Flock isn't set up: the apps
+			// take a registered daemon for a finished setup (Installation.isSetUp, IsSetUp).
+			firstInstall := !serviceInstalled()
 			if err := installService(s.root, bin); err != nil {
 				return fmt.Errorf("install background service: %w", err)
 			}
-			cmd.Println("✓ daemon runs in the background and starts at login")
+			cmd.Println("✓ daemon runs in the background and starts " + serviceStarts)
 
-			if skipPrivileged {
+			if skipPrivileged || privilegedFirst {
 				return nil
 			}
 			if err := ensurePrivileged(cmd, s, bin, ca); err != nil {
+				if firstInstall {
+					_ = uninstallService()
+				}
 				return err
 			}
 			// The daemon started before the privileged steps and still reports what was missing
@@ -81,11 +118,28 @@ func newInstallCommand() *cobra.Command {
 	}
 
 	cmd.Flags().BoolVar(&skipPrivileged, "skip-privileged", false, "skip the steps that need an administrator password")
+	cmd.Flags().BoolVar(&ignoreConflicts, "ignore-conflicts", false, "set up even when other programs use Flock's ports (see `flock conflicts`)")
+	if privilegedFirst {
+		// The installer checks these before it replaces the app (see windows/installer/Flock.iss).
+		cmd.Flags().BoolVar(&privilegedOnly, "privileged-only", false, "only the steps that need an administrator")
+		_ = cmd.Flags().MarkHidden("privileged-only")
+	}
 	return cmd
 }
 
+// ensureCA creates Flock's certificate authority unless it exists.
+func ensureCA(cmd *cobra.Command, s *state) (*certs.CA, error) {
+	ca, err := certs.Ensure(filepath.Join(s.root, "certs"), s.cfg.TLD)
+	if err != nil {
+		return nil, err
+	}
+	cmd.Printf("✓ local certificate authority (%s)\n", ca.Fingerprint())
+	return ca, nil
+}
+
 // installBinary copies the running flock executable to <root>/bin so the shims and the service
-// keep working when the original moves (e.g. a rebuilt dev binary).
+// keep working when the original moves (e.g. a rebuilt dev binary). The one from the Linux
+// package is linked instead (linkPackaged).
 func installBinary(root string) (string, error) {
 	self, err := os.Executable()
 	if err != nil {
@@ -101,6 +155,9 @@ func installBinary(root string) (string, error) {
 	}
 	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
 		return "", err
+	}
+	if linked, err := linkPackaged(self, dst); linked || err != nil {
+		return dst, err
 	}
 
 	data, err := os.ReadFile(self)

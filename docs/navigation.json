@@ -1,0 +1,52 @@
+[
+  {
+    "section": "Getting started",
+    "pages": [
+      { "slug": "introduction", "title": "Introduction" },
+      { "slug": "installation", "title": "Installation" },
+      { "slug": "quick-start", "title": "Quick start" }
+    ]
+  },
+  {
+    "section": "Sites",
+    "pages": [
+      { "slug": "sites", "title": "Linking & parking" },
+      { "slug": "domains", "title": "Domains & subdomains" },
+      { "slug": "https", "title": "HTTPS" },
+      { "slug": "sharing", "title": "Sharing" }
+    ]
+  },
+  {
+    "section": "Runtimes",
+    "pages": [
+      { "slug": "php", "title": "PHP" },
+      { "slug": "node", "title": "Node.js" },
+      { "slug": "project-versions", "title": "Per-project versions" }
+    ]
+  },
+  {
+    "section": "Services",
+    "pages": [
+      { "slug": "services", "title": "Databases & services" },
+      { "slug": "postgres", "title": "PostgreSQL" }
+    ]
+  },
+  {
+    "section": "Tools",
+    "pages": [
+      { "slug": "mail", "title": "Mail" },
+      { "slug": "dumps", "title": "Dumps" },
+      { "slug": "xdebug", "title": "Xdebug" },
+      { "slug": "logs", "title": "Logs" },
+      { "slug": "ai", "title": "AI agents" }
+    ]
+  },
+  {
+    "section": "Reference",
+    "pages": [
+      { "slug": "cli", "title": "CLI reference" },
+      { "slug": "configuration", "title": "Configuration" },
+      { "slug": "uninstalling", "title": "Uninstalling" }
+    ]
+  }
+]

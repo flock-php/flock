@@ -1,0 +1,18 @@
+# For running from the source tree: Ubuntu's AppIndicator extension searches only the tray's
+# IconThemePath (data/icons), so it needs the theme's directories. Packages install the icons into
+# the system's hicolor theme instead.
+[Icon Theme]
+Name=Hicolor
+Directories=scalable/apps,symbolic/apps
+
+[scalable/apps]
+Size=128
+MinSize=8
+MaxSize=512
+Type=Scalable
+
+[symbolic/apps]
+Size=16
+MinSize=8
+MaxSize=512
+Type=Scalable

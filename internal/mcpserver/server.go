@@ -34,7 +34,9 @@ type Daemon interface {
 
 	SetServiceRunning(ctx context.Context, id string, on bool) ([]api.Service, error)
 	InstallService(ctx context.Context, id, line string, port int) (api.Catalog, error)
-	InstallPostgres(ctx context.Context, major string) (api.PostgresVersions, error)
+	InstallPostgres(ctx context.Context, major string, extensions ...string) (api.PostgresVersions, error)
+	PostgresExtensions(ctx context.Context, major string) (api.PostgresExtensions, error)
+	InstallPostgresExtension(ctx context.Context, major, name string) (api.PostgresExtensions, error)
 	InstallPHP(ctx context.Context, minor string) (api.PHPVersions, error)
 	InstallNode(ctx context.Context, major string) (api.NodeVersions, error)
 
@@ -115,7 +117,7 @@ func (s *server) instructions(ctx context.Context) string {
 - Run php, composer, node and npm as usual: Flock's shims pick the versions the project uses.
 - When code uses a PHP extension (imagick, intl, ...), require it in composer.json ("composer require ext-<name>:*"). php_extensions shows what the project requires and what Flock's PHP has.
 - Mail the app sends is caught by Flock, not delivered: read it with list_mail and read_mail.
-- To debug: get_errors (the Laravel log and PHP errors), get_dumps (dump() and dd() output) and service_logs.
+- To debug: get_errors (the Laravel log and PHP errors), get_dumps (dump() and dd() output), get_events (the queries, logs, views, jobs and requests a page or command ran) and service_logs.
 - If other guidelines describe a different local development server, follow them only when Flock isn't the one serving the project.`)
 	return b.String()
 }

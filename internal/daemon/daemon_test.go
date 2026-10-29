@@ -2,20 +2,30 @@ package daemon
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"io"
 	"net"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"testing"
 	"time"
 
 	"flock/internal/api"
+	"flock/internal/binaries"
 	"flock/internal/config"
 	"flock/internal/paths"
 )
+
+// TestMain keeps the daemons offline: without the package manifest, the first run doesn't
+// download PHP and Node.js, and versions count as offered.
+func TestMain(m *testing.M) {
+	binaries.Bases = nil
+	os.Exit(m.Run())
+}
 
 // shortTempDir keeps the socket path under macOS's ~104 byte AF_UNIX limit,
 // which t.TempDir() under /var/folders can exceed.
@@ -31,16 +41,28 @@ func shortTempDir(t *testing.T) string {
 	return dir
 }
 
+// freePort returns a port that's free for TCP and UDP: Caddy also listens for HTTP/3 over
+// UDP, and Windows can reserve a port for UDP that's free for TCP.
 func freePort(t *testing.T) int {
 	t.Helper()
 
-	ln, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer ln.Close()
+	for range 20 {
+		ln, err := net.Listen("tcp", "127.0.0.1:0")
+		if err != nil {
+			t.Fatal(err)
+		}
+		port := ln.Addr().(*net.TCPAddr).Port
+		pc, err := net.ListenPacket("udp", "127.0.0.1:"+strconv.Itoa(port))
+		ln.Close()
+		if err == nil {
+			pc.Close()
 
-	return ln.Addr().(*net.TCPAddr).Port
+			return port
+		}
+	}
+	t.Fatal("no port is free for both TCP and UDP")
+
+	return 0
 }
 
 // testRoot writes a config.json that only uses free high ports.
@@ -49,6 +71,7 @@ func testRoot(t *testing.T, mutate func(*config.Config)) (string, *config.Config
 
 	root := shortTempDir(t)
 	cfg := config.Default()
+	cfg.DefaultPHP, cfg.DefaultNode = "8.5", "22" // as after the first run
 	cfg.Ports = config.Ports{HTTP: freePort(t), HTTPS: freePort(t), DNS: freePort(t), SMTP: freePort(t), Postgres: freePort(t)}
 	if mutate != nil {
 		mutate(cfg)
@@ -103,6 +126,46 @@ func TestStatusReportsRunningServices(t *testing.T) {
 	}
 }
 
+func TestStatusListsValkeyOnce(t *testing.T) {
+	root, _ := testRoot(t, func(c *config.Config) {
+		c.Services.SetExtra("valkey", config.Extra{Version: "9.1.2", Port: freePort(t)})
+	})
+	client := startDaemon(t, root)
+
+	status, err := client.Status(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	body, err := json.Marshal(status)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var listed struct {
+		Valkey string `json:"valkey"`
+		Extras []struct {
+			ID string `json:"id"`
+		} `json:"extras"`
+	}
+	if err := json.Unmarshal(body, &listed); err != nil {
+		t.Fatal(err)
+	}
+
+	count := 0
+	if listed.Valkey != "" {
+		count++
+	}
+	for _, x := range listed.Extras {
+		if x.ID == "valkey" {
+			count++
+		}
+	}
+	if count != 1 {
+		t.Fatalf("valkey listed %d times: %s", count, body)
+	}
+}
+
 func TestUnknownHostsGetTheCatchAllPage(t *testing.T) {
 	root, cfg := testRoot(t, nil)
 	startDaemon(t, root)
@@ -136,6 +199,45 @@ func TestReloadReportsSitesWithMissingPHP(t *testing.T) {
 	}
 	if len(status.Sites) != 1 || status.Sites[0].Problem != "PHP 7.0 is not installed" {
 		t.Fatalf("unexpected sites: %+v", status.Sites)
+	}
+}
+
+func TestTheFirstRunWaitsForTheDefaultsAndSaysSo(t *testing.T) {
+	root, cfg := testRoot(t, func(cfg *config.Config) { cfg.DefaultPHP, cfg.DefaultNode = "", "" })
+	cfg.Upsert(config.Site{Name: "app", Path: t.TempDir()})
+	if err := cfg.Save(root); err != nil {
+		t.Fatal(err)
+	}
+	client := startDaemon(t, root)
+
+	status, err := client.Reload(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Offline there is no manifest yet to pick the versions from.
+	if d := status.Defaults; d == nil || d.PHP.State != api.DefaultWaiting || d.Node.State != api.DefaultWaiting {
+		t.Fatalf("defaults: %+v", status.Defaults)
+	}
+	if len(status.Sites) != 1 || status.Sites[0].Problem != "PHP is being installed" {
+		t.Fatalf("sites: %+v", status.Sites)
+	}
+
+	// The site's name gets the page that says PHP is coming, not "not linked". The first run's
+	// background work reloads the web server meanwhile, which can drop a connection.
+	req, _ := http.NewRequest(http.MethodGet, "http://127.0.0.1:"+strconv.Itoa(cfg.Ports.HTTP)+"/", nil)
+	req.Host = "app.test"
+	var resp *http.Response
+	deadline := time.Now().Add(5 * time.Second)
+	for resp, err = http.DefaultClient.Do(req); err != nil; resp, err = http.DefaultClient.Do(req) {
+		if time.Now().After(deadline) {
+			t.Fatal(err)
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(resp.Body)
+	if !strings.Contains(string(body), "Installing PHP") || strings.Contains(string(body), "Not linked") {
+		t.Fatalf("got %d %q", resp.StatusCode, body)
 	}
 }
 
@@ -213,6 +315,45 @@ func TestReloadMovesServicesToNewPorts(t *testing.T) {
 	if status.Mail != "127.0.0.1:"+strconv.Itoa(cfg.Ports.SMTP) {
 		t.Fatalf("mail did not move: %s (warnings %v)", status.Mail, status.Warnings)
 	}
+}
+
+func TestFoldersInParkedPathsAreFollowed(t *testing.T) {
+	projectWatchInterval = 50 * time.Millisecond
+	t.Cleanup(func() { projectWatchInterval = 3 * time.Second })
+
+	parked := t.TempDir()
+	root, _ := testRoot(t, func(cfg *config.Config) { cfg.Parked = []string{parked} })
+	client := startDaemon(t, root)
+
+	hasSite := func(name string) bool {
+		status, _ := client.Status(context.Background())
+		for _, s := range status.Sites {
+			if s.Name == name {
+				return true
+			}
+		}
+		return false
+	}
+	waitFor := func(want bool) {
+		t.Helper()
+		deadline := time.Now().Add(5 * time.Second)
+		for hasSite("acme") != want {
+			if time.Now().After(deadline) {
+				t.Fatalf("acme listed = %v, want %v", !want, want)
+			}
+			time.Sleep(20 * time.Millisecond)
+		}
+	}
+
+	if err := os.Mkdir(filepath.Join(parked, "acme"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	waitFor(true)
+
+	if err := os.Remove(filepath.Join(parked, "acme")); err != nil {
+		t.Fatal(err)
+	}
+	waitFor(false)
 }
 
 func containsText(list []string, needle string) bool {

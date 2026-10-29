@@ -3,7 +3,9 @@ package api
 import (
 	"encoding/json"
 	"fmt"
+	"net"
 	"net/http"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -21,6 +23,7 @@ func (stubPGService) Apply(string, bool) error { return nil }
 func (stubPGService) Running() bool            { return false }
 func (stubPGService) Port() int                { return 5432 }
 func (stubPGService) Live() bool               { return false }
+func (stubPGService) Reload() error            { return nil }
 
 func pgBackend(t *testing.T) *fakeBackend {
 	t.Helper()
@@ -56,7 +59,7 @@ func TestPostgresVersionsEndpoints(t *testing.T) {
 		t.Fatalf("got %s", body)
 	}
 	first := v.Majors[0]
-	for _, key := range []string{"major", "installed", "latest", "update", "size", "prerelease", "yanked", "active", "has_data", "data_size", "eol", "busy"} {
+	for _, key := range []string{"major", "installed", "latest", "update", "size", "prerelease", "yanked", "active", "has_data", "data_size", "eol", "busy", "extensions"} {
 		if _, ok := first[key]; !ok {
 			t.Fatalf("missing %s in %v", key, first)
 		}
@@ -87,6 +90,53 @@ func TestPostgresVersionsEndpoints(t *testing.T) {
 	none := serve(t, &fakeBackend{root: t.TempDir()}, "")
 	if resp, _ := call(t, "GET", none.URL+"/v1/postgres/versions", "", ""); resp.StatusCode != http.StatusNotImplemented {
 		t.Fatalf("no manager: %d", resp.StatusCode)
+	}
+}
+
+func TestPostgresExtensionsEndpoints(t *testing.T) {
+	b := pgBackend(t)
+	srv := serve(t, b, "")
+	if resp, body := call(t, "POST", srv.URL+"/v1/postgres/check", "", ""); resp.StatusCode != http.StatusOK {
+		t.Fatalf("check: %d %s", resp.StatusCode, body)
+	}
+
+	resp, body := call(t, "GET", srv.URL+"/v1/postgres/versions/18/extensions", "", "")
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("%d %s", resp.StatusCode, body)
+	}
+	var v struct {
+		Major      string           `json:"major"`
+		CustomDir  string           `json:"custom_dir"`
+		Extensions []map[string]any `json:"extensions"`
+		Custom     []map[string]any `json:"custom"`
+	}
+	if err := json.Unmarshal([]byte(body), &v); err != nil {
+		t.Fatal(err)
+	}
+	if v.Major != "18" || v.CustomDir != postgres.CustomDir(b.root, "18") || len(v.Extensions) != len(postgres.Extensions) || v.Custom == nil {
+		t.Fatalf("got %s", body)
+	}
+	if _, err := os.Stat(filepath.Join(v.CustomDir, "README.txt")); err != nil {
+		t.Fatalf("custom folder not created: %v", err)
+	}
+	for _, key := range []string{"name", "title", "description", "creates", "license", "preload", "supported", "installed", "latest", "update", "discontinued", "size", "prerelease", "yanked", "busy"} {
+		if _, ok := v.Extensions[0][key]; !ok {
+			t.Fatalf("missing %s in %v", key, v.Extensions[0])
+		}
+	}
+
+	for _, c := range []struct {
+		method, path string
+		want         int
+	}{
+		{"GET", "/v1/postgres/versions/abc/extensions", http.StatusBadRequest},
+		{"POST", "/v1/postgres/versions/18/extensions/nope/install", http.StatusBadRequest},
+		{"DELETE", "/v1/postgres/versions/18/extensions/postgis", http.StatusConflict},
+	} {
+		resp, body := call(t, c.method, srv.URL+c.path, "", "")
+		if resp.StatusCode != c.want || !strings.Contains(body, `"error"`) {
+			t.Fatalf("%s %s: %d %s", c.method, c.path, resp.StatusCode, body)
+		}
 	}
 }
 
@@ -143,6 +193,16 @@ func TestCatalogEndpoints(t *testing.T) {
 	}
 	if resp, body := call(t, "PATCH", srv.URL+"/v1/services/postgres", "", `{"port":3308}`); resp.StatusCode != http.StatusBadRequest || !strings.Contains(body, "mariadb") {
 		t.Fatalf("PostgreSQL on MariaDB's port: %d %s", resp.StatusCode, body)
+	}
+	// A port another program listens on is refused, naming the program.
+	other, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer other.Close()
+	busy := other.Addr().(*net.TCPAddr).Port
+	if resp, body := call(t, "PATCH", srv.URL+"/v1/services/mariadb", "", fmt.Sprintf(`{"port":%d}`, busy)); resp.StatusCode != http.StatusBadRequest || !strings.Contains(body, "pick another port") {
+		t.Fatalf("a busy port: %d %s", resp.StatusCode, body)
 	}
 
 	if resp, _ := call(t, "DELETE", srv.URL+"/v1/catalog/mariadb?delete_data=1", "", ""); resp.StatusCode != http.StatusOK {

@@ -34,12 +34,14 @@ func TestIntegrationInstallAndRun(t *testing.T) {
 			continue
 		}
 		t.Run(k.ID, func(t *testing.T) {
-			// A short root keeps unix socket paths under the macOS limit.
-			root, err := os.MkdirTemp("", "cat")
+			// A short root keeps unix socket paths under the macOS limit; the space in it stands
+			// in for "Application Support".
+			tmp, err := os.MkdirTemp("", "cat")
 			if err != nil {
 				t.Fatal(err)
 			}
-			defer os.RemoveAll(root)
+			defer os.RemoveAll(tmp)
+			root := filepath.Join(tmp, "a b")
 
 			source := binaries.NewCatalog(binaries.DefaultSource(root), func() binaries.Channel { return binaries.Stable })
 			m := NewManager(root, []*Kind{k}, source, configMutate(root))

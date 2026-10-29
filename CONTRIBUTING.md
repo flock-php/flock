@@ -16,6 +16,10 @@ To make sure work goes into changes that fit the project, every pull request sta
 Pull requests that don't reference an approved issue are closed automatically, with a note
 explaining why. Once the issue is approved, you're welcome to open a new one.
 
+Flock's prebuilt PHP and services are built in [flock-php/binaries](https://github.com/flock-php/binaries),
+and a change often needs both. An approved issue in either repository counts for a pull request in
+the other: reference it as `flock-php/binaries#123` or with a link to it.
+
 ## Documentation
 
 The documentation at [flockphp.com/docs](https://flockphp.com/docs/quick-start) lives in

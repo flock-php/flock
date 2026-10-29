@@ -8,7 +8,7 @@ public class SettingsTests
         var config = FlockJson.Decode<FlockConfig>("""
             {"tld":"test","default_php":"8.5","default_node":"22","xdebug":false,"dumps":true,
              "root":"C:\\Users\\x\\AppData\\Roaming\\Flock",
-             "ports":{"http":80,"https":443,"dns":53535,"smtp":2525,"postgres":5432,"valkey":6379,"dumps":9912,"api":53531},
+             "ports":{"http":80,"https":443,"dns":53535,"smtp":2525,"postgres":5432,"dumps":9912,"api":53531},
              "parked":["C:\\Users\\x\\Developer"],
              "php":[{"version":"8.5","full_version":"8.5.11","ini":"/f/php/8.5/php.ini","xdebug_available":true},
                     {"version":"8.4","full_version":"8.4.26","ini":"/f/php/8.4/php.ini","xdebug_available":false}],
@@ -74,5 +74,9 @@ public class SettingsTests
         Assert.Equal("""{"default_php":"8.4"}""", FlockJson.Encode(new SettingsChange(DefaultPhp: "8.4")));
         Assert.Equal("""{"channel":"beta"}""", FlockJson.Encode(new SettingsChange(Channel: "beta")));
         Assert.Equal("""{"php":""}""", FlockJson.Encode(new SiteChange(Php: "")));
+        Assert.Equal("""{"root":"src/www"}""", FlockJson.Encode(new SiteChange(Root: "src/www")));
+        Assert.Equal("""{"capture_off":["query"]}""", FlockJson.Encode(new SettingsChange(CaptureOff: ["query"])));
+        Assert.Equal("""{"capture_off":[]}""", FlockJson.Encode(new SettingsChange(CaptureOff: [])));
+        Assert.Equal("""{"dumps_in_page":true}""", FlockJson.Encode(new SettingsChange(DumpsInPage: true)));
     }
 }

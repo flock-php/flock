@@ -23,12 +23,12 @@ func NewRootCommand() *cobra.Command {
 	root.SetOut(os.Stdout)
 
 	root.AddCommand(
-		newInstallCommand(), newUninstallCommand(), newPrivilegedSetupCommand(),
+		newInstallCommand(), newConflictsCommand(), newUninstallCommand(), newPrivilegedSetupCommand(),
 		newDaemonCommand(), newRestartCommand(), newStatusCommand(), newLogsCommand(), newVersionCommand(), newUpdateCommand(),
 		newSitesCommand(), newLinkCommand(), newUnlinkCommand(), newParkCommand(), newUnparkCommand(),
-		newSecureCommand(true), newSecureCommand(false), newDomainCommand(), newUseCommand(),
-		newIsolateCommand(), newUnisolateCommand(), newIsolatedCommand(), newPinCommand(), newUnpinCommand(),
-		newPHPCommand(), newNodeCommand(), newPostgresCommand(), newServicesCommand(), newXdebugCommand(), newDebugCommand(), newFrankenPHPCommand(), newDumpsCommand(), newMailCommand(),
+		newSecureCommand(true), newSecureCommand(false), newDomainCommand(), newShareCommand(), newUseCommand(),
+		newIsolateCommand(), newUnisolateCommand(), newIsolatedCommand(), newPinCommand(), newUnpinCommand(), newRootCommand(),
+		newPHPCommand(), newNodeCommand(), newServicesCommand(), newXdebugCommand(), newDebugCommand(), newFrankenPHPCommand(), newDumpsCommand(), newEventsCommand(), newMailCommand(),
 		newExecCommand(), newMCPCommand(), newBoostCommand(), newChannelCommand(), newExtCommand(),
 	)
 

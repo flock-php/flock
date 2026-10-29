@@ -20,7 +20,7 @@ private func decode<T: Decodable>(_ type: T.Type, _ json: String) throws -> T {
     let status = try decode(Status.self, """
     {"version":"0893ae2","pid":91994,"started_at":"2026-10-13T14:10:01.123456+02:00",
      "dns":{"tld":"test","addr":"127.0.0.1:53535"},"http_port":80,"https_port":443,
-     "mail":"127.0.0.1:2525","postgres":"18.6.0 on 127.0.0.1:5432","valkey":"9.1.2 on 127.0.0.1:6379",
+     "mail":"127.0.0.1:2525","postgres":"18.6.0 on 127.0.0.1:5432",
      "extras":[{"id":"mysql","name":"MySQL","version":"8.4.6","port":3306,"enabled":true,"up":true},{"id":"redis"}],
      "xdebug":true,"xdebug_breakpoints":true,"dumps":false,"mail_count":3,"dump_count":12,
      "sites":[{"name":"watchtower","domain":"watchtower.test","path":"/code/watchtower","php":"8.5","secured":true,"parked":false,"url":"https://watchtower.test","debugging":true},
@@ -30,7 +30,6 @@ private func decode<T: Decodable>(_ type: T.Type, _ json: String) throws -> T {
     """)
 
     #expect(status.httpsPort == 443)
-    #expect(status.valkey == "9.1.2 on 127.0.0.1:6379")
     #expect(status.extras.map(\.id) == ["mysql", "redis"] && status.extras[0].up && status.extras[0].port == 3306)
     #expect(status.extras[1].name == "redis" && !status.extras[1].up && status.extras[1].enabled)
     #expect(status.mailCount == 3 && status.dumpCount == 12)
@@ -61,6 +60,37 @@ private func decode<T: Decodable>(_ type: T.Type, _ json: String) throws -> T {
     #expect(status.sites[1].domains.isEmpty)
 }
 
+@Test func decodesTheDocumentRoot() throws {
+    let status = try decode(Status.self, """
+    {"version":"dev","pid":1,"started_at":"2026-10-13T14:10:01Z","processes":[],
+     "sites":[{"name":"zoo","domain":"zoo.test","path":"/code/zoo","php":"8.5","root":".","root_source":"default","root_pinned":"","root_file":"",
+               "root_state":"not_found","root_suggestions":["src/www"],"notice":"No document root found"},
+              {"name":"shop","domain":"shop.test","path":"/code/shop","php":"8.5","root":"web","root_source":"isolated",
+               "root_pinned":"public","root_file":"/code/shop/.flockrc"},
+              {"name":"old","domain":"old.test","path":"/code/old","php":"8.5"},
+              {"name":"cms","domain":"cms.test","path":"/code/cms","php":"8.5","root":"src/www","root_source":"isolated","root_state":"empty"}]}
+    """)
+
+    let zoo = status.sites[0]
+    #expect(zoo.rootState == .notFound && zoo.rootSuggestions == ["src/www"] && zoo.notice == "No document root found")
+    #expect(zoo.root == "." && zoo.rootSource == .default && !zoo.rootPinnedHere)
+    let shop = status.sites[1]
+    #expect(shop.root == "web" && shop.rootSource == .isolated && shop.rootPinned == "public" && shop.rootPinnedHere && shop.rootState == .ok)
+    // A daemon from before document roots: the project folder, detected.
+    let old = status.sites[2]
+    #expect(old.root == "." && old.rootSource == .default && old.rootState == .ok && old.rootSuggestions.isEmpty && old.notice == nil)
+    #expect(status.sites[3].rootState == .empty && status.sites[3].notice == nil)
+}
+
+@Test func turnsAChosenFolderIntoADocumentRoot() throws {
+    let site = try decode(Status.Site.self, #"{"name":"zoo","path":"/code/zoo"}"#)
+    #expect(site.root(for: URL(fileURLWithPath: "/code/zoo/src/www")) == "src/www")
+    #expect(site.root(for: URL(fileURLWithPath: "/code/zoo/src/www/")) == "src/www")
+    #expect(site.root(for: URL(fileURLWithPath: "/code/zoo")) == ".")
+    #expect(site.root(for: URL(fileURLWithPath: "/code/zoo-2/www")) == nil)
+    #expect(site.root(for: URL(fileURLWithPath: "/code")) == nil)
+}
+
 @Test func decodesAMinimalStatusWithOmittedFields() throws {
     let status = try decode(Status.self, """
     {"version":"dev","pid":1,"started_at":"2026-10-13T14:10:01Z","dns":{"tld":"test","addr":""},
@@ -68,10 +98,31 @@ private func decode<T: Decodable>(_ type: T.Type, _ json: String) throws -> T {
      "mail_count":0,"dump_count":0,"sites":null,"processes":[]}
     """)
 
-    #expect(status.postgres == nil && status.valkey == nil && status.extras.isEmpty)
+    #expect(status.postgres == nil && status.extras.isEmpty)
     #expect(status.sites.isEmpty && status.warnings.isEmpty)
     #expect(!status.isDegraded)
     #expect(status.channel == "stable")
+    #expect(status.defaults == nil)
+}
+
+@Test func decodesTheFirstRunsDefaultInstalls() throws {
+    let status = try decode(Status.self, """
+    {"version":"dev","pid":1,"started_at":"2026-10-13T14:10:01Z","processes":[],
+     "defaults":{"php":{"version":"8.5","state":"installing","error":""},"node":{"state":"waiting"}}}
+    """)
+
+    let defaults = try #require(status.defaults)
+    #expect(defaults.php == Status.DefaultInstall(version: "8.5", state: .installing))
+    #expect(defaults.node.version.isEmpty && defaults.node.state == .waiting && defaults.node.isPending)
+
+    let failed = try decode(Status.Defaults.self, """
+    {"php":{"version":"8.5","state":"done"},"node":{"version":"24","state":"failed","error":"checksum mismatch"}}
+    """)
+    #expect(failed.php.state == .done && !failed.php.isPending)
+    #expect(failed.node.state == .failed && failed.node.error == "checksum mismatch" && !failed.node.isPending)
+
+    let odd = try decode(Status.Defaults.self, #"{"php":{"version":"8.5","state":"something-new"}}"#)
+    #expect(odd.php.state == .unknown && odd.node == Status.DefaultInstall())
 }
 
 @Test func decodesMailListAndDetail() throws {
@@ -217,4 +268,52 @@ private func decode<T: Decodable>(_ type: T.Type, _ json: String) throws -> T {
      "sites":[{"name":"a","boost":"missing"},{"name":"b","boost":"outdated"},{"name":"c"},{"name":"d","boost":"current"}]}
     """)
     #expect(status.sites.map(\.boost) == [.missing, .outdated, .none, .current])
+}
+
+@Test func decodesCaptureSettingsAndDefaultsThemForAnOlderDaemon() throws {
+    let status = try decode(Status.self, """
+    {"version":"dev","pid":1,"started_at":"2026-10-13T14:10:01Z","dumps":true,"processes":[],
+     "capture_off":["view","job"],"dumps_in_page":true,"event_count":42,"capture_unsupported":["8.1"]}
+    """)
+    #expect(status.captureOff == ["view", "job"] && status.dumpsInPage && status.eventCount == 42)
+    #expect(status.captureUnsupported == ["8.1"])
+
+    let older = try decode(Status.self, """
+    {"version":"dev","pid":1,"started_at":"2026-10-13T14:10:01Z","dumps":true,"processes":[],"capture_off":null}
+    """)
+    #expect(older.captureOff.isEmpty && !older.dumpsInPage && older.eventCount == 0 && older.captureUnsupported.isEmpty)
+
+    let config = try decode(FlockConfig.self, """
+    {"tld":"test","dumps":true,"capture_off":["log"],"dumps_in_page":true,"ports":{"http":80,"dumps":9912,"agent":9913}}
+    """)
+    #expect(config.captureOff == ["log"] && config.dumpsInPage && config.ports.agent == 9913)
+}
+
+@Test func encodesOnlyTheChangedCaptureSettings() throws {
+    let encoder = JSONEncoder()
+    encoder.outputFormatting = .sortedKeys
+    #expect(String(decoding: try encoder.encode(SettingsChange(captureOff: ["query"])), as: UTF8.self) == #"{"capture_off":["query"]}"#)
+    #expect(String(decoding: try encoder.encode(SettingsChange(captureOff: [])), as: UTF8.self) == #"{"capture_off":[]}"#)
+    #expect(String(decoding: try encoder.encode(SettingsChange(dumpsInPage: false)), as: UTF8.self) == #"{"dumps_in_page":false}"#)
+}
+
+@Test func decodesASitesShare() throws {
+    let site = try decode(Status.Site.self, """
+    {"name":"watchtower","domain":"watchtower.test","path":"/code/watchtower","php":"8.5",
+     "share":{"site":"watchtower","state":"running","url":"https://quiet-river-lamp.trycloudflare.com",
+              "allow":["bob@acme.com","*@client.com"],"started_at":"2026-10-19T10:00:00.5Z","expires_at":"2026-10-19T18:00:00.5Z",
+              "built":true,"can_rebuild":true,"rebuilding":false,"log":"share-watchtower","qr":"iVBORw0KGgo="}}
+    """)
+    let share = try #require(site.share)
+    #expect(site.shared && share.state == .running)
+    #expect(share.url == "https://quiet-river-lamp.trycloudflare.com" && share.allow == ["bob@acme.com", "*@client.com"])
+    #expect(share.canRebuild && !share.rebuilding && share.rebuildError == nil && share.built)
+    #expect(share.expiresAt == FlockJSON.parseDate("2026-10-19T18:00:00.5Z"))
+    #expect(share.qrPNG?.count == 8)
+
+    let failed = try decode(Status.Site.self, #"{"name":"a","share":{"site":"a","state":"failed","error":"no tunnel","allow":null}}"#)
+    #expect(failed.share?.state == .failed && failed.share?.error == "no tunnel" && failed.share?.allow == [] && !failed.shared)
+    #expect(try decode(Status.Site.self, #"{"name":"a"}"#).share == nil)
+
+    #expect(ShareStatus.parseAllow(" bob@acme.com,  *@client.com\nann@x.io ") == ["bob@acme.com", "*@client.com", "ann@x.io"])
 }

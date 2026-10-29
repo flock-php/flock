@@ -1,5 +1,5 @@
-using System.Diagnostics;
 using System.Runtime.InteropServices;
+using Flock.Tray.Infrastructure;
 using Microsoft.Win32;
 
 namespace Flock.Tray;
@@ -56,9 +56,9 @@ internal static partial class Native
     /// Asks the running instance to bring its main window to the front, or, for a flock:// link
     /// this process was started with, to open the link.
     /// </summary>
-    public static void SignalRunningInstance(string? link = null)
+    public static void SignalRunningInstance(string? link = null, string windowClass = TrayWindowClass)
     {
-        var hwnd = FindWindow(TrayWindowClass, null);
+        var hwnd = FindWindow(windowClass, null);
         if (hwnd != IntPtr.Zero)
         {
             // This process was just started by the user, so it may take the foreground; pass that
@@ -172,34 +172,6 @@ internal static partial class Native
         {
             Marshal.DestroyStructure<WINTRUST_FILE_INFO>(filePointer);
             Marshal.FreeHGlobal(filePointer);
-        }
-    }
-
-    // Opening things
-
-    /// <summary>Opens a file, folder or URL with its default program.</summary>
-    public static void Open(string target)
-    {
-        try
-        {
-            Process.Start(new ProcessStartInfo(target) { UseShellExecute = true });
-        }
-        catch (Exception e) when (e is System.ComponentModel.Win32Exception or InvalidOperationException)
-        {
-            // Nothing is registered for it (e.g. an editor URL scheme); there is nothing to fall back to.
-        }
-    }
-
-    /// <summary>Shows a file or folder in Explorer (selected in its parent folder).</summary>
-    public static void Reveal(string path)
-    {
-        if (Directory.Exists(path) && !File.Exists(path))
-        {
-            Process.Start(new ProcessStartInfo("explorer.exe", $"\"{path}\"") { UseShellExecute = true });
-        }
-        else
-        {
-            Process.Start(new ProcessStartInfo("explorer.exe", $"/select,\"{path}\"") { UseShellExecute = true });
         }
     }
 
@@ -341,7 +313,8 @@ internal static partial class Native
         void EnumItems(out IntPtr items);
     }
 
-    // Notification area icon
+    // Notification area icon. The orchestration and failure policy live in Infrastructure/TrayService;
+    // this file keeps only the raw interop and the callback pointer rooted for the native class lifetime.
 
     [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
     private struct NOTIFYICONDATAW
@@ -366,8 +339,9 @@ internal static partial class Native
         public IntPtr hBalloonIcon;
     }
 
-    private const int NIM_ADD = 0, NIM_MODIFY = 1, NIM_DELETE = 2;
     private const int NIF_MESSAGE = 0x1, NIF_ICON = 0x2, NIF_TIP = 0x4;
+    private const int IMAGE_ICON = 1, LR_LOADFROMFILE = 0x10, SM_CXSMICON = 49;
+    private const int ERROR_CLASS_ALREADY_EXISTS = 1410;
 
     [DllImport("shell32.dll", CharSet = CharSet.Unicode)]
     private static extern bool Shell_NotifyIcon(int message, ref NOTIFYICONDATAW data);
@@ -398,10 +372,13 @@ internal static partial class Native
     private static extern IntPtr CreateWindowEx(int exStyle, string className, string windowName, int style,
         int x, int y, int width, int height, IntPtr parent, IntPtr menu, IntPtr instance, IntPtr param);
 
+    [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    private static extern bool UnregisterClass(string className, IntPtr instance);
+
     [DllImport("user32.dll")]
     private static extern bool DestroyWindow(IntPtr hwnd);
 
-    [DllImport("user32.dll")]
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
     private static extern IntPtr DefWindowProc(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam);
 
     [DllImport("user32.dll", CharSet = CharSet.Unicode)]
@@ -434,182 +411,133 @@ internal static partial class Native
     [DllImport("user32.dll")]
     private static extern bool SetMenuDefaultItem(IntPtr menu, int item, int byPosition);
 
-    /// <summary>
-    /// The icon in the notification area. A hidden top-level window receives its clicks (and
-    /// "TaskbarCreated", to come back after Explorer restarts) through the UI thread's message loop.
-    /// </summary>
-    public sealed class TrayIcon : IDisposable
+    private static readonly object trayGate = new();
+    private static WndProc? trayProc; // kept alive while Windows can call the class procedure
+    private static Func<TrayNativeMessage, IntPtr?>? trayCallback;
+
+    internal static IntPtr ModuleHandle() => GetModuleHandle(null);
+
+    internal static ushort RegisterTrayClass(string className, Func<TrayNativeMessage, IntPtr?> callback, out bool alreadyRegistered, out int error)
     {
-        private static WndProc? proc; // kept alive: Windows calls it for as long as the class exists
-        private static TrayIcon? instance;
-
-        private readonly IntPtr hwnd;
-        private readonly int taskbarCreated;
-        private IntPtr icon;
-        private string iconPath;
-        private string tooltip;
-
-        public event Action? Clicked;
-        public event Action? MenuRequested;
-        public event Action? ShowRequested;
-        /// <summary>A second instance was started with a flock:// link (the raw text; parse it before use).</summary>
-        public event Action<string>? LinkReceived;
-        /// <summary>Windows switched between light and dark mode (the taskbar's or the apps').</summary>
-        public event Action? ThemeChanged;
-
-        public TrayIcon(string iconPath, string tooltip)
+        lock (trayGate)
         {
-            this.iconPath = iconPath;
-            this.tooltip = tooltip;
-            instance = this;
-            taskbarCreated = RegisterWindowMessage("TaskbarCreated");
-
-            proc = Dispatch;
+            trayCallback = callback;
+            trayProc = TrayDispatch;
             var wc = new WNDCLASSEXW
             {
                 cbSize = Marshal.SizeOf<WNDCLASSEXW>(),
-                lpfnWndProc = Marshal.GetFunctionPointerForDelegate(proc),
-                hInstance = GetModuleHandle(null),
-                lpszClassName = TrayWindowClass,
+                lpfnWndProc = Marshal.GetFunctionPointerForDelegate(trayProc),
+                hInstance = ModuleHandle(),
+                lpszClassName = className,
             };
-            RegisterClassEx(ref wc);
-            hwnd = CreateWindowEx(0, TrayWindowClass, "Flock", 0, 0, 0, 0, 0, IntPtr.Zero, IntPtr.Zero, wc.hInstance, IntPtr.Zero);
-
-            icon = Load(iconPath);
-            Notify(NIM_ADD);
+            var atom = RegisterClassEx(ref wc);
+            error = Marshal.GetLastWin32Error();
+            alreadyRegistered = atom == 0 && error == ERROR_CLASS_ALREADY_EXISTS;
+            return atom;
         }
+    }
 
-        public IntPtr Handle => hwnd;
-
-        /// <summary>Changes the icon (normal, warning, stopped) and tooltip.</summary>
-        public void Update(string newIconPath, string newTooltip)
+    internal static bool UnregisterTrayClass(string className, IntPtr instance)
+    {
+        lock (trayGate)
         {
-            if (newIconPath == iconPath && newTooltip == tooltip)
+            var result = UnregisterClass(className, instance);
+            if (result)
             {
-                return;
+                trayCallback = null;
+                trayProc = null;
             }
-            if (newIconPath != iconPath)
-            {
-                var old = icon;
-                icon = Load(newIconPath);
-                iconPath = newIconPath;
-                Notify(NIM_MODIFY);
-                DestroyIcon(old);
-            }
-            tooltip = newTooltip;
-            Notify(NIM_MODIFY);
+            return result;
         }
+    }
 
-        /// <summary>Shows a native menu at the cursor and returns the chosen item's index, or -1.</summary>
-        public int ShowMenu(IReadOnlyList<string?> items, int defaultItem = -1)
+    internal static IntPtr CreateTrayWindow(string className, IntPtr instance, out int error)
+    {
+        var hwnd = CreateWindowEx(0, className, "Flock", 0, 0, 0, 0, 0, IntPtr.Zero, IntPtr.Zero, instance, IntPtr.Zero);
+        error = Marshal.GetLastWin32Error();
+        return hwnd;
+    }
+
+    internal static int RegisterTrayWindowMessage(string name) => RegisterWindowMessage(name);
+
+    internal static IntPtr LoadTrayIcon(string path, IntPtr hwnd, out int error)
+    {
+        var dpi = hwnd == IntPtr.Zero ? 96u : Math.Max(96u, GetDpiForWindow(hwnd));
+        var size = GetSystemMetricsForDpi(SM_CXSMICON, dpi);
+        var icon = LoadImage(IntPtr.Zero, path, IMAGE_ICON, size, size, LR_LOADFROMFILE);
+        error = Marshal.GetLastWin32Error();
+        return icon;
+    }
+
+    internal static bool NotifyTray(TrayNotifyOperation operation, TrayNotification notification)
+    {
+        var data = new NOTIFYICONDATAW
         {
-            var menu = CreatePopupMenu();
-            try
-            {
-                for (var i = 0; i < items.Count; i++)
-                {
-                    const int MF_STRING = 0x0, MF_SEPARATOR = 0x800;
-                    AppendMenu(menu, items[i] is null ? MF_SEPARATOR : MF_STRING, i + 1, items[i]);
-                }
-                if (defaultItem >= 0)
-                {
-                    SetMenuDefaultItem(menu, defaultItem + 1, 0);
-                }
+            cbSize = Marshal.SizeOf<NOTIFYICONDATAW>(),
+            hWnd = notification.Window,
+            uID = 1,
+            uFlags = NIF_MESSAGE | NIF_ICON | NIF_TIP,
+            uCallbackMessage = WM_TRAY,
+            hIcon = notification.Icon,
+            szTip = notification.Tooltip.Length > 127 ? notification.Tooltip[..127] : notification.Tooltip,
+            szInfo = "",
+            szInfoTitle = "",
+        };
+        return Shell_NotifyIcon((int)operation, ref data);
+    }
 
-                // Without this the menu does not close when clicking elsewhere.
-                SetForegroundWindow(hwnd);
-                var cursor = CursorPosition();
-                const int TPM_RETURNCMD = 0x100, TPM_RIGHTBUTTON = 0x2, TPM_BOTTOMALIGN = 0x20;
-                var chosen = TrackPopupMenuEx(menu, TPM_RETURNCMD | TPM_RIGHTBUTTON | TPM_BOTTOMALIGN, cursor.X, cursor.Y, hwnd, IntPtr.Zero);
-                PostMessage(hwnd, WM_NULL, IntPtr.Zero, IntPtr.Zero);
-                return chosen - 1;
-            }
-            finally
-            {
-                DestroyMenu(menu);
-            }
-        }
+    internal static bool DestroyTrayIcon(IntPtr icon) => DestroyIcon(icon);
 
-        private IntPtr Load(string path)
+    internal static bool DestroyTrayWindow(IntPtr hwnd) => DestroyWindow(hwnd);
+
+    internal static IntPtr CreateTrayPopupMenu() => CreatePopupMenu();
+
+    internal static bool AppendTrayMenu(IntPtr menu, bool separator, IntPtr id, string? text)
+    {
+        const int MF_STRING = 0x0, MF_SEPARATOR = 0x800;
+        return AppendMenu(menu, separator ? MF_SEPARATOR : MF_STRING, id, text);
+    }
+
+    internal static bool SetTrayMenuDefaultItem(IntPtr menu, int item) => SetMenuDefaultItem(menu, item, 0);
+
+    internal static int TrackTrayPopupMenu(IntPtr menu, IntPtr hwnd, POINT cursor)
+    {
+        const int TPM_RETURNCMD = 0x100, TPM_RIGHTBUTTON = 0x2, TPM_BOTTOMALIGN = 0x20;
+        return TrackPopupMenuEx(menu, TPM_RETURNCMD | TPM_RIGHTBUTTON | TPM_BOTTOMALIGN, cursor.X, cursor.Y, hwnd, IntPtr.Zero);
+    }
+
+    internal static bool DestroyTrayMenu(IntPtr menu) => DestroyMenu(menu);
+
+    internal static bool SetTrayForegroundWindow(IntPtr hwnd) => SetForegroundWindow(hwnd);
+
+    internal static bool PostTrayMessage(IntPtr hwnd, int message) => PostMessage(hwnd, message, IntPtr.Zero, IntPtr.Zero);
+
+    private static IntPtr TrayDispatch(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam)
+    {
+        try
         {
-            const int IMAGE_ICON = 1, LR_LOADFROMFILE = 0x10, SM_CXSMICON = 49;
-            var dpi = hwnd == IntPtr.Zero ? 96u : Math.Max(96u, GetDpiForWindow(hwnd));
-            var size = GetSystemMetricsForDpi(SM_CXSMICON, dpi);
-            return LoadImage(IntPtr.Zero, path, IMAGE_ICON, size, size, LR_LOADFROMFILE);
-        }
-
-        private void Notify(int message)
-        {
-            var data = new NOTIFYICONDATAW
+            string? link = null;
+            string? text = null;
+            if (msg == WM_COPYDATA)
             {
-                cbSize = Marshal.SizeOf<NOTIFYICONDATAW>(),
-                hWnd = hwnd,
-                uID = 1,
-                uFlags = NIF_MESSAGE | NIF_ICON | NIF_TIP,
-                uCallbackMessage = WM_TRAY,
-                hIcon = icon,
-                szTip = tooltip.Length > 127 ? tooltip[..127] : tooltip,
-                szInfo = "",
-                szInfoTitle = "",
-            };
-            Shell_NotifyIcon(message, ref data);
-        }
-
-        private static IntPtr Dispatch(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam)
-        {
-            var self = instance;
-            if (self is not null && hwnd == self.hwnd)
-            {
-                if (msg == WM_TRAY)
+                var data = Marshal.PtrToStructure<COPYDATASTRUCT>(lParam);
+                if (data.dwData == LinkMessage && data.cbData is > 0 and <= 1024)
                 {
-                    switch ((int)(lParam.ToInt64() & 0xFFFF))
-                    {
-                        case WM_LBUTTONUP:
-                            self.Clicked?.Invoke();
-                            break;
-                        case WM_RBUTTONUP:
-                        case WM_CONTEXTMENU:
-                            self.MenuRequested?.Invoke();
-                            break;
-                    }
-                    return IntPtr.Zero;
-                }
-                if (msg == WM_SHOW_APP)
-                {
-                    self.ShowRequested?.Invoke();
-                    return IntPtr.Zero;
-                }
-                if (msg == WM_COPYDATA)
-                {
-                    var data = Marshal.PtrToStructure<COPYDATASTRUCT>(lParam);
-                    if (data.dwData == LinkMessage && data.cbData is > 0 and <= 1024)
-                    {
-                        // Copied now: the sender frees it as soon as this returns.
-                        var link = Marshal.PtrToStringUni(data.lpData, data.cbData / 2).TrimEnd('\0');
-                        self.LinkReceived?.Invoke(link);
-                        return 1;
-                    }
-                    return IntPtr.Zero;
-                }
-                if (msg == WM_SETTINGCHANGE && Marshal.PtrToStringUni(lParam) == "ImmersiveColorSet")
-                {
-                    self.ThemeChanged?.Invoke();
-                }
-                if (msg == self.taskbarCreated)
-                {
-                    self.Notify(NIM_ADD); // Explorer restarted and forgot every icon
-                    return IntPtr.Zero;
+                    link = Marshal.PtrToStringUni(data.lpData, data.cbData / 2)?.TrimEnd('\0');
                 }
             }
+            else if (msg == WM_SETTINGCHANGE)
+            {
+                text = Marshal.PtrToStringUni(lParam);
+            }
+            var callback = trayCallback;
+            return callback?.Invoke(new TrayNativeMessage(hwnd, msg, wParam, lParam, link, text))
+                ?? DefWindowProc(hwnd, msg, wParam, lParam);
+        }
+        catch
+        {
+            // A native window procedure must not let managed exceptions cross the ABI boundary.
             return DefWindowProc(hwnd, msg, wParam, lParam);
-        }
-
-        public void Dispose()
-        {
-            Notify(NIM_DELETE);
-            DestroyIcon(icon);
-            DestroyWindow(hwnd);
-            instance = null;
         }
     }
 }

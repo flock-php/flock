@@ -77,6 +77,87 @@ public struct Installation: Sendable {
         return await Self.run(bundledFlock, ["install"], onLine: onLine)
     }
 
+    /// Another program on one of Flock's ports, or answering for the TLD (`flock conflicts --json`).
+    /// The first setup waits until it is quit.
+    public struct Conflict: Decodable, Sendable, Equatable, Hashable {
+        public var port: Int?
+        /// The resolver file another program set up for the TLD.
+        public var file: String?
+        /// What Flock needs the port for: "HTTP", "*.test DNS".
+        public var service: String
+        /// "Herd (nginx-arm64, pid 812)".
+        public var holder: String
+        /// What to quit: "Herd", or the program when no app is known.
+        public var app: String
+        /// "quit Herd", "run `brew services stop nginx`".
+        public var hint: String?
+        public var message: String
+
+        public init(port: Int? = nil, file: String? = nil, service: String, holder: String, app: String, hint: String? = nil, message: String = "") {
+            self.port = port
+            self.file = file
+            self.service = service
+            self.holder = holder
+            self.app = app
+            self.hint = hint
+            self.message = message
+        }
+    }
+
+    /// One app to quit and what it is in the way of.
+    public struct ConflictingApp: Sendable, Equatable, Identifiable {
+        public var app: String
+        public var hint: String?
+        public var conflicts: [Conflict]
+        public var id: String { app }
+
+        /// "Quit Herd", "Run `brew services stop nginx`".
+        public var title: String {
+            guard let hint, let first = hint.first else { return "Quit \(app)" }
+            return first.uppercased() + hint.dropFirst()
+        }
+
+        /// "It uses port 80 (HTTP) and port 443 (HTTPS), and answers for *.test."
+        public var detail: String {
+            var uses = conflicts.compactMap { c in c.port.map { "port \($0) (\(c.service))" } }
+            uses = uses.isEmpty ? [] : ["uses " + Self.joined(uses)]
+            if let dns = conflicts.first(where: { $0.file != nil }) {
+                uses.append("answers for \(dns.service.replacingOccurrences(of: " DNS", with: "")) (\(dns.file!))")
+            }
+            let text = "\(conflicts.first?.holder ?? app) " + uses.joined(separator: ", and ") + "."
+            return text.prefix(1).uppercased() + text.dropFirst()
+        }
+
+        private static func joined(_ items: [String]) -> String {
+            items.count < 2 ? items.joined() : items.dropLast().joined(separator: ", ") + " and " + items.last!
+        }
+    }
+
+    /// The conflicts grouped by the app to quit, in the order they were found.
+    public static func group(_ conflicts: [Conflict]) -> [ConflictingApp] {
+        var apps: [ConflictingApp] = []
+        for c in conflicts {
+            if let i = apps.firstIndex(where: { $0.app == c.app }) {
+                apps[i].conflicts.append(c)
+            } else {
+                apps.append(ConflictingApp(app: c.app, hint: c.hint, conflicts: [c]))
+            }
+        }
+        return apps
+    }
+
+    /// Asks the bundled CLI which other programs use Flock's ports. Empty when there are none, and
+    /// when the check itself fails: `flock install` checks again and reports them.
+    public func conflicts() async -> [Conflict] {
+        guard let bundledFlock else { return [] }
+        let result = await Self.run(bundledFlock, ["conflicts", "--json"])
+        struct Response: Decodable { var conflicts: [Conflict] }
+        guard result.ok, let response = try? FlockJSON.decoder().decode(Response.self, from: Data(result.output.utf8)) else {
+            return []
+        }
+        return response.conflicts
+    }
+
     /// The CLI to uninstall with: the bundled one, else the installed one.
     public var uninstaller: URL? {
         bundledFlock ?? (FileManager.default.isExecutableFile(atPath: installedFlock.path) ? installedFlock : nil)

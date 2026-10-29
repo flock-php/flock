@@ -1,0 +1,75 @@
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+ij_shell_use_unix_line_separator = true
+indent_size = 4
+indent_style = space
+insert_final_newline = false
+trim_trailing_whitespace = true
+max_line_length = 170
+ij_visual_guides = 150
+
+# Microsoft .NET properties
+csharp_new_line_before_members_in_object_initializers = false
+csharp_preferred_modifier_order = private, public, internal, protected, file, override, abstract, static, sealed, readonly, virtual, new, extern, unsafe, volatile, async, required:suggestion
+
+# Using directive sorting
+dotnet_sort_system_directives_first = true
+dotnet_separate_import_directive_groups = false
+
+# C# namespace preferences
+csharp_style_namespace_declarations = file_scoped:warning
+dotnet_diagnostic.IDE0160.severity = none
+
+# Expression-bodied members: prefer `=>` for single-expression bodies, block style otherwise.
+# `when_on_single_line` keeps a body that would wrap as a block; severity is suggestion so CI
+# never fails on body style. (ReSharper/Rider equivalent is set below via *_body keys.)
+csharp_style_expression_bodied_methods = when_on_single_line:suggestion
+csharp_style_expression_bodied_local_functions = when_on_single_line:suggestion
+
+# Collection Expressions
+dotnet_diagnostic.IDE0305.severity = none
+
+# ReSharper properties
+resharper_arguments_skip_single = true
+resharper_blank_lines_after_block_statements = 0
+resharper_blank_lines_after_control_transfer_statements = 0
+resharper_blank_lines_after_multiline_statements = 0
+resharper_blank_lines_before_block_statements = 0
+resharper_blank_lines_before_control_transfer_statements = 0
+resharper_braces_for_for = required_for_multiline
+resharper_braces_for_foreach = required_for_multiline
+resharper_braces_for_ifelse = not_required
+resharper_csharp_align_multiline_calls_chain = false
+resharper_csharp_align_multiline_parameter = false
+resharper_csharp_blank_lines_around_field = 0
+resharper_csharp_blank_lines_around_invocable = 0
+resharper_csharp_insert_final_newline = false
+resharper_csharp_max_line_length = 195
+resharper_csharp_remove_blank_lines_near_braces_in_code = false
+resharper_csharp_remove_blank_lines_near_braces_in_declarations = false
+resharper_csharp_wrap_ternary_expr_style = wrap_if_long
+resharper_force_attribute_style = separate
+resharper_indent_pars = outside
+resharper_int_align_assignments = false
+resharper_int_align_binary_expressions = false
+resharper_int_align_fields = false
+resharper_int_align_invocations = false
+resharper_int_align_parameters = false
+resharper_int_align_properties = false
+resharper_int_align_switch_expressions = false
+resharper_int_align_variables = false
+resharper_local_function_body = expression_body
+resharper_method_or_operator_body = expression_body
+resharper_parentheses_redundancy_style = remove
+resharper_place_accessorholder_attribute_on_same_line = false
+resharper_place_expr_method_on_single_line = true
+resharper_place_field_attribute_on_same_line = false
+resharper_place_simple_anonymousmethod_on_single_line = false
+resharper_prefer_explicit_discard_declaration = false
+resharper_prefer_separate_deconstructed_variables_declaration = false
+resharper_trailing_comma_in_multiline_lists = false
+resharper_wrap_before_invocation_rpar = false
+resharper_wrap_list_pattern = chop_if_long

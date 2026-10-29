@@ -34,6 +34,7 @@ func TestAllSitesMergesParkedAndLinkedSites(t *testing.T) {
 	}
 
 	cfg := Default()
+	cfg.DefaultPHP = "8.5"
 	cfg.Parked = []string{parked}
 	cfg.Upsert(Site{Name: "shop", Path: "/elsewhere/shop", PHP: "8.4"})
 

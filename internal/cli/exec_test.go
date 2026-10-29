@@ -33,7 +33,7 @@ func TestResolveToolUsesTheSitePHPVersion(t *testing.T) {
 	fakePHP(t, root, "8.4")
 	fakePHP(t, root, "8.5")
 
-	cfg := config.Default()
+	cfg := withDefaults()
 	cfg.Upsert(config.Site{Name: "legacy", Path: "/code/legacy", PHP: "8.4"})
 	s := &state{root: root, cfg: cfg}
 
@@ -54,7 +54,7 @@ func TestResolveToolUsesTheSitePHPVersion(t *testing.T) {
 func TestResolveToolPassesTheAbsoluteBinaryAsArgv0(t *testing.T) {
 	root := t.TempDir()
 	fakePHP(t, root, "8.5")
-	s := &state{root: root, cfg: config.Default()}
+	s := &state{root: root, cfg: withDefaults()}
 
 	path, argv, _, err := resolveTool(s, "/x", "php", nil)
 	if err != nil || argv[0] != path || !filepath.IsAbs(argv[0]) {
@@ -65,7 +65,7 @@ func TestResolveToolPassesTheAbsoluteBinaryAsArgv0(t *testing.T) {
 func TestResolveToolRunsComposerThroughPHP(t *testing.T) {
 	root := t.TempDir()
 	fakePHP(t, root, "8.5")
-	s := &state{root: root, cfg: config.Default()}
+	s := &state{root: root, cfg: withDefaults()}
 
 	_, argv, _, err := resolveTool(s, "/x", "composer", []string{"install"})
 	if err != nil || argv[1] != php.ComposerPhar(root) || argv[2] != "install" {
@@ -74,7 +74,7 @@ func TestResolveToolRunsComposerThroughPHP(t *testing.T) {
 }
 
 func TestResolveToolExplainsMissingVersions(t *testing.T) {
-	s := &state{root: t.TempDir(), cfg: config.Default()}
+	s := &state{root: t.TempDir(), cfg: withDefaults()}
 
 	if _, _, _, err := resolveTool(s, "/x", "php", nil); err == nil || !strings.Contains(err.Error(), "not installed") {
 		t.Fatalf("got %v", err)
@@ -94,7 +94,7 @@ func TestNodeGetsTheSiteCertificateForViteWhenSecured(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	cfg := config.Default()
+	cfg := withDefaults()
 	cfg.Upsert(config.Site{Name: "shop", Path: "/code/shop", Secured: true})
 	cfg.Upsert(config.Site{Name: "blog", Path: "/code/blog"})
 	s := &state{root: root, cfg: cfg}
@@ -127,7 +127,7 @@ func TestNodeGetsTheSiteCertificateForViteWhenSecured(t *testing.T) {
 
 func TestPostgresToolsDefaultToFlocksServer(t *testing.T) {
 	root := t.TempDir()
-	s := &state{root: root, cfg: config.Default()}
+	s := &state{root: root, cfg: withDefaults()}
 	if _, _, _, err := resolveTool(s, "/x", "psql", nil); !errors.Is(err, errPostgresMissing) {
 		t.Fatalf("no PostgreSQL installed: %v", err)
 	}
@@ -171,7 +171,7 @@ func TestRedisCLIUsesTheConfiguredPort(t *testing.T) {
 			}
 		}
 	}
-	cfg := config.Default()
+	cfg := withDefaults()
 	s := &state{root: root, cfg: cfg}
 	if _, _, _, err := resolveTool(s, "/x", "redis-cli", nil); !errors.Is(err, errRedisMissing) {
 		t.Fatalf("nothing installed: %v", err)
@@ -216,7 +216,7 @@ func TestShimToolRecognisesShimNames(t *testing.T) {
 }
 
 func TestMissingRedisAndPostgresClientAreOfferedOnlyWhereFlockCanDownloadThem(t *testing.T) {
-	s := &state{root: t.TempDir(), cfg: config.Default()}
+	s := &state{root: t.TempDir(), cfg: withDefaults()}
 	for tool, want := range map[string]error{"redis-cli": errRedisMissing, "pg_dump": errPostgresMissing} {
 		if _, _, _, err := resolveTool(s, "/x", tool, nil); !errors.Is(err, want) {
 			t.Fatalf("%s: got %v, want %v", tool, err, want)
@@ -229,5 +229,23 @@ func TestMissingRedisAndPostgresClientAreOfferedOnlyWhereFlockCanDownloadThem(t 
 		if installed, installErr := offerInstall(context.Background(), s, err); installed || installErr != nil {
 			t.Fatalf("macOS has no prebuilt build to offer: %v %v", installed, installErr)
 		}
+	}
+}
+
+// withDefaults is a config with PHP 8.5 and Node.js 22 as the defaults, as the first run sets them.
+func withDefaults() *config.Config {
+	cfg := config.Default()
+	cfg.DefaultPHP, cfg.DefaultNode = "8.5", "22"
+	return cfg
+}
+
+func TestResolveToolExplainsThatNothingIsInstalledYet(t *testing.T) {
+	s := &state{root: t.TempDir(), cfg: config.Default()}
+
+	if _, _, _, err := resolveTool(s, "/x", "php", nil); !errors.Is(err, errNoDefaultPHP) {
+		t.Fatalf("php: got %v", err)
+	}
+	if _, _, _, err := resolveTool(s, "/x", "node", nil); !errors.Is(err, errNoDefaultNode) {
+		t.Fatalf("node: got %v", err)
 	}
 }

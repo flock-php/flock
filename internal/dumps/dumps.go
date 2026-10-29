@@ -4,6 +4,10 @@
 // Symfony's VarDumper sends every dump to a TCP dump server instead of the page. Flock
 // runs that server: a small PHP script with its own copy of symfony/var-dumper (embedded
 // in the flock binary), which renders each dump and appends it to a JSON-lines file.
+//
+// PHP versions that ship the opentelemetry extension use Flock's agent instead (see package
+// capture), which renders dumps in the app and hands them to the daemon (Append, SetHeader).
+// The dump server stays for the versions without it.
 package dumps
 
 import (
@@ -18,6 +22,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"sync"
 	"time"
 
 	"flock/internal/supervisor"
@@ -59,13 +64,61 @@ type Request struct {
 // File is the JSON-lines file dumps are appended to.
 func File(root string) string { return filepath.Join(root, "dumps", "dumps.jsonl") }
 
-// Header returns Symfony's dump <script>/<style> header, written by the server at startup.
+// Header returns Symfony's dump <script>/<style> header, written by the server at startup (or
+// sent by the agent, see SetHeader).
 func Header(root string) (string, error) {
-	data, err := os.ReadFile(filepath.Join(filepath.Dir(File(root)), "header.html"))
+	data, err := os.ReadFile(headerFile(root))
 	if err != nil {
 		return "", err
 	}
 	return string(data), nil
+}
+
+func headerFile(root string) string { return filepath.Join(filepath.Dir(File(root)), "header.html") }
+
+// SetHeader stores the dump header, unless it is already the stored one.
+func SetHeader(root, header string) error {
+	if old, err := Header(root); err == nil && old == header {
+		return nil
+	}
+	if err := os.MkdirAll(filepath.Dir(File(root)), 0o700); err != nil {
+		return err
+	}
+	return os.WriteFile(headerFile(root), []byte(header), 0o600)
+}
+
+var (
+	appendMu sync.Mutex
+	sequence int
+)
+
+// Append stores a dump that didn't come through the dump server (the agent's), giving it an ID
+// like the server's. It appends in one write, as the server does, so the two can share the file.
+func Append(root string, e Entry) error {
+	if e.Time.IsZero() {
+		e.Time = time.Now()
+	}
+
+	appendMu.Lock()
+	defer appendMu.Unlock()
+	sequence++
+	if e.ID == "" {
+		e.ID = fmt.Sprintf("%d-a%05d", e.Time.UnixMicro(), sequence%100000)
+	}
+	line, err := json.Marshal(e)
+	if err != nil {
+		return err
+	}
+	if err := os.MkdirAll(filepath.Dir(File(root)), 0o700); err != nil {
+		return err
+	}
+	f, err := os.OpenFile(File(root), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	_, err = f.Write(append(line, '\n'))
+	return err
 }
 
 // Env makes PHP send dumps to the server on port.

@@ -1,0 +1,21 @@
+{
+  "id": "mail-3",
+  "inbox": "acme",
+  "from": "Acme <hello@acme.test>",
+  "to": ["ada@example.com"],
+  "cc": [],
+  "subject": "Your order #1042 is on its way",
+  "date": "{{now-2m}}",
+  "html": "<!DOCTYPE html><html><head><meta charset=\"utf-8\"><style>body{margin:0;background:#f4f5f7;font-family:-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#3d4852}.wrap{max-width:570px;margin:0 auto;padding:32px 0}.brand{text-align:center;font-size:19px;font-weight:bold;color:#3d4852;padding-bottom:24px}.card{background:#fff;border-radius:4px;padding:32px;box-shadow:0 2px 0 rgba(0,0,150,.025),2px 4px 0 rgba(0,0,150,.015)}h1{font-size:18px;margin:0 0 16px}p{font-size:16px;line-height:1.5em;margin:0 0 16px}table{width:100%;border-collapse:collapse;margin:8px 0 24px;font-size:15px}td{padding:8px 0;border-bottom:1px solid #edeff2}td.r{text-align:right}.btn{display:inline-block;background:#2d3748;color:#fff;text-decoration:none;border-radius:4px;padding:10px 18px;font-size:15px}.foot{text-align:center;color:#b0adc5;font-size:12px;padding-top:24px}</style></head><body><div class=\"wrap\"><div class=\"brand\">Acme</div><div class=\"card\"><h1>Hello Ada!</h1><p>Good news: your order <strong>#1042</strong> has shipped and should arrive in 2–3 days.</p><table><tr><td>Acme Mug × 2</td><td class=\"r\">$29.90</td></tr><tr><td>Acme Hoodie × 1</td><td class=\"r\">$100.00</td></tr><tr><td><strong>Total</strong></td><td class=\"r\"><strong>$129.90</strong></td></tr></table><p><a class=\"btn\" href=\"https://acme.test/orders/1042\">Track your order</a></p><p>Thanks,<br>Acme</p></div><div class=\"foot\">© 2026 Acme. All rights reserved.</div></div></body></html>",
+  "text": "Hello Ada!\n\nGood news: your order #1042 has shipped and should arrive in 2–3 days.\n\nTrack your order: https://acme.test/orders/1042\n\nThanks,\nAcme",
+  "headers": [
+    { "name": "From", "value": "Acme <hello@acme.test>" },
+    { "name": "To", "value": "ada@example.com" },
+    { "name": "Subject", "value": "Your order #1042 is on its way" },
+    { "name": "MIME-Version", "value": "1.0" },
+    { "name": "Content-Type", "value": "multipart/alternative; boundary=acme" }
+  ],
+  "attachments": [
+    { "index": 0, "filename": "invoice-1042.pdf", "content_type": "application/pdf", "size": 48213 }
+  ]
+}

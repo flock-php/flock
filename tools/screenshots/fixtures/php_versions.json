@@ -1,0 +1,13 @@
+{
+  "checked_at": "{{now-3h}}",
+  "check_error": "",
+  "versions": [
+    { "minor": "8.5", "latest": "8.5.11", "installed": "8.5.11", "status": "installed", "update": false, "size": 50097454, "default": true, "xdebug": true },
+    { "minor": "8.4", "latest": "8.4.26", "installed": "8.4.26", "status": "installed", "update": false, "size": 49054403, "default": false, "xdebug": true },
+    { "minor": "8.3", "latest": "8.3.35", "installed": "8.3.34", "status": "update", "update": true, "size": 47830035, "default": false, "xdebug": true },
+    { "minor": "8.2", "latest": "8.2.34", "installed": "", "status": "available", "update": false, "size": 47389056, "default": false, "xdebug": false },
+    { "minor": "8.1", "latest": "8.1.34", "installed": "", "status": "available", "update": false, "size": 44728560, "default": false, "xdebug": false },
+    { "minor": "8.0", "latest": "8.0.30", "installed": "", "status": "available", "update": false, "size": 39700756, "default": false, "xdebug": false },
+    { "minor": "7.4", "latest": "7.4.33", "installed": "", "status": "available", "update": false, "size": 38980418, "default": false, "xdebug": false }
+  ]
+}

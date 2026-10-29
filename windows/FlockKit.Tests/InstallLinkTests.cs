@@ -77,4 +77,67 @@ public class InstallLinkTests
         Assert.Null(new InstallLink("mysql").Resolve(services, null, postgres));
         Assert.Null(new InstallLink("postgres").Resolve(services, catalog, null));
     }
+
+    [Fact]
+    public void ParsesPhpAndNodeLinks()
+    {
+        Assert.Equal(new InstallLink(InstallLink.Php, "8.5"), InstallLink.Parse("flock://install/php/8.5"));
+        Assert.Equal(new InstallLink(InstallLink.Node, "24"), InstallLink.Parse("flock://install/node/24"));
+        Assert.Equal(new InstallLink(InstallLink.Php), InstallLink.Parse("flock://install/php"));
+    }
+
+    [Fact]
+    public void ResolvesPhpLinksAgainstThePhpVersions()
+    {
+        var catalog = FlockJson.Decode<PhpCatalog>("""
+            {"versions":[
+              {"minor":"8.6","latest":"8.6.0RC2","status":"available","prerelease":true},
+              {"minor":"8.10","latest":"8.10.1","status":"available"},
+              {"minor":"8.5","latest":"8.5.12","status":"available"},
+              {"minor":"8.4","latest":"8.4.26","installed":"8.4.26","status":"installed","default":true},
+              {"minor":"8.3","latest":"8.3.20","status":"available","job":{"state":"running","phase":"downloading"}},
+              {"minor":"7.3","installed":"7.3.33","status":"installed"}]}
+            """);
+        InstallLinkResolution? Resolve(string? line = null) => new InstallLink(InstallLink.Php, line).ResolvePhp(catalog);
+
+        Assert.Equal(new InstallLinkTarget("php", "PHP", "8.5", "8.5", "8.5.12"), Resolve("8.5")?.Target);
+        Assert.Equal("Install PHP 8.5?", Resolve("8.5")?.Title);
+        Assert.Equal("A link asked Flock to install PHP 8.5.12. Sites that use it are served as soon as it's installed.", Resolve("8.5")?.Message);
+        // The newest that isn't a pre-release, by number.
+        Assert.Equal("8.10", Resolve()?.Target?.Line);
+        // A pre-release asked for by name is offered.
+        Assert.Equal("8.6", Resolve("8.6")?.Target?.Line);
+
+        Assert.Equal(InstallLinkResolution.AlreadyInstalled("PHP 8.4", "PHP"), Resolve("8.4"));
+        Assert.Equal("You'll find it in Settings → PHP.", Resolve("8.4")?.Message);
+        Assert.Equal(InstallLinkResolution.AlreadyInstalled("PHP 7.3", "PHP"), Resolve("7.3"));
+        Assert.Equal(InstallLinkResolution.Installing("PHP 8.3", "PHP"), Resolve("8.3"));
+        Assert.Equal("Flock doesn't offer PHP 7.2", Resolve("7.2")?.Title);
+        Assert.Null(Resolve("7.2")?.Target);
+
+        Assert.Null(new InstallLink(InstallLink.Php, "8.5").ResolvePhp(null));
+        Assert.Equal("Flock doesn't offer PHP", new InstallLink(InstallLink.Php).ResolvePhp(new PhpCatalog())?.Title);
+    }
+
+    [Fact]
+    public void ResolvesNodeLinksAgainstTheNodeLines()
+    {
+        var catalog = FlockJson.Decode<NodeCatalog>("""
+            {"versions":[
+              {"major":"25","latest":"25.1.0"},
+              {"major":"24","latest":"24.11.1"},
+              {"major":"22","latest":"22.21.0","installed":"22.21.0","default":true},
+              {"major":"9","latest":"9.11.2"}]}
+            """);
+        InstallLinkResolution? Resolve(string? line = null, IReadOnlyCollection<string>? installing = null) =>
+            new InstallLink(InstallLink.Node, line).ResolveNode(catalog, installing);
+
+        Assert.Equal(new InstallLinkTarget("node", "Node.js", "24", "24", "24.11.1"), Resolve("24")?.Target);
+        Assert.Equal("Install Node.js 24?", Resolve("24")?.Title);
+        Assert.Equal("25", Resolve()?.Target?.Line);
+        Assert.Equal(InstallLinkResolution.AlreadyInstalled("Node.js 22", "Node"), Resolve("22"));
+        Assert.Equal(InstallLinkResolution.Installing("Node.js 24", "Node"), Resolve("24", ["24"]));
+        Assert.Equal("Flock doesn't offer Node.js 12", Resolve("12")?.Title);
+        Assert.Null(new InstallLink(InstallLink.Node, "24").ResolveNode(null));
+    }
 }

@@ -10,22 +10,33 @@ public struct Status: Decodable, Sendable, Equatable {
     public var httpsPort: Int
     public var mail: String
     public var postgres: String?
-    /// "9.1.2 on 127.0.0.1:6379" when Valkey is installed.
-    public var valkey: String?
     /// The installed catalog services (MySQL, Redis, ...).
     public var extras: [Extra]
     /// Xdebug detection: requests that ask for Xdebug go to a PHP pool that loads it.
     public var xdebug: Bool
     /// Sites with PhpStorm breakpoints send every request to Xdebug.
     public var xdebugBreakpoints: Bool
+    /// Capture is on: dumps (and, where the PHP agent runs, queries, logs, views, jobs and
+    /// requests) go to Flock.
     public var dumps: Bool
+    /// Event kinds ("query", "log", "view", "job", "request") that are not captured.
+    public var captureOff: [String]
+    /// dump() output also shows in the page or terminal; dd() always does.
+    public var dumpsInPage: Bool
     public var mailCount: Int
     public var dumpCount: Int
+    /// Captured events (queries, logs, ...), see GET /v1/events.
+    public var eventCount: Int
+    /// Installed PHP versions whose build has no agent extension: they only capture dumps.
+    public var captureUnsupported: [String]
     public var sites: [Site]
     public var processes: [Process]
     public var warnings: [String]
     /// The channel config.json follows: "stable", "beta" or "experimental" (`flock channel`).
     public var channel: String
+    /// The first run's installs of the newest PHP and Node.js LTS, which become the defaults;
+    /// nil once both defaults are set.
+    public var defaults: Defaults?
 
     public struct DNSStatus: Decodable, Sendable, Equatable {
         public var tld: String
@@ -94,6 +105,18 @@ public struct Status: Decodable, Sendable, Equatable {
         public var parked: Bool
         public var url: String?
         public var problem: String?
+        /// Something that needs a decision but isn't broken, e.g. that no document root was found.
+        public var notice: String?
+        /// The document root relative to `path` ("." for the project folder); `rootSource` says why:
+        /// set on this machine (isolated), in the project's .flockrc, or detected (default).
+        public var root: String
+        public var rootSource: VersionSource
+        /// What the project's .flockrc says (in `rootFile`), also when this machine's root wins over it.
+        public var rootPinned: String
+        public var rootFile: String
+        /// Why Flock serves its page instead of the site, and which folders could be the root.
+        public var rootState: RootState
+        public var rootSuggestions: [String]
         public var domains: [SiteDomain]
         /// PhpStorm breakpoints send every request of the site to Xdebug.
         public var debugging: Bool
@@ -107,8 +130,13 @@ public struct Status: Decodable, Sendable, Equatable {
         public var frankenPHP: SiteFrankenPHP?
         /// Whether the project uses Laravel Boost and has Flock's guideline.
         public var boost: Boost
+        /// The site's tunnel (`flock share`), while there is one.
+        public var share: ShareStatus?
 
         public var id: String { name }
+
+        /// The site is reachable at a public share URL right now.
+        public var shared: Bool { share?.state == .running }
 
         /// FrankenPHP needs PHP 8.2 or newer.
         public var supportsFrankenPHP: Bool { Self.frankenPHPSupports(php) }
@@ -124,6 +152,17 @@ public struct Status: Decodable, Sendable, Equatable {
         /// The file pinning PHP sits in the site's own folder (so it can be unpinned there).
         public var phpPinnedHere: Bool { !phpFile.isEmpty && Self.inFolder(phpFile, path) }
         public var nodePinnedHere: Bool { !nodeFile.isEmpty && Self.inFolder(nodeFile, path) }
+        public var rootPinnedHere: Bool { !rootPinned.isEmpty }
+
+        /// A folder as a document root of the site: relative to its path ("src/www", "." for the
+        /// project folder itself), or nil when the folder isn't in the project.
+        public func root(for folder: URL) -> String? {
+            let project = URL(fileURLWithPath: path).resolvingSymlinksInPath().standardizedFileURL.pathComponents
+            let chosen = folder.resolvingSymlinksInPath().standardizedFileURL.pathComponents
+            guard chosen.count >= project.count, Array(chosen.prefix(project.count)) == project else { return nil }
+            let rest = chosen.dropFirst(project.count)
+            return rest.isEmpty ? "." : rest.joined(separator: "/")
+        }
 
         private static func inFolder(_ file: String, _ folder: String) -> Bool {
             URL(fileURLWithPath: file).deletingLastPathComponent().standardizedFileURL.path == URL(fileURLWithPath: folder).standardizedFileURL.path
@@ -131,7 +170,8 @@ public struct Status: Decodable, Sendable, Equatable {
 
         enum CodingKeys: String, CodingKey {
             case name, domain, path, php, phpSource, phpPinned, phpFile, node, nodeSource, nodePinned, nodeFile, nodeShadowed
-            case secured, parked, url, problem, domains, debugging, server, worker, octaneAvailable, boost
+            case secured, parked, url, problem, notice, root, rootSource, rootPinned, rootFile, rootState, rootSuggestions
+            case domains, debugging, server, worker, octaneAvailable, boost, share
             case frankenPHP = "frankenphp"
         }
 
@@ -153,6 +193,13 @@ public struct Status: Decodable, Sendable, Equatable {
             parked = try c.decodeIfPresent(Bool.self, forKey: .parked) ?? false
             url = try c.decodeIfPresent(String.self, forKey: .url)
             problem = try c.decodeIfPresent(String.self, forKey: .problem)
+            notice = try c.decodeIfPresent(String.self, forKey: .notice)
+            root = try c.decodeIfPresent(String.self, forKey: .root) ?? "."
+            rootSource = try c.decodeIfPresent(VersionSource.self, forKey: .rootSource) ?? .default
+            rootPinned = try c.decodeIfPresent(String.self, forKey: .rootPinned) ?? ""
+            rootFile = try c.decodeIfPresent(String.self, forKey: .rootFile) ?? ""
+            rootState = try c.decodeIfPresent(RootState.self, forKey: .rootState) ?? .ok
+            rootSuggestions = try c.decodeIfPresent([String].self, forKey: .rootSuggestions) ?? []
             domains = try c.decodeIfPresent([SiteDomain].self, forKey: .domains) ?? []
             debugging = try c.decodeIfPresent(Bool.self, forKey: .debugging) ?? false
             server = try c.decodeIfPresent(Server.self, forKey: .server) ?? .fastcgi
@@ -160,6 +207,22 @@ public struct Status: Decodable, Sendable, Equatable {
             octaneAvailable = try c.decodeIfPresent(Bool.self, forKey: .octaneAvailable) ?? false
             frankenPHP = try c.decodeIfPresent(SiteFrankenPHP.self, forKey: .frankenPHP)
             boost = try c.decodeIfPresent(Boost.self, forKey: .boost) ?? .none
+            share = try c.decodeIfPresent(ShareStatus.self, forKey: .share)
+        }
+    }
+
+    /// Why a site isn't served from its document root; the raw values are the API's.
+    public enum RootState: String, Decodable, Sendable, Hashable {
+        case ok = ""
+        /// The root set on this machine or in .flockrc isn't a folder.
+        case missing
+        /// A Composer project without an index.php in public/, www/, web/, webroot/ or its own folder.
+        case notFound = "not_found"
+        /// The root has neither an index.php nor an index.html (yet).
+        case empty
+
+        public init(from decoder: Decoder) throws {
+            self = RootState(rawValue: try decoder.singleValueContainer().decode(String.self)) ?? .ok
         }
     }
 
@@ -289,14 +352,76 @@ public struct Status: Decodable, Sendable, Equatable {
         }
     }
 
+    /// The first run's default PHP and Node.js installs.
+    public struct Defaults: Decodable, Sendable, Equatable {
+        public var php: DefaultInstall
+        public var node: DefaultInstall
+
+        public init(php: DefaultInstall = DefaultInstall(), node: DefaultInstall = DefaultInstall()) {
+            self.php = php
+            self.node = node
+        }
+
+        enum CodingKeys: String, CodingKey { case php, node }
+
+        public init(from decoder: Decoder) throws {
+            let c = try decoder.container(keyedBy: CodingKeys.self)
+            php = try c.decodeIfPresent(DefaultInstall.self, forKey: .php) ?? DefaultInstall()
+            node = try c.decodeIfPresent(DefaultInstall.self, forKey: .node) ?? DefaultInstall()
+        }
+    }
+
+    /// One of the first run's installs: the newest PHP minor or Node.js LTS major, until it is the default.
+    public struct DefaultInstall: Decodable, Sendable, Equatable {
+        /// "8.5", "24"; empty until the package manifest says which.
+        public var version: String
+        public var state: State
+        /// Why it failed; the user tries again from Settings → PHP or Node.
+        public var error: String
+
+        public init(version: String = "", state: State = .done, error: String = "") {
+            self.version = version
+            self.state = state
+            self.error = error
+        }
+
+        /// Not installed yet, but on its way.
+        public var isPending: Bool { state == .waiting || state == .installing }
+
+        public enum State: String, Decodable, Sendable {
+            /// No package manifest yet (e.g. offline).
+            case waiting
+            case installing
+            /// See `error`.
+            case failed
+            /// The default is set.
+            case done
+            case unknown
+
+            public init(from decoder: Decoder) throws {
+                self = State(rawValue: try decoder.singleValueContainer().decode(String.self)) ?? .unknown
+            }
+        }
+
+        enum CodingKeys: String, CodingKey { case version, state, error }
+
+        public init(from decoder: Decoder) throws {
+            let c = try decoder.container(keyedBy: CodingKeys.self)
+            version = try c.decodeIfPresent(String.self, forKey: .version) ?? ""
+            state = try c.decodeIfPresent(State.self, forKey: .state) ?? .unknown
+            error = try c.decodeIfPresent(String.self, forKey: .error) ?? ""
+        }
+    }
+
     /// Something needs attention: a warning, or a supervised process that is down.
     public var isDegraded: Bool {
         !warnings.isEmpty || processes.contains { !$0.up }
     }
 
     enum CodingKeys: String, CodingKey {
-        case version, pid, startedAt, dns, httpPort, httpsPort, mail, postgres, valkey, extras
-        case xdebug, xdebugBreakpoints, dumps, mailCount, dumpCount, sites, processes, warnings, channel
+        case version, pid, startedAt, dns, httpPort, httpsPort, mail, postgres, extras
+        case xdebug, xdebugBreakpoints, dumps, captureOff, dumpsInPage, mailCount, dumpCount, eventCount, captureUnsupported
+        case sites, processes, warnings, channel, defaults
     }
 
     // Go omits empty slices (`omitempty`) or sends null; treat both as empty.
@@ -310,17 +435,21 @@ public struct Status: Decodable, Sendable, Equatable {
         httpsPort = try c.decodeIfPresent(Int.self, forKey: .httpsPort) ?? 0
         mail = try c.decodeIfPresent(String.self, forKey: .mail) ?? ""
         postgres = try c.decodeIfPresent(String.self, forKey: .postgres)
-        valkey = try c.decodeIfPresent(String.self, forKey: .valkey)
         extras = try c.decodeIfPresent([Extra].self, forKey: .extras) ?? []
         xdebug = try c.decodeIfPresent(Bool.self, forKey: .xdebug) ?? false
         xdebugBreakpoints = try c.decodeIfPresent(Bool.self, forKey: .xdebugBreakpoints) ?? false
         dumps = try c.decodeIfPresent(Bool.self, forKey: .dumps) ?? false
+        captureOff = try c.decodeIfPresent([String].self, forKey: .captureOff) ?? []
+        dumpsInPage = try c.decodeIfPresent(Bool.self, forKey: .dumpsInPage) ?? false
         mailCount = try c.decodeIfPresent(Int.self, forKey: .mailCount) ?? 0
         dumpCount = try c.decodeIfPresent(Int.self, forKey: .dumpCount) ?? 0
+        eventCount = try c.decodeIfPresent(Int.self, forKey: .eventCount) ?? 0
+        captureUnsupported = try c.decodeIfPresent([String].self, forKey: .captureUnsupported) ?? []
         sites = try c.decodeIfPresent([Site].self, forKey: .sites) ?? []
         processes = try c.decodeIfPresent([Process].self, forKey: .processes) ?? []
         warnings = try c.decodeIfPresent([String].self, forKey: .warnings) ?? []
         channel = try c.decodeIfPresent(String.self, forKey: .channel) ?? "stable"
+        defaults = try c.decodeIfPresent(Defaults.self, forKey: .defaults)
     }
 }
 
@@ -416,6 +545,12 @@ public struct Dump: Decodable, Sendable, Equatable, Identifiable, Hashable {
         public var line: Int
         public var name: String
 
+        public init(file: String, line: Int, name: String = "") {
+            self.file = file
+            self.line = line
+            self.name = name
+        }
+
         enum CodingKeys: String, CodingKey { case file, line, name }
 
         public init(from decoder: Decoder) throws {
@@ -452,6 +587,101 @@ public struct Dump: Decodable, Sendable, Equatable, Identifiable, Hashable {
         label = try c.decodeIfPresent(String.self, forKey: .label)
         text = try c.decodeIfPresent(String.self, forKey: .text) ?? ""
         html = try c.decodeIfPresent(String.self, forKey: .html) ?? ""
+    }
+}
+
+/// An entry of GET /v1/events: a query, log message, rendered view, queue job or finished request
+/// that Flock's PHP agent captured. Decode it with `FlockJSON.eventDecoder()`, which keeps the
+/// keys of a log message's context as the app wrote them.
+public struct Event: Decodable, Sendable, Equatable, Identifiable, Hashable {
+    public enum Kind: String, Sendable, CaseIterable, Identifiable {
+        case query, log, view, job, request
+
+        public var id: String { rawValue }
+
+        /// "Queries", "Logs", ... for menus and settings.
+        public var title: String {
+            switch self {
+            case .query: "Queries"
+            case .log: "Logs"
+            case .view: "Views"
+            case .job: "Jobs"
+            case .request: "Requests"
+            }
+        }
+    }
+
+    public var id: String
+    /// nil for a kind this version of the app doesn't know; such events are left out.
+    public var kind: Kind?
+    public var time: Date
+    public var site: String
+    /// Shared with the dumps and other events of the same HTTP request or CLI run.
+    public var group: String
+    public var request: Dump.Request?
+    public var commandLine: String?
+    /// The first frame outside vendor/ (where a query was run, a job dispatched, ...).
+    public var source: Dump.Source?
+
+    // query
+    public var sql: String
+    public var bindings: [JSONValue]
+    public var connection: String
+    /// Queries, finished jobs and requests.
+    public var durationMs: Double?
+
+    // log
+    public var level: String
+    public var message: String
+    public var context: [String: JSONValue]
+
+    // view
+    public var view: String
+    public var path: String
+
+    // job
+    public var job: String
+    public var queue: String
+    /// "processing", "processed" or "failed".
+    public var state: String
+    public var exception: String
+
+    // request
+    public var statusCode: Int?
+
+    enum CodingKeys: String, CodingKey {
+        case id, kind, time, site, group, request, source, sql, bindings, connection, level, message, context
+        case view, path, job, queue, state, exception
+        case commandLine = "command_line"
+        case durationMs = "duration_ms"
+        case statusCode = "status_code"
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(String.self, forKey: .id)
+        kind = (try? c.decodeIfPresent(String.self, forKey: .kind)).flatMap { $0.flatMap(Kind.init(rawValue:)) }
+        time = try c.decodeIfPresent(Date.self, forKey: .time) ?? .distantPast
+        site = try c.decodeIfPresent(String.self, forKey: .site) ?? ""
+        group = try c.decodeIfPresent(String.self, forKey: .group) ?? ""
+        request = try? c.decodeIfPresent(Dump.Request.self, forKey: .request)
+        commandLine = try? c.decodeIfPresent(String.self, forKey: .commandLine)
+        source = try? c.decodeIfPresent(Dump.Source.self, forKey: .source)
+        sql = (try? c.decodeIfPresent(String.self, forKey: .sql)) ?? ""
+        bindings = (try? c.decodeIfPresent([JSONValue].self, forKey: .bindings)) ?? []
+        connection = (try? c.decodeIfPresent(String.self, forKey: .connection)) ?? ""
+        durationMs = try? c.decodeIfPresent(Double.self, forKey: .durationMs)
+        level = (try? c.decodeIfPresent(String.self, forKey: .level)) ?? ""
+        message = (try? c.decodeIfPresent(String.self, forKey: .message)) ?? ""
+        // PHP encodes an empty array as [], so an empty context may come as a list.
+        context = (try? c.decodeIfPresent([String: JSONValue].self, forKey: .context)) ?? [:]
+        view = (try? c.decodeIfPresent(String.self, forKey: .view)) ?? ""
+        path = (try? c.decodeIfPresent(String.self, forKey: .path)) ?? ""
+        job = (try? c.decodeIfPresent(String.self, forKey: .job)) ?? ""
+        queue = (try? c.decodeIfPresent(String.self, forKey: .queue)) ?? ""
+        state = (try? c.decodeIfPresent(String.self, forKey: .state)) ?? ""
+        exception = (try? c.decodeIfPresent(String.self, forKey: .exception)) ?? ""
+        statusCode = try? c.decodeIfPresent(Int.self, forKey: .statusCode)
     }
 }
 

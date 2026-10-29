@@ -1,3 +1,4 @@
+using System.Text.Json;
 using System.Text.Json.Serialization;
 
 namespace Flock.Kit;
@@ -25,20 +26,69 @@ public sealed class Status
     public int HttpsPort { get; init; }
     public string Mail { get; init; } = "";
     public string? Postgres { get; init; }
-    /// <summary>"9.1.2 on 127.0.0.1:6379" when Valkey is installed.</summary>
-    public string? Valkey { get; init; }
     /// <summary>The installed catalog services (MySQL, Redis, ...).</summary>
     public List<ExtraService> Extras { get; init; } = [];
     /// <summary>Xdebug detection: requests that ask for Xdebug go to a PHP pool that loads it.</summary>
     public bool Xdebug { get; init; }
     /// <summary>Sites with PhpStorm breakpoints send every request to Xdebug.</summary>
     public bool XdebugBreakpoints { get; init; }
+    /// <summary>Capture is on: dumps, and with the capture extension queries, logs, views, jobs and requests.</summary>
     public bool Dumps { get; init; }
+    /// <summary>Kinds (EventKind) not captured while capture is on.</summary>
+    public List<string> CaptureOff { get; init; } = [];
+    /// <summary>dump() output also shows in the page or terminal; dd() always does.</summary>
+    public bool DumpsInPage { get; init; }
+    /// <summary>Installed PHP minors without the capture extension: only dumps are captured there.</summary>
+    public List<string> CaptureUnsupported { get; init; } = [];
     public int MailCount { get; init; }
     public int DumpCount { get; init; }
+    public int EventCount { get; init; }
     public List<Site> Sites { get; init; } = [];
     public List<Process> Processes { get; init; } = [];
     public List<string> Warnings { get; init; } = [];
+    /// <summary>
+    /// The first run's install of the newest PHP and Node.js LTS, which then become the defaults;
+    /// null once both defaults are set.
+    /// </summary>
+    public FirstRunDefaults? Defaults { get; init; }
+
+    public sealed class FirstRunDefaults
+    {
+        public DefaultInstall Php { get; init; } = new();
+        public DefaultInstall Node { get; init; } = new();
+    }
+
+    /// <summary>The install of one default (a PHP minor, a Node.js major).</summary>
+    public sealed class DefaultInstall
+    {
+        /// <summary>"8.5", "24"; empty until the package manifest names it.</summary>
+        public string Version { get; init; } = "";
+        /// <summary>One of DefaultState.</summary>
+        public string State { get; init; } = DefaultState.Done;
+        /// <summary>Why it failed; it is tried again from Settings → PHP or Node.</summary>
+        public string Error { get; init; } = "";
+
+        /// <summary>Not installed yet, but on its way: waiting for the manifest or installing.</summary>
+        [JsonIgnore]
+        public bool IsPending => State is DefaultState.Waiting or DefaultState.Installing;
+
+        [JsonIgnore]
+        public bool IsInstalling => State == DefaultState.Installing;
+
+        [JsonIgnore]
+        public bool IsFailed => State == DefaultState.Failed;
+    }
+
+    /// <summary>Values of DefaultInstall.State.</summary>
+    public static class DefaultState
+    {
+        /// <summary>No package manifest yet (e.g. offline).</summary>
+        public const string Waiting = "waiting";
+        public const string Installing = "installing";
+        public const string Failed = "failed";
+        /// <summary>The default is set.</summary>
+        public const string Done = "done";
+    }
 
     /// <summary>An installed catalog service, for the tray panel.</summary>
     public sealed class ExtraService
@@ -107,6 +157,20 @@ public sealed class Status
         public bool Parked { get; init; }
         public string? Url { get; init; }
         public string? Problem { get; init; }
+        /// <summary>Something that needs a decision but isn't broken, e.g. that no document root was found.</summary>
+        public string? Notice { get; init; }
+        /// <summary>
+        /// The document root relative to Path, with / ("." for the project folder); RootSource says
+        /// why: set on this machine (isolated), in the project's .flockrc, or detected (default).
+        /// </summary>
+        public string Root { get; init; } = ".";
+        public string RootSource { get; init; } = VersionSource.Default;
+        /// <summary>What the project's .flockrc says (in RootFile), also when this machine's root wins over it.</summary>
+        public string RootPinned { get; init; } = "";
+        public string RootFile { get; init; } = "";
+        /// <summary>"" when the site is served from Root, else one of DocumentRootState; RootSuggestions are then folders with an index.php.</summary>
+        public string RootState { get; init; } = "";
+        public List<string> RootSuggestions { get; init; } = [];
         public List<SiteDomain> Domains { get; init; } = [];
         /// <summary>PhpStorm breakpoints send every request of the site to Xdebug.</summary>
         public bool Debugging { get; init; }
@@ -121,9 +185,14 @@ public sealed class Status
         public SiteFrankenPhp? FrankenPhp { get; init; }
         /// <summary>Whether the project uses Laravel Boost and has Flock's guideline: "" (no Boost) or one of BoostState.</summary>
         public string Boost { get; init; } = "";
+        /// <summary>The site's tunnel (`flock share`), while there is one.</summary>
+        public SiteShare? Share { get; init; }
 
         [JsonIgnore]
         public bool IsFrankenPhp => Server == SiteServer.FrankenPhp;
+
+        [JsonIgnore]
+        public bool IsShared => Share?.IsRunning == true;
 
         /// <summary>The project file pinning PHP sits in the site's own folder (so it can be unpinned here).</summary>
         [System.Text.Json.Serialization.JsonIgnore]
@@ -132,9 +201,41 @@ public sealed class Status
         [System.Text.Json.Serialization.JsonIgnore]
         public bool NodePinnedHere => NodeFile.Length > 0 && SameDir(NodeFile, Path);
 
+        /// <summary>root= is only read from the .flockrc in the site's own folder.</summary>
+        [System.Text.Json.Serialization.JsonIgnore]
+        public bool RootPinnedHere => RootPinned.Length > 0;
+
+        /// <summary>
+        /// A folder as a document root of the site: relative to Path with / ("src/www", "." for the
+        /// project folder itself), or null when the folder isn't in the project.
+        /// </summary>
+        public string? RootFor(string folder)
+        {
+            // Split by hand, as in SameDir, so the tests run anywhere.
+            static string[] Parts(string path) => path.Split(['\\', '/'], StringSplitOptions.RemoveEmptyEntries);
+            var project = Parts(Path);
+            var chosen = Parts(folder);
+            if (chosen.Length < project.Length || !project.SequenceEqual(chosen[..project.Length], StringComparer.OrdinalIgnoreCase))
+            {
+                return null;
+            }
+            return chosen.Length == project.Length ? "." : string.Join('/', chosen[project.Length..]);
+        }
+
         // Splits by hand rather than with Path.GetDirectoryName, which ignores '\\' off Windows (tests run anywhere).
         private static bool SameDir(string file, string dir) =>
             string.Equals(file[..Math.Max(0, file.LastIndexOfAny(['\\', '/']))].TrimEnd('\\', '/'), dir.TrimEnd('\\', '/'), StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>Values of Site.RootState: why Flock serves its page instead of the site.</summary>
+    public static class DocumentRootState
+    {
+        /// <summary>The root set on this machine or in .flockrc isn't a folder.</summary>
+        public const string Missing = "missing";
+        /// <summary>A Composer project without an index.php in public/, www/, web/, webroot/ or its own folder.</summary>
+        public const string NotFound = "not_found";
+        /// <summary>The root has neither an index.php nor an index.html (yet).</summary>
+        public const string Empty = "empty";
     }
 
     /// <summary>Values of Site.Server and Site.Worker.</summary>
@@ -185,6 +286,53 @@ public sealed class Status
 
         [JsonIgnore]
         public bool HasProgress => Progress is >= 0 and <= 1;
+    }
+
+    /// <summary>
+    /// A site shared at a temporary public URL through a Cloudflare quick tunnel. It is followed
+    /// through the status: building the assets, starting the tunnel, running, or failed (see Error).
+    /// </summary>
+    public sealed class SiteShare
+    {
+        public string Site { get; init; } = "";
+        /// <summary>One of ShareState.</summary>
+        public string State { get; init; } = "";
+        public string? Url { get; init; }
+        /// <summary>Emails (or *@domain) let in; empty: anyone with the URL.</summary>
+        public List<string> Allow { get; init; } = [];
+        /// <summary>Debug mode is on for visitors (stack traces), whatever .env says.</summary>
+        public bool Debug { get; init; }
+        public DateTimeOffset StartedAt { get; init; }
+        /// <summary>Set once running: the share ends then.</summary>
+        public DateTimeOffset? ExpiresAt { get; init; }
+        /// <summary>The assets were built for the share.</summary>
+        public bool Built { get; init; }
+        /// <summary>The project's assets are built by Flock (Vite), so they can be rebuilt while shared.</summary>
+        public bool CanRebuild { get; init; }
+        public bool Rebuilding { get; init; }
+        public string? RebuildError { get; init; }
+        public string? Error { get; init; }
+        /// <summary>What to know about how the share protects the app, e.g. that the cached config keeps debug mode on.</summary>
+        public string? Warning { get; init; }
+        /// <summary>Name for /v1/logs/services/{name}.</summary>
+        public string Log { get; init; } = "";
+        /// <summary>The URL as a QR code: a base64 PNG.</summary>
+        public string? Qr { get; init; }
+
+        [JsonIgnore]
+        public bool IsRunning => State == ShareState.Running;
+
+        [JsonIgnore]
+        public bool IsFailed => State == ShareState.Failed;
+    }
+
+    /// <summary>Values of SiteShare.State.</summary>
+    public static class ShareState
+    {
+        public const string Building = "building";
+        public const string Starting = "starting";
+        public const string Running = "running";
+        public const string Failed = "failed";
     }
 
     /// <summary>Where a site's PHP or Node.js version comes from, in this order.</summary>
@@ -305,6 +453,107 @@ public sealed class DumpRequest
 {
     public string Method { get; init; } = "";
     public string Uri { get; init; } = "";
+}
+
+/// <summary>Values of RuntimeEvent.Kind, which are also what Status.CaptureOff lists.</summary>
+public static class EventKind
+{
+    public const string Query = "query";
+    public const string Log = "log";
+    public const string View = "view";
+    public const string Job = "job";
+    public const string Request = "request";
+
+    /// <summary>Every kind the timeline renders, in menu order; events of other kinds are ignored.</summary>
+    public static IReadOnlyList<string> All { get; } = [Query, Log, View, Job, Request];
+
+    public static string Name(string kind) => kind switch
+    {
+        Query => "Queries",
+        Log => "Logs",
+        View => "Views",
+        Job => "Jobs",
+        Request => "Requests",
+        _ => kind,
+    };
+}
+
+/// <summary>
+/// An entry of GET /v1/events: a query, log, view, job or request of the same request / CLI run
+/// (Group) as its dumps. The kind-specific fields are only set for their kind.
+/// </summary>
+public sealed class RuntimeEvent
+{
+    public string Id { get; init; } = "";
+    /// <summary>One of EventKind; unknown kinds are kept but not rendered.</summary>
+    public string Kind { get; init; } = "";
+    public DateTimeOffset Time { get; init; }
+    public string Site { get; init; } = "";
+    public string Group { get; init; } = "";
+    public DumpRequest? Request { get; init; }
+    public string? CommandLine { get; init; }
+    /// <summary>The first frame outside vendor/, when known.</summary>
+    public DumpSource? Source { get; init; }
+
+    // query
+    public string Sql { get; init; } = "";
+    public List<JsonElement> Bindings { get; init; } = [];
+    public string Connection { get; init; } = "";
+    /// <summary>Queries, processed or failed jobs and requests.</summary>
+    public double? DurationMs { get; init; }
+
+    // log
+    public string Level { get; init; } = "";
+    public string Message { get; init; } = "";
+    /// <summary>The log context, an object (may be empty).</summary>
+    public JsonElement? Context { get; init; }
+
+    // view
+    public string View { get; init; } = "";
+    public string Path { get; init; } = "";
+
+    // job
+    public string Job { get; init; } = "";
+    public string Queue { get; init; } = "";
+    /// <summary>"processing", "processed" or "failed".</summary>
+    public string State { get; init; } = "";
+    public string Exception { get; init; } = "";
+
+    // request
+    public int? StatusCode { get; init; }
+
+    /// <summary>The kinds the timeline renders (see EventKind.All).</summary>
+    [JsonIgnore]
+    public bool IsKnown => EventKind.All.Contains(Kind);
+
+    /// <summary>"GET https://app.test/x" for requests, the command line for CLI runs.</summary>
+    [JsonIgnore]
+    public string Origin
+    {
+        get
+        {
+            if (Request is { Uri.Length: > 0 })
+            {
+                return $"{Request.Method} {Request.Uri}";
+            }
+            return CommandLine ?? "";
+        }
+    }
+
+    /// <summary>The bindings as JSON ("[0, \"a\"]"); empty without bindings.</summary>
+    [JsonIgnore]
+    public string BindingsText => Bindings.Count == 0 ? "" : "[" + string.Join(", ", Bindings.Select(b => b.GetRawText())) + "]";
+
+    /// <summary>The log context as JSON; empty when there is none or it is empty.</summary>
+    [JsonIgnore]
+    public string ContextText => Context switch
+    {
+        { ValueKind: JsonValueKind.Object } c when c.EnumerateObject().Any() => JsonSerializer.Serialize(c, IndentedJson),
+        { ValueKind: JsonValueKind.Array } c when c.GetArrayLength() > 0 => JsonSerializer.Serialize(c, IndentedJson),
+        _ => "",
+    };
+
+    private static readonly JsonSerializerOptions IndentedJson = new() { WriteIndented = true };
 }
 
 /// <summary>GET /v1/logs</summary>

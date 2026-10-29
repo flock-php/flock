@@ -2,7 +2,6 @@ package cli
 
 import (
 	"bytes"
-	"crypto/sha256"
 	"encoding/csv"
 	"errors"
 	"fmt"
@@ -30,6 +29,9 @@ import (
 	"flock/internal/paths"
 )
 
+// serviceStarts says when the scheduled task starts the daemon.
+const serviceStarts = "at login"
+
 // On Windows, `flock install` sets up:
 //
 //   - <root>\bin\php.exe, composer.exe, ... — hard links to flock.exe, which acts as
@@ -48,14 +50,14 @@ const (
 
 func exeName(name string) string { return name + ".exe" }
 
-// writeShims links every tool name to the flock binary.
+// writeShims links every tool name, and the command's aliases, to the flock binary.
 func writeShims(root, bin string) error {
 	dir := filepath.Join(root, "bin")
 	data, err := os.ReadFile(bin)
 	if err != nil {
 		return err
 	}
-	for _, tool := range tools {
+	for _, tool := range append(slices.Clone(tools), cliAliases...) {
 		dst := filepath.Join(dir, exeName(tool))
 		if err := placeLink(bin, dst, data); err != nil {
 			return fmt.Errorf("%s: %w", dst, err)
@@ -406,6 +408,11 @@ func startDetached(exe string, args []string) error {
 	return cmd.Process.Release()
 }
 
+// serviceInstalled reports whether the daemon starts at sign-in, by scheduled task or Run key.
+func serviceInstalled() bool {
+	return taskInstalled() || runKeyInstalled()
+}
+
 func uninstallService() error {
 	if taskInstalled() {
 		_ = exec.Command("schtasks", "/End", "/TN", taskName).Run()
@@ -521,10 +528,16 @@ func waitDaemonGone(root string) {
 	}
 }
 
+// privilegedFirst: `flock install` runs ensurePrivileged before it replaces anything, so declining
+// the UAC prompt leaves the installed version as it was. The installer runs it on its own
+// (--privileged-only) before it replaces the app, so an update that isn't allowed doesn't happen.
+const privilegedFirst = true
+
 // ensurePrivileged checks the administrator-owned parts and, if anything is missing or outdated,
-// re-runs flock elevated (Windows shows a UAC prompt) to fix them.
-func ensurePrivileged(cmd *cobra.Command, s *state, bin string, ca *certs.CA) error {
-	helperBin, err := installHelperBinary(bin)
+// re-runs this flock.exe elevated (Windows shows a UAC prompt) to fix them. It runs before bin is
+// installed (privilegedFirst), so it doesn't use it.
+func ensurePrivileged(cmd *cobra.Command, s *state, _ string, ca *certs.CA) error {
+	self, helperBin, err := bundledHelper()
 	if err != nil {
 		return err
 	}
@@ -533,7 +546,9 @@ func ensurePrivileged(cmd *cobra.Command, s *state, bin string, ca *certs.CA) er
 	helper := hosts.HelperStatus()
 	// A helper Windows refused before isn't tried again; a different build is.
 	blocked := hosts.BlockedExe(s.root, helperBin)
-	helperOK := blocked || helper.Configured(source, s.cfg.TLD) && helper.Running && sameFile(helperBin, hosts.HelperExe())
+	// The installed helper is replaced only when it does something else (HelperRevision): every
+	// release's build differs, and replacing it needs administrator permission.
+	helperOK := blocked || helper.Configured(source, s.cfg.TLD) && helper.Running && helper.Revision == hosts.HelperRevision
 	trusted := exec.Command("certutil", "-store", "Root", ca.Fingerprint()).Run() == nil
 	ruleOK := dns.NRPTInstalled(s.cfg.TLD)
 
@@ -562,7 +577,7 @@ func ensurePrivileged(cmd *cobra.Command, s *state, bin string, ca *certs.CA) er
 	} else {
 		cmd.Println("→ setting up DNS for *." + s.cfg.TLD + ", the hosts helper and the local CA (Windows asks for permission)…")
 	}
-	err = runElevated(bin, args...)
+	err = runElevated(self, args...)
 	switch {
 	case errors.Is(err, errHelperBlocked):
 		if err := hosts.MarkBlocked(s.root, helperBin); err != nil {
@@ -578,39 +593,38 @@ func ensurePrivileged(cmd *cobra.Command, s *state, bin string, ca *certs.CA) er
 	return nil
 }
 
-// installHelperBinary copies flock-helper.exe from next to the running flock.exe to next to bin,
-// where the elevated setup picks it up, and returns its path there.
-func installHelperBinary(bin string) (string, error) {
-	dst := filepath.Join(filepath.Dir(bin), hosts.HelperName)
-	self, err := os.Executable()
-	if err != nil {
-		return "", err
+// bundledHelper returns the running flock.exe and the flock-helper.exe next to it, which the
+// elevated setup (privilegedSetup) installs.
+func bundledHelper() (self, helper string, err error) {
+	if self, err = os.Executable(); err != nil {
+		return "", "", err
 	}
 	if self, err = filepath.EvalSymlinks(self); err != nil {
-		return "", err
+		return "", "", err
 	}
-	src := filepath.Join(filepath.Dir(self), hosts.HelperName)
+	helper = filepath.Join(filepath.Dir(self), hosts.HelperName)
+	if _, err := os.Stat(helper); err != nil {
+		return "", "", fmt.Errorf("%s must be next to flock.exe: %w", hosts.HelperName, err)
+	}
+	return self, helper, nil
+}
+
+// installHelperBinary copies flock-helper.exe from next to the running flock.exe to next to bin,
+// so that `flock install` run from there later finds it.
+func installHelperBinary(bin string) error {
+	_, src, err := bundledHelper()
+	if err != nil {
+		return err
+	}
+	dst := filepath.Join(filepath.Dir(bin), hosts.HelperName)
 	if src == dst {
-		return dst, nil
+		return nil
 	}
 	data, err := os.ReadFile(src)
 	if err != nil {
-		return "", fmt.Errorf("%s must be next to flock.exe: %w", hosts.HelperName, err)
+		return err
 	}
-	return dst, replaceExecutable(dst, data)
-}
-
-// sameFile reports whether two files have the same contents.
-func sameFile(a, b string) bool {
-	da, err := os.ReadFile(a)
-	if err != nil {
-		return false
-	}
-	db, err := os.ReadFile(b)
-	if err != nil {
-		return false
-	}
-	return sha256.Sum256(da) == sha256.Sum256(db)
+	return replaceExecutable(dst, data)
 }
 
 type shellExecuteInfo struct {

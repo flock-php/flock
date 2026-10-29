@@ -213,13 +213,14 @@ func confDir(root, minor string) string { return filepath.Join(Dir(root, minor),
 
 // EnsureIni (re)writes Flock's ini files for a build: the extensions in its ext/ load as for the
 // regular PHP (on Windows the official build's plus Flock's extension pack; on macOS the larger
-// ones the build doesn't compile in).
+// ones the build doesn't compile in), and Flock's defaults apply as for it (see php.DefaultsIni).
 func EnsureIni(root, minor string) error {
 	dir := confDir(root, minor)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return err
 	}
-	return os.WriteFile(filepath.Join(dir, "00-flock.ini"), []byte(php.ExtensionsIni(filepath.Join(Dir(root, minor), "ext"))), 0o644)
+	body := php.ExtensionsIni(filepath.Join(Dir(root, minor), "ext")) + php.DefaultsIni(root, minor)
+	return os.WriteFile(filepath.Join(dir, "00-flock.ini"), []byte(body), 0o644)
 }
 
 // Env is the environment a build runs with: the regular PHP's php.ini (when that version is

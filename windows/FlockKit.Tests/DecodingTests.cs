@@ -3,6 +3,12 @@ namespace Flock.Kit.Tests;
 public class DecodingTests
 {
     [Fact]
+    public void DecodesNullListsAsEmpty()
+    {
+        Assert.Empty(FlockJson.Decode<List<string>>("null"));
+    }
+
+    [Fact]
     public void ParsesGoTimesWithAndWithoutFractions()
     {
         var whole = FlockJson.ParseDate("2026-10-13T13:40:07+02:00")!.Value;
@@ -31,7 +37,6 @@ public class DecodingTests
 
         Assert.Equal(443, status.HttpsPort);
         Assert.Equal("beta", status.Channel);
-        Assert.Null(status.Valkey);
         Assert.Equal(["redis", "mysql"], status.Extras.Select(e => e.Id));
         Assert.True(status.Extras[0].Up);
         Assert.Equal(6379, status.Extras[0].Port);
@@ -71,6 +76,45 @@ public class DecodingTests
         Assert.Equal((Status.VersionSource.Project, ".nvmrc: 20"), (shop.NodeSource, shop.NodeShadowed));
         Assert.Equal(Status.VersionSource.Default, status.Sites[1].PhpSource);
         Assert.False(status.Sites[1].PhpPinnedHere);
+    }
+
+    [Fact]
+    public void DecodesTheDocumentRoot()
+    {
+        var status = FlockJson.Decode<Status>("""
+            {"version":"dev","pid":1,"started_at":"2026-10-13T14:10:01Z","processes":[],
+             "sites":[{"name":"zoo","domain":"zoo.test","path":"C:\\code\\zoo","php":"8.5","root":".","root_source":"default",
+                       "root_pinned":"","root_file":"","root_state":"not_found","root_suggestions":["src/www"],"notice":"No document root found"},
+                      {"name":"shop","domain":"shop.test","path":"C:\\code\\shop","php":"8.5","root":"web","root_source":"isolated",
+                       "root_pinned":"public","root_file":"C:\\code\\shop\\.flockrc"},
+                      {"name":"old","domain":"old.test","path":"C:\\code\\old","php":"8.5"},
+                      {"name":"cms","domain":"cms.test","path":"C:\\code\\cms","php":"8.5","root":"src/www","root_source":"isolated","root_state":"empty"}]}
+            """);
+
+        var zoo = status.Sites[0];
+        Assert.Equal((Status.DocumentRootState.NotFound, "No document root found"), (zoo.RootState, zoo.Notice));
+        Assert.Equal(["src/www"], zoo.RootSuggestions);
+        Assert.False(zoo.RootPinnedHere);
+        var shop = status.Sites[1];
+        Assert.Equal(("web", Status.VersionSource.Isolated, "public", ""), (shop.Root, shop.RootSource, shop.RootPinned, shop.RootState));
+        Assert.True(shop.RootPinnedHere);
+        // A daemon from before document roots: the project folder, detected.
+        var old = status.Sites[2];
+        Assert.Equal((".", Status.VersionSource.Default, "", null), (old.Root, old.RootSource, old.RootState, old.Notice));
+        Assert.Empty(old.RootSuggestions);
+        Assert.Equal((Status.DocumentRootState.Empty, null), (status.Sites[3].RootState, status.Sites[3].Notice));
+    }
+
+    [Theory]
+    [InlineData(@"C:\code\zoo\src\www", "src/www")]
+    [InlineData(@"c:\Code\Zoo\src\www\", "src/www")]
+    [InlineData(@"C:\code\zoo", ".")]
+    [InlineData(@"C:\code\zoo-2\www", null)]
+    [InlineData(@"C:\code", null)]
+    public void TurnsAChosenFolderIntoADocumentRoot(string folder, string? root)
+    {
+        var site = new Status.Site { Path = @"C:\code\zoo" };
+        Assert.Equal(root, site.RootFor(folder));
     }
 
     [Fact]
@@ -132,6 +176,38 @@ public class DecodingTests
     }
 
     [Fact]
+    public void DecodesASitesShare()
+    {
+        var status = FlockJson.Decode<Status>("""
+            {"version":"dev","pid":1,"started_at":"2026-10-19T14:10:01Z","dns":{"tld":"test","addr":""},
+             "http_port":80,"https_port":443,"mail":"","xdebug":false,"dumps":false,"mail_count":0,"dump_count":0,"processes":[],
+             "sites":[{"name":"shop","domain":"shop.test","path":"C:\\code\\shop","php":"8.4","secured":true,"parked":false,
+                       "share":{"site":"shop","state":"running","url":"https://quiet-river-lamp.trycloudflare.com","allow":["*@acme.com"],
+                                "started_at":"2026-10-19T14:10:01Z","expires_at":"2026-10-19T22:10:05Z","built":true,"can_rebuild":true,
+                                "rebuilding":false,"log":"share-shop","qr":"iVBORw0KGgo="}},
+                      {"name":"blog","domain":"blog.test","path":"C:\\code\\blog","php":"8.4","secured":false,"parked":false,
+                       "share":{"site":"blog","state":"failed","allow":null,"started_at":"2026-10-19T14:10:01Z","built":false,
+                                "can_rebuild":false,"rebuilding":false,"error":"cloudflared exited","log":"share-blog"}},
+                      {"name":"old","domain":"old.test","path":"C:\\code\\old","php":"8.3","secured":false,"parked":true}]}
+            """);
+
+        var shop = status.Sites[0];
+        Assert.True(shop.IsShared);
+        Assert.Equal(("https://quiet-river-lamp.trycloudflare.com", "share-shop"), (shop.Share!.Url, shop.Share.Log));
+        Assert.Equal(["*@acme.com"], shop.Share.Allow);
+        Assert.Equal(new DateTimeOffset(2026, 10, 19, 22, 10, 5, TimeSpan.Zero), shop.Share.ExpiresAt);
+        Assert.True(shop.Share.CanRebuild);
+        Assert.Equal("iVBORw0KGgo=", shop.Share.Qr);
+        var blog = status.Sites[1];
+        Assert.False(blog.IsShared);
+        Assert.True(blog.Share!.IsFailed);
+        Assert.Empty(blog.Share.Allow);
+        Assert.Null(blog.Share.ExpiresAt);
+        Assert.Equal("cloudflared exited", blog.Share.Error);
+        Assert.Null(status.Sites[2].Share);
+    }
+
+    [Fact]
     public void DecodesTheFrankenPhpBuilds()
     {
         var state = FlockJson.Decode<FrankenPhpState>("""
@@ -172,11 +248,101 @@ public class DecodingTests
             """);
 
         Assert.Null(status.Postgres);
-        Assert.Null(status.Valkey);
         Assert.Empty(status.Extras);
         Assert.Empty(status.Sites);
         Assert.Empty(status.Warnings);
         Assert.False(status.IsDegraded);
+        // Both defaults are set.
+        Assert.Null(status.Defaults);
+        // A daemon from before runtime capture: everything captured, nothing unsupported.
+        Assert.Empty(status.CaptureOff);
+        Assert.Empty(status.CaptureUnsupported);
+        Assert.False(status.DumpsInPage);
+        Assert.Equal(0, status.EventCount);
+    }
+
+    [Fact]
+    public void DecodesTheCaptureSettings()
+    {
+        var status = FlockJson.Decode<Status>("""
+            {"version":"dev","dumps":true,"capture_off":["view","job"],"dumps_in_page":true,"event_count":42,
+             "capture_unsupported":["8.1"],"sites":[],"processes":[]}
+            """);
+
+        Assert.Equal(["view", "job"], status.CaptureOff);
+        Assert.True(status.DumpsInPage);
+        Assert.Equal(42, status.EventCount);
+        Assert.Equal(["8.1"], status.CaptureUnsupported);
+
+        var config = FlockJson.Decode<FlockConfig>("""{"tld":"test","dumps":true,"capture_off":null,"dumps_in_page":true}""");
+        Assert.Empty(config.CaptureOff);
+        Assert.True(config.DumpsInPage);
+    }
+
+    [Fact]
+    public void DecodesEveryEventKindAndIgnoresUnknownOnes()
+    {
+        var events = FlockJson.Decode<List<RuntimeEvent>>("""
+            [{"id":"6","kind":"request","time":"2026-10-18T09:40:07.9Z","site":"shop","group":"g1",
+              "request":{"method":"GET","uri":"https://shop.test/spike"},"status_code":200,"duration_ms":31.2},
+             {"id":"5","kind":"job","time":"2026-10-18T09:40:07.8Z","group":"g2","command_line":"artisan queue:work",
+              "job":"App\\Jobs\\SpikeJob","queue":"default","connection":"database","state":"failed","exception":"RuntimeException: boom","duration_ms":5.5},
+             {"id":"4","kind":"view","time":"2026-10-18T09:40:07.7Z","group":"g1","view":"spike","path":"/code/shop/resources/views/spike.blade.php"},
+             {"id":"3","kind":"log","time":"2026-10-18T09:40:07.6Z","group":"g1","level":"warning","message":"spike request","context":{"count":0}},
+             {"id":"2","kind":"query","time":"2026-10-18T09:40:07.5Z","group":"g1","sql":"select * from users where id > ?",
+              "bindings":[0,"a",null],"connection":"sqlite","duration_ms":0.42,
+              "source":{"file":"/code/shop/routes/web.php","line":12,"name":"web.php"},"some_future_field":{"x":1}},
+             {"id":"1","kind":"mail","time":"2026-10-18T09:40:07.4Z","group":"g1"}]
+            """);
+
+        Assert.Equal((200, 31.2), (events[0].StatusCode, events[0].DurationMs));
+        Assert.Equal("GET https://shop.test/spike", events[0].Origin);
+        Assert.Equal(("App\\Jobs\\SpikeJob", "failed", "RuntimeException: boom"), (events[1].Job, events[1].State, events[1].Exception));
+        Assert.Equal("artisan queue:work", events[1].Origin);
+        Assert.Equal("spike", events[2].View);
+        Assert.Equal(("warning", "spike request"), (events[3].Level, events[3].Message));
+        Assert.Contains("\"count\": 0", events[3].ContextText);
+        Assert.Equal("[0, \"a\", null]", events[4].BindingsText);
+        Assert.Equal(("sqlite", 0.42, 12), (events[4].Connection, events[4].DurationMs, events[4].Source?.Line));
+        Assert.Null(events[4].StatusCode);
+        Assert.False(events[5].IsKnown);
+        Assert.True(events[4].IsKnown);
+    }
+
+    [Fact]
+    public void EmptyLogContextShowsNothing()
+    {
+        var events = FlockJson.Decode<List<RuntimeEvent>>("""
+            [{"id":"1","kind":"log","time":"2026-10-18T09:40:07Z","context":{}},{"id":"2","kind":"log","time":"2026-10-18T09:40:07Z"}]
+            """);
+
+        Assert.Equal("", events[0].ContextText);
+        Assert.Equal("", events[1].ContextText);
+        Assert.Equal("", events[1].BindingsText);
+    }
+
+    [Fact]
+    public void DecodesTheFirstRunInstallOfTheDefaults()
+    {
+        var status = FlockJson.Decode<Status>("""
+            {"version":"dev","pid":1,"started_at":"2026-10-13T14:10:01Z",
+             "defaults":{"php":{"version":"8.5","state":"failed","error":"download failed"},"node":{"state":"waiting"}}}
+            """);
+        var defaults = status.Defaults!;
+        Assert.Equal(("8.5", Status.DefaultState.Failed, "download failed"), (defaults.Php.Version, defaults.Php.State, defaults.Php.Error));
+        Assert.True(defaults.Php.IsFailed);
+        Assert.False(defaults.Php.IsPending);
+        Assert.Equal(("", Status.DefaultState.Waiting, ""), (defaults.Node.Version, defaults.Node.State, defaults.Node.Error));
+        Assert.True(defaults.Node.IsPending);
+        Assert.False(defaults.Node.IsInstalling);
+
+        var installing = FlockJson.Decode<Status>("""
+            {"version":"dev","pid":1,"started_at":"2026-10-13T14:10:01Z",
+             "defaults":{"php":{"version":"8.5","state":"done"},"node":{"version":"24","state":"installing"}}}
+            """).Defaults!;
+        Assert.False(installing.Php.IsPending);
+        Assert.True(installing.Node.IsInstalling);
+        Assert.Equal("24", installing.Node.Version);
     }
 
     [Fact]

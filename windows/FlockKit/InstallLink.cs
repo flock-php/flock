@@ -3,16 +3,24 @@ namespace Flock.Kit;
 /// <summary>
 /// A link from the website or the docs that asks to install a service:
 /// <c>flock://install/&lt;service&gt;</c> or <c>flock://install/&lt;service&gt;/&lt;version line&gt;</c>,
-/// e.g. <c>flock://install/mysql/8.4</c> or <c>flock://install/postgres/18</c>.
+/// e.g. <c>flock://install/mysql/8.4</c> or <c>flock://install/postgres/18</c>. <c>flock://install/php/8.5</c>
+/// (from the page served for a site whose PHP is missing) and <c>flock://install/node/24</c> ask for
+/// a PHP or Node.js version instead.
 ///
 /// Any web page can open such a link, so it never installs anything by itself: the app shows what
-/// it would install and waits for the user to confirm (see Resolve).
+/// it would install and waits for the user to confirm (see Resolve, ResolvePhp and ResolveNode).
 /// </summary>
-/// <param name="Service">The service id ("mysql").</param>
-/// <param name="Line">The version line ("8.4", a PostgreSQL major); null for the newest.</param>
+/// <param name="Service">The service id ("mysql"), Php or Node.</param>
+/// <param name="Line">The version line ("8.4", a PostgreSQL or Node.js major); null for the newest.</param>
 public sealed record InstallLink(string Service, string? Line = null)
 {
     public const string Scheme = "flock";
+
+    /// <summary>The Service of a link that asks for a PHP minor, which the PHP pane installs.</summary>
+    public const string Php = "php";
+
+    /// <summary>The Service of a link that asks for a Node.js major, which the Node pane installs.</summary>
+    public const string Node = "node";
 
     /// <summary>The link in a command line or message, or null when it isn't a valid install link.</summary>
     public static InstallLink? Parse(string? text)
@@ -92,6 +100,74 @@ public sealed record InstallLink(string Service, string? Line = null)
         }
         return InstallLinkResolution.Install(new InstallLinkTarget(entry.Id, entry.Name, target.Id, target.Label, target.Latest));
     }
+
+    /// <summary>
+    /// What a php link asks for, measured against the PHP versions. Without a version, the newest
+    /// one that isn't a pre-release. Null while the versions are still loading.
+    /// </summary>
+    public InstallLinkResolution? ResolvePhp(PhpCatalog? catalog)
+    {
+        if (catalog is null)
+        {
+            return null;
+        }
+        var release = Line is null
+            ? catalog.Versions.Where(v => !v.Prerelease && v.Latest.Length > 0).MaxBy(v => Numeric(v.Minor))
+            : catalog.Versions.FirstOrDefault(v => v.Minor == Line);
+        if (release is null || (!release.IsInstalled && release.Latest.Length == 0))
+        {
+            return InstallLinkResolution.UnknownVersion("PHP", Line ?? "", NoBuild);
+        }
+        var name = $"PHP {release.Minor}";
+        if (release.IsInstalled)
+        {
+            return InstallLinkResolution.AlreadyInstalled(name, "PHP");
+        }
+        if (release.Job?.IsRunning == true)
+        {
+            return InstallLinkResolution.Installing(name, "PHP");
+        }
+        return InstallLinkResolution.Install(new InstallLinkTarget(Php, "PHP", release.Minor, release.Minor, release.Latest),
+            "Sites that use it are served as soon as it's installed.");
+    }
+
+    /// <summary>
+    /// What a node link asks for, measured against the Node.js lines. Without a version, the newest
+    /// line. Null while the lines are still loading.
+    /// </summary>
+    /// <param name="installing">Majors that are being installed already (the first run's default, one started in the Node pane).</param>
+    public InstallLinkResolution? ResolveNode(NodeCatalog? catalog, IReadOnlyCollection<string>? installing = null)
+    {
+        if (catalog is null)
+        {
+            return null;
+        }
+        var release = Line is null
+            ? catalog.Versions.Where(v => v.Latest.Length > 0).MaxBy(v => Numeric(v.Major))
+            : catalog.Versions.FirstOrDefault(v => v.Major == Line);
+        if (release is null || (!release.IsInstalled && release.Latest.Length == 0))
+        {
+            return InstallLinkResolution.UnknownVersion("Node.js", Line ?? "", NoBuild);
+        }
+        var name = $"Node.js {release.Major}";
+        if (release.IsInstalled)
+        {
+            return InstallLinkResolution.AlreadyInstalled(name, "Node");
+        }
+        if (installing?.Contains(release.Major) == true)
+        {
+            return InstallLinkResolution.Installing(name, "Node");
+        }
+        return InstallLinkResolution.Install(new InstallLinkTarget(Node, "Node.js", release.Major, release.Major, release.Latest),
+            "Projects that use it get node, npm and npx as soon as it's installed.");
+    }
+
+    /// <summary>Versions compare by their numbers: "8.10" is newer than "8.9".</summary>
+    private static Version Numeric(string version) =>
+        Version.TryParse(version.Contains('.') ? version : version + ".0", out var parsed) ? parsed : new Version();
+
+    // A PHP or Node.js version the manifest doesn't publish for this platform, or doesn't know at all.
+    private const string NoBuild = "There's no build of it for this computer, or the link is meant for a newer Flock.";
 }
 
 /// <summary>What an install link would install once the user confirms.</summary>
@@ -104,13 +180,18 @@ public sealed record InstallLinkTarget(string Service, string Name, string Line,
 /// <param name="Target">Set when there is something to install.</param>
 public sealed record InstallLinkResolution(string Title, string Message, InstallLinkTarget? Target = null)
 {
-    public static InstallLinkResolution Install(InstallLinkTarget target) => new(
+    /// <param name="purpose">What it is for once installed.</param>
+    public static InstallLinkResolution Install(InstallLinkTarget target, string purpose = "It runs on 127.0.0.1 for your sites.") => new(
         $"Install {target.Name} {target.Label}?",
-        $"A link asked Flock to install {target.Name} {(target.Version.Length > 0 ? target.Version : target.Label)}. It runs on 127.0.0.1 for your sites.",
+        $"A link asked Flock to install {target.Name} {(target.Version.Length > 0 ? target.Version : target.Label)}. {purpose}",
         target);
 
-    public static InstallLinkResolution AlreadyInstalled(string name) =>
-        new($"{name} is already installed", "You'll find it in Settings → Services.");
+    /// <param name="pane">The Settings pane that lists it.</param>
+    public static InstallLinkResolution AlreadyInstalled(string name, string pane = "Services") =>
+        new($"{name} is already installed", $"You'll find it in Settings → {pane}.");
+
+    public static InstallLinkResolution Installing(string name, string pane) =>
+        new($"{name} is already being installed", $"Settings → {pane} shows how far it is.");
 
     public static InstallLinkResolution Unavailable(string name, string reason) =>
         new($"{name} isn't available on this computer", reason.Length > 0 ? reason : "Flock can't run it on this platform.");
@@ -118,8 +199,8 @@ public sealed record InstallLinkResolution(string Title, string Message, Install
     public static InstallLinkResolution Unknown(string name) =>
         new($"Flock doesn't offer {name}", NewerFlock);
 
-    public static InstallLinkResolution UnknownVersion(string name, string line) =>
-        new($"Flock doesn't offer {name} {line}", NewerFlock);
+    public static InstallLinkResolution UnknownVersion(string name, string line, string message = NewerFlock) =>
+        new($"Flock doesn't offer {name} {line}".TrimEnd(), message);
 
     private const string NewerFlock = "The link may be meant for a newer Flock. Update Flock, then try again.";
 }

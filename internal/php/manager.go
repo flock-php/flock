@@ -176,6 +176,35 @@ func latest(manifest *binaries.Manifest, platform, minor string) (offer, bool) {
 	return offer{}, false
 }
 
+// LatestStable is the newest minor the channel offers for installing that isn't a pre-release,
+// or "" when it offers none (no manifest yet).
+func (m *Manager) LatestStable() string { return latestStable(m.manifest(), m.platform) }
+
+func latestStable(manifest *binaries.Manifest, platform string) string {
+	newest := ""
+	for _, v := range manifest.Versions(Package, platform) {
+		minor := MinorOf(v.Version)
+		if minor == "" || (newest != "" && !versionLess(newest, minor)) {
+			continue
+		}
+		if o, ok := latest(manifest, platform, minor); ok && !o.version.Prerelease && o.installable() {
+			newest = minor
+		}
+	}
+	return newest
+}
+
+// Offered reports whether the channel has a build of minor to install. Without a manifest it
+// can't tell, and says yes.
+func (m *Manager) Offered(minor string) bool {
+	manifest := m.manifest()
+	if manifest == nil {
+		return true
+	}
+	o, ok := latest(manifest, m.platform, minor)
+	return ok && o.installable()
+}
+
 func release(manifest *binaries.Manifest, platform, version string) (binaries.Entry, bool) {
 	for _, v := range manifest.Versions(Package, platform) {
 		if v.Version == version {

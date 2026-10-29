@@ -1,0 +1,48 @@
+# Flock's AUR packages (linux/packaging/aur), after the update feed (releases.json) is written: the
+# release goes to the packages of the channels it now leads. flockphp-bin follows stable (and beta
+# until there is a stable release), flockphp-beta-bin follows beta, as the repository's suites do.
+name: AUR
+description: Publish the release to Flock's AUR packages
+inputs:
+  version:
+    description: The release, e.g. 1.1.0 or 1.1.0-beta.2
+    required: true
+  dist:
+    description: Folder with the release's flockphp .deb files
+    default: dist
+  ssh-key:
+    description: AUR_SSH_KEY, the private key of the AUR account that maintains the packages
+    required: true
+  token:
+    description: Token that may read releases
+    required: true
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      env:
+        VERSION: ${{ inputs.version }}
+        DIST: ${{ inputs.dist }}
+        AUR_SSH_KEY: ${{ inputs.ssh-key }}
+        GH_TOKEN: ${{ inputs.token }}
+      run: |
+        set -euo pipefail
+        if [ -z "$AUR_SSH_KEY" ]; then
+          echo "::warning::AUR_SSH_KEY isn't set: the AUR packages stay as they are."
+          exit 0
+        fi
+        feed="$RUNNER_TEMP/aur-feed"
+        mkdir -p "$feed"
+        gh release download updates --repo "$GITHUB_REPOSITORY" --pattern releases.json --dir "$feed" --clobber
+        stable="$(jq -r '.stable.version // ""' "$feed/releases.json")"
+        beta="$(jq -r '.beta.version // ""' "$feed/releases.json")"
+        packages=()
+        if [ "$stable" = "$VERSION" ] || { [ -z "$stable" ] && [ "$beta" = "$VERSION" ]; }; then
+          packages+=(flockphp-bin)
+        fi
+        [ "$beta" = "$VERSION" ] && packages+=(flockphp-beta-bin)
+        if [ ${#packages[@]} -eq 0 ]; then
+          echo "$VERSION leads no channel (a newer release does): the AUR packages stay as they are."
+          exit 0
+        fi
+        linux/packaging/aur/publish.sh "${packages[@]}"

@@ -468,3 +468,20 @@ func TestPreparesTrimWhatFlockDoesntNeed(t *testing.T) {
 		t.Fatalf("a Valkey package without valkey-server: %v", err)
 	}
 }
+
+func TestCheckFreeNamesTheHolder(t *testing.T) {
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ln.Close()
+	busy := ln.Addr().(*net.TCPAddr).Port
+
+	err = CheckFree(t.TempDir(), busy)
+	if !errors.Is(err, ErrInvalid) || !strings.Contains(err.Error(), "pick another port") {
+		t.Fatalf("busy port: %v", err)
+	}
+	if err := CheckFree(t.TempDir(), freePort(t)); err != nil {
+		t.Fatalf("free port: %v", err)
+	}
+}

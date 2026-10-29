@@ -7,14 +7,13 @@ import (
 	"testing"
 
 	"flock/internal/api"
-	"flock/internal/config"
 	"flock/internal/node"
 	"flock/internal/php"
 )
 
 // The shims only offer an install for these typed errors, so they must survive resolveTool.
 func TestMissingVersionsAreTypedErrors(t *testing.T) {
-	s := &state{root: t.TempDir(), cfg: config.Default()}
+	s := &state{root: t.TempDir(), cfg: withDefaults()}
 
 	_, _, _, err := resolveTool(s, t.TempDir(), "composer", nil)
 	var phpErr *phpMissingError

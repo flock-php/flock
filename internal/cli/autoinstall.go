@@ -26,6 +26,13 @@ func (e *phpMissingError) Error() string {
 	return fmt.Sprintf("PHP %s is not installed (install it with `flock php install %s`)", e.minor, e.minor)
 }
 
+// errNoDefaultPHP and errNoDefaultNode: nothing pins a version and there is no default yet, which
+// the daemon sets once it has installed the newest PHP and Node.js on its first run.
+var (
+	errNoDefaultPHP  = errors.New("no PHP is installed yet — Flock installs the newest one when it first starts (see Settings → PHP), or run `flock php install <version>`")
+	errNoDefaultNode = errors.New("no Node.js is installed yet — Flock installs the newest LTS when it first starts (see Settings → Node), or run `flock node install <version>`")
+)
+
 // interactive reports whether a person is at the terminal. Shims run by IDEs, Composer scripts or
 // pipes never prompt: a question nobody sees would hang them.
 func interactive() bool {

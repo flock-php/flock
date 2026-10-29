@@ -25,7 +25,12 @@ type Config struct {
 	// is new: the old "xdebug" loaded Xdebug for every request and defaulted to off.
 	Xdebug            bool `json:"xdebug_detection"`
 	XdebugBreakpoints bool `json:"xdebug_breakpoints"`
-	Dumps             bool `json:"dumps"`
+	// Dumps is the capture switch: dump()/dd() output, and on PHP versions with Flock's agent
+	// (see package capture) also the kinds of events not in CaptureOff, go to Flock.
+	Dumps      bool     `json:"dumps"`
+	CaptureOff []string `json:"capture_off,omitempty"` // event kinds not captured: "query", "log", ...
+	// DumpsInPage keeps dump() output in the page or terminal too (dd() always shows there).
+	DumpsInPage bool `json:"dumps_in_page,omitempty"`
 	// Channel is which manifest of prebuilt packages Flock follows: "" or "stable", "beta" (new
 	// versions earlier, pre-releases) or "experimental" (everything published, for testing;
 	// set with `flock channel`, not in the apps).
@@ -42,7 +47,8 @@ type Ports struct {
 	SMTP     int `json:"smtp"`
 	Postgres int `json:"postgres"`
 	Dumps    int `json:"dumps"`
-	API      int `json:"api"` // token-protected HTTP API for the native apps
+	Agent    int `json:"agent"` // collector the PHP agent sends dumps and events to
+	API      int `json:"api"`   // token-protected HTTP API for the native apps
 }
 
 // Services are optional background services; an empty version means not installed.
@@ -114,6 +120,10 @@ type Site struct {
 	Domains []string `json:"domains,omitempty"`
 	Parked  bool     `json:"-"` // discovered from a parked directory rather than linked
 
+	// Root is the document root set for the site on this machine, relative to Path ("src/www", "."
+	// for Path itself); empty means the project's .flockrc or detection decides (see project.RootFor).
+	Root string `json:"root,omitempty"`
+
 	// Server runs the site's PHP: "" through the version's FastCGI pool (PHP-FPM; php-cgi on
 	// Windows), or ServerFrankenPHP in a FrankenPHP process of its own on Port, behind the web server.
 	Server string `json:"server,omitempty"`
@@ -182,15 +192,14 @@ func (c *Config) nextSitePort(site string) int {
 	return port
 }
 
-// Default returns the config used when none exists yet.
+// Default returns the config used when none exists yet. It has no default PHP and Node.js: the
+// daemon installs the newest stable ones on the first run and makes them the defaults then.
 func Default() *Config {
 	return &Config{
 		TLD:               "test",
-		DefaultPHP:        "8.5",
-		DefaultNode:       "22",
 		Xdebug:            true,
 		XdebugBreakpoints: true,
-		Ports:             Ports{HTTP: 80, HTTPS: 443, DNS: 53535, SMTP: 2525, Postgres: 5432, Dumps: 9912, API: 53531},
+		Ports:             Ports{HTTP: 80, HTTPS: 443, DNS: 53535, SMTP: 2525, Postgres: 5432, Dumps: 9912, Agent: 9913, API: 53531},
 	}
 }
 
@@ -222,7 +231,7 @@ func Load(root string) (*Config, error) {
 func (c *Config) UsedPorts(except string) map[int]string {
 	used := map[int]string{
 		c.Ports.HTTP: "web", c.Ports.HTTPS: "web", c.Ports.DNS: "dns", c.Ports.SMTP: "mail",
-		c.Ports.Dumps: "dumps", c.Ports.API: "api",
+		c.Ports.Dumps: "dumps", c.Ports.Agent: "agent", c.Ports.API: "api",
 	}
 	if c.Services.Postgres != "" {
 		used[c.Ports.Postgres] = "postgres"

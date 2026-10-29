@@ -10,6 +10,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"flock/internal/config"
+	"flock/internal/project"
 )
 
 // siteArg resolves the site a command targets: the named one, or the one containing the working directory.
@@ -60,6 +61,9 @@ func newLinkCommand() *cobra.Command {
 			site := config.Site{Name: name, Path: cwd, PHP: phpVersion, Secured: secure}
 			if existing, ok := s.cfg.FindSite(name); ok && !existing.Parked {
 				site.Node, site.Domains = existing.Node, existing.Domains
+				if existing.Path == cwd {
+					site.Root = existing.Root // relative to the project, so only for the same folder
+				}
 				if phpVersion == "" {
 					site.PHP = existing.PHP
 				}
@@ -78,6 +82,9 @@ func newLinkCommand() *cobra.Command {
 				scheme = "https"
 			}
 			cmd.Printf("linked %s → %s://%s\n", cwd, scheme, s.cfg.Domain(site))
+			if r := project.RootFor(&site); r.State != "" {
+				printRoot(cmd, site.Name, site.Path, r)
+			}
 			return nil
 		},
 	}

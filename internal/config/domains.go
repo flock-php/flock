@@ -37,9 +37,12 @@ func (c *Config) ExtraDomains(s Site) []ExtraDomain {
 }
 
 // DomainsBySite resolves the extra domains of sites (by site name) and marks those that can't be
-// served: an alias that is another site's domain or lies under it, or that an earlier site
-// (by name) already claimed. Validation normally prevents these, but parked directories appear
-// without asking.
+// served: an alias that is another site's domain or that an earlier site (by name) already
+// claimed, and a subdomain that another site has as its alias. Validation normally prevents
+// these, but parked directories appear without asking.
+//
+// An alias may lie under another site's domain or alias (accounts.shop.test next to shop.test):
+// the most specific name wins, so that site keeps the rest of its subdomains.
 func (c *Config) DomainsBySite(sites []Site) map[string][]ExtraDomain {
 	primary := map[string]string{} // domain → site
 	for _, s := range sites {
@@ -54,7 +57,7 @@ func (c *Config) DomainsBySite(sites []Site) map[string][]ExtraDomain {
 			if !extras[i].Alias {
 				continue
 			}
-			if owner := c.ownerOf(extras[i].Host, s.Name, primary, aliases); owner != "" {
+			if owner := ownerOf(extras[i].Host, s.Name, primary, aliases); owner != "" {
 				extras[i].Problem = fmt.Sprintf("%s is already served by %s", extras[i].Host, owner)
 				continue
 			}
@@ -62,20 +65,22 @@ func (c *Config) DomainsBySite(sites []Site) map[string][]ExtraDomain {
 		}
 		out[s.Name] = extras
 	}
+	// The alias wins over the subdomain: it is the more specific name.
+	for _, s := range sites {
+		for i, e := range out[s.Name] {
+			if owner := ownerOf(e.Host, s.Name, aliases); !e.Alias && owner != "" {
+				out[s.Name][i].Problem = fmt.Sprintf("%s is served by %s", e.Host, owner)
+			}
+		}
+	}
 	return out
 }
 
-// ownerOf names the other site serving host: as its domain, an alias, or a subdomain of either,
-// or with an alias under host (host's subdomains would take it over).
-func (c *Config) ownerOf(host, site string, primary, aliases map[string]string) string {
-	for _, names := range []map[string]string{primary, aliases} {
-		for name, owner := range names {
-			if owner == site {
-				continue
-			}
-			if host == name || strings.HasSuffix(host, "."+name) || strings.HasSuffix(name, "."+host) {
-				return owner
-			}
+// ownerOf names the other site that has host as its name in one of names.
+func ownerOf(host, site string, names ...map[string]string) string {
+	for _, m := range names {
+		if owner, ok := m[host]; ok && owner != site {
+			return owner
 		}
 	}
 	return ""
@@ -147,20 +152,24 @@ func (c *Config) NormalizeDomain(s Site, name string) (string, error) {
 		return "", fmt.Errorf("%s is already an extra domain of %s", name, s.Name)
 	}
 
-	if alias {
-		sites := c.AllSites()
-		primary, aliases := map[string]string{}, map[string]string{}
-		for _, o := range sites {
-			primary[c.Domain(o)] = o.Name
-			for _, e := range c.ExtraDomains(o) {
-				if e.Alias {
-					aliases[e.Host] = o.Name
-				}
+	// Only the exact name can be taken: under another site's name, the more specific name wins.
+	primary, aliases, subdomains := map[string]string{}, map[string]string{}, map[string]string{}
+	for _, o := range c.AllSites() {
+		primary[c.Domain(o)] = o.Name
+		for _, e := range c.ExtraDomains(o) {
+			if e.Alias {
+				aliases[e.Host] = o.Name
+			} else {
+				subdomains[e.Host] = o.Name
 			}
 		}
-		if owner := c.ownerOf(name, s.Name, primary, aliases); owner != "" {
-			return "", fmt.Errorf("%s is already served by %s", name, owner)
+	}
+	if !alias {
+		if owner := ownerOf(name+"."+domain, s.Name, aliases); owner != "" {
+			return "", fmt.Errorf("%s.%s is already served by %s", name, domain, owner)
 		}
+	} else if owner := ownerOf(name, s.Name, primary, aliases, subdomains); owner != "" {
+		return "", fmt.Errorf("%s is already served by %s", name, owner)
 	}
 	return name, nil
 }

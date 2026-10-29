@@ -1,0 +1,11 @@
+{
+  "checked_at": "{{now-3h}}",
+  "check_error": "",
+  "versions": [
+    { "major": "26", "latest": "26.12.0", "installed": "", "default": false, "update": false, "npm": "", "npm_latest": "" },
+    { "major": "24", "latest": "24.22.0", "installed": "24.22.0", "default": true, "update": false, "npm": "11.6.2", "npm_latest": "" },
+    { "major": "22", "latest": "22.23.3", "installed": "22.23.3", "default": false, "update": false, "npm": "10.9.9", "npm_latest": "11.6.2" },
+    { "major": "20", "latest": "20.20.2", "installed": "", "default": false, "update": false, "npm": "", "npm_latest": "" },
+    { "major": "18", "latest": "18.20.8", "installed": "", "default": false, "update": false, "npm": "", "npm_latest": "" }
+  ]
+}

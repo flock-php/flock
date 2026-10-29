@@ -26,7 +26,7 @@ import (
 const output = "THIRD_PARTY_NOTICES"
 
 // The builds Flock ships; each links a slightly different set of modules.
-var targets = []struct{ goos, goarch string }{{"darwin", "arm64"}, {"windows", "amd64"}}
+var targets = []struct{ goos, goarch string }{{"darwin", "arm64"}, {"windows", "amd64"}, {"linux", "amd64"}, {"linux", "arm64"}}
 
 var programs = []string{"./cmd/flock", "./cmd/flock-helper"}
 

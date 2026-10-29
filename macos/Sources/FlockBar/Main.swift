@@ -1,3 +1,4 @@
+import FlockUI
 import Foundation
 
 /// Entry point: `FlockBar --selftest` checks every API call against the running daemon

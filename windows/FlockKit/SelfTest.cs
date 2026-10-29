@@ -1,6 +1,6 @@
 namespace Flock.Kit;
 
-/// <summary>Exercises every endpoint the app uses against the running daemon and reports problems.</summary>
+/// <summary>Exercises selected daemon endpoints used by the app and reports problems.</summary>
 public static class SelfTest
 {
     public static async Task<int> RunAsync(FlockClient client, TextWriter output)

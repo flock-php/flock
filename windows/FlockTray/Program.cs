@@ -1,12 +1,10 @@
 using Flock.Kit;
-using Microsoft.UI.Dispatching;
-using Microsoft.UI.Xaml;
 
 namespace Flock.Tray;
 
 /// <summary>
-/// Entry point: `FlockTray --selftest` checks every API call against the running daemon and exits
-/// (the output goes to the console it was started from); otherwise the tray app starts, once.
+/// Entry point: `FlockTray --selftest` checks selected daemon endpoints and exits (the output goes
+/// to the console it was started from); otherwise the tray app starts, once.
 /// </summary>
 public static class Program
 {
@@ -16,30 +14,29 @@ public static class Program
         if (args.Contains("--selftest"))
         {
             Native.AttachParentConsole();
-            using var client = new FlockClient();
-            return SelfTest.RunAsync(client, Console.Out).GetAwaiter().GetResult();
+            return RunSelfTestAsync().GetAwaiter().GetResult();
         }
 
-        // One tray icon per user session: a second start (e.g. from the Start menu) brings the
-        // running app's main window to the front, and one for a flock:// link hands it over.
-        using var single = new Mutex(initiallyOwned: true, @"Local\Flock.Tray", out var first);
+        var identity = LaunchIdentity.ForExecutable(Environment.ProcessPath!, Installation.Uninstaller is not null,
+            args.Contains("--dev"));
+        // Installed launches share one instance; local builds only activate their own executable.
+        using var single = new Mutex(initiallyOwned: true, identity.MutexName, out var first);
         if (!first)
         {
-            Native.SignalRunningInstance(args.FirstOrDefault(SecureLink.IsFlockLink));
+            Native.SignalRunningInstance(args.FirstOrDefault(SecureLink.IsFlockLink), identity.WindowClass);
             return 0;
         }
 
-        WinRT.ComWrappersSupport.InitializeComWrappers();
         // Unpackaged apps would put WebView2's profile next to the exe, which may not be writable.
         Environment.SetEnvironmentVariable("WEBVIEW2_USER_DATA_FOLDER",
-            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Flock", "WebView2"));
+            Path.Combine(identity.DataDirectory, "WebView2"));
 
         try
         {
-            Application.Start(callback =>
+            App.Run(new AppOptions
             {
-                SynchronizationContext.SetSynchronizationContext(new DispatcherQueueSynchronizationContext(DispatcherQueue.GetForCurrentThread()));
-                _ = new App();
+                Identity = identity,
+                PreferencesPath = Path.Combine(identity.DataDirectory, "tray.json"),
             });
         }
         catch (Exception e)
@@ -50,5 +47,12 @@ public static class Program
             return 1;
         }
         return 0;
+    }
+
+    private static async Task<int> RunSelfTestAsync()
+    {
+        await using var host = AppHost.Create();
+        await host.StartAsync();
+        return await SelfTest.RunAsync(host.Client, Console.Out);
     }
 }

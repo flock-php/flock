@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"golang.org/x/sys/windows"
+	"golang.org/x/sys/windows/registry"
 	"golang.org/x/sys/windows/svc"
 	"golang.org/x/sys/windows/svc/mgr"
 )
@@ -38,11 +39,23 @@ const HelperName = "flock-helper.exe"
 // HelperExe is the installed helper's executable.
 func HelperExe() string { return filepath.Join(HelperDir(), HelperName) }
 
+// HelperRevision is the version of what the helper does (cmd/flock-helper, RunHelper and what it
+// calls). Raise it with every change to them: `flock install` replaces the installed helper, which
+// needs administrator permission, only when its revision differs, not with every Flock release.
+const HelperRevision = 1
+
+// revisionValue is where InstallHelper records the helper's revision: in the service's registry
+// key, which every user can read.
+const revisionValue = "FlockRevision"
+
+const serviceKey = `SYSTEM\CurrentControlSet\Services\` + ServiceName
+
 // Status describes the installed helper as any user can see it.
 type Status struct {
 	Installed bool
 	Running   bool
 	Command   string // the service's command line, to check its TLD and source file
+	Revision  int    // the installed helper's HelperRevision (0: a helper from before revisions)
 }
 
 // HelperStatus queries the service with the rights every user has (no administrator needed).
@@ -67,6 +80,12 @@ func HelperStatus() Status {
 	}
 	if c, err := s.Config(); err == nil {
 		st.Command = c.BinaryPathName
+	}
+	if k, err := registry.OpenKey(registry.LOCAL_MACHINE, serviceKey, registry.QUERY_VALUE); err == nil {
+		if v, _, err := k.GetIntegerValue(revisionValue); err == nil {
+			st.Revision = int(v)
+		}
+		k.Close()
 	}
 	return st
 }
@@ -122,6 +141,16 @@ func InstallHelper(exe, source, tld string) error {
 		return fmt.Errorf("create service: %w", err)
 	}
 	defer s.Close()
+
+	k, err := registry.OpenKey(registry.LOCAL_MACHINE, serviceKey, registry.SET_VALUE)
+	if err != nil {
+		return fmt.Errorf("record helper revision: %w", err)
+	}
+	err = k.SetDWordValue(revisionValue, HelperRevision)
+	k.Close()
+	if err != nil {
+		return fmt.Errorf("record helper revision: %w", err)
+	}
 
 	_ = s.SetRecoveryActions([]mgr.RecoveryAction{
 		{Type: mgr.ServiceRestart, Delay: 5 * time.Second},

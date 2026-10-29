@@ -68,6 +68,8 @@ func registerNodeVersions(mux *http.ServeMux, b Backend) {
 			return
 		}
 		node.RemoveOlder(b.Root(), version)
+		// Until there is a default Node.js, the daemon makes the one installed first the default.
+		_ = b.Reload()
 		respond(w, r, false)
 	})
 
