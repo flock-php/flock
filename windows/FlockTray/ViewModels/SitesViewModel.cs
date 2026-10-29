@@ -17,6 +17,7 @@ internal sealed partial class SitesViewModel(SitesService service) : ObservableO
     [NotifyPropertyChangedFor(nameof(Error))]
     public partial SiteRowViewModel? Selected { get; private set; }
     public string? Error => Selected is { } row ? Service.ErrorFor(row.Name) : Service.Error;
+    public bool HasSites => Sites.Count > 0;
 
     public event Action? SelectionChanged;
 
@@ -42,6 +43,7 @@ internal sealed partial class SitesViewModel(SitesService service) : ObservableO
             Select(Sites.FirstOrDefault());
         }
         OnPropertyChanged(nameof(Error));
+        OnPropertyChanged(nameof(HasSites));
         return !ReferenceEquals(selectedBefore, Selected) || selectedChanged;
     }
 

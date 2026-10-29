@@ -240,10 +240,10 @@ internal sealed partial class SitesPane : UserControl, ISettingsPane
         {
             return;
         }
+        // No sites: the pane shows its empty state instead (HasSites).
         if (viewModel.Selected is not { } row)
         {
-            DetailHost.Content = Ui.EmptyState(Ui.GlyphGlobe, "No sites", "Add a single site here, or add a project folder in General.",
-                Ui.Button("Add Site…", () => Start("add-site", AddSiteAsync, refreshAfter: false), true));
+            DetailHost.Content = null;
             return;
         }
         if (!ReferenceEquals(SiteList.SelectedItem, row))
