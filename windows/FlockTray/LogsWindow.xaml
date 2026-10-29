@@ -8,6 +8,7 @@
             <local:LogLevelBrushConverter x:Key="LogLevelBrushConverter" />
             <local:LogLevelTextConverter x:Key="LogLevelTextConverter" />
             <local:LogTimeConverter x:Key="LogTimeConverter" />
+            <local:LogMessageLinesConverter x:Key="LogMessageLinesConverter" />
             <local:StringVisibilityConverter x:Key="StringVisibilityConverter" />
             <DataTemplate x:Key="SiteSourceTemplate">
                 <Button HorizontalAlignment="Stretch" HorizontalContentAlignment="Left" Padding="8,7" Click="SourceClicked"
@@ -84,10 +85,12 @@
                                             <TextBlock Text="{Binding Env}" Style="{StaticResource CaptionTextBlockStyle}"
                                                        Visibility="{Binding Env, Converter={StaticResource StringVisibilityConverter}}" />
                                         </StackPanel>
-                                        <TextBlock Text="{Binding Message}" TextWrapping="Wrap" IsTextSelectionEnabled="True" MaxLines="3" />
-                                        <Expander Header="Details" Visibility="{Binding Details, Converter={StaticResource StringVisibilityConverter}}">
-                                            <ScrollViewer MaxHeight="360" HorizontalScrollBarVisibility="Auto">
-                                                <TextBlock Text="{Binding Details}" FontFamily="Cascadia Mono, Consolas" FontSize="12" IsTextSelectionEnabled="True" />
+                                        <TextBlock Text="{Binding Message}" TextWrapping="Wrap" IsTextSelectionEnabled="True"
+                                                   MaxLines="{Binding IsExpanded, ElementName=DetailsExpander, Converter={StaticResource LogMessageLinesConverter}}" />
+                                        <Expander x:Name="DetailsExpander" Header="Details" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch"
+                                                  Visibility="{Binding Details, Converter={StaticResource StringVisibilityConverter}}">
+                                            <ScrollViewer MaxHeight="360" HorizontalScrollMode="Disabled" HorizontalScrollBarVisibility="Disabled">
+                                                <TextBlock Text="{Binding Details}" FontFamily="Cascadia Mono, Consolas" FontSize="12" TextWrapping="Wrap" IsTextSelectionEnabled="True" />
                                             </ScrollViewer>
                                         </Expander>
                                     </StackPanel>

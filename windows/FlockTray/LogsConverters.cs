@@ -14,6 +14,16 @@ internal sealed class LogLevelTextConverter : IValueConverter
         throw new NotSupportedException();
 }
 
+/// <summary>An entry's message: three lines, or all of it while its details are open.</summary>
+internal sealed class LogMessageLinesConverter : IValueConverter
+{
+    public object Convert(object value, Type targetType, object parameter, string language) =>
+        value is true ? 0 : 3;
+
+    public object ConvertBack(object value, Type targetType, object parameter, string language) =>
+        throw new NotSupportedException();
+}
+
 internal sealed class LogTimeConverter : IValueConverter
 {
     public object Convert(object value, Type targetType, object parameter, string language) =>
