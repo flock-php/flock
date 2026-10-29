@@ -107,10 +107,13 @@ func (s *Services) SetRunning(id string, on bool) {
 	}
 }
 
-// Site is a directory served as <name>.<tld> and its subdomains (up to MaxDepth levels).
+// Site is a directory served as <name>.<tld>, or as its own Domain, and its subdomains (up to MaxDepth levels).
 type Site struct {
-	Name    string `json:"name"`
-	Path    string `json:"path"`
+	Name string `json:"name"`
+	Path string `json:"path"`
+	// Domain is the domain the site is served as when it isn't <name>.<tld>, e.g.
+	// "filament.ui-playground.test" for the site filament-ui-playground (see SetDomain).
+	Domain  string `json:"domain,omitempty"`
 	PHP     string `json:"php,omitempty"`  // "8.5"; empty means Config.DefaultPHP
 	Node    string `json:"node,omitempty"` // major, e.g. "22"; empty means Config.DefaultNode
 	Secured bool   `json:"secured"`
@@ -270,6 +273,9 @@ func (c *Config) Save(root string) error {
 
 // Domain is the primary hostname of a site.
 func (c *Config) Domain(s Site) string {
+	if s.Domain != "" {
+		return s.Domain
+	}
 	return s.Name + "." + c.TLD
 }
 

@@ -164,12 +164,29 @@ internal sealed partial class SitesPane : Pane
         }
     }
 
+    /// <summary>Asks for the domain to serve the chosen folder as; left empty, it is served as &lt;folder&gt;.test, as
+    /// <c>flock link</c> does.</summary>
     private async Task AddSiteAsync()
     {
-        if (await Window.PickFolder() is { } path)
+        if (await Window.PickFolder() is not { } path)
         {
-            await Model.Sites.LinkAsync(path);
+            return;
         }
+        var folder = Path.GetFileName(Path.TrimEndingDirectorySeparator(path));
+        var tld = Model.Status?.Dns.Tld is { Length: > 0 } t ? t : "test";
+        var name = SiteName(folder);
+        var details = $"Serve it as {name}.{tld}, or as a domain of your choosing, like {name}.my-project.{tld}.";
+        if (await Window.Ask($"Add {folder}", details, $"{name}.{tld}", "Add", allowEmpty: true) is { } domain)
+        {
+            await Model.Sites.LinkAsync(path, domain.Length > 0 ? domain : null);
+        }
+    }
+
+    /// <summary>A folder's name as a hostname label, the site name Flock gives it (config.SiteName).</summary>
+    private static string SiteName(string folder)
+    {
+        var label = new string(folder.ToLowerInvariant().Select(c => c is >= 'a' and <= 'z' or >= '0' and <= '9' or '-' ? c : '-').ToArray()).Trim('-');
+        return label.Length > 0 ? label : "app";
     }
 
     private async Task RemoveSiteAsync(Status.Site site)

@@ -102,10 +102,11 @@ public actor FlockClient {
         try await decode([Service]?.self, "PATCH", "/v1/services/\(escape(id))", body: try JSONEncoder().encode(["port": port])) ?? []
     }
 
-    /// Links a directory as a site (name defaults to the directory name on the daemon side).
-    public func linkSite(path: String, name: String? = nil, php: String? = nil, secured: Bool = false) async throws -> Status {
-        struct Body: Encodable { var path: String; var name: String?; var php: String?; var secured: Bool }
-        return try await decode(Status.self, "POST", "/v1/sites", body: try JSONEncoder().encode(Body(path: path, name: name, php: php, secured: secured)))
+    /// Links a directory as a site (name defaults to the directory name on the daemon side). A domain
+    /// ("filament.ui-playground") serves it as that domain instead, and names the site after it.
+    public func linkSite(path: String, name: String? = nil, domain: String? = nil, php: String? = nil, secured: Bool = false) async throws -> Status {
+        struct Body: Encodable { var path: String; var name: String?; var domain: String?; var php: String?; var secured: Bool }
+        return try await decode(Status.self, "POST", "/v1/sites", body: try JSONEncoder().encode(Body(path: path, name: name, domain: domain, php: php, secured: secured)))
     }
 
     public func updateSite(_ name: String, _ change: SiteChange) async throws -> Status {

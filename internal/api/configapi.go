@@ -1,6 +1,7 @@
 package api
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
@@ -210,8 +211,11 @@ func registerConfig(mux *http.ServeMux, b Backend) {
 
 	mux.HandleFunc("POST /v1/sites", func(w http.ResponseWriter, r *http.Request) {
 		var body struct {
-			Path    string `json:"path"`
-			Name    string `json:"name"`
+			Path string `json:"path"`
+			Name string `json:"name"`
+			// Domain is the name the site is served as ("filament.ui-playground"; see config.SetDomain),
+			// instead of Name.
+			Domain  string `json:"domain"`
 			PHP     string `json:"php"`
 			Secured bool   `json:"secured"`
 		}
@@ -226,11 +230,15 @@ func registerConfig(mux *http.ServeMux, b Backend) {
 			if info, err := os.Stat(body.Path); err != nil || !info.IsDir() {
 				return invalid("%s is not a directory", body.Path)
 			}
-			name := body.Name
-			if name == "" {
-				name = filepath.Base(body.Path)
+			site := config.Site{Path: filepath.Clean(body.Path), PHP: body.PHP, Secured: body.Secured}
+			if body.Domain != "" {
+				if err := cfg.SetDomain(&site, body.Domain); err != nil {
+					return invalid("%s", err)
+				}
+			} else {
+				site.Name = config.SiteName(cmp.Or(body.Name, filepath.Base(body.Path)))
 			}
-			cfg.Upsert(config.Site{Name: config.SiteName(name), Path: filepath.Clean(body.Path), PHP: body.PHP, Secured: body.Secured})
+			cfg.Upsert(site)
 			return nil
 		})
 	})
@@ -548,10 +556,11 @@ func (c *Client) SetServiceRunning(ctx context.Context, id string, on bool) ([]S
 	return out, err
 }
 
-// LinkSite serves dir (absolute) as a site; name defaults to the directory's name.
-func (c *Client) LinkSite(ctx context.Context, dir, name string) (Status, error) {
+// LinkSite serves dir (absolute) as a site: as domain when it's set ("filament.ui-playground"),
+// otherwise as <name>.test; name defaults to the directory's name.
+func (c *Client) LinkSite(ctx context.Context, dir, name, domain string) (Status, error) {
 	var out Status
-	err := c.send(ctx, http.MethodPost, "/v1/sites", map[string]string{"path": dir, "name": name}, &out)
+	err := c.send(ctx, http.MethodPost, "/v1/sites", map[string]string{"path": dir, "name": name, "domain": domain}, &out)
 	return out, err
 }
 

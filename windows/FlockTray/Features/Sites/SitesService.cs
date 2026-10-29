@@ -35,8 +35,8 @@ public sealed class SitesService : IAsyncDisposable
 
     public event Action? Changed;
 
-    public Task<OperationOutcome> LinkAsync(string path, CancellationToken token = default) =>
-        MutateAsync("link:" + path, path, (_, cancellationToken) => client.LinkSiteAsync(path, cancellationToken: cancellationToken), token);
+    public Task<OperationOutcome> LinkAsync(string path, string? domain = null, CancellationToken token = default) =>
+        MutateAsync("link:" + path, path, (_, cancellationToken) => client.LinkSiteAsync(path, domain: domain, cancellationToken: cancellationToken), token);
 
     public Task<OperationOutcome> UnlinkAsync(string site, CancellationToken token = default) =>
         MutateAsync(Key(site), site, (_, cancellationToken) => client.UnlinkSiteAsync(site, cancellationToken), token);

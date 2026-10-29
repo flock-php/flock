@@ -35,13 +35,18 @@ func siteArg(s *state, args []string) (config.Site, error) {
 }
 
 func newLinkCommand() *cobra.Command {
-	var phpVersion string
+	var phpVersion, domain string
 	var secure bool
 
 	cmd := &cobra.Command{
 		Use:   "link [name]",
 		Short: "Serve the current directory as <name>.test (defaults to the directory name)",
-		Args:  cobra.MaximumNArgs(1),
+		Long: `Serve the current directory as <name>.test (defaults to the directory name).
+
+--domain serves it as a domain of more labels, and names the site after it:
+
+  flock link --domain filament.ui-playground     filament.ui-playground.test, site filament-ui-playground`,
+		Args: cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			s, err := load()
 			if err != nil {
@@ -59,8 +64,19 @@ func newLinkCommand() *cobra.Command {
 			}
 
 			site := config.Site{Name: name, Path: cwd, PHP: phpVersion, Secured: secure}
-			if existing, ok := s.cfg.FindSite(name); ok && !existing.Parked {
+			if domain != "" {
+				if len(args) > 0 {
+					return fmt.Errorf("give a name or --domain, not both: the domain names the site")
+				}
+				if err := s.cfg.SetDomain(&site, domain); err != nil {
+					return err
+				}
+			}
+			if existing, ok := s.cfg.FindSite(site.Name); ok && !existing.Parked {
 				site.Node, site.Domains = existing.Node, existing.Domains
+				if domain == "" {
+					site.Domain = existing.Domain
+				}
 				if existing.Path == cwd {
 					site.Root = existing.Root // relative to the project, so only for the same folder
 				}
@@ -91,6 +107,7 @@ func newLinkCommand() *cobra.Command {
 
 	cmd.Flags().StringVar(&phpVersion, "php", "", "PHP version for this site (default: the global default)")
 	cmd.Flags().BoolVar(&secure, "secure", false, "serve over HTTPS")
+	cmd.Flags().StringVar(&domain, "domain", "", "serve the site as this domain, e.g. filament.ui-playground (the .test is optional)")
 
 	return cmd
 }

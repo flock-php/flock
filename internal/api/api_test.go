@@ -298,6 +298,17 @@ func TestSiteAndParkedEndpoints(t *testing.T) {
 		t.Fatalf("relative path must be rejected, got %d", resp.StatusCode)
 	}
 
+	other := t.TempDir()
+	if resp, body := call(t, "POST", srv.URL+"/v1/sites", "", `{"path":`+jsonString(other)+`,"domain":"filament.ui-playground.test"}`); resp.StatusCode != http.StatusOK {
+		t.Fatalf("link with a domain: %d %s", resp.StatusCode, body)
+	}
+	if site, ok := b.config(t).FindSite("filament-ui-playground"); !ok || site.Path != other || site.Domain != "filament.ui-playground.test" {
+		t.Fatalf("site not linked with its domain: %+v", b.config(t).Sites)
+	}
+	if resp, body := call(t, "POST", srv.URL+"/v1/sites", "", `{"path":`+jsonString(project)+`,"domain":"filament.ui-playground"}`); resp.StatusCode != http.StatusBadRequest || !strings.Contains(body, "already named") {
+		t.Fatalf("a domain another site has must be rejected, got %d %s", resp.StatusCode, body)
+	}
+
 	parent := filepath.Dir(project)
 	if resp, body := call(t, "POST", srv.URL+"/v1/parked", "", `{"path":`+jsonString(parent)+`}`); resp.StatusCode != http.StatusOK {
 		t.Fatalf("park: %d %s", resp.StatusCode, body)

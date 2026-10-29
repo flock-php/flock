@@ -308,7 +308,8 @@ internal sealed partial class SettingsWindow : FlockWindow
     }
 
     /// <summary>Asks for one line of text; null when cancelled or left empty.</summary>
-    public async Task<string?> Ask(string question, string details, string placeholder, string action)
+    /// <summary>Asks for a line of text: null when cancelled, and when left empty unless <paramref name="allowEmpty"/>.</summary>
+    public async Task<string?> Ask(string question, string details, string placeholder, string action, bool allowEmpty = false)
     {
         var box = new TextBox { PlaceholderText = placeholder };
         var content = new StackPanel { Spacing = 12 };
@@ -333,7 +334,7 @@ internal sealed partial class SettingsWindow : FlockWindow
         };
         var result = await dialog.ShowAsync();
         var text = box.Text.Trim();
-        return (result == ContentDialogResult.Primary || box.Tag is "submitted") && text.Length > 0 ? text : null;
+        return (result == ContentDialogResult.Primary || box.Tag is "submitted") && (text.Length > 0 || allowEmpty) ? text : null;
     }
 
     public XamlRoot XamlRoot => Content.XamlRoot;

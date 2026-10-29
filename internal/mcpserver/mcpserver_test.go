@@ -136,8 +136,8 @@ func (f *fakeDaemon) InstallNode(_ context.Context, major string) (api.NodeVersi
 	return api.NodeVersions{}, nil
 }
 
-func (f *fakeDaemon) LinkSite(_ context.Context, dir, name string) (api.Status, error) {
-	f.record("link", dir, name)
+func (f *fakeDaemon) LinkSite(_ context.Context, dir, name, domain string) (api.Status, error) {
+	f.record("link", dir, name, domain)
 	st := f.status
 	st.Sites = append(st.Sites, api.SiteStatus{Name: filepath.Base(dir), Domain: filepath.Base(dir) + ".test", Path: dir, URL: "https://" + filepath.Base(dir) + ".test"})
 	return st, nil
@@ -477,7 +477,7 @@ func TestLinkSiteAndDebugging(t *testing.T) {
 	if e := callTool(t, cs, "link_site", nil, &out); e != "" || out.Site == nil || out.Site.URL != "https://blog.test" {
 		t.Fatalf("%q %+v", e, out)
 	}
-	if d.changes[0] != `link [`+jsonString(opts.Dir)+`,""]` {
+	if d.changes[0] != `link [`+jsonString(opts.Dir)+`,"",""]` {
 		t.Fatalf("changes: %q", d.changes)
 	}
 
