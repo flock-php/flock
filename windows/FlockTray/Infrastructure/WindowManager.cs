@@ -1,15 +1,22 @@
-using Flock.Tray;
 using Flock.Tray.ViewModels;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
-
 namespace Flock.Tray.Infrastructure;
 
 public interface IWindowRoot : IAsyncDisposable
 {
     Window Window { get; }
+    event Action<WindowClosingEventArgs> Closing;
+    event Action Closed;
+    void Activate();
+    void Close();
 }
 
+public sealed class WindowClosingEventArgs
+{
+    public bool Cancel { get; set; }
+}
 
 public interface IWindowFactory
 {
@@ -31,7 +38,7 @@ public sealed class WindowFactory(IServiceScopeFactory scopes, RuntimeService mo
                 WindowKind.Logs => new LogsWindow(scope.ServiceProvider.GetRequiredService<LogsViewModel>()),
                 WindowKind.Setup => new SetupWindow(model),
                 WindowKind.Settings => new SettingsWindow(model, deepLinks),
-                _ => throw new ArgumentOutOfRangeException(nameof(kind)),
+                _ => throw new ArgumentOutOfRangeException(nameof(kind))
             };
             return new WindowRoot(window, scope);
         }
@@ -42,34 +49,62 @@ public sealed class WindowFactory(IServiceScopeFactory scopes, RuntimeService mo
         }
     }
 
-    private sealed class WindowRoot(Window window, AsyncServiceScope scope) : IWindowRoot
+    private sealed class WindowRoot : IWindowRoot
     {
-        public Window Window => window;
+        private readonly AsyncServiceScope scope;
+
+        public WindowRoot(Window window, AsyncServiceScope scope)
+        {
+            Window = window;
+            this.scope = scope;
+            window.AppWindow.Closing += WindowClosing;
+            window.Closed += WindowClosed;
+        }
+
+        public Window Window { get; }
+
+        public event Action<WindowClosingEventArgs>? Closing;
+        public event Action? Closed;
+
+        public void Activate()
+        {
+            Window.Activate();
+        }
+
+        public void Close()
+        {
+            Window.Close();
+        }
 
         public async ValueTask DisposeAsync()
         {
-            if (window is FlockWindow flockWindow)
+            if (Window is FlockWindow flockWindow)
             {
                 await flockWindow.ReleaseAsync();
             }
             await scope.DisposeAsync();
         }
+
+        private void WindowClosing(AppWindow sender, AppWindowClosingEventArgs args)
+        {
+            var closing = new WindowClosingEventArgs();
+            Closing?.Invoke(closing);
+            args.Cancel = closing.Cancel;
+        }
+
+        private void WindowClosed(object sender, WindowEventArgs args)
+        {
+            Closed?.Invoke();
+        }
     }
 }
-
 
 /// <summary>Owns one root and scope per window kind and joins release before native destruction.</summary>
 public sealed class WindowManager(IWindowFactory factory, IUiDispatcher dispatcher)
 {
-    private sealed class Entry(IWindowRoot root)
-    {
-        public IWindowRoot Root { get; } = root;
-        public Task? CloseTask { get; set; }
-        public bool AllowClose { get; set; }
-    }
+    private readonly Dictionary<WindowKind, Entry> entries = [];
 
     private readonly object gate = new();
-    private readonly Dictionary<WindowKind, Entry> entries = [];
 
     public Window Open(WindowKind kind)
     {
@@ -77,21 +112,29 @@ public sealed class WindowManager(IWindowFactory factory, IUiDispatcher dispatch
         {
             if (entries.TryGetValue(kind, out var existing))
             {
-                existing.Root.Window.Activate();
-                return existing.Root.Window;
+                if (existing.CloseTask is null)
+                {
+                    existing.Root.Activate();
+                    return existing.Root.Window;
+                }
+                if (!existing.CloseTask.IsCompletedSuccessfully)
+                {
+                    throw new InvalidOperationException($"The {kind} window is still closing.");
+                }
+                entries.Remove(kind);
             }
             var entry = new Entry(factory.Create(kind));
             entries.Add(kind, entry);
-            entry.Root.Window.AppWindow.Closing += (appWindow, args) =>
+            entry.Root.Closing += args =>
             {
                 if (!entry.AllowClose)
                 {
                     args.Cancel = true;
-                    _ = CloseAsync(kind, entry);
+                    _ = ObserveCloseAsync(kind, entry);
                 }
             };
-            entry.Root.Window.Closed += (_, _) => RemoveClosed(kind, entry);
-            entry.Root.Window.Activate();
+            entry.Root.Closed += () => RemoveClosed(kind, entry);
+            entry.Root.Activate();
             return entry.Root.Window;
         }
     }
@@ -111,8 +154,22 @@ public sealed class WindowManager(IWindowFactory factory, IUiDispatcher dispatch
         return Open(kind);
     }
 
-    public T? Get<T>(WindowKind kind) where T : Window =>
-        entries.TryGetValue(kind, out var entry) ? entry.Root.Window as T : null;
+    private async Task ObserveCloseAsync(WindowKind kind, Entry entry)
+    {
+        try
+        {
+            await CloseAsync(kind, entry);
+        }
+        catch (Exception error)
+        {
+            App.Log(error);
+        }
+    }
+
+    public T? Get<T>(WindowKind kind) where T : Window
+    {
+        return entries.TryGetValue(kind, out var entry) ? entry.Root.Window as T : null;
+    }
 
     public Task CloseAsync(WindowKind kind)
     {
@@ -141,7 +198,7 @@ public sealed class WindowManager(IWindowFactory factory, IUiDispatcher dispatch
         finally
         {
             entry.AllowClose = true;
-            await dispatcher.InvokeAsync(() => entry.Root.Window.Close(), CancellationToken.None);
+            await dispatcher.InvokeAsync(entry.Root.Close, CancellationToken.None);
         }
     }
 
@@ -164,5 +221,12 @@ public sealed class WindowManager(IWindowFactory factory, IUiDispatcher dispatch
             current = [.. entries];
         }
         await Task.WhenAll(current.Select(pair => CloseAsync(pair.Key, pair.Value)));
+    }
+
+    private sealed class Entry(IWindowRoot root)
+    {
+        public IWindowRoot Root { get; } = root;
+        public Task? CloseTask { get; set; }
+        public bool AllowClose { get; set; }
     }
 }

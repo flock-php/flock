@@ -58,12 +58,12 @@ internal sealed class Screenshots(Screenshots.Options options)
     public async Task RunAsync(App app)
     {
         var session = new ScreenshotSession(app);
+        await app.State.RefreshAsync();
         foreach (var shot in All.Where(s => options.Only?.Contains(s.Id) ?? true))
         {
             var file = Path.Combine(options.Out, $"{shot.Id}-windows-{options.Theme}.png");
             try
             {
-                await app.State.RefreshAsync();
                 var window = await shot.Show(session);
                 var hwnd = Microsoft.UI.Win32Interop.GetWindowFromWindowId(window.AppWindow.Id);
                 Capture.Prepare(hwnd);

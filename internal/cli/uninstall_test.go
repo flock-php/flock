@@ -18,7 +18,7 @@ func fakeRoot(t *testing.T) (root, cache string) {
 	for _, f := range []string{
 		"config.json", "api.json", "hosts.txt", "notes.txt",
 		"bin/flock.exe", "php/8.4/bin/php.exe", "node/22.11.0/node.exe", "certs/ca.key", "log/daemon.log",
-		"mail/1.eml", "tools/composer.phar",
+		"mail/1.eml", "tools/composer.phar", "frankenphp/8.4/frankenphp.exe", "cloudflared/cloudflared.exe",
 		"services/postgres/18.6/bin/postgres.exe", "services/postgres/data/PG_VERSION",
 		"services/valkey/8.1/valkey-server", "services/postgres/18.6-build1/bin/psql.exe",
 		"services/postgres/extensions/postgis/18/3.6.4-build1/lib/postgis-3.so",

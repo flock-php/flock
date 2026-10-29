@@ -4,61 +4,39 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Flock.Kit;
 using Flock.Tray.Infrastructure;
-
 namespace Flock.Tray.ViewModels;
 
 /// <summary>Owns the selected log, its source-bound reads, filtering, polling, and window lifetime.</summary>
 public sealed class LogsViewModel : ObservableObject, IAsyncDisposable
 {
-    public abstract record Source(string Name);
-    public sealed record SiteSource(string Name) : Source(Name);
-    public sealed record ServiceSource(string Name) : Source(Name);
 
-    public abstract record LogContent
-    {
-        public Source Source => this switch
-        {
-            SiteContent site => site.Site,
-            ServiceContent service => service.Service,
-            _ => throw new ArgumentOutOfRangeException(),
-        };
-    }
-
-    public sealed record SiteContent(SiteSource Site, IReadOnlyList<LogEntry> Entries) : LogContent;
-    public sealed record ServiceContent(ServiceSource Service, string Text) : LogContent;
-
-    private readonly FlockClient client;
-    private readonly OperationRunner operations;
-    private readonly IUiDispatcher? dispatcher;
-    private readonly TimeProvider timeProvider;
+    private readonly FlockClient _client;
+    private readonly IUiDispatcher? _dispatcher;
+    private readonly OperationErrors featureErrors = new();
+    private readonly Lock gate = new();
     private readonly SharedRead<LogIndex> indexRequest;
+    private readonly CancellationTokenSource lifetime = new();
+    private readonly OperationRunner _operations;
     private readonly Dictionary<Source, SharedRead<LogContent>> requests = [];
     private readonly Dictionary<Source, OperationErrors> resourceErrors = [];
-    private readonly OperationErrors featureErrors = new();
     private readonly ObservableCollection<Source> sources = [];
-    private readonly CancellationTokenSource lifetime = new();
-    private readonly object gate = new();
+    private readonly TimeProvider _timeProvider;
+    private bool autoRefreshEnabled;
+    private readonly IAsyncRelayCommand? clearCommand;
+    private LogLevelFilter level = LogLevelFilter.All;
     private Task? pollTask;
-    private bool windowActive = true;
+    private string query = "";
     private bool released;
     private long selectionGeneration;
-    private Source? selection;
-    private LogContent? current;
-    private LogIndex index = new();
-    private string query = "";
-    private LogLevelFilter level = LogLevelFilter.All;
-    private bool autoRefreshEnabled;
-    private IReadOnlyList<LogEntry> filteredEntries = [];
-    private string filteredText = "";
-    private IAsyncRelayCommand? clearCommand;
+    private bool windowActive = true;
 
     public LogsViewModel(FlockClient client, OperationRunner operations, IUiDispatcher? dispatcher = null,
         TimeProvider? timeProvider = null)
     {
-        this.client = client;
-        this.operations = operations;
-        this.dispatcher = dispatcher;
-        this.timeProvider = timeProvider ?? TimeProvider.System;
+        _client = client;
+        _operations = operations;
+        _dispatcher = dispatcher;
+        _timeProvider = timeProvider ?? TimeProvider.System;
         indexRequest = new SharedRead<LogIndex>(dispatcher);
         featureErrors.PropertyChanged += ErrorsChanged;
         operations.RunningChanged += OperationRunningChanged;
@@ -69,18 +47,20 @@ public sealed class LogsViewModel : ObservableObject, IAsyncDisposable
         ClearCommand = clearCommand;
     }
 
-    public LogIndex Index => index;
+    public LogIndex Index { get; private set; } = new();
     public IReadOnlyList<Source> Sources => sources;
-    public Source? Selection => selection;
-    public LogContent? Current => current;
-    public IReadOnlyList<LogEntry> FilteredEntries => filteredEntries;
-    public string FilteredText => filteredText;
+    public IReadOnlyList<SiteSource> SiteSources => sources.OfType<SiteSource>().ToList();
+    public IReadOnlyList<ServiceSource> ServiceSources => sources.OfType<ServiceSource>().ToList();
+    public Source? Selection { get; private set; }
+    public LogContent? Current { get; private set; }
+    public IReadOnlyList<LogEntry> FilteredEntries { get; private set; } = [];
+    public string FilteredText { get; private set; } = "";
     public string? Error => SelectedErrors()?.Action ?? featureErrors.Action ?? SelectedErrors()?.Refresh ?? featureErrors.Refresh;
     public string? LoadError => SelectedErrors()?.Refresh;
     public string? ActionError => SelectedErrors()?.Action ?? featureErrors.Action;
     public bool IsLoading { get; private set; }
     public bool IsClearing => clearCommand?.IsRunning == true;
-    public bool CanClear => selection is SiteSource && clearCommand?.IsRunning != true && selection is { } source && !operations.IsRunning(Key(source));
+    public bool CanClear => Selection is SiteSource && clearCommand?.IsRunning != true && Selection is { } source && !_operations.IsRunning(Key(source));
 
     public string Query
     {
@@ -111,14 +91,14 @@ public sealed class LogsViewModel : ObservableObject, IAsyncDisposable
         get => autoRefreshEnabled;
         set
         {
-            if (SetProperty(ref autoRefreshEnabled, value))
+            if (!SetProperty(ref autoRefreshEnabled, value))
+                return;
+
+            if (value)
             {
-                if (value)
-                {
-                    pollTask ??= PollAsync(lifetime.Token);
-                }
-                OnPropertyChanged(nameof(IsPolling));
+                pollTask ??= PollAsync(lifetime.Token);
             }
+            OnPropertyChanged(nameof(IsPolling));
         }
     }
 
@@ -126,6 +106,34 @@ public sealed class LogsViewModel : ObservableObject, IAsyncDisposable
     public IAsyncRelayCommand RefreshCommand { get; }
     public IAsyncRelayCommand<Source> ShowSourceCommand { get; }
     public IAsyncRelayCommand ClearCommand { get; }
+
+    public async ValueTask DisposeAsync()
+    {
+        Task? polling;
+        SharedRead<LogIndex>[] indexReads;
+        SharedRead<LogContent>[] logReads;
+        lock (gate)
+        {
+            if (released)
+            {
+                return;
+            }
+            released = true;
+            windowActive = false;
+            lifetime.Cancel();
+            polling = pollTask;
+            indexReads = [indexRequest];
+            logReads = [.. requests.Values];
+        }
+        _operations.RunningChanged -= OperationRunningChanged;
+        featureErrors.PropertyChanged -= ErrorsChanged;
+        await Task.WhenAll(indexReads.Select(read => read.DisposeAsync().AsTask()).Concat(logReads.Select(read => read.DisposeAsync().AsTask())));
+        if (polling is not null)
+        {
+            await polling;
+        }
+        lifetime.Dispose();
+    }
 
     /// <summary>Whether the native window is visible and not minimized.</summary>
     public void SetWindowActive(bool active)
@@ -140,22 +148,22 @@ public sealed class LogsViewModel : ObservableObject, IAsyncDisposable
     public void SelectSource(Source? source)
     {
         SharedRead<LogContent>? previousRequest = null;
-        var changed = !Equals(selection, source);
+        var changed = !Equals(Selection, source);
         lock (gate)
         {
             if (released)
             {
                 return;
             }
-            previousRequest = selection is not null && requests.TryGetValue(selection, out var request) ? request : null;
+            previousRequest = Selection is not null && requests.TryGetValue(Selection, out var request) ? request : null;
             selectionGeneration++;
-            selection = source;
+            Selection = source;
             if (changed)
             {
-                current = null;
+                Current = null;
                 IsLoading = false;
-                filteredEntries = [];
-                filteredText = "";
+                FilteredEntries = [];
+                FilteredText = "";
             }
         }
         previousRequest?.Invalidate();
@@ -189,7 +197,7 @@ public sealed class LogsViewModel : ObservableObject, IAsyncDisposable
 
     public async Task RefreshAsync(CancellationToken observerToken = default)
     {
-        var source = selection;
+        var source = Selection;
         var intent = selectionGeneration;
         await RefreshIndexAsync(observerToken);
         if (source is not null && IsCurrentIntent(source, intent))
@@ -207,7 +215,7 @@ public sealed class LogsViewModel : ObservableObject, IAsyncDisposable
 
     public Task RefreshSelectedAsync(CancellationToken observerToken = default)
     {
-        var source = selection;
+        var source = Selection;
         return source is null ? Task.CompletedTask : RefreshSourceAsync(source, selectionGeneration, observerToken);
     }
 
@@ -221,7 +229,7 @@ public sealed class LogsViewModel : ObservableObject, IAsyncDisposable
             }
         }
         return indexRequest.JoinReadAsync(
-            token => client.LogsAsync(token),
+            token => _client.LogsAsync(token),
             ApplyIndex,
             PublishIndexFailure,
             observerToken,
@@ -237,7 +245,7 @@ public sealed class LogsViewModel : ObservableObject, IAsyncDisposable
     {
         var errors = ErrorsFor(source);
         var request = GetRequest(source);
-        var outcome = await operations.RunMutationAsync(
+        var outcome = await _operations.RunMutationAsync(
             Key(source),
             errors,
             async token =>
@@ -245,7 +253,7 @@ public sealed class LogsViewModel : ObservableObject, IAsyncDisposable
                 request.Invalidate();
                 try
                 {
-                    await client.ClearSiteLogAsync(source.Name, token);
+                    await _client.ClearSiteLogAsync(source.Name, token);
                 }
                 finally
                 {
@@ -278,37 +286,9 @@ public sealed class LogsViewModel : ObservableObject, IAsyncDisposable
         OnPropertyChanged(nameof(LoadError));
     }
 
-    public async ValueTask DisposeAsync()
-    {
-        Task? polling;
-        SharedRead<LogIndex>[] indexReads;
-        SharedRead<LogContent>[] logReads;
-        lock (gate)
-        {
-            if (released)
-            {
-                return;
-            }
-            released = true;
-            windowActive = false;
-            lifetime.Cancel();
-            polling = pollTask;
-            indexReads = [indexRequest];
-            logReads = [.. requests.Values];
-        }
-        operations.RunningChanged -= OperationRunningChanged;
-        featureErrors.PropertyChanged -= ErrorsChanged;
-        await Task.WhenAll(indexReads.Select(read => read.DisposeAsync().AsTask()).Concat(logReads.Select(read => read.DisposeAsync().AsTask())));
-        if (polling is not null)
-        {
-            await polling;
-        }
-        lifetime.Dispose();
-    }
-
     private async Task ClearSelectedAsync()
     {
-        if (selection is SiteSource site)
+        if (Selection is SiteSource site)
         {
             await ClearAsync(site);
         }
@@ -331,10 +311,10 @@ public sealed class LogsViewModel : ObservableObject, IAsyncDisposable
             }
             if (!requests.TryGetValue(source, out request))
             {
-                request = new SharedRead<LogContent>(dispatcher);
+                request = new SharedRead<LogContent>(_dispatcher);
                 requests.Add(source, request);
             }
-            if (selection == source && selectionGeneration == intent)
+            if (Selection == source && selectionGeneration == intent)
             {
                 IsLoading = true;
             }
@@ -351,18 +331,25 @@ public sealed class LogsViewModel : ObservableObject, IAsyncDisposable
         await read.WaitAsync(observerToken);
     }
 
-    private Task<LogContent> LoadContentAsync(Source source, CancellationToken token) => source switch
+    private Task<LogContent> LoadContentAsync(Source source, CancellationToken token)
     {
-        SiteSource site => LoadSiteAsync(site, token),
-        ServiceSource service => LoadServiceAsync(service, token),
-        _ => throw new ArgumentOutOfRangeException(nameof(source)),
-    };
+        return source switch
+        {
+            SiteSource site => LoadSiteAsync(site, token),
+            ServiceSource service => LoadServiceAsync(service, token),
+            _ => throw new ArgumentOutOfRangeException(nameof(source))
+        };
+    }
 
-    private async Task<LogContent> LoadSiteAsync(SiteSource source, CancellationToken token) =>
-        new SiteContent(source, await client.SiteLogAsync(source.Name, cancellationToken: token));
+    private async Task<LogContent> LoadSiteAsync(SiteSource source, CancellationToken token)
+    {
+        return new SiteContent(source, await _client.SiteLogAsync(source.Name, cancellationToken: token));
+    }
 
-    private async Task<LogContent> LoadServiceAsync(ServiceSource source, CancellationToken token) =>
-        new ServiceContent(source, await client.ServiceLogAsync(source.Name, cancellationToken: token));
+    private async Task<LogContent> LoadServiceAsync(ServiceSource source, CancellationToken token)
+    {
+        return new ServiceContent(source, await _client.ServiceLogAsync(source.Name, cancellationToken: token));
+    }
 
     private void ApplyContent(Source source, long intent, LogContent value)
     {
@@ -370,12 +357,12 @@ public sealed class LogsViewModel : ObservableObject, IAsyncDisposable
         {
             return;
         }
-        var unchanged = current is not null && SameContent(current, value);
+        var unchanged = Current is not null && SameContent(Current, value);
         var errors = ErrorsFor(source);
         errors.ClearRefresh();
         if (!unchanged)
         {
-            current = value;
+            Current = value;
             Refilter();
             OnPropertyChanged(nameof(Current));
             OnPropertyChanged(nameof(FilteredEntries));
@@ -402,13 +389,15 @@ public sealed class LogsViewModel : ObservableObject, IAsyncDisposable
 
     private void ApplyIndex(LogIndex value)
     {
-        if (!SameIndex(index, value))
+        if (!SameIndex(Index, value))
         {
-            index = value;
+            Index = value;
             var wanted = value.Sites.Select(name => (Source)new SiteSource(name)).Concat(value.Services.Select(name => (Source)new ServiceSource(name)));
             SynchronizeSources(wanted);
             OnPropertyChanged(nameof(Index));
             OnPropertyChanged(nameof(Sources));
+            OnPropertyChanged(nameof(SiteSources));
+            OnPropertyChanged(nameof(ServiceSources));
         }
         featureErrors.ClearRefresh();
         OnPropertyChanged(nameof(Error));
@@ -450,19 +439,19 @@ public sealed class LogsViewModel : ObservableObject, IAsyncDisposable
 
     private void Refilter()
     {
-        switch (current)
+        switch (Current)
         {
             case SiteContent site:
-                filteredEntries = LogFilter.Filter(site.Entries, Query, Level);
-                filteredText = "";
+                FilteredEntries = LogFilter.Filter(site.Entries, Query, Level);
+                FilteredText = "";
                 break;
             case ServiceContent service:
-                filteredEntries = [];
-                filteredText = LogFilter.FilterLines(service.Text, Query);
+                FilteredEntries = [];
+                FilteredText = LogFilter.FilterLines(service.Text, Query);
                 break;
             default:
-                filteredEntries = [];
-                filteredText = "";
+                FilteredEntries = [];
+                FilteredText = "";
                 break;
         }
         OnPropertyChanged(nameof(FilteredEntries));
@@ -473,7 +462,7 @@ public sealed class LogsViewModel : ObservableObject, IAsyncDisposable
     {
         lock (gate)
         {
-            return !released && selection == source && selectionGeneration == intent;
+            return !released && Selection == source && selectionGeneration == intent;
         }
     }
 
@@ -483,7 +472,7 @@ public sealed class LogsViewModel : ObservableObject, IAsyncDisposable
         {
             if (!requests.TryGetValue(source, out var request))
             {
-                request = new SharedRead<LogContent>(dispatcher);
+                request = new SharedRead<LogContent>(_dispatcher);
                 requests.Add(source, request);
             }
             return request;
@@ -505,10 +494,17 @@ public sealed class LogsViewModel : ObservableObject, IAsyncDisposable
         }
     }
 
-    private OperationErrors? SelectedErrors() => selection is not null && resourceErrors.TryGetValue(selection, out var errors) ? errors : null;
+    private OperationErrors? SelectedErrors()
+    {
+        return Selection is not null && resourceErrors.TryGetValue(Selection, out var errors) ? errors : null;
+    }
 
     private void ErrorsChanged(object? sender, PropertyChangedEventArgs args)
     {
+        if (!OperationErrors.IsDirectPropertyChange(args))
+        {
+            return;
+        }
         OnPropertyChanged(nameof(Error));
         OnPropertyChanged(nameof(ActionError));
         OnPropertyChanged(nameof(LoadError));
@@ -523,28 +519,39 @@ public sealed class LogsViewModel : ObservableObject, IAsyncDisposable
         }
     }
 
-    private string Key(Source source) => "logs:" + (source is SiteSource ? "site:" : "service:") + source.Name;
-
-    private static bool SameIndex(LogIndex left, LogIndex right) =>
-        left.Sites.SequenceEqual(right.Sites, StringComparer.Ordinal) && left.Services.SequenceEqual(right.Services, StringComparer.Ordinal);
-
-    private static bool SameContent(LogContent left, LogContent right) => (left, right) switch
+    private string Key(Source source)
     {
-        (SiteContent a, SiteContent b) => a.Site == b.Site && a.Entries.Count == b.Entries.Count && a.Entries.Zip(b.Entries).All(pair => SameEntry(pair.First, pair.Second)),
-        (ServiceContent a, ServiceContent b) => a.Service == b.Service && string.Equals(a.Text, b.Text, StringComparison.Ordinal),
-        _ => false,
-    };
+        return "logs:" + (source is SiteSource ? "site:" : "service:") + source.Name;
+    }
 
-    private static bool SameEntry(LogEntry left, LogEntry right) =>
-        left.Time == right.Time && string.Equals(left.Env, right.Env, StringComparison.Ordinal) &&
-        string.Equals(left.Level, right.Level, StringComparison.Ordinal) && string.Equals(left.Message, right.Message, StringComparison.Ordinal) &&
-        string.Equals(left.Details, right.Details, StringComparison.Ordinal);
+    private static bool SameIndex(LogIndex left, LogIndex right)
+    {
+        return left.Sites.SequenceEqual(right.Sites, StringComparer.Ordinal) && left.Services.SequenceEqual(right.Services, StringComparer.Ordinal);
+    }
+
+    private static bool SameContent(LogContent left, LogContent right)
+    {
+        return (left, right) switch
+        {
+            (SiteContent a, SiteContent b) => a.Site == b.Site && a.Entries.Count == b.Entries.Count &&
+                                              a.Entries.Zip(b.Entries).All(pair => SameEntry(pair.First, pair.Second)),
+            (ServiceContent a, ServiceContent b) => a.Service == b.Service && string.Equals(a.Text, b.Text, StringComparison.Ordinal),
+            _ => false
+        };
+    }
+
+    private static bool SameEntry(LogEntry left, LogEntry right)
+    {
+        return left.Time == right.Time && string.Equals(left.Env, right.Env, StringComparison.Ordinal) &&
+               string.Equals(left.Level, right.Level, StringComparison.Ordinal) && string.Equals(left.Message, right.Message, StringComparison.Ordinal) &&
+               string.Equals(left.Details, right.Details, StringComparison.Ordinal);
+    }
 
     private async Task PollAsync(CancellationToken token)
     {
         try
         {
-            using var timer = new PeriodicTimer(TimeSpan.FromSeconds(2), timeProvider);
+            using var timer = new PeriodicTimer(TimeSpan.FromSeconds(2), _timeProvider);
             while (await timer.WaitForNextTickAsync(token))
             {
                 bool active;
@@ -552,7 +559,7 @@ public sealed class LogsViewModel : ObservableObject, IAsyncDisposable
                 {
                     active = windowActive && !released;
                 }
-                if (AutoRefreshEnabled && active && selection is not null)
+                if (AutoRefreshEnabled && active && Selection is not null)
                 {
                     try
                     {
@@ -569,4 +576,24 @@ public sealed class LogsViewModel : ObservableObject, IAsyncDisposable
         {
         }
     }
+
+    public abstract record Source(string Name);
+
+    public sealed record SiteSource(string Name) : Source(Name);
+
+    public sealed record ServiceSource(string Name) : Source(Name);
+
+    public abstract record LogContent
+    {
+        public Source Source => this switch
+        {
+            SiteContent site => site.Site,
+            ServiceContent service => service.Service,
+            _ => throw new ArgumentOutOfRangeException()
+        };
+    }
+
+    public sealed record SiteContent(SiteSource Site, IReadOnlyList<LogEntry> Entries) : LogContent;
+
+    public sealed record ServiceContent(ServiceSource Service, string Text) : LogContent;
 }

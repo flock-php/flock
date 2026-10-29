@@ -17,7 +17,7 @@ public sealed class ConfigurationService : IAsyncDisposable
         this.client = client;
         this.runner = runner;
         request = new SharedRead<FlockConfig>(dispatcher);
-        errors.PropertyChanged += (_, _) => Changed?.Invoke();
+        errors.PropertyChanged += (_, args) => { if (OperationErrors.IsDirectPropertyChange(args)) Changed?.Invoke(); };
     }
 
     public FlockConfig? Current => current;

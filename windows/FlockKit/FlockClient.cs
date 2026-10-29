@@ -359,7 +359,7 @@ public sealed class FlockClient : IDisposable
     {
         var data = await Raw(method, path, body, timeout, cancellationToken);
         // Go encodes nil slices as null; an empty list is what every caller wants then.
-        if (data.Length == 0 || data.AsSpan().SequenceEqual("null"u8))
+        if (data.Length == 0)
         {
             data = typeof(T).IsGenericType && typeof(T).GetGenericTypeDefinition() == typeof(List<>) ? "[]"u8.ToArray() : data;
         }

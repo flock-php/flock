@@ -1,6 +1,5 @@
 using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
-using CommunityToolkit.Mvvm.Input;
 using Flock.Kit;
 using Flock.Tray.Features.Services;
 using Flock.Tray.Infrastructure;
@@ -10,27 +9,26 @@ using CatalogFeatureService = Flock.Tray.Features.Services.CatalogService;
 namespace Flock.Tray.ViewModels;
 
 /// <summary>Retained service rows and the three shared service snapshots used by the Services pane.</summary>
-public sealed class ServicesPaneViewModel : ObservableObject, IDisposable
+public sealed partial class ServicesPaneViewModel : ObservableObject, IDisposable
 {
     private readonly ServicesService services;
     private readonly PostgresService postgres;
     private readonly CatalogFeatureService catalog;
+    private readonly ServiceReleaseActions releaseActions;
     private readonly CollectionSynchronizer<string, ServiceViewModel> serviceSynchronizer = new();
     private readonly CollectionSynchronizer<string, CatalogServiceViewModel> catalogSynchronizer = new();
-    private string? selectedId;
-    private bool showAll = true;
     private string? postgresDraftMajor;
     private int postgresDraftPort;
-    private bool postgresDraftChanged;
 
-    public ServicesPaneViewModel(ServicesService services, PostgresService postgres, CatalogFeatureService catalog)
+    public ServicesPaneViewModel(ServicesService services, PostgresService postgres, CatalogFeatureService catalog, ServiceReleaseActions releaseActions)
     {
         this.services = services;
         this.postgres = postgres;
         this.catalog = catalog;
-        services.Changed += RefreshRows;
-        postgres.Changed += RefreshRows;
-        catalog.Changed += RefreshRows;
+        this.releaseActions = releaseActions;
+        services.Changed += ServicesChanged;
+        postgres.Changed += PostgresChanged;
+        catalog.Changed += CatalogChanged;
         RefreshRows();
     }
 
@@ -38,40 +36,51 @@ public sealed class ServicesPaneViewModel : ObservableObject, IDisposable
     public ObservableCollection<CatalogServiceViewModel> CatalogServices { get; } = [];
     public PostgresVersions? Postgres => postgres.Current;
     public ServiceCatalog? Catalog => catalog.Current;
+    public ServiceReleaseActions ReleaseActions => releaseActions;
     public string? Error => services.Error ?? postgres.Error ?? catalog.Error;
     public bool IsPostgresRunning => postgres.IsRunning;
     public bool IsCatalogChecking => catalog.IsChecking;
-    public bool ShowAll
-    {
-        get => showAll;
-        set => SetProperty(ref showAll, value);
-    }
-    public string? SelectedId
-    {
-        get => selectedId;
-        set => SetProperty(ref selectedId, value);
-    }
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(VisibleServices))]
+    [NotifyPropertyChangedFor(nameof(VisibleServiceGroups))]
+    [NotifyPropertyChangedFor(nameof(SelectedService))]
+    public partial bool ShowAll { get; set; } = true;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(VisibleServices))]
+    [NotifyPropertyChangedFor(nameof(SelectedService))]
+    public partial string? SelectedId { get; set; }
+
+    public IEnumerable<ServiceViewModel> VisibleServices => ShowAll
+        ? Services
+        : Services.Where(service => !service.IsOnRequest || service.Installed);
+    public IEnumerable<ServiceGroupViewModel> VisibleServiceGroups => VisibleServices
+        .GroupBy(service => service.Category)
+        .Select(group => new ServiceGroupViewModel(group.Key, [.. group]));
+    public ServiceViewModel? SelectedService => VisibleServices.FirstOrDefault(service => service.Id == SelectedId);
+    public event Action<ServiceViewModel?>? SelectedServiceChanged;
     public string? PostgresDraftMajor
     {
-        get => postgresDraftMajor ?? Postgres?.Majors.FirstOrDefault()?.Major;
-        set
-        {
-            if (SetProperty(ref postgresDraftMajor, value))
-                postgresDraftChanged = true;
-        }
+        get => postgresDraftMajor;
+        set => SetProperty(ref postgresDraftMajor, value);
     }
     public int PostgresDraftPort
     {
         get => postgresDraftPort == 0 ? Postgres?.Port ?? 0 : postgresDraftPort;
         set
         {
-            if (SetProperty(ref postgresDraftPort, value))
-                postgresDraftChanged = true;
+            SetProperty(ref postgresDraftPort, value);
         }
     }
 
     public Task RefreshAsync(CancellationToken observerToken = default, CancellationToken lifetimeToken = default) =>
         Task.WhenAll(services.RefreshAsync(observerToken, lifetimeToken), postgres.RefreshAsync(observerToken, lifetimeToken), catalog.RefreshAsync(observerToken, lifetimeToken));
+
+    public async Task RefreshReleaseStateAsync(CancellationToken token = default)
+    {
+        await postgres.RefreshAsync(token);
+        await catalog.RefreshAsync(token);
+    }
 
     public bool IsServiceRunning(string id) => services.IsRunning(id);
     public bool IsPostgresBusy => postgres.Current?.AnyBusy == true || postgres.IsRunning;
@@ -81,47 +90,94 @@ public sealed class ServicesPaneViewModel : ObservableObject, IDisposable
 
     public void Dispose()
     {
-        services.Changed -= RefreshRows;
-        postgres.Changed -= RefreshRows;
-        catalog.Changed -= RefreshRows;
+        services.Changed -= ServicesChanged;
+        postgres.Changed -= PostgresChanged;
+        catalog.Changed -= CatalogChanged;
     }
 
-    private void RefreshRows()
+    private void ServicesChanged() => RefreshRows(detailMayHaveChanged: true);
+
+    private void PostgresChanged() => RefreshRows(detailMayHaveChanged: SelectedId == "postgres");
+
+    private void CatalogChanged() => RefreshRows(detailMayHaveChanged: SelectedService?.IsOnRequest == true);
+
+    private void RefreshRows(bool detailMayHaveChanged = false)
     {
+        var selected = SelectedService;
+        var selectedSnapshot = selected?.Value;
         serviceSynchronizer.Synchronize(Services, services.Current, row => row.Id, value => value.Id,
-            value => new ServiceViewModel(services, value), (row, value) => row.Update(value));
+            value => new ServiceViewModel(value), (row, value) => row.Update(value));
         catalogSynchronizer.Synchronize(CatalogServices, catalog.Current?.Services ?? [], row => row.Id, value => value.Id,
-            value => new CatalogServiceViewModel(catalog, value), (row, value) => row.Update(value));
+            value => new CatalogServiceViewModel(value), (row, value) => row.Update(value));
+        NormalizeInstallDrafts();
         OnPropertyChanged(nameof(Postgres));
         OnPropertyChanged(nameof(Catalog));
         OnPropertyChanged(nameof(Error));
         OnPropertyChanged(nameof(IsPostgresRunning));
         OnPropertyChanged(nameof(IsCatalogChecking));
         OnPropertyChanged(nameof(IsPostgresBusy));
-        if (!postgresDraftChanged && postgres.Current is { } currentPostgres)
+        OnPropertyChanged(nameof(VisibleServices));
+        OnPropertyChanged(nameof(VisibleServiceGroups));
+        NormalizeSelection();
+        var current = SelectedService;
+        if (selected is not null && ReferenceEquals(selected, current) &&
+            (detailMayHaveChanged || !ReferenceEquals(selectedSnapshot, current?.Value)))
         {
-            postgresDraftMajor = currentPostgres.Majors.FirstOrDefault()?.Major;
-            postgresDraftPort = currentPostgres.Port;
-            OnPropertyChanged(nameof(PostgresDraftMajor));
-            OnPropertyChanged(nameof(PostgresDraftPort));
+            SelectedServiceChanged?.Invoke(current);
         }
     }
+
+    public void NotifySelectedServiceChanged() => SelectedServiceChanged?.Invoke(SelectedService);
+
+    partial void OnShowAllChanged(bool value) => NormalizeSelection();
+
+    partial void OnSelectedIdChanged(string? value) => SelectedServiceChanged?.Invoke(SelectedService);
+
+    private void NormalizeSelection()
+    {
+        var selected = VisibleServices.FirstOrDefault(service => service.Id == SelectedId)?.Id;
+        var next = selected ?? VisibleServices.FirstOrDefault()?.Id;
+        if (SelectedId != next)
+        {
+            SelectedId = next;
+        }
+    }
+
+    private void NormalizeInstallDrafts()
+    {
+        var postgresTargets = releaseActions.InstallTargets("postgres");
+        var postgresDraft = NormalizeDraft(postgresDraftMajor, postgresTargets);
+        if (postgresDraftMajor != postgresDraft)
+        {
+            postgresDraftMajor = postgresDraft;
+            OnPropertyChanged(nameof(PostgresDraftMajor));
+        }
+
+        foreach (var service in CatalogServices)
+        {
+            service.NormalizeDraft(releaseActions.InstallTargets(service.Id));
+        }
+    }
+
+    private static string? NormalizeDraft(string? draft, IReadOnlyList<ServiceReleaseTarget> targets) =>
+        targets.Any(target => target.Line == draft) ? draft : targets.FirstOrDefault()?.Line;
 }
 
-/// <summary>Retained state and service-level commands for one daemon service.</summary>
+/// <summary>One visible service category and its retained rows.</summary>
+public sealed class ServiceGroupViewModel(string name, IReadOnlyList<ServiceViewModel> services)
+{
+    public string Name { get; } = name;
+    public IReadOnlyList<ServiceViewModel> Services { get; } = services;
+}
+
+/// <summary>Retained state for one daemon service.</summary>
 public sealed class ServiceViewModel : ObservableObject
 {
-    private readonly ServicesService service;
     private Service value;
-    private int draftPort;
-    private bool portChanged;
 
-    public ServiceViewModel(ServicesService service, Service value)
+    public ServiceViewModel(Service value)
     {
-        this.service = service;
         this.value = value;
-        draftPort = value.Port;
-        SavePortCommand = new AsyncRelayCommand(SavePortAsync, () => !service.IsRunning(Id));
     }
 
     public string Id => value.Id;
@@ -133,6 +189,12 @@ public sealed class ServiceViewModel : ObservableObject
     public string Unavailable => value.Unavailable;
     public string Version => value.Version;
     public int Port => value.Port;
+    public string ListDetail => string.Join(" · ", new[]
+    {
+        value.Version,
+        value.Port > 0 ? $"Port {value.Port}" : null,
+        !value.Running ? "Stopped" : null,
+    }.Where(part => !string.IsNullOrEmpty(part)));
     public bool Installed => value.Installed;
     public bool Enabled => value.Enabled;
     public bool Running => value.Running;
@@ -144,37 +206,13 @@ public sealed class ServiceViewModel : ObservableObject
     public bool IsOnRequest => value.IsOnRequest;
     public bool HasConfigurablePort => value.HasConfigurablePort;
     public bool IsDatabase => value.IsDatabase;
-    public int DraftPort
-    {
-        get => draftPort;
-        set
-        {
-            if (SetProperty(ref draftPort, value))
-            {
-                portChanged = true;
-                SavePortCommand.NotifyCanExecuteChanged();
-            }
-        }
-    }
-    public IAsyncRelayCommand SavePortCommand { get; }
-
-    public Task<OperationOutcome> StartAsync(CancellationToken token = default) => service.StartAsync(Id, token);
-    public Task<OperationOutcome> StopAsync(CancellationToken token = default) => service.StopAsync(Id, token);
-
     public void Update(Service next)
     {
         if (value.Id != next.Id)
         {
             return;
         }
-        var oldPort = value.Port;
         value = next;
-        if (!portChanged || draftPort == oldPort)
-        {
-            draftPort = next.Port;
-            portChanged = false;
-            OnPropertyChanged(nameof(DraftPort));
-        }
         OnPropertyChanged(nameof(Name));
         OnPropertyChanged(nameof(Category));
         OnPropertyChanged(nameof(Description));
@@ -182,6 +220,7 @@ public sealed class ServiceViewModel : ObservableObject
         OnPropertyChanged(nameof(Unavailable));
         OnPropertyChanged(nameof(Version));
         OnPropertyChanged(nameof(Port));
+        OnPropertyChanged(nameof(ListDetail));
         OnPropertyChanged(nameof(Installed));
         OnPropertyChanged(nameof(Enabled));
         OnPropertyChanged(nameof(Running));
@@ -190,97 +229,21 @@ public sealed class ServiceViewModel : ObservableObject
         OnPropertyChanged(nameof(Log));
         OnPropertyChanged(nameof(Url));
         OnPropertyChanged(nameof(Problem));
-        SavePortCommand.NotifyCanExecuteChanged();
     }
-
-    private async Task SavePortAsync()
-    {
-        if (!portChanged || draftPort == value.Port)
-        {
-            return;
-        }
-        var outcome = await service.SetPortAsync(Id, draftPort);
-        if (outcome == OperationOutcome.Succeeded)
-        {
-            portChanged = false;
-        }
-    }
-}
-
-/// <summary>Retained state and draft controls for one PostgreSQL version form.</summary>
-public sealed class PostgresMajorViewModel : ObservableObject
-{
-    private PostgresMajor value;
-
-    public PostgresMajorViewModel(PostgresService service, PostgresMajor value)
-    {
-        this.value = value;
-        Service = service;
-        InstallCommand = new AsyncRelayCommand(InstallAsync, () => !service.IsRunning);
-        UpdateCommand = new AsyncRelayCommand(() => service.UpdateAsync(Major), () => !service.IsRunning);
-        ActivateCommand = new AsyncRelayCommand(() => service.ActivateAsync(Major), () => !service.IsRunning);
-        UninstallCommand = new AsyncRelayCommand(() => service.UninstallAsync(Major, DeleteData), () => !service.IsRunning);
-    }
-
-    private PostgresService Service { get; }
-    public string Major => value.Major;
-    public PostgresMajor Value => value;
-    public string Installed => value.Installed;
-    public string Latest => value.Latest;
-    public bool IsInstalled => value.IsInstalled;
-    public bool Active => value.Active;
-    public bool UpdateAvailable => value.Update;
-    public bool HasData => value.HasData;
-    public long DataSize => value.DataSize;
-    public string Busy => value.Busy;
-    public bool DeleteData { get; set; }
-    public IAsyncRelayCommand InstallCommand { get; }
-    public IAsyncRelayCommand UpdateCommand { get; }
-    public IAsyncRelayCommand ActivateCommand { get; }
-    public IAsyncRelayCommand UninstallCommand { get; }
-
-    public void Update(PostgresMajor next)
-    {
-        if (value.Major != next.Major)
-        {
-            return;
-        }
-        value = next;
-        OnPropertyChanged(nameof(Installed));
-        OnPropertyChanged(nameof(Latest));
-        OnPropertyChanged(nameof(IsInstalled));
-        OnPropertyChanged(nameof(Active));
-        OnPropertyChanged(nameof(UpdateAvailable));
-        OnPropertyChanged(nameof(HasData));
-        OnPropertyChanged(nameof(DataSize));
-        OnPropertyChanged(nameof(Busy));
-        InstallCommand.NotifyCanExecuteChanged();
-        UpdateCommand.NotifyCanExecuteChanged();
-        ActivateCommand.NotifyCanExecuteChanged();
-        UninstallCommand.NotifyCanExecuteChanged();
-    }
-
-    private Task<OperationOutcome> InstallAsync() => Service.InstallAsync(Major);
 }
 
 /// <summary>Retained catalog service state and install form drafts.</summary>
 public sealed class CatalogServiceViewModel : ObservableObject
 {
-    private readonly CatalogFeatureService service;
     private CatalogEntry value;
     private string? draftLine;
     private int draftPort;
-    private bool draftChanged;
 
-    public CatalogServiceViewModel(CatalogFeatureService service, CatalogEntry value)
+    public CatalogServiceViewModel(CatalogEntry value)
     {
-        this.service = service;
         this.value = value;
         draftLine = value.PreferredLine?.Id;
         draftPort = value.Port;
-        InstallCommand = new AsyncRelayCommand(InstallAsync, () => !service.IsRunning(Id));
-        CancelCommand = new AsyncRelayCommand(() => service.CancelAsync(Id), () => !service.IsRunning(Id));
-        DismissCommand = new AsyncRelayCommand(() => service.DismissAsync(Id), () => !service.IsRunning(Id));
     }
 
     public string Id => value.Id;
@@ -303,10 +266,7 @@ public sealed class CatalogServiceViewModel : ObservableObject
         get => draftLine;
         set
         {
-            if (SetProperty(ref draftLine, value))
-            {
-                draftChanged = true;
-            }
+            SetProperty(ref draftLine, value);
         }
     }
     public int DraftPort
@@ -314,36 +274,16 @@ public sealed class CatalogServiceViewModel : ObservableObject
         get => draftPort;
         set
         {
-            if (SetProperty(ref draftPort, value))
-            {
-                draftChanged = true;
-            }
+            SetProperty(ref draftPort, value);
         }
     }
-    public IAsyncRelayCommand InstallCommand { get; }
-    public IAsyncRelayCommand CancelCommand { get; }
-    public IAsyncRelayCommand DismissCommand { get; }
-
-    public Task<OperationOutcome> ActivateAsync(string line, CancellationToken token = default) => service.ActivateAsync(Id, line, token);
-    public Task<OperationOutcome> UninstallAsync(string? line, bool deleteData, CancellationToken token = default) => service.UninstallAsync(Id, line, deleteData, token);
-    public Task<string> ReadLogAsync(CancellationToken token = default) => service.ReadLogAsync(Id, token);
-
     public void Update(CatalogEntry next)
     {
         if (value.Id != next.Id)
         {
             return;
         }
-        var oldPort = value.Port;
         value = next;
-        if (!draftChanged || (draftPort == oldPort && draftLine == value.PreferredLine?.Id))
-        {
-            draftLine = next.PreferredLine?.Id;
-            draftPort = next.Port;
-            draftChanged = false;
-            OnPropertyChanged(nameof(DraftLine));
-            OnPropertyChanged(nameof(DraftPort));
-        }
         OnPropertyChanged(nameof(Name));
         OnPropertyChanged(nameof(Category));
         OnPropertyChanged(nameof(Description));
@@ -357,17 +297,15 @@ public sealed class CatalogServiceViewModel : ObservableObject
         OnPropertyChanged(nameof(DefaultPort));
         OnPropertyChanged(nameof(Lines));
         OnPropertyChanged(nameof(Job));
-        InstallCommand.NotifyCanExecuteChanged();
-        CancelCommand.NotifyCanExecuteChanged();
-        DismissCommand.NotifyCanExecuteChanged();
     }
 
-    private async Task InstallAsync()
+    public void NormalizeDraft(IReadOnlyList<ServiceReleaseTarget> targets)
     {
-        var outcome = await service.InstallAsync(Id, draftLine, draftPort);
-        if (outcome == OperationOutcome.Succeeded)
+        var normalized = targets.Any(target => target.Line == draftLine) ? draftLine : targets.FirstOrDefault()?.Line;
+        if (draftLine != normalized)
         {
-            draftChanged = false;
+            draftLine = normalized;
+            OnPropertyChanged(nameof(DraftLine));
         }
     }
 }
