@@ -26,7 +26,7 @@ This page lists the `flock` commands. The other pages show where to find each ac
 | --- | --- |
 | `flock park [dir]` | Serve every subdirectory of `dir` as `<subdir>.test` |
 | `flock unpark [dir]` | Stop serving a parked directory (alias: `forget`) |
-| `flock link [name] [--php 8.4] [--secure]` | Serve the current directory as `<name>.test` |
+| `flock link [name] [--php 8.4] [--secure] [--domain <domain>]` | Serve the current directory as `<name>.test`, or as `--domain` |
 | `flock unlink [name]` | Remove a linked site |
 | `flock sites` | List linked and parked sites |
 | `flock secure [name]` | Serve a site over HTTPS with a trusted certificate |
