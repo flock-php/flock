@@ -72,6 +72,7 @@ These tools change things, so clients ask you first:
 | `create_database` | Create a database in PostgreSQL, MySQL or MariaDB |
 | `create_worktree` | Create a [git worktree](worktrees.md) of a site on a branch (or one Flock names), at its own URL, and wait while Flock sets it up |
 | `setup_worktree` | Set a worktree up, or wait for its setup |
+| `postgres_extension` | List or install PostGIS, pgRouting, pgvector or TimescaleDB for a PostgreSQL version, and tell the agent the `CREATE EXTENSION` to run |
 
 None of the tools remove anything: an agent can't unlink sites, uninstall versions or services, remove worktrees, drop databases, or delete data, mail or logs.
 

@@ -216,6 +216,26 @@ impl Client {
         self.request("POST", &format!("/v1/postgres/versions/{}/{}", escape(major), escape(operation)), None::<&()>, timeout)
     }
 
+    /// Installs a major with the extensions it has a build of.
+    pub fn install_postgres_with(&self, major: &str, extensions: &[String]) -> Result<PostgresVersions, Error> {
+        let body = serde_json::json!({ "extensions": extensions });
+        self.request("POST", &format!("/v1/postgres/versions/{}/install", escape(major)), Some(&body), INSTALL_TIMEOUT)
+    }
+
+    /// The extensions of a major; creates its folder for your own.
+    pub fn postgres_extensions(&self, major: &str) -> Result<PostgresExtensions, Error> {
+        self.request("GET", &format!("/v1/postgres/versions/{}/extensions", escape(major)), None::<&()>, DEFAULT_TIMEOUT)
+    }
+
+    /// install, update or uninstall an extension of a major; answers when it is done.
+    pub fn postgres_extension(&self, major: &str, name: &str, operation: &str) -> Result<PostgresExtensions, Error> {
+        let path = format!("/v1/postgres/versions/{}/extensions/{}", escape(major), escape(name));
+        match operation {
+            "uninstall" => self.request("DELETE", &path, None::<&()>, CHANGE_TIMEOUT),
+            _ => self.request("POST", &format!("{path}/{}", escape(operation)), None::<&()>, INSTALL_TIMEOUT),
+        }
+    }
+
     pub fn uninstall_postgres(&self, major: &str, delete_data: bool) -> Result<PostgresVersions, Error> {
         let path = format!("/v1/postgres/versions/{}?delete_data={}", escape(major), if delete_data { "1" } else { "0" });
         self.request("DELETE", &path, None::<&()>, CHANGE_TIMEOUT)
@@ -526,7 +546,6 @@ pub struct Status {
     pub dump_count: u32,
     pub event_count: u32,
     pub postgres: Option<String>,
-    pub valkey: Option<String>,
     pub extras: Vec<ExtraStatus>,
     pub xdebug: bool,
     pub xdebug_breakpoints: bool,
@@ -781,6 +800,69 @@ pub struct PostgresMajor {
     pub eol: String,
     /// "", installing, updating, switching or uninstalling.
     pub busy: String,
+    /// Names of the extensions installed for this major.
+    pub extensions: Option<Vec<String>>,
+}
+
+/// GET /v1/postgres/versions/{major}/extensions (postgres.MajorExtensions): Flock's extensions for
+/// one major, and the folder for your own.
+#[derive(Deserialize, Debug, Clone, PartialEq, Default)]
+#[serde(default)]
+pub struct PostgresExtensions {
+    pub major: String,
+    pub extensions: Option<Vec<PostgresExtension>>,
+    pub custom_dir: String,
+    /// What is in the custom folder, read only.
+    pub custom: Option<Vec<PostgresCustomExtension>>,
+}
+
+/// An extension in a major's own extensions folder: what Flock found, and whether the server has it.
+#[derive(Deserialize, Debug, Clone, PartialEq, Default)]
+#[serde(default)]
+pub struct PostgresCustomExtension {
+    pub name: String,
+    pub version: String,
+    pub linked: bool,
+    /// Why it can't be used; empty when nothing is in the way.
+    pub problem: String,
+}
+
+#[derive(Deserialize, Debug, Clone, PartialEq, Default)]
+#[serde(default)]
+pub struct PostgresExtension {
+    pub name: String,
+    pub title: String,
+    pub description: String,
+    /// What CREATE EXTENSION takes ("vector" for pgvector).
+    pub creates: String,
+    pub license: String,
+    /// Loaded at server start: installing or removing it restarts PostgreSQL.
+    pub preload: bool,
+    pub supported: bool,
+    pub installed: String,
+    pub latest: String,
+    pub update: bool,
+    /// Newer versions exist, but no longer for this major.
+    pub discontinued: bool,
+    pub size: i64,
+    pub prerelease: bool,
+    pub yanked: String,
+    /// "", installing, updating or uninstalling.
+    pub busy: String,
+}
+
+/// "PostGIS, pgvector" for the extension names of a major.
+pub fn extension_titles(names: &[String]) -> String {
+    names
+        .iter()
+        .map(|n| match n.as_str() {
+            "postgis" => "PostGIS",
+            "pgrouting" => "pgRouting",
+            "timescaledb" => "TimescaleDB",
+            other => other,
+        })
+        .collect::<Vec<_>>()
+        .join(", ")
 }
 
 /// A caught message (GET /v1/mail, mail.Message).
@@ -1319,5 +1401,30 @@ mod tests {
         let down = ProcStatus { name: "postgres".into(), ..Default::default() };
         let status = Status { processes: vec![down], ..Default::default() };
         assert!(status.is_degraded());
+    }
+
+    #[test]
+    fn decodes_postgres_extensions() {
+        let versions: PostgresVersions = serde_json::from_str(
+            r#"{"active":"18","majors":[{"major":"18","installed":"18.6","extensions":["postgis","pgvector"]},{"major":"17"}]}"#,
+        )
+        .unwrap();
+        let majors = versions.majors.unwrap();
+        assert_eq!(extension_titles(majors[0].extensions.as_deref().unwrap_or_default()), "PostGIS, pgvector");
+        assert!(majors[1].extensions.is_none());
+
+        let json = r#"{"major":"17","custom_dir":"/home/demo/.local/share/flock/services/postgres/extensions/custom/17",
+            "extensions":[{"name":"timescaledb","title":"TimescaleDB","creates":"timescaledb","preload":true,"supported":true,
+              "installed":"2.30.2","latest":"2.30.2","discontinued":true,"busy":"updating","size":123},
+              {"name":"pgvector","supported":false}],
+            "custom":[{"name":"hello","version":"1.2","linked":true},{"name":"broken","problem":"its library broken isn't in lib/"}]}"#;
+        let state: PostgresExtensions = serde_json::from_str(json).unwrap();
+        let extensions = state.extensions.unwrap();
+        assert!(state.custom_dir.ends_with("/custom/17"));
+        assert!(extensions[0].preload && extensions[0].discontinued && extensions[0].busy == "updating" && extensions[0].size == 123);
+        assert!(!extensions[1].supported && extensions[1].installed.is_empty());
+        let custom = state.custom.unwrap();
+        assert!(custom[0].linked && custom[0].version == "1.2" && custom[0].problem.is_empty());
+        assert!(!custom[1].linked && custom[1].problem.contains("lib/"));
     }
 }

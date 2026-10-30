@@ -18,7 +18,7 @@ public sealed class McpService : IAsyncDisposable
         this.client = client;
         this.runner = runner;
         request = new SharedRead<McpState>(dispatcher);
-        errors.PropertyChanged += (_, _) => Changed?.Invoke();
+        errors.PropertyChanged += (_, args) => { if (OperationErrors.IsDirectPropertyChange(args)) Changed?.Invoke(); };
         runner.RunningChanged += RunnerChanged;
     }
 
@@ -113,7 +113,7 @@ public sealed class McpService : IAsyncDisposable
             return value;
         }
         value = new OperationErrors();
-        value.PropertyChanged += (_, _) => Changed?.Invoke();
+        value.PropertyChanged += (_, args) => { if (OperationErrors.IsDirectPropertyChange(args)) Changed?.Invoke(); };
         clientErrors.Add(id, value);
         return value;
     }

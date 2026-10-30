@@ -59,7 +59,7 @@ impl DumpsWindow {
             .build();
         search_bar.connect_entry(&search);
 
-        let banner = adw::Banner::builder().button_label("Dismiss").build();
+        let banner = adw::Banner::builder().button_label("Dismiss").use_markup(false).build();
         let note = gtk::Label::builder()
             .wrap(true)
             .xalign(0.0)
@@ -167,7 +167,7 @@ impl DumpsWindow {
         let banner = self.banner.clone();
         self.model.change_settings(change, move |error| {
             if let Some(message) = error {
-                banner.set_title(&glib::markup_escape_text(&message));
+                banner.set_title(&message);
                 banner.set_revealed(true);
             }
         });
@@ -264,7 +264,7 @@ impl DumpsWindow {
                     this.banner.set_revealed(false);
                 }
                 (Err(e), _) | (_, Err(e)) => {
-                    this.banner.set_title(&glib::markup_escape_text(&e.to_string()));
+                    this.banner.set_title(&e.to_string());
                     this.banner.set_revealed(true);
                 }
             }

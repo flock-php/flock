@@ -8,7 +8,7 @@ import Testing
      "checked_at":"2026-10-14T08:00:00Z","check_error":"",
      "majors":[
       {"major":"18","installed":"18.6","latest":"18.7","update":true,"yanked":"crashes on start","active":true,
-       "has_data":true,"data_size":48234496,"eol":"2030-11-14","busy":""},
+       "has_data":true,"data_size":48234496,"eol":"2030-11-14","busy":"","extensions":["postgis","pgvector"]},
       {"major":"17","installed":"17.4","latest":"17.4","update":false,"prerelease":true,"active":false,
        "has_data":true,"data_size":1024,"eol":"2029-11-08","busy":"switching"},
       {"major":"16","installed":"","latest":"16.10.0","update":false,"active":false,
@@ -27,6 +27,8 @@ import Testing
 
     let pg18 = versions.majors[0]
     #expect(pg18.update && pg18.active && pg18.hasData && pg18.dataSize == 48_234_496 && pg18.busy == .idle && !pg18.isBusy)
+    #expect(pg18.extensions == ["postgis", "pgvector"] && versions.majors[1].extensions.isEmpty)
+    #expect(PostgresExtensions.titles(pg18.extensions) == "PostGIS, pgvector")
     #expect(pg18.yanked == "crashes on start" && !pg18.prerelease && versions.majors[1].prerelease && versions.majors[1].yanked.isEmpty)
     #expect(versions.majors[1].busy == .switching)
     // A state this app doesn't know yet is still busy.
@@ -34,6 +36,31 @@ import Testing
     #expect(!versions.majors[2].isInstalled && versions.majors[2].hasData)
     let pg14 = versions.majors[4]
     #expect(!pg14.isInstalled && pg14.latest.isEmpty && pg14.eolDate == nil && pg14.busy == .idle)
+}
+
+@Test func decodesPostgresExtensions() throws {
+    let state = try FlockJSON.decoder().decode(PostgresExtensions.self, from: Data("""
+    {"major":"17","custom_dir":"/Users/demo/Library/Application Support/Flock/services/postgres/extensions/custom/17",
+     "extensions":[
+      {"name":"postgis","title":"PostGIS","description":"Geographic types","creates":"postgis","license":"GPL-2.0",
+       "preload":false,"supported":true,"installed":"3.6.4","latest":"3.6.5","update":true,"discontinued":false,
+       "size":12345,"prerelease":false,"yanked":"","busy":""},
+      {"name":"timescaledb","title":"TimescaleDB","creates":"timescaledb","preload":true,"supported":true,
+       "installed":"2.30.2","latest":"2.30.2","discontinued":true,"busy":"updating"},
+      {"name":"pgvector","supported":false}
+     ],
+     "custom":[{"name":"hello","version":"1.2","linked":true,"problem":""},{"name":"broken","problem":"its library broken isn't in lib/"}]}
+    """.utf8))
+    #expect(state.major == "17" && state.customDir.hasSuffix("/custom/17") && state.extensions.count == 3 && state.isBusy)
+    let postgis = state.extensions[0]
+    #expect(postgis.isInstalled && postgis.update && postgis.size == 12345 && postgis.license == "GPL-2.0" && !postgis.isBusy)
+    let timescale = state.extensions[1]
+    #expect(timescale.preload && timescale.discontinued && timescale.isBusy && timescale.description.isEmpty)
+    let vector = state.extensions[2]
+    #expect(!vector.supported && !vector.isInstalled && vector.title == "pgvector" && vector.creates == "pgvector")
+    #expect(state.custom.map(\.name) == ["hello", "broken"])
+    #expect(state.custom[0].linked && state.custom[0].version == "1.2" && state.custom[0].problem.isEmpty)
+    #expect(!state.custom[1].linked && state.custom[1].version.isEmpty && state.custom[1].problem.contains("lib/"))
 }
 
 @Test func decodesPostgresVersionsNeverCheckedAndEmpty() throws {

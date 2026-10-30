@@ -34,6 +34,10 @@ func newChannelCommand() *cobra.Command {
 				return err
 			}
 			if ch == current {
+				// The repository may still be on the other suite (a beta's package install).
+				if err := followChannel(cmd, ch); err != nil {
+					return err
+				}
 				cmd.Printf("already on the %s channel\n", ch)
 				return nil
 			}

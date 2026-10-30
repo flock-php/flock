@@ -3,6 +3,7 @@ using Flock.Kit;
 using Flock.Tray.Features.Configuration;
 using Flock.Tray.Infrastructure;
 using Flock.Tray.ViewModels;
+using Microsoft.UI.Xaml;
 
 namespace Flock.Tray.Tests;
 
@@ -55,6 +56,40 @@ public sealed class GeneralViewModelTests : IDisposable
         Assert.Equal(["POST /v1/settings", "GET /v1/config"], handler.Requests);
     }
 
+    [Fact]
+    public async Task BindingProjectionsFollowTheLatestConfiguration()
+    {
+        await viewModel.RefreshAsync();
+
+        Assert.Equal("*.test", viewModel.DomainValue);
+        Assert.Equal("Every folder inside a project folder is served as <folder>.test — the same as `flock park`.", viewModel.ProjectFoldersDescription);
+        Assert.Equal("C:\\Flock", viewModel.Root);
+        Assert.Equal(["C:\\Projects"], viewModel.Config!.Parked);
+        Assert.Equal(Visibility.Visible, viewModel.PortsVisibility);
+    }
+
+    [Fact]
+    public async Task RestartReEnablesOnceTheRestartHasFinished()
+    {
+        var restarting = false;
+        var finish = new TaskCompletionSource();
+        using var restartable = new GeneralViewModel(configuration, () => finish.Task, () => restarting);
+        restarting = true;
+        var restart = restartable.RestartCommand.ExecuteAsync(null);
+        Assert.True(restartable.IsRestarting);
+        Assert.False(restartable.RestartCommand.CanExecute(null));
+
+        var notified = 0;
+        restartable.RestartCommand.CanExecuteChanged += (_, _) => notified++;
+        restarting = false;
+        finish.SetResult();
+        await restart;
+
+        Assert.False(restartable.IsRestarting);
+        Assert.True(restartable.RestartCommand.CanExecute(null));
+        Assert.True(notified > 0);
+    }
+
     private sealed class Handler : HttpMessageHandler
     {
         public bool FailWrites { get; set; }
@@ -73,7 +108,7 @@ public sealed class GeneralViewModelTests : IDisposable
             }
             return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
             {
-                Content = new StringContent("{\"channel\":\"beta\"}"),
+                Content = new StringContent("{\"channel\":\"beta\",\"tld\":\"test\",\"root\":\"C:\\\\Flock\",\"parked\":[\"C:\\\\Projects\"],\"ports\":{\"http\":8080,\"https\":8443}}"),
             });
         }
     }

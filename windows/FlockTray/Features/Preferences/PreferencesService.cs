@@ -1,3 +1,4 @@
+using System.Runtime.ExceptionServices;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Flock.Tray.Infrastructure;
@@ -52,8 +53,7 @@ public sealed class PreferencesService
     public string? Error { get; private set; }
     public string? ActionError => Error;
 
-    public event Action<PreferenceData>? Changed;
-    public event Action? ErrorChanged;
+    public event Action? StateChanged;
 
     /// <summary>Reads the existing file once. A missing file uses defaults without creating it.</summary>
     public async Task<PreferenceData> LoadAsync(CancellationToken cancellationToken = default)
@@ -79,7 +79,7 @@ public sealed class PreferencesService
         if (Error is not null)
         {
             Error = null;
-            ErrorChanged?.Invoke();
+            PublishStateChanged();
         }
     }
 
@@ -90,6 +90,8 @@ public sealed class PreferencesService
         await gate.WaitAsync(cancellationToken);
         string? temporary = null;
         var committed = false;
+        var notify = false;
+        ExceptionDispatchInfo? failure = null;
         try
         {
             if (!loaded)
@@ -102,34 +104,33 @@ public sealed class PreferencesService
             ArgumentNullException.ThrowIfNull(next);
             if (next == snapshot)
             {
-                Error = null;
-                return snapshot;
+                if (Error is not null)
+                {
+                    Error = null;
+                    notify = true;
+                }
             }
-
-            temporary = path + ".tmp." + Guid.NewGuid().ToString("N");
-            await WriteTemporaryAsync(temporary, next, cancellationToken);
-            cancellationToken.ThrowIfCancellationRequested();
-            File.Move(temporary, path, overwrite: true);
-            temporary = null;
-            committed = true;
-            snapshot = next;
-            Error = null;
+            else
+            {
+                temporary = path + ".tmp." + Guid.NewGuid().ToString("N");
+                await WriteTemporaryAsync(temporary, next, cancellationToken);
+                cancellationToken.ThrowIfCancellationRequested();
+                File.Move(temporary, path, overwrite: true);
+                temporary = null;
+                committed = true;
+                snapshot = next;
+                Error = null;
+                notify = true;
+            }
         }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException or JsonException or OperationCanceledException)
         {
             Error = committed ? null : SafeMessage(error);
+            notify = true;
             if (!committed)
             {
                 Log(error, "save");
-                if (dispatcher is not null)
-                {
-                    await dispatcher.InvokeAsync(() => ErrorChanged?.Invoke(), CancellationToken.None);
-                }
-                else
-                {
-                    ErrorChanged?.Invoke();
-                }
-                throw;
+                failure = ExceptionDispatchInfo.Capture(error);
             }
         }
         finally
@@ -141,19 +142,32 @@ public sealed class PreferencesService
             gate.Release();
         }
 
-        if (committed)
+        if (notify)
         {
-            var value = snapshot;
-            if (dispatcher is not null)
-            {
-                await dispatcher.InvokeAsync(() => Changed?.Invoke(value), CancellationToken.None);
-            }
-            else
-            {
-                Changed?.Invoke(value);
-            }
+            await PublishStateChangedAsync();
         }
+        failure?.Throw();
         return snapshot;
+    }
+
+    private void PublishStateChanged()
+    {
+        if (dispatcher is not null)
+        {
+            _ = PublishStateChangedAsync();
+            return;
+        }
+        StateChanged?.Invoke();
+    }
+
+    private Task PublishStateChangedAsync()
+    {
+        if (dispatcher is not null)
+        {
+            return dispatcher.InvokeAsync(() => StateChanged?.Invoke(), CancellationToken.None);
+        }
+        StateChanged?.Invoke();
+        return Task.CompletedTask;
     }
 
     private async Task<PreferenceData> ReadAsync(CancellationToken cancellationToken)

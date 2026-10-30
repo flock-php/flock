@@ -57,6 +57,8 @@ func newInstallCommand() *cobra.Command {
 				}
 			}
 
+			// Linux: a beta's package put the repository on its beta suite; the channel follows.
+			adoptRepoChannel(s.cfg)
 			if err := s.cfg.Save(s.root); err != nil {
 				return err
 			}

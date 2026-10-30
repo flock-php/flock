@@ -70,6 +70,8 @@ public sealed class PostgresMajor
     public string Eol { get; init; } = "";
     /// <summary>One of PostgresBusy, or empty when idle.</summary>
     public string Busy { get; init; } = "";
+    /// <summary>Names of the extensions installed for this major ("postgis", "pgvector").</summary>
+    public List<string> Extensions { get; init; } = [];
 
     [JsonIgnore]
     public bool IsInstalled => Installed.Length > 0;
@@ -222,4 +224,73 @@ public sealed class CatalogJob : JobState
     /// <summary>What it installs; empty until the newest release is known.</summary>
     public string Version { get; init; } = "";
     public string Line { get; init; } = "";
+}
+/// <summary>
+/// GET /v1/postgres/versions/{major}/extensions — the extensions Flock offers for one major
+/// (PostGIS, pgRouting, pgvector, TimescaleDB), each a download of its own, and the folder for the
+/// user's own extensions, which Flock keeps across updates.
+/// </summary>
+public sealed class PostgresExtensions
+{
+    public string Major { get; init; } = "";
+    public List<PostgresExtension> Extensions { get; init; } = [];
+    /// <summary>The folder for extensions of your own: lib\, extension\ and deps\.</summary>
+    public string CustomDir { get; init; } = "";
+    /// <summary>What is in that folder, read only.</summary>
+    public List<PostgresCustomExtension> Custom { get; init; } = [];
+
+    [JsonIgnore]
+    public bool AnyBusy => Extensions.Any(e => e.IsBusy);
+
+    /// <summary>"PostGIS, pgvector" for the names of a major's extensions.</summary>
+    public static string Titles(IEnumerable<string> names) => string.Join(", ", names.Select(n => n switch
+    {
+        "postgis" => "PostGIS",
+        "pgrouting" => "pgRouting",
+        "timescaledb" => "TimescaleDB",
+        _ => n,
+    }));
+}
+
+/// <summary>One extension for one PostgreSQL major.</summary>
+public sealed class PostgresExtension
+{
+    public string Name { get; init; } = "";
+    public string Title { get; init; } = "";
+    public string Description { get; init; } = "";
+    /// <summary>What CREATE EXTENSION takes ("vector" for pgvector).</summary>
+    public string Creates { get; init; } = "";
+    public string License { get; init; } = "";
+    /// <summary>Loaded at server start: installing or removing it restarts PostgreSQL.</summary>
+    public bool Preload { get; init; }
+    /// <summary>A build exists for this major and platform.</summary>
+    public bool Supported { get; init; }
+    public string Installed { get; init; } = "";
+    public string Latest { get; init; } = "";
+    public bool Update { get; init; }
+    /// <summary>Newer versions exist, but no longer for this major.</summary>
+    public bool Discontinued { get; init; }
+    public long Size { get; init; }
+    public bool Prerelease { get; init; }
+    public string Yanked { get; init; } = "";
+    /// <summary>"", "installing", "updating" or "uninstalling".</summary>
+    public string Busy { get; init; } = "";
+
+    [JsonIgnore]
+    public bool IsInstalled => Installed.Length > 0;
+
+    [JsonIgnore]
+    public bool IsBusy => Busy.Length > 0;
+}
+
+/// <summary>An extension in a major's own extensions folder: what Flock found, and whether the server has it.</summary>
+public sealed class PostgresCustomExtension
+{
+    /// <summary>What CREATE EXTENSION takes.</summary>
+    public string Name { get; init; } = "";
+    /// <summary>Its control file's default_version; empty when it has none.</summary>
+    public string Version { get; init; } = "";
+    public bool Linked { get; init; }
+    /// <summary>Why it can't be used; empty when nothing is in the way.</summary>
+    public string Problem { get; init; } = "";
 }

@@ -138,9 +138,6 @@ struct PanelView: View {
             if let postgres = status.postgres {
                 ServiceRow(name: "PostgreSQL", detail: postgres, up: status.processes.first { $0.name == "postgres" }?.up ?? false)
             }
-            if let valkey = status.valkey {
-                ServiceRow(name: "Valkey", detail: valkey, up: status.processes.first { $0.name == "valkey" }?.up ?? false)
-            }
             ForEach(status.extras) { extra in
                 ServiceRow(name: extra.name, detail: extra.enabled ? "\(extra.version) on 127.0.0.1:\(extra.port)" : "stopped", up: extra.up)
             }
@@ -160,7 +157,7 @@ struct PanelView: View {
     /// Databases and caches are installed on request, from Settings → Services.
     @ViewBuilder
     private func notInstalled(_ status: Status) -> some View {
-        if status.postgres == nil, status.valkey == nil, status.extras.isEmpty {
+        if status.postgres == nil, status.extras.isEmpty {
             HStack(spacing: 6) {
                 Circle().fill(Color.secondary.opacity(0.4)).frame(width: 7, height: 7)
                 Text("No database or cache installed")

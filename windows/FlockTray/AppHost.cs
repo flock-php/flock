@@ -111,7 +111,12 @@ public sealed class AppHost : IAsyncDisposable
             builder.Services.AddSingleton<NodeService>();
             builder.Services.AddSingleton<ServicesService>();
             builder.Services.AddSingleton<PostgresService>();
-            builder.Services.AddSingleton<CatalogFeatureService>();
+            builder.Services.AddSingleton<CatalogFeatureService>(services => new CatalogFeatureService(
+                services.GetRequiredService<Flock.Kit.FlockClient>(),
+                services.GetRequiredService<OperationRunner>(),
+                services.GetService<IUiDispatcher>(),
+                services.GetRequiredService<TimeProvider>()));
+            builder.Services.AddSingleton<ServiceReleaseActions>();
             builder.Services.AddSingleton<McpService>();
             builder.Services.AddSingleton<SitesService>();
             builder.Services.AddSingleton<DeepLinkCoordinator>();
@@ -140,7 +145,7 @@ public sealed class AppHost : IAsyncDisposable
                     services.GetRequiredService<IUpdateFileVerifier>(),
                     services.GetRequiredService<IUpdateFileCleanup>(),
                     services.GetRequiredService<OperationRunner>(),
-                    services.GetRequiredService<IShutdownRequest>(),
+                    () => services.GetRequiredService<ApplicationRuntime>().RequestQuit(),
                     services.GetRequiredService<Microsoft.Extensions.Logging.ILogger<UpdateService>>(),
                     () => services.GetRequiredService<PreferencesService>().Snapshot.Channel,
                     services.GetRequiredService<IUiDispatcher>());
@@ -155,27 +160,27 @@ public sealed class AppHost : IAsyncDisposable
                 services.GetRequiredService<UpdateService>(),
                 services.GetRequiredService<InstallationService>(),
                 services.GetRequiredService<CliProcessRunner>(),
-                    services.GetRequiredService<StatusPollingService>(),
-                     services.GetRequiredService<OperationRunner>(),
-                     services.GetRequiredService<MailService>(),
-                     services.GetRequiredService<PreferencesService>(),
-                     services.GetRequiredService<ConfigurationService>(),
-                     services.GetRequiredService<PhpService>(),
-                     services.GetRequiredService<FrankenPhpService>(),
-                     services.GetRequiredService<NodeService>(),
-                     services.GetRequiredService<ServicesService>(),
-                     services.GetRequiredService<PostgresService>(),
-                      services.GetRequiredService<CatalogFeatureService>(),
-                      services.GetRequiredService<McpService>(),
-                     services.GetRequiredService<DumpsService>(),
-                     services.GetService<IUiDispatcher>(),
-                     services.GetRequiredService<SitesService>(),
-                     shell: services.GetRequiredService<IShellLauncher>()));
+                services.GetRequiredService<StatusPollingService>(),
+                services.GetRequiredService<OperationRunner>(),
+                services.GetRequiredService<MailService>(),
+                services.GetRequiredService<PreferencesService>(),
+                services.GetRequiredService<ConfigurationService>(),
+                services.GetRequiredService<PhpService>(),
+                services.GetRequiredService<FrankenPhpService>(),
+                services.GetRequiredService<NodeService>(),
+                services.GetRequiredService<ServicesService>(),
+                services.GetRequiredService<PostgresService>(),
+                services.GetRequiredService<CatalogFeatureService>(),
+                services.GetRequiredService<ServiceReleaseActions>(),
+                services.GetRequiredService<McpService>(),
+                services.GetRequiredService<DumpsService>(),
+                services.GetService<IUiDispatcher>(),
+                services.GetRequiredService<SitesService>(),
+                shell: services.GetRequiredService<IShellLauncher>()));
         }
         builder.Services.AddSingleton<TimeProvider>(TimeProvider.System);
         builder.Services.AddSingleton<ApplicationRuntime>(services =>
             new ApplicationRuntime(() => services.GetRequiredService<IHostApplicationLifetime>().StopApplication()));
-        builder.Services.AddSingleton<IShutdownRequest>(services => services.GetRequiredService<ApplicationRuntime>());
         return new AppHost(builder.Build(), logSink, releaseUi, dispatcher is not null);
     }
 
@@ -225,7 +230,7 @@ public sealed class AppHost : IAsyncDisposable
         runtime.RequestQuit();
         lock (lifecycleGate)
         {
-            return quitTask ??= runtime.QuitAsync(QuitCoreAsync);
+            return quitTask ??= QuitCoreAsync();
         }
     }
 

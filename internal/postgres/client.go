@@ -23,7 +23,10 @@ func (e *Error) Error() string {
 	return fmt.Sprintf("postgres: %s (SQLSTATE %s)", e.Message, e.Code)
 }
 
-const sqlstateDuplicateDatabase = "42P04"
+const (
+	sqlstateDuplicateDatabase = "42P04"
+	sqlstateUndefinedObject   = "42704"
+)
 
 // CreateDatabase creates database name as user postgres; an existing database is not an error.
 func CreateDatabase(ctx context.Context, port int, name string) error {
@@ -58,13 +61,24 @@ func DropDatabase(ctx context.Context, port int, name string) error {
 	return Exec(ctx, port, "postgres", "DROP DATABASE IF EXISTS "+quoteIdent(name)+" WITH (FORCE)")
 }
 
+// Databases lists the databases that accept connections, except the templates.
+func Databases(ctx context.Context, port int) ([]string, error) {
+	return query(ctx, port, "postgres", "SELECT datname FROM pg_database WHERE datallowconn AND NOT datistemplate ORDER BY datname")
+}
+
 // Exec runs sql (simple query protocol, results discarded) against database on 127.0.0.1:port
 // as user postgres. It only supports trust authentication, which is what InitDB configures.
 func Exec(ctx context.Context, port int, database, sql string) error {
+	_, err := query(ctx, port, database, sql)
+	return err
+}
+
+// query runs sql like Exec and returns the first column of the rows it returned.
+func query(ctx context.Context, port int, database, sql string) ([]string, error) {
 	var d net.Dialer
 	conn, err := d.DialContext(ctx, "tcp", net.JoinHostPort("127.0.0.1", strconv.Itoa(port)))
 	if err != nil {
-		return err
+		return nil, err
 	}
 	defer conn.Close()
 
@@ -77,22 +91,23 @@ func Exec(ctx context.Context, port int, database, sql string) error {
 	r := bufio.NewReader(conn)
 
 	if _, err := conn.Write(startupMessage("postgres", database)); err != nil {
-		return err
+		return nil, err
 	}
-	if err := readUntilReady(r); err != nil {
-		return err
+	if _, err := readUntilReady(r); err != nil {
+		return nil, err
 	}
 
 	if _, err := conn.Write(message('Q', []byte(sql+"\x00"))); err != nil {
-		return err
+		return nil, err
 	}
-	if err := readUntilReady(r); err != nil {
-		return err
+	rows, err := readUntilReady(r)
+	if err != nil {
+		return nil, err
 	}
 
 	_, _ = conn.Write(message('X', nil))
 
-	return nil
+	return rows, nil
 }
 
 func startupMessage(user, database string) []byte {
@@ -111,29 +126,31 @@ func message(kind byte, body []byte) []byte {
 	return append(msg, body...)
 }
 
-// readUntilReady consumes messages until ReadyForQuery, returning the first ErrorResponse seen.
-func readUntilReady(r *bufio.Reader) error {
+// readUntilReady consumes messages until ReadyForQuery, returning the first column of the rows
+// and the first ErrorResponse seen.
+func readUntilReady(r *bufio.Reader) ([]string, error) {
 	var firstErr error
+	var rows []string
 
 	for {
 		kind, err := r.ReadByte()
 		if err != nil {
-			return err
+			return nil, err
 		}
 
 		var size uint32
 		if err := binary.Read(r, binary.BigEndian, &size); err != nil {
-			return err
+			return nil, err
 		}
 		body := make([]byte, size-4)
 		if _, err := io.ReadFull(r, body); err != nil {
-			return err
+			return nil, err
 		}
 
 		switch kind {
 		case 'R':
 			if code := binary.BigEndian.Uint32(body); code != 0 {
-				return fmt.Errorf("postgres: unsupported authentication method %d (only trust is supported)", code)
+				return nil, fmt.Errorf("postgres: unsupported authentication method %d (only trust is supported)", code)
 			}
 		case 'E':
 			pgErr := parseError(body)
@@ -142,10 +159,17 @@ func readUntilReady(r *bufio.Reader) error {
 			}
 			// An error during startup ends the connection without ReadyForQuery.
 			if pgErr.Code == "" || strings.HasPrefix(pgErr.Code, "28") || strings.HasPrefix(pgErr.Code, "3D") {
-				return firstErr
+				return nil, firstErr
+			}
+		case 'D':
+			// DataRow: column count, then each column's length (-1 for NULL) and bytes.
+			if len(body) >= 6 && binary.BigEndian.Uint16(body) > 0 {
+				if n := int32(binary.BigEndian.Uint32(body[2:])); n >= 0 && int(n) <= len(body)-6 {
+					rows = append(rows, string(body[6:6+n]))
+				}
 			}
 		case 'Z':
-			return firstErr
+			return rows, firstErr
 		}
 	}
 }

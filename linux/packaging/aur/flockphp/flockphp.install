@@ -1,0 +1,25 @@
+# What linux/packaging/postinstall.sh does for the .deb and .rpm, minus the package repository:
+# pacman's own hooks reload systemd and refresh the icon and desktop caches. Removing Flock undoes
+# its setup in flockphp.hook.
+
+# Every running daemon restarts and runs the new flock through the link `flk install` put in the
+# user's data dir: after an upgrade, and after flockphp-bin and flockphp-beta-bin replace each
+# other (which installs the other package).
+restart_daemons() {
+  if [ -d /run/systemd/system ]; then
+    systemctl daemon-reload || true
+    systemctl try-restart 'flock@*.service' || true
+  fi
+}
+
+post_install() {
+  restart_daemons
+  for dir in /etc/systemd/system/flock@?*.service.d; do
+    [ -d "$dir" ] && return
+  done
+  echo 'Flock is installed. Set it up for your user with: flk install'
+}
+
+post_upgrade() {
+  restart_daemons
+}

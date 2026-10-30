@@ -1,0 +1,13 @@
+# Before Flock is removed: every user's daemon is stopped and their system-wide setup undone (unit
+# drop-in, *.test DNS, CA trust, Firefox policy), as the .deb's and .rpm's preremove.sh does. A hook,
+# not pre_remove: when flockphp-bin and flockphp-beta-bin replace each other, pacman runs the old
+# one's pre_remove, but counts the flock they both have as upgraded, so this doesn't run.
+[Trigger]
+Operation = Remove
+Type = Path
+Target = usr/libexec/flockphp/flock
+
+[Action]
+Description = Undoing Flock's setup for its users...
+When = PreTransaction
+Exec = /bin/sh -c 'for dir in /etc/systemd/system/flock@?*.service.d; do [ -d "$dir" ] || continue; user="${dir#/etc/systemd/system/flock@}"; user="${user%.service.d}"; /usr/libexec/flockphp/flock privileged-setup --remove --user "$user" || echo "flockphp: could not undo the setup for $user" >&2; done'

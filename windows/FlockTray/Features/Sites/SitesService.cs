@@ -217,7 +217,7 @@ public sealed class SitesService : IAsyncDisposable
             return value;
         }
         value = new OperationErrors();
-        value.PropertyChanged += (_, _) => Changed?.Invoke();
+        value.PropertyChanged += (_, args) => { if (OperationErrors.IsDirectPropertyChange(args)) Changed?.Invoke(); };
         errors.Add(resource, value);
         return value;
     }

@@ -43,7 +43,7 @@ impl MailWindow {
         let sidebar = adw::NavigationPage::new(&sidebar_view, "Mail");
 
         let detail = adw::Bin::new();
-        let banner = adw::Banner::builder().button_label("Dismiss").build();
+        let banner = adw::Banner::builder().button_label("Dismiss").use_markup(false).build();
         let body = gtk::Box::new(gtk::Orientation::Vertical, 0);
         body.append(&banner);
         body.append(&detail);
@@ -109,7 +109,7 @@ impl MailWindow {
     fn error(&self, error: Option<String>) {
         match error {
             Some(message) => {
-                self.banner.set_title(&glib::markup_escape_text(&message));
+                self.banner.set_title(&message);
                 self.banner.set_revealed(true);
             }
             None => self.banner.set_revealed(false),

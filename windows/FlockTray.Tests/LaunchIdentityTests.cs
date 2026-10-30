@@ -2,6 +2,7 @@ using Flock.Tray.Infrastructure;
 
 namespace Flock.Tray.Tests;
 
+[Collection("Native tray")]
 public sealed class LaunchIdentityTests
 {
     [Fact]
@@ -60,3 +61,6 @@ public sealed class LaunchIdentityTests
         Assert.Equal("flock://update", secondLink);
     }
 }
+
+[CollectionDefinition("Native tray", DisableParallelization = true)]
+public sealed class NativeTrayCollection;

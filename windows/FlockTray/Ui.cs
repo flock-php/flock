@@ -11,8 +11,9 @@ using Windows.UI;
 namespace Flock.Tray;
 
 /// <summary>
-/// Small builders for the WinUI controls the windows are made of (the counterpart of the macOS
-/// app's SwiftUI components): Fluent text styles, cards, badges, status dots, code blocks.
+/// Small builders for runtime-only WinUI fragments whose shape depends on daemon data or a native
+/// resource. Static window and pane shells are compiled XAML; these helpers retain Fluent text
+/// styles, cards, badges, status dots, code blocks, and dialog content.
 /// </summary>
 internal static class Ui
 {
@@ -49,8 +50,6 @@ internal static class Ui
     public const string GlyphRobot = "\uE99A";
     public const string GlyphPuzzle = "\uEA86";
     public const string GlyphCheck = "\uE73E";
-    public const string GlyphChevronRight = "\uE76C";
-    public const string GlyphChevronDown = "\uE70D";
 
     public static T Resource<T>(string key) => (T)Application.Current.Resources[key];
 

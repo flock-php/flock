@@ -18,7 +18,7 @@ public sealed class FrankenPhpService : IAsyncDisposable
         this.client = client;
         this.runner = runner;
         request = new SharedRead<FrankenPhpState?>(dispatcher);
-        catalogErrors.PropertyChanged += (_, _) => Changed?.Invoke();
+        catalogErrors.PropertyChanged += (_, args) => { if (OperationErrors.IsDirectPropertyChange(args)) Changed?.Invoke(); };
         runner.RunningChanged += RunnerChanged;
     }
     public FrankenPhpState? Current => current;
@@ -145,7 +145,7 @@ public sealed class FrankenPhpService : IAsyncDisposable
             return error;
         }
         error = new OperationErrors();
-        error.PropertyChanged += (_, _) => Changed?.Invoke();
+        error.PropertyChanged += (_, args) => { if (OperationErrors.IsDirectPropertyChange(args)) Changed?.Invoke(); };
         resourceErrors.Add(minor, error);
         return error;
     }

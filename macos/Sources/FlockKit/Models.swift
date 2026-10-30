@@ -10,8 +10,6 @@ public struct Status: Decodable, Sendable, Equatable {
     public var httpsPort: Int
     public var mail: String
     public var postgres: String?
-    /// "9.1.2 on 127.0.0.1:6379" when Valkey is installed.
-    public var valkey: String?
     /// The installed catalog services (MySQL, Redis, ...).
     public var extras: [Extra]
     /// Xdebug detection: requests that ask for Xdebug go to a PHP pool that loads it.
@@ -430,7 +428,7 @@ public struct Status: Decodable, Sendable, Equatable {
     }
 
     enum CodingKeys: String, CodingKey {
-        case version, pid, startedAt, dns, httpPort, httpsPort, mail, postgres, valkey, extras
+        case version, pid, startedAt, dns, httpPort, httpsPort, mail, postgres, extras
         case xdebug, xdebugBreakpoints, dumps, captureOff, dumpsInPage, mailCount, dumpCount, eventCount, captureUnsupported
         case sites, processes, warnings, channel, defaults
     }
@@ -446,7 +444,6 @@ public struct Status: Decodable, Sendable, Equatable {
         httpsPort = try c.decodeIfPresent(Int.self, forKey: .httpsPort) ?? 0
         mail = try c.decodeIfPresent(String.self, forKey: .mail) ?? ""
         postgres = try c.decodeIfPresent(String.self, forKey: .postgres)
-        valkey = try c.decodeIfPresent(String.self, forKey: .valkey)
         extras = try c.decodeIfPresent([Extra].self, forKey: .extras) ?? []
         xdebug = try c.decodeIfPresent(Bool.self, forKey: .xdebug) ?? false
         xdebugBreakpoints = try c.decodeIfPresent(Bool.self, forKey: .xdebugBreakpoints) ?? false

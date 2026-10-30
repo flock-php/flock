@@ -34,6 +34,19 @@ public sealed class SettingsNavigationViewModel : IAsyncDisposable
         }
     }
 
+    public Task RetryAsync()
+    {
+        lock (gate)
+        {
+            if (selected is not { } pane)
+            {
+                return Task.CompletedTask;
+            }
+            selected = null;
+            return ActivateAsync(pane);
+        }
+    }
+
     private async Task ActivateCoreAsync(Task? old, SettingsPane pane, CancellationTokenSource cancellation)
     {
         if (old is not null && !old.IsCompleted)

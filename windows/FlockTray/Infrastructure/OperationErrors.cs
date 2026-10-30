@@ -3,25 +3,22 @@ using CommunityToolkit.Mvvm.ComponentModel;
 namespace Flock.Tray.Infrastructure;
 
 /// <summary>Owns action and refresh failures for one resource without sharing a mutable error map.</summary>
-public sealed class OperationErrors : ObservableObject
+public sealed partial class OperationErrors : ObservableObject
 {
-    private string? action;
-    private string? refresh;
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(DisplayedMessage))]
+    public partial string? Action { get; private set; }
 
-    public string? Action
-    {
-        get => action;
-        private set => SetProperty(ref action, value);
-    }
-
-    public string? Refresh
-    {
-        get => refresh;
-        private set => SetProperty(ref refresh, value);
-    }
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(DisplayedMessage))]
+    public partial string? Refresh { get; private set; }
 
     /// <summary>The action failure wins over the refresh failure for this resource.</summary>
     public string? DisplayedMessage => Action ?? Refresh;
+
+    /// <summary>Returns true for a direct error value change, excluding the derived display-message notification.</summary>
+    internal static bool IsDirectPropertyChange(System.ComponentModel.PropertyChangedEventArgs args) =>
+        args.PropertyName is nameof(Action) or nameof(Refresh);
 
     public void SetAction(Exception error) => Action = error.Message;
 
