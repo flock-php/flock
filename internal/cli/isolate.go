@@ -90,7 +90,9 @@ func newIsolateCommand() *cobra.Command {
 			}
 			// A site from a project folder becomes linked so its settings can be stored.
 			site.Parked = false
-			s.cfg.Upsert(site)
+			if err := s.cfg.Upsert(site); err != nil {
+				return err
+			}
 			if err := s.commit(cmd.Context(), cmd.ErrOrStderr()); err != nil {
 				return err
 			}
@@ -131,7 +133,9 @@ func newUnisolateCommand() *cobra.Command {
 				site.Node = ""
 			}
 			if !site.Parked {
-				s.cfg.Upsert(site)
+				if err := s.cfg.Upsert(site); err != nil {
+					return err
+				}
 			}
 			if err := s.commit(cmd.Context(), cmd.ErrOrStderr()); err != nil {
 				return err
@@ -206,7 +210,9 @@ func newPinCommand() *cobra.Command {
 					return err
 				}
 				if lifted {
-					s.cfg.Upsert(*site)
+					if err := s.cfg.Upsert(*site); err != nil {
+						return err
+					}
 				}
 			} else {
 				if version == "" {

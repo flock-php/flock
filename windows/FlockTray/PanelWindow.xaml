@@ -108,46 +108,117 @@
                         <ItemsControl ItemsSource="{Binding Sites}">
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate>
-                                    <Button
-                                        HorizontalAlignment="Stretch"
-                                        HorizontalContentAlignment="Stretch"
-                                        Padding="6,4"
-                                        Background="Transparent"
-                                        BorderThickness="0"
-                                        IsEnabled="{Binding HasUrl}"
-                                        ToolTipService.ToolTip="{Binding SiteTooltip}"
-                                        Click="OpenSite">
-                                        <Grid ColumnSpacing="8">
+                                    <StackPanel Spacing="2">
+                                        <Grid ColumnSpacing="2">
                                             <Grid.ColumnDefinitions>
                                                 <ColumnDefinition Width="*" />
                                                 <ColumnDefinition Width="Auto" />
                                             </Grid.ColumnDefinitions>
-                                            <StackPanel Orientation="Horizontal" Spacing="8">
-                                                <FontIcon Glyph="{Binding SecurityGlyph}" FontFamily="{StaticResource SymbolsFont}" FontSize="12"
-                                                          Foreground="{Binding SecurityBrush}" />
-                                                <StackPanel Spacing="0">
-                                                    <TextBlock Text="{Binding Domain}" TextTrimming="CharacterEllipsis" />
-                                                    <TextBlock Text="{Binding Problem}" Foreground="{ThemeResource SystemFillColorCriticalBrush}"
-                                                               TextTrimming="CharacterEllipsis" Visibility="{Binding ProblemVisibility}" />
-                                                </StackPanel>
-                                            </StackPanel>
-                                            <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
-                                                <FontIcon Glyph="{StaticResource GlyphBug}" FontFamily="{StaticResource SymbolsFont}" FontSize="12"
-                                                          Foreground="{ThemeResource SystemFillColorCautionBrush}" Visibility="{Binding DebuggingVisibility}" />
-                                                <Border Background="{ThemeResource ControlFillColorSecondaryBrush}" CornerRadius="8" Padding="7,1,7,2"
-                                                        Visibility="{Binding FrankenPhpVisibility}">
-                                                    <TextBlock Text="{Binding WorkerLabel}" FontSize="11" FontWeight="SemiBold"
+                                            <Button
+                                                HorizontalAlignment="Stretch"
+                                                HorizontalContentAlignment="Stretch"
+                                                Padding="6,4"
+                                                Background="Transparent"
+                                                BorderThickness="0"
+                                                IsEnabled="{Binding HasUrl}"
+                                                ToolTipService.ToolTip="{Binding SiteTooltip}"
+                                                Click="OpenSite">
+                                                <Grid ColumnSpacing="8">
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="*" />
+                                                        <ColumnDefinition Width="Auto" />
+                                                    </Grid.ColumnDefinitions>
+                                                    <StackPanel Orientation="Horizontal" Spacing="8">
+                                                        <FontIcon Glyph="{Binding SecurityGlyph}" FontFamily="{StaticResource SymbolsFont}" FontSize="12"
+                                                                  Foreground="{Binding SecurityBrush}" />
+                                                        <StackPanel Spacing="0">
+                                                            <TextBlock Text="{Binding Domain}" TextTrimming="CharacterEllipsis" />
+                                                            <TextBlock Text="{Binding Problem}" Foreground="{ThemeResource SystemFillColorCriticalBrush}"
+                                                                       TextTrimming="CharacterEllipsis" Visibility="{Binding ProblemVisibility}" />
+                                                        </StackPanel>
+                                                    </StackPanel>
+                                                    <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                                                        <FontIcon Glyph="{StaticResource GlyphBug}" FontFamily="{StaticResource SymbolsFont}" FontSize="12"
+                                                                  Foreground="{ThemeResource SystemFillColorCautionBrush}" Visibility="{Binding DebuggingVisibility}" />
+                                                        <Border Background="{ThemeResource ControlFillColorSecondaryBrush}" CornerRadius="8" Padding="7,1,7,2"
+                                                                Visibility="{Binding FrankenPhpVisibility}">
+                                                            <TextBlock Text="{Binding WorkerLabel}" FontSize="11" FontWeight="SemiBold"
+                                                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                                        </Border>
+                                                        <Border Background="{ThemeResource SystemFillColorSuccessBackgroundBrush}" CornerRadius="8" Padding="7,1,7,2"
+                                                                Visibility="{Binding SharedVisibility}" ToolTipService.ToolTip="{Binding ShareTooltip}">
+                                                            <TextBlock Text="Shared" FontSize="11" FontWeight="SemiBold" Foreground="{ThemeResource SystemFillColorSuccessBrush}" />
+                                                        </Border>
+                                                        <TextBlock Text="{Binding PhpLabel}" Style="{StaticResource CaptionTextBlockStyle}"
+                                                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                                    </StackPanel>
+                                                </Grid>
+                                            </Button>
+                                            <!-- A site with worktrees: how many, and a toggle that shows them under it. -->
+                                            <Button
+                                                Grid.Column="1"
+                                                Padding="6,4"
+                                                VerticalAlignment="Stretch"
+                                                Background="Transparent"
+                                                BorderThickness="0"
+                                                Visibility="{Binding ToggleVisibility}"
+                                                ToolTipService.ToolTip="{Binding ToggleLabel}"
+                                                AutomationProperties.Name="{Binding ToggleLabel}"
+                                                Click="ToggleWorktrees">
+                                                <StackPanel Orientation="Horizontal" Spacing="4">
+                                                    <TextBlock Text="{Binding WorktreeCount}" Style="{StaticResource CaptionTextBlockStyle}"
                                                                Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                                                </Border>
-                                                <Border Background="{ThemeResource SystemFillColorSuccessBackgroundBrush}" CornerRadius="8" Padding="7,1,7,2"
-                                                        Visibility="{Binding SharedVisibility}" ToolTipService.ToolTip="{Binding ShareTooltip}">
-                                                    <TextBlock Text="Shared" FontSize="11" FontWeight="SemiBold" Foreground="{ThemeResource SystemFillColorSuccessBrush}" />
-                                                </Border>
-                                                <TextBlock Text="{Binding PhpLabel}" Style="{StaticResource CaptionTextBlockStyle}"
-                                                           Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                                            </StackPanel>
+                                                    <FontIcon Glyph="{Binding ToggleGlyph}" FontFamily="{StaticResource SymbolsFont}" FontSize="10"
+                                                              Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                                </StackPanel>
+                                            </Button>
                                         </Grid>
-                                    </Button>
+                                        <ItemsControl ItemsSource="{Binding Worktrees}" Visibility="{Binding WorktreesVisibility}">
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate>
+                                                    <Button
+                                                        Margin="20,0,0,2"
+                                                        HorizontalAlignment="Stretch"
+                                                        HorizontalContentAlignment="Stretch"
+                                                        Padding="6,4"
+                                                        Background="Transparent"
+                                                        BorderThickness="0"
+                                                        IsEnabled="{Binding HasUrl}"
+                                                        ToolTipService.ToolTip="{Binding Tooltip}"
+                                                        Click="OpenWorktree">
+                                                        <Grid ColumnSpacing="8">
+                                                            <Grid.ColumnDefinitions>
+                                                                <ColumnDefinition Width="*" />
+                                                                <ColumnDefinition Width="Auto" />
+                                                            </Grid.ColumnDefinitions>
+                                                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                                                <FontIcon Glyph="{Binding SecurityGlyph}" FontFamily="{StaticResource SymbolsFont}" FontSize="12"
+                                                                          Foreground="{Binding SecurityBrush}" />
+                                                                <StackPanel Spacing="0">
+                                                                    <TextBlock Text="{Binding Label}" TextTrimming="CharacterEllipsis" />
+                                                                    <TextBlock Text="{Binding Message}" Style="{StaticResource CaptionTextBlockStyle}"
+                                                                               Foreground="{ThemeResource SystemFillColorCriticalBrush}" TextWrapping="Wrap"
+                                                                               Visibility="{Binding MessageVisibility}" />
+                                                                </StackPanel>
+                                                            </StackPanel>
+                                                            <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                                                                <Border Background="{ThemeResource ControlFillColorSecondaryBrush}" CornerRadius="8" Padding="7,1,7,2"
+                                                                        Visibility="{Binding DatabaseVisibility}" ToolTipService.ToolTip="{Binding DatabaseTooltip}">
+                                                                    <TextBlock Text="{Binding DatabaseLabel}" FontSize="11" FontWeight="SemiBold"
+                                                                               Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                                                </Border>
+                                                                <StackPanel Orientation="Horizontal" Spacing="6" Visibility="{Binding StepVisibility}">
+                                                                    <ProgressRing Width="12" Height="12" />
+                                                                    <TextBlock Text="{Binding Step}" Style="{StaticResource CaptionTextBlockStyle}" MaxWidth="150"
+                                                                               TextTrimming="CharacterEllipsis" />
+                                                                </StackPanel>
+                                                            </StackPanel>
+                                                        </Grid>
+                                                    </Button>
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+                                    </StackPanel>
                                 </DataTemplate>
                             </ItemsControl.ItemTemplate>
                         </ItemsControl>

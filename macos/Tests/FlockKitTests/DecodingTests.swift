@@ -317,3 +317,31 @@ private func decode<T: Decodable>(_ type: T.Type, _ json: String) throws -> T {
 
     #expect(ShareStatus.parseAllow(" bob@acme.com,  *@client.com\nann@x.io ") == ["bob@acme.com", "*@client.com", "ann@x.io"])
 }
+
+@Test func decodesWorktreesUnderTheirSite() throws {
+    let status = try decode(Status.self, """
+    {"version":"dev","pid":1,"started_at":"2026-10-27T10:00:00+01:00",
+     "sites":[{"name":"acme","domain":"acme.test","path":"/code/acme","php":"8.5"},
+              {"name":"feature-auth.acme","domain":"feature-auth.acme.test","path":"/code/acme-feature-auth","php":"8.5",
+               "parent":"acme","branch":"feature/auth",
+               "worktree":{"state":"running","step":"composer install","log":"worktree-feature-auth.acme","db_mode":"copy","database":"acme_feature_auth"}},
+              {"name":"bisect.acme","domain":"bisect.acme.test","path":"/code/bisect","php":"8.5","parent":"acme","branch":""},
+              {"name":"blog","domain":"blog.test","path":"/code/blog","php":"8.4","parent":""}]}
+    """)
+
+    #expect(status.sites.topLevel.map(\.name) == ["acme", "blog"])
+    let worktrees = status.sites.worktrees(of: "acme")
+    #expect(worktrees.map(\.worktreeLabel) == ["feature/auth", "bisect"])
+    let setup = try #require(worktrees[0].worktree)
+    #expect(setup.busy && setup.step == "composer install" && setup.dbMode == .copy && setup.database == "acme_feature_auth")
+    #expect(worktrees[1].worktree == nil && !status.sites[3].isWorktree)
+
+}
+
+@Test func ordersBranchesCurrentAndDefaultFirst() throws {
+    let branches = try decode(Branches.self, """
+    {"current":"develop","default":"main","local":["alpha","develop","main"],"remote":["origin/main"]}
+    """)
+    #expect(branches.ordered == ["develop", "main", "alpha"])
+    #expect(Branches(current: "", default: "gone", local: ["a", "b"]).ordered == ["a", "b"])
+}

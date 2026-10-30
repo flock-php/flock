@@ -229,4 +229,20 @@ internal sealed partial class PanelWindow : Window
             viewModel.OpenSite(url);
         }
     }
+
+    private void OpenWorktree(object sender, RoutedEventArgs args)
+    {
+        if (sender is Button { DataContext: PanelWorktreeRow { Url: { Length: > 0 } url } })
+        {
+            viewModel.OpenSite(url);
+        }
+    }
+
+    private void ToggleWorktrees(object sender, RoutedEventArgs args)
+    {
+        if (sender is Button { DataContext: PanelSiteRow row })
+        {
+            viewModel.ToggleWorktrees(row.Name);
+        }
+    }
 }

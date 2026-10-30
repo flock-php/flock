@@ -38,6 +38,7 @@ import (
 	"flock/internal/share"
 	"flock/internal/supervisor"
 	"flock/internal/web"
+	"flock/internal/worktree"
 	"flock/internal/xdebug"
 )
 
@@ -83,6 +84,12 @@ type daemon struct {
 	catalog *catalog.Manager
 	// shares are the sites shared through tunnels (`flock share`); never kept across restarts.
 	shares *share.Manager
+	// worktrees sets up the sites' git worktrees (see syncWorktrees); pendingDB are the database
+	// modes asked for while their setup ran, by path (see setPendingDB).
+	worktrees *worktree.Manager
+	pendingMu sync.Mutex
+	pendingDB map[string]string
+	gone      map[string]bool // worktrees being forgotten, by path (see syncWorktrees)
 
 	// leaves issues certificates for deep subdomains, aliases and unknown names during handshakes.
 	leaves *certs.Leaves
@@ -106,6 +113,9 @@ func (d *daemon) shutdown() {
 	// First, while reloads still work: stopping a share reloads the web server.
 	if d.shares != nil {
 		d.shares.StopAll()
+	}
+	if d.worktrees != nil {
+		d.worktrees.StopAll()
 	}
 	d.reloadMu.Lock()
 	defer d.reloadMu.Unlock()
@@ -288,6 +298,7 @@ func Run(ctx context.Context, cfg Config) error {
 	go d.frankenphp.Run(ctx)
 	d.catalog = catalog.NewManager(cfg.Root, catalog.Kinds(runtime.GOOS), d.binaries, d.Mutate)
 	go d.catalog.Run(ctx)
+	d.worktrees = worktree.NewManager(cfg.Root)
 	d.shares = share.NewManager(cfg.Root, d.binaries)
 	d.shares.Changed = func() {
 		if err := d.reload(); err != nil {
@@ -300,6 +311,7 @@ func Run(ctx context.Context, cfg Config) error {
 	if err := d.reload(); err != nil {
 		d.setWarnings([]string{err.Error()})
 	}
+	d.markWorktreesSince()
 	// What the first reload served, taken before the API answers: a folder parked once a client
 	// can see the daemon is a change.
 	files, extFiles := d.projectFiles(), d.postgresExtensionFiles()
@@ -603,6 +615,7 @@ func (d *daemon) reload() error {
 		version := phpVersion.Version
 		status := api.SiteStatus{
 			Name: site.Name, Domain: domain, Path: site.Path, Secured: site.Secured, Parked: site.Parked,
+			Parent: site.Parent, Branch: site.Branch,
 			PHP: version, PHPSource: phpVersion.Source, PHPPinned: phpVersion.Pinned, PHPFile: phpVersion.File,
 			Node: nodeVersion.Version, NodeSource: nodeVersion.Source, NodePinned: nodeVersion.Pinned, NodeFile: nodeVersion.File,
 			NodeShadowed: nodeVersion.Shadowed, Domains: []api.SiteDomain{},
@@ -816,6 +829,7 @@ func (d *daemon) reload() error {
 	d.mu.Unlock()
 
 	go d.checkWildcard()
+	d.syncWorktrees(cfg)
 	// Until there are defaults: one may be installed now (the first run's, or one the user installed).
 	if cfg.DefaultPHP == "" || cfg.DefaultNode == "" {
 		go d.ensureDefaults()
@@ -973,7 +987,7 @@ func (d *daemon) Status() api.Status {
 		Version:   d.version,
 		PID:       os.Getpid(),
 		StartedAt: d.startedAt,
-		Sites:     d.withShares(withBoost(d.liveSites())),
+		Sites:     d.withWorktrees(d.withShares(withBoost(d.liveSites()))),
 		Processes: d.procs.Status(),
 		Warnings:  d.warnings,
 	}

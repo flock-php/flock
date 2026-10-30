@@ -45,7 +45,9 @@ func newRootCommand() *cobra.Command {
 			case reset:
 				site.Root = ""
 				if !site.Parked {
-					s.cfg.Upsert(site)
+					if err := s.cfg.Upsert(site); err != nil {
+						return err
+					}
 				}
 			case len(args) > 0:
 				rel, err := project.RootFromPath(site.Path, args[0])
@@ -54,7 +56,9 @@ func newRootCommand() *cobra.Command {
 				}
 				// A site from a project folder becomes linked so its settings can be stored.
 				site.Root, site.Parked = rel, false
-				s.cfg.Upsert(site)
+				if err := s.cfg.Upsert(site); err != nil {
+					return err
+				}
 			default:
 				printRoot(cmd, site.Name, site.Path, project.RootFor(&site))
 				return nil
@@ -160,7 +164,9 @@ func pinRoot(cmd *cobra.Command, siteName string, args []string) error {
 			return err
 		}
 		if lifted {
-			s.cfg.Upsert(*site)
+			if err := s.cfg.Upsert(*site); err != nil {
+				return err
+			}
 		}
 	} else {
 		if rel == "" {

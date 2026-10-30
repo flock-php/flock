@@ -23,12 +23,14 @@ use webkit6::prelude::WebViewExt;
 use crate::{Windows, model, window};
 
 /// The shots, in the order of macOS's Screenshots.all.
-const SHOTS: [&str; 14] = [
+const SHOTS: [&str; 17] = [
     "settings-general-project-folders",
     "settings-sites",
     "settings-sites-https",
     "settings-sites-add-domain",
     "settings-sites-pin",
+    "settings-sites-worktrees",
+    "settings-sites-worktree",
     "settings-php",
     "settings-node",
     "settings-services-postgres",
@@ -38,6 +40,7 @@ const SHOTS: [&str; 14] = [
     "mail-window",
     "dumps-window",
     "panel-running",
+    "panel-worktrees",
 ];
 
 const SCALE: f32 = 2.0;
@@ -48,6 +51,9 @@ pub fn main(args: &[String]) -> glib::ExitCode {
     // FLOCK_HOME and with it api.json point into a scratch folder, so the app talks to the fake daemon only.
     // SAFETY: before any thread is started.
     unsafe { std::env::set_var("FLOCK_HOME", &home) };
+    // The app's preferences too: expanding a site's worktrees remembers it.
+    // SAFETY: as above.
+    unsafe { std::env::set_var("XDG_CONFIG_HOME", &home) };
     if args.iter().any(|a| a == "--serve") {
         serve(&home);
         println!("FLOCK_HOME={}", home.display());
@@ -119,7 +125,8 @@ async fn shoot(id: &str, app: &adw::Application, model: &Rc<model::AppModel>, wi
     let name = match id {
         "settings-general-project-folders" => "settings/general",
         "settings-sites" | "settings-sites-pin" => "settings/sites/shop",
-        "settings-sites-https" | "settings-sites-add-domain" => "settings/sites/acme",
+        "settings-sites-https" | "settings-sites-add-domain" | "settings-sites-worktrees" => "settings/sites/acme",
+        "settings-sites-worktree" => "settings/sites/feature-checkout.acme",
         "settings-php" => "settings/php",
         "settings-node" => "settings/node",
         "settings-services-postgres" => "settings/services/postgres",
@@ -130,6 +137,8 @@ async fn shoot(id: &str, app: &adw::Application, model: &Rc<model::AppModel>, wi
         "dumps-window" => "dumps",
         // Linux has no panel: the Flock window's General shows the status.
         "panel-running" => "settings/general",
+        // ... and the Sites list the panel's sites, with acme's worktrees.
+        "panel-worktrees" => "settings/sites",
         _ => return Err(format!("no shot {id}")),
     };
     // The status first: the panes and windows show it.
@@ -146,14 +155,17 @@ async fn shoot(id: &str, app: &adw::Application, model: &Rc<model::AppModel>, wi
         "settings-general-project-folders" => {
             let title = find(&window, &|w| w.downcast_ref::<gtk::Label>().is_some_and(|l| l.label() == "Project folders"))
                 .ok_or("no Project folders")?;
-            let scrolled = title.ancestor(gtk::ScrolledWindow::static_type()).ok_or("no scrolled pane")?;
-            let adjustment = scrolled.downcast_ref::<gtk::ScrolledWindow>().expect("scrolled").vadjustment();
-            adjustment.set_value(adjustment.upper() - adjustment.page_size());
-            // Laid out now: behind a locked screen, GNOME sends the window no frames to do it in.
-            let parent = scrolled.parent().ok_or("no pane")?;
-            let bounds = scrolled.compute_bounds(&parent).ok_or("pane not laid out")?;
-            let allocation = gtk::Allocation::new(bounds.x() as i32, bounds.y() as i32, scrolled.width(), scrolled.height());
-            scrolled.size_allocate(&allocation, -1);
+            scroll_to_end(&title)?;
+        }
+        "settings-sites-worktrees" => {
+            let title =
+                find(&window, &|w| w.downcast_ref::<gtk::Label>().is_some_and(|l| l.label() == "Worktrees")).ok_or("no Worktrees group")?;
+            scroll_to_end(&title)?;
+        }
+        "panel-worktrees" => {
+            let row = find(&window, &|w| w.downcast_ref::<adw::ExpanderRow>().is_some_and(|r| r.title() == "acme"))
+                .ok_or("no acme with worktrees")?;
+            row.downcast::<adw::ExpanderRow>().expect("expander row").set_expanded(true);
         }
         "settings-sites-add-domain" => {
             let row = find(&window, &|w| w.downcast_ref::<adw::ActionRow>().is_some_and(|r| r.title() == "Add Domain…"))
@@ -191,6 +203,19 @@ async fn shoot(id: &str, app: &adw::Application, model: &Rc<model::AppModel>, wi
         }
     }
     save(&window, &pages, file)
+}
+
+/// Scrolls the pane a widget is in to its end.
+fn scroll_to_end(widget: &gtk::Widget) -> Result<(), String> {
+    let scrolled = widget.ancestor(gtk::ScrolledWindow::static_type()).ok_or("no scrolled pane")?;
+    let adjustment = scrolled.downcast_ref::<gtk::ScrolledWindow>().expect("scrolled").vadjustment();
+    adjustment.set_value(adjustment.upper() - adjustment.page_size());
+    // Laid out now: behind a locked screen, GNOME sends the window no frames to do it in.
+    let parent = scrolled.parent().ok_or("no pane")?;
+    let bounds = scrolled.compute_bounds(&parent).ok_or("pane not laid out")?;
+    let allocation = gtk::Allocation::new(bounds.x() as i32, bounds.y() as i32, scrolled.width(), scrolled.height());
+    scrolled.size_allocate(&allocation, -1);
+    Ok(())
 }
 
 /// Waits for the main loop to handle what is pending, and then some.

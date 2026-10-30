@@ -1,0 +1,200 @@
+package api
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"io"
+	"net/http"
+	"net/url"
+	"time"
+
+	"flock/internal/worktree"
+)
+
+// WorktreeStatus is the setup of a git worktree Flock serves (see package worktree).
+type WorktreeStatus = worktree.Status
+
+// ErrNotWorktree is returned for a path that isn't a worktree of a Flock site.
+var ErrNotWorktree = errors.New("not a git worktree of a Flock site")
+
+// ErrInvalidRequest and ErrConflict mark a backend's errors as the asker's (400) or as clashing
+// with what runs (409).
+var (
+	ErrInvalidRequest = errInvalid
+	ErrConflict       = errConflict
+)
+
+// WorktreeRequest names a worktree by its folder. Again sets it up again although it is set up
+// already; DB is the database mode (shared, copy, fresh; "" leaves it to flock.yml). Force removes
+// it even when a hook fails or it has changes.
+type WorktreeRequest struct {
+	Path  string `json:"path"`
+	Again bool   `json:"again,omitempty"`
+	DB    string `json:"db,omitempty"`
+	Force bool   `json:"force,omitempty"`
+}
+
+// WorktreeCreate asks for a new worktree of Site on Branch: the branch when it exists, else a new
+// one from From (HEAD when ""), at Path ("" for where flock.yml says), with the database mode DB.
+// Without a Branch, Flock makes up its name (like brave-otter).
+type WorktreeCreate struct {
+	Site   string `json:"site"`
+	Branch string `json:"branch"`
+	From   string `json:"from,omitempty"`
+	Path   string `json:"path,omitempty"`
+	DB     string `json:"db,omitempty"`
+}
+
+// WorktreeCreated is the new worktree's folder, its branch and its setup.
+type WorktreeCreated struct {
+	Path   string         `json:"path"`
+	Branch string         `json:"branch"`
+	Setup  WorktreeStatus `json:"setup"`
+}
+
+// WorktreeBranches are a site's git branches (see worktree.Branches).
+type WorktreeBranches = worktree.Branches
+
+// WorktreeRemoval is what removing a worktree printed (its before_delete hook, git).
+type WorktreeRemoval struct {
+	Output string `json:"output"`
+}
+
+func registerWorktrees(mux *http.ServeMux, b Backend) {
+	decode := func(w http.ResponseWriter, r *http.Request) (WorktreeRequest, bool) {
+		var req WorktreeRequest
+		if err := json.NewDecoder(io.LimitReader(r.Body, 1<<16)).Decode(&req); err != nil || req.Path == "" {
+			writeError(w, http.StatusBadRequest, errors.New("name the worktree by its path"))
+			return req, false
+		}
+		return req, true
+	}
+	fail := func(w http.ResponseWriter, err error) {
+		code := statusFor(err)
+		if errors.Is(err, ErrNotWorktree) {
+			code = http.StatusNotFound
+		}
+		writeError(w, code, err)
+	}
+
+	mux.HandleFunc("POST /v1/worktrees", func(w http.ResponseWriter, r *http.Request) {
+		var req WorktreeCreate
+		if err := json.NewDecoder(io.LimitReader(r.Body, 1<<16)).Decode(&req); err != nil || req.Site == "" {
+			writeError(w, http.StatusBadRequest, errors.New("name the site"))
+			return
+		}
+		created, err := b.CreateWorktree(r.Context(), req)
+		if err != nil {
+			fail(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, created)
+	})
+	mux.HandleFunc("GET /v1/sites/{name}/branches", func(w http.ResponseWriter, r *http.Request) {
+		branches, err := b.SiteBranches(r.Context(), r.PathValue("name"))
+		if err != nil {
+			fail(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, branches)
+	})
+	// Starts the setup, or joins the one running; see Backend.SetupWorktree.
+	mux.HandleFunc("POST /v1/worktrees/setup", func(w http.ResponseWriter, r *http.Request) {
+		req, ok := decode(w, r)
+		if !ok {
+			return
+		}
+		st, err := b.SetupWorktree(req.Path, req.Again, req.DB)
+		if err != nil {
+			fail(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, st)
+	})
+	mux.HandleFunc("GET /v1/worktrees/setup", func(w http.ResponseWriter, r *http.Request) {
+		st, err := b.WorktreeSetup(r.URL.Query().Get("path"))
+		if err != nil {
+			fail(w, err)
+			return
+		}
+		if st == nil {
+			writeError(w, http.StatusNotFound, errors.New("Flock hasn't set this worktree up"))
+			return
+		}
+		writeJSON(w, http.StatusOK, st)
+	})
+	// Switches the database mode as the worktree's job, followed like a setup.
+	mux.HandleFunc("POST /v1/worktrees/db", func(w http.ResponseWriter, r *http.Request) {
+		req, ok := decode(w, r)
+		if !ok {
+			return
+		}
+		st, err := b.SwitchWorktreeDatabase(req.Path, req.DB)
+		if err != nil {
+			fail(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, st)
+	})
+	mux.HandleFunc("POST /v1/worktrees/remove", func(w http.ResponseWriter, r *http.Request) {
+		req, ok := decode(w, r)
+		if !ok {
+			return
+		}
+		out, err := b.RemoveWorktree(r.Context(), req.Path, req.Force)
+		if err != nil {
+			if out != "" {
+				err = fmt.Errorf("%w\n%s", err, out)
+			}
+			fail(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, WorktreeRemoval{Output: out})
+	})
+}
+
+// CreateWorktree creates a worktree and starts its setup.
+func (c *Client) CreateWorktree(ctx context.Context, req WorktreeCreate) (WorktreeCreated, error) {
+	var out WorktreeCreated
+	err := c.slow().send(ctx, http.MethodPost, "/v1/worktrees", req, &out)
+	return out, err
+}
+
+// SiteBranches lists the git branches of a site.
+func (c *Client) SiteBranches(ctx context.Context, name string) (WorktreeBranches, error) {
+	var out WorktreeBranches
+	err := c.get(ctx, "/v1/sites/"+url.PathEscape(name)+"/branches", &out)
+	return out, err
+}
+
+// SetupWorktree starts the setup of the worktree at path, or joins the one that runs.
+func (c *Client) SetupWorktree(ctx context.Context, path string, again bool, db string) (WorktreeStatus, error) {
+	var st WorktreeStatus
+	err := c.send(ctx, http.MethodPost, "/v1/worktrees/setup", WorktreeRequest{Path: path, Again: again, DB: db}, &st)
+	return st, err
+}
+
+// SwitchWorktreeDatabase gives the worktree at path a database by mode, as its job, dropping the
+// one Flock made for it.
+func (c *Client) SwitchWorktreeDatabase(ctx context.Context, path, mode string) (WorktreeStatus, error) {
+	var st WorktreeStatus
+	err := c.send(ctx, http.MethodPost, "/v1/worktrees/db", WorktreeRequest{Path: path, DB: mode}, &st)
+	return st, err
+}
+
+// WorktreeSetup reports the setup of the worktree at path.
+func (c *Client) WorktreeSetup(ctx context.Context, path string) (WorktreeStatus, error) {
+	var st WorktreeStatus
+	err := c.get(ctx, "/v1/worktrees/setup?path="+url.QueryEscape(path), &st)
+	return st, err
+}
+
+// RemoveWorktree runs the worktree's before_delete hook, removes it with git and drops the
+// database Flock made for it.
+func (c *Client) RemoveWorktree(ctx context.Context, path string, force bool) (string, error) {
+	var out WorktreeRemoval
+	err := c.timeout(10*time.Minute).send(ctx, http.MethodPost, "/v1/worktrees/remove", WorktreeRequest{Path: path, Force: force}, &out)
+	return out.Output, err
+}

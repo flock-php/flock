@@ -183,6 +183,27 @@ public sealed class SitesWorkflowTests : IDisposable
     }
 
     [Fact]
+    public void ListsWorktreesRightAfterTheirSite()
+    {
+        var model = new SitesViewModel(service);
+        model.Apply(new Status { Sites = [Site("acme", "8.4"), Site("blog", "8.3"), Worktree("feature.acme", "acme")] });
+
+        Assert.Equal(["acme", "feature.acme", "blog"], model.Sites.Select(row => row.Name));
+    }
+
+    [Fact]
+    public void AWorktreeChangingRefreshesItsSelectedSite()
+    {
+        var model = new SitesViewModel(service);
+        model.Apply(new Status { Sites = [Site("acme", "8.4"), Site("blog", "8.3")] });
+        model.Select("acme");
+
+        Assert.True(model.Apply(new Status { Sites = [Site("acme", "8.4"), Site("blog", "8.3"), Worktree("feature.acme", "acme")] }));
+        Assert.False(model.Apply(new Status { Sites = [Site("acme", "8.4"), Site("blog", "8.3"), Worktree("feature.acme", "acme")] }));
+        Assert.True(model.Apply(new Status { Sites = [Site("acme", "8.4"), Site("blog", "8.3")] }));
+    }
+
+    [Fact]
     public void StatusRefreshKeepsTheSelectedRowProjection()
     {
         var model = new SitesViewModel(service);
@@ -295,6 +316,8 @@ public sealed class SitesWorkflowTests : IDisposable
     };
     private static Status.SiteDomain Domain(string entry, string host, string? problem = null) => new() { Entry = entry, Host = host, Problem = problem };
     private static Status.SiteFrankenPhp Franken(string problem) => new() { State = "failed", Problem = problem };
+
+    private static Status.Site Worktree(string name, string parent) => new() { Name = name, Domain = name + ".test", Php = "8.4", Parent = parent };
 
     private sealed class Handler : HttpMessageHandler
     {

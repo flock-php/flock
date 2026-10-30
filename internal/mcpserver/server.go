@@ -44,6 +44,9 @@ type Daemon interface {
 	UpdateSite(ctx context.Context, name string, change api.SiteChange) (api.Status, error)
 	AddDomain(ctx context.Context, name, domain string) (api.Status, error)
 	PinSite(ctx context.Context, name, tool, version string) (api.Status, error)
+	CreateWorktree(ctx context.Context, req api.WorktreeCreate) (api.WorktreeCreated, error)
+	SetupWorktree(ctx context.Context, path string, again bool, db string) (api.WorktreeStatus, error)
+	WorktreeSetup(ctx context.Context, path string) (api.WorktreeStatus, error)
 	UnpinSite(ctx context.Context, name, tool string) (api.Status, error)
 	RestartSite(ctx context.Context, name string) (api.Status, error)
 	UpdateSettings(ctx context.Context, s api.Settings) (api.Status, error)
@@ -81,6 +84,7 @@ func New(ctx context.Context, opts Options) *mcp.Server {
 	})
 	s.addReadTools(srv)
 	s.addWriteTools(srv)
+	s.addWorktreeTools(srv)
 	s.addResources(srv)
 	s.addPrompts(srv)
 	return srv
@@ -106,6 +110,10 @@ func (s *server) instructions(ctx context.Context) string {
 		info := siteInfoOf(site)
 		fmt.Fprintf(&b, "This project is the Flock site %q, served at %s. It uses PHP %s (%s) and Node.js %s (%s).\n\n",
 			info.Name, info.URL, info.PHP.Version, describeSource(info.PHP), info.Node.Version, describeSource(info.Node))
+		if site.Parent != "" {
+			fmt.Fprintf(&b, "It is a git worktree of the site %q, on the branch %q: it uses %s's settings, and Flock set up its "+
+				"dependencies and .env (see list_worktrees).\n\n", site.Parent, site.Branch, site.Parent)
+		}
 	case errors.Is(err, api.ErrDaemonNotRunning):
 		b.WriteString("Flock isn't running right now; most tools need it. It starts with the Flock app, or with `flock daemon`.\n\n")
 	default:
@@ -118,6 +126,7 @@ func (s *server) instructions(ctx context.Context) string {
 - When code uses a PHP extension (imagick, intl, ...), require it in composer.json ("composer require ext-<name>:*"). php_extensions shows what the project requires and what Flock's PHP has.
 - Mail the app sends is caught by Flock, not delivered: read it with list_mail and read_mail.
 - To debug: get_errors (the Laravel log and PHP errors), get_dumps (dump() and dd() output), get_events (the queries, logs, views, jobs and requests a page or command ran) and service_logs.
+- To work on another branch side by side, create_worktree makes a git worktree that Flock serves and sets up at its own URL; git worktrees made any other way are served and set up too.
 - If other guidelines describe a different local development server, follow them only when Flock isn't the one serving the project.`)
 	return b.String()
 }

@@ -27,6 +27,10 @@ final class AppModel {
     var settingsPane: SettingsPane = .general
     /// The service selected in Settings → Services.
     var servicesSelection: String?
+    /// A site (or worktree) Settings → Sites is asked to select, e.g. from a notification.
+    var pendingSite: String?
+    /// Tells about worktree setups that failed where no window shows them.
+    let worktreeNotifier = WorktreeNotifier()
 
     /// Points the Settings window at a pane (and a service of the Services pane).
     func showSettings(_ pane: SettingsPane, service: String? = nil) {
@@ -61,6 +65,9 @@ final class AppModel {
         case .update:
             showSettings(.general)
             updater.checkForUpdates()
+        case .site(let name):
+            pendingSite = name
+            showSettings(.sites)
         }
     }
 
@@ -135,6 +142,7 @@ final class AppModel {
         let previous = status
         status = new
         error = nil
+        worktreeNotifier.check(previous: previous, new: new)
         updater.channel = new.channel
         Task { await settings.refreshIfVisible() }
 

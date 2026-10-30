@@ -110,8 +110,14 @@ type SiteStatus struct {
 	NodeShadowed string `json:"node_shadowed"`
 	Secured      bool   `json:"secured"`
 	Parked       bool   `json:"parked"`
-	URL          string `json:"url,omitempty"`
-	Problem      string `json:"problem,omitempty"`
+	// Parent is set on a git worktree of another site: that site's name, whose settings it uses.
+	// Branch is the worktree's branch ("" when HEAD is detached).
+	Parent string `json:"parent,omitempty"`
+	Branch string `json:"branch,omitempty"`
+	// Worktree is the setup of a worktree Flock set up (nil for others).
+	Worktree *WorktreeStatus `json:"worktree,omitempty"`
+	URL      string          `json:"url,omitempty"`
+	Problem  string          `json:"problem,omitempty"`
 	// Notice is something about the site that needs a decision from the user but isn't broken,
 	// e.g. that Flock found no document root in it.
 	Notice string `json:"notice,omitempty"`
@@ -232,6 +238,22 @@ type Backend interface {
 	// that the site can be shared, with the app's debug mode on for visitors when debug is set.
 	Shares() *share.Manager
 	StartShare(site string, allow []string, debug bool) error
+	// CreateWorktree creates a git worktree of a site and starts its setup.
+	CreateWorktree(ctx context.Context, req WorktreeCreate) (WorktreeCreated, error)
+	// SiteBranches lists the git branches of a site, for where a new worktree's branch starts.
+	SiteBranches(ctx context.Context, name string) (WorktreeBranches, error)
+	// SetupWorktree starts the setup of the git worktree at path (ErrNotWorktree when it isn't
+	// one of a site's) with the database mode db ("" for flock.yml's), or joins the one that runs;
+	// one set up already is left alone unless again.
+	SetupWorktree(path string, again bool, db string) (WorktreeStatus, error)
+	// SwitchWorktreeDatabase gives the worktree a database by mode as its job, dropping the one
+	// Flock made for it.
+	SwitchWorktreeDatabase(path, mode string) (WorktreeStatus, error)
+	// WorktreeSetup is the state of the worktree's setup, nil when Flock hasn't set it up.
+	WorktreeSetup(path string) (*WorktreeStatus, error)
+	// RemoveWorktree runs the worktree's before_delete hook, removes it with git and drops the
+	// database Flock made for it, returning what they printed.
+	RemoveWorktree(ctx context.Context, path string, force bool) (string, error)
 }
 
 // NewHandler builds the API routes. A non-empty token requires `Authorization: Bearer <token>`
@@ -277,6 +299,7 @@ func NewHandler(b Backend, token string) http.Handler {
 	registerMCP(mux, b)
 	registerBoost(mux, b)
 	registerShares(mux, b)
+	registerWorktrees(mux, b)
 
 	if token == "" {
 		return mux

@@ -7,6 +7,7 @@ Most settings are changed from the Flock app or the CLI. This page describes whe
 | File | Purpose |
 | --- | --- |
 | `.flockrc` | PHP (`php=8.5`) and optionally Node (`node=22`) versions for the project. Commit it. |
+| `flock.yml` | How the project's [git worktrees](worktrees.md) are set up. Commit it; `flock.local.yml` next to it holds your machine's settings. |
 | `.nvmrc` / `.node-version` | Node version, read the same way as by nvm and other tools. Only version numbers count; aliases like `lts/*` are ignored. |
 
 Project files are looked up from the current directory upwards. See [Per-project versions](project-versions.md).

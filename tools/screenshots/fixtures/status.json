@@ -83,6 +83,55 @@
       "server": "fastcgi"
     },
     {
+      "php": "8.5",
+      "php_source": "project",
+      "php_pinned": "8.5",
+      "node": "24",
+      "node_source": "default",
+      "root": "public",
+      "root_source": "default",
+      "secured": true,
+      "parked": false,
+      "server": "fastcgi",
+      "parent": "acme",
+      "name": "feature-checkout.acme",
+      "domain": "feature-checkout.acme.test",
+      "path": "C:\\Users\\demo\\Code\\acme-feature-checkout",
+      "php_file": "C:\\Users\\demo\\Code\\acme-feature-checkout\\.flockrc",
+      "url": "https://feature-checkout.acme.test",
+      "branch": "feature/checkout",
+      "worktree": {
+        "state": "ready",
+        "log": "worktree-feature-checkout.acme",
+        "db_mode": "copy",
+        "database": "acme_feature_checkout"
+      }
+    },
+    {
+      "php": "8.5",
+      "php_source": "project",
+      "php_pinned": "8.5",
+      "node": "24",
+      "node_source": "default",
+      "root": "public",
+      "root_source": "default",
+      "secured": true,
+      "parked": false,
+      "server": "fastcgi",
+      "parent": "acme",
+      "name": "fix-invoices.acme",
+      "domain": "fix-invoices.acme.test",
+      "path": "C:\\Users\\demo\\Code\\acme-fix-invoices",
+      "php_file": "C:\\Users\\demo\\Code\\acme-fix-invoices\\.flockrc",
+      "url": "https://fix-invoices.acme.test",
+      "branch": "fix/invoices",
+      "worktree": {
+        "state": "running",
+        "step": "composer install",
+        "log": "worktree-fix-invoices.acme"
+      }
+    },
+    {
       "name": "shop",
       "domain": "shop.test",
       "path": "C:\\Users\\demo\\Sites\\shop",

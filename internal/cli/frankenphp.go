@@ -94,7 +94,9 @@ first time a site needs it. php.ini is the regular PHP's (see ` + "`flock php li
 			if err := s.cfg.SetServer(&site, config.ServerFrankenPHP, worker); err != nil {
 				return err
 			}
-			s.cfg.Upsert(site)
+			if err := s.cfg.Upsert(site); err != nil {
+				return err
+			}
 			if err := s.commit(cmd.Context(), cmd.ErrOrStderr()); err != nil {
 				return err
 			}
@@ -122,7 +124,9 @@ first time a site needs it. php.ini is the regular PHP's (see ` + "`flock php li
 			if err := s.cfg.SetServer(&site, config.ServerFastCGI, site.Worker); err != nil {
 				return err
 			}
-			s.cfg.Upsert(site)
+			if err := s.cfg.Upsert(site); err != nil {
+				return err
+			}
 			if err := s.commit(cmd.Context(), cmd.ErrOrStderr()); err != nil {
 				return err
 			}

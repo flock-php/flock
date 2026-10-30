@@ -2,6 +2,7 @@
 //! seconds, and the actions on it (restart, settings). Windows subscribe to changes.
 
 use std::cell::{Cell, RefCell};
+use std::collections::HashSet;
 use std::rc::Rc;
 use std::time::Duration;
 
@@ -28,6 +29,8 @@ pub struct AppModel {
     /// A flock:// link the pane it opened asks about once its data is loaded.
     link: RefCell<Option<Link>>,
     listeners: RefCell<Vec<Rc<dyn Fn()>>>,
+    /// Worktrees whose job a progress dialog follows, by folder: their failures aren't notified.
+    followed_worktrees: RefCell<HashSet<String>>,
 }
 
 impl AppModel {
@@ -69,6 +72,18 @@ impl AppModel {
 
     pub fn set_link(&self, link: Option<Link>) {
         self.link.replace(link);
+    }
+
+    pub fn follow_worktree(&self, path: &str) {
+        self.followed_worktrees.borrow_mut().insert(path.to_owned());
+    }
+
+    pub fn unfollow_worktree(&self, path: &str) {
+        self.followed_worktrees.borrow_mut().remove(path);
+    }
+
+    pub fn follows_worktree(&self, path: &str) -> bool {
+        self.followed_worktrees.borrow().contains(path)
     }
 
     /// Calls f after every change, from now on.

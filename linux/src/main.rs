@@ -9,6 +9,7 @@ mod links;
 mod logs;
 mod mail;
 mod model;
+mod notifier;
 mod panes;
 mod paths;
 mod prefs;
@@ -196,6 +197,7 @@ fn main() -> glib::ExitCode {
         let mut shown = (!background || screenshot.is_some()).then(|| w.main()).flatten();
         if screenshot.is_none() {
             start_tray(app, &m, &w);
+            notifier::start(app, &m);
         }
         if let Some(window) = open.as_deref().and_then(|name| w.open(app, &m, name)) {
             shown = Some(window);

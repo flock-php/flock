@@ -8,6 +8,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -18,6 +19,7 @@ import (
 	"flock/internal/binaries"
 	"flock/internal/config"
 	"flock/internal/paths"
+	"flock/internal/worktree"
 )
 
 // TestMain keeps the daemons offline: without the package manifest, the first run doesn't
@@ -354,6 +356,138 @@ func TestFoldersInParkedPathsAreFollowed(t *testing.T) {
 		t.Fatal(err)
 	}
 	waitFor(false)
+}
+
+func TestGitWorktreesAreServedUnderTheirSite(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git is not installed")
+	}
+	projectWatchInterval = 50 * time.Millisecond
+	t.Cleanup(func() { projectWatchInterval = 3 * time.Second })
+
+	parked := t.TempDir()
+	repo := filepath.Join(parked, "acme")
+	git := func(args ...string) {
+		t.Helper()
+		cmd := exec.Command("git", append([]string{"-C", repo, "-c", "user.name=Flock", "-c", "user.email=flock@example.test"}, args...)...)
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v\n%s", args, err, out)
+		}
+	}
+	if err := os.Mkdir(repo, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	git("init", "-q")
+	writeFile(t, filepath.Join(repo, ".gitignore"), ".env\nhooked.txt\n")
+	writeFile(t, filepath.Join(repo, "flock.yml"), "worktrees:\n  hooks:\n    after_create:\n      - echo done> hooked.txt\n")
+	git("add", ".")
+	git("commit", "-q", "-m", "init")
+	writeFile(t, filepath.Join(repo, ".env"), "APP_URL=http://acme.test\n")
+	// Made before Flock looked for worktrees: served, but left as it is.
+	git("worktree", "add", "-q", "-b", "old", filepath.Join(parked, "acme-old"))
+
+	root, _ := testRoot(t, func(cfg *config.Config) { cfg.Parked = []string{parked} })
+	client := startDaemon(t, root)
+
+	sites := func() map[string]api.SiteStatus {
+		status, _ := client.Status(context.Background())
+		out := map[string]api.SiteStatus{}
+		for _, s := range status.Sites {
+			out[s.Name] = s
+		}
+		return out
+	}
+	waitFor := func(name string, want bool) api.SiteStatus {
+		t.Helper()
+		deadline := time.Now().Add(5 * time.Second)
+		for {
+			site, ok := sites()[name]
+			if ok == want {
+				return site
+			}
+			if time.Now().After(deadline) {
+				t.Fatalf("%s listed = %v, want %v: %v", name, ok, want, sites())
+			}
+			time.Sleep(20 * time.Millisecond)
+		}
+	}
+
+	waitFor("old.acme", true)
+
+	// Next to the site, in the parked folder: the worktree, not a site acme-auth.test.
+	path := filepath.Join(parked, "acme-auth")
+	git("worktree", "add", "-q", "-b", "feature/auth", path)
+	wt := waitFor("feature-auth.acme", true)
+	if wt.Domain != "feature-auth.acme.test" || wt.Parent != "acme" || wt.Branch != "feature/auth" {
+		t.Errorf("unexpected worktree: %+v", wt)
+	}
+	if _, twice := sites()["acme-auth"]; twice {
+		t.Error("the worktree is also served as a parked site")
+	}
+
+	// It is set up by itself: .env from the site, pointed at the worktree, then the hook.
+	deadline := time.Now().Add(10 * time.Second)
+	for st := sites()["feature-auth.acme"].Worktree; st == nil || st.State != worktree.Ready; st = sites()["feature-auth.acme"].Worktree {
+		if st != nil && st.State == worktree.Failed || time.Now().After(deadline) {
+			log, _ := os.ReadFile(filepath.Join(root, "log", "worktree-feature-auth.acme.log"))
+			t.Fatalf("setup: %+v\n%s", st, log)
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	if env, _ := os.ReadFile(filepath.Join(path, ".env")); string(env) != "APP_URL=http://feature-auth.acme.test\n" {
+		t.Errorf(".env: %q", env)
+	}
+	if hooked, err := os.ReadFile(filepath.Join(path, "hooked.txt")); err != nil || strings.TrimSpace(string(hooked)) != "done" {
+		t.Errorf("the after_create hook didn't run: %q %v", hooked, err)
+	}
+	if st := sites()["old.acme"].Worktree; st != nil {
+		t.Errorf("a worktree older than Flock's worktree support was set up: %+v", st)
+	}
+	if _, err := os.Stat(filepath.Join(parked, "acme-old", ".env")); err == nil {
+		t.Error("a worktree older than Flock's worktree support got a .env")
+	}
+
+	// Removed outside Flock (an agent app, git): forgotten, with what Flock made for it.
+	other := filepath.Join(t.TempDir(), "acme-other")
+	git("worktree", "add", "-q", "-b", "other", other)
+	waitFor("other.acme", true)
+	known := func() bool {
+		cfg, err := config.Load(root)
+		if err != nil {
+			t.Fatal(err)
+		}
+		_, ok := cfg.WorktreeEntry(other)
+		return ok
+	}
+	deadline = time.Now().Add(10 * time.Second)
+	for st := sites()["other.acme"].Worktree; st == nil || st.State != worktree.Ready || !known(); st = sites()["other.acme"].Worktree {
+		if time.Now().After(deadline) {
+			t.Fatalf("other's setup: %+v, recorded %v", st, known())
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	git("worktree", "remove", "--force", other)
+	waitFor("other.acme", false)
+	for deadline = time.Now().Add(5 * time.Second); known(); time.Sleep(20 * time.Millisecond) {
+		if time.Now().After(deadline) {
+			t.Fatal("a worktree removed outside Flock is still recorded")
+		}
+	}
+
+	if _, err := client.RemoveWorktree(context.Background(), path, true); err != nil {
+		t.Fatal(err)
+	}
+	waitFor("feature-auth.acme", false)
+	if _, err := os.Stat(path); !os.IsNotExist(err) {
+		t.Errorf("the worktree's folder is still there: %v", err)
+	}
+}
+
+func writeFile(t *testing.T, path, content string) {
+	t.Helper()
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
 }
 
 func containsText(list []string, needle string) bool {

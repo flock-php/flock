@@ -208,6 +208,8 @@ internal sealed partial class SitesPane : UserControl, ISettingsPane
     internal void Select(string name)
     {
         var previous = viewModel.Selected;
+        // Before the pane was shown (a notification opening it), its rows aren't there yet.
+        viewModel.Apply(Model.Status);
         viewModel.Select(name);
         if (!ReferenceEquals(previous, viewModel.Selected))
         {
@@ -250,7 +252,7 @@ internal sealed partial class SitesPane : UserControl, ISettingsPane
         {
             SiteList.SelectedItem = row;
         }
-        DetailHost.Content = Detail(row.Snapshot, row);
+        DetailHost.Content = row.Snapshot.IsWorktree ? WorktreeDetail(row.Snapshot) : Detail(row.Snapshot, row);
     }
 
     private void AddSiteClicked(object sender, RoutedEventArgs args)
@@ -378,6 +380,9 @@ internal sealed partial class SitesPane : UserControl, ISettingsPane
         {
             panel.Children.Add(Section("Laravel Boost", boost));
         }
+
+        // Last, so screenshots and the docs find it at the end of the details.
+        panel.Children.Add(Worktrees(site));
 
         var card = Ui.Card(panel, new Thickness(20, 16, 16, 20));
         card.VerticalAlignment = VerticalAlignment.Top;

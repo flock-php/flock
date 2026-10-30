@@ -40,6 +40,27 @@ func CreateDatabase(ctx context.Context, port int, name string) error {
 	return err
 }
 
+// Codes of errors NewDatabase returns.
+const (
+	SQLStateDatabaseExists = sqlstateDuplicateDatabase
+	SQLStateTemplateInUse  = "55006" // object_in_use: the template database has other connections
+)
+
+// NewDatabase creates database name as user postgres, as a copy of template unless that is "".
+// Unlike CreateDatabase, a database that exists is an error (SQLStateDatabaseExists).
+func NewDatabase(ctx context.Context, port int, name, template string) error {
+	sql := "CREATE DATABASE " + quoteIdent(name)
+	if template != "" {
+		sql += " TEMPLATE " + quoteIdent(template)
+	}
+	return Exec(ctx, port, "postgres", sql)
+}
+
+// DropDatabase drops database name, closing its connections; one that doesn't exist is not an error.
+func DropDatabase(ctx context.Context, port int, name string) error {
+	return Exec(ctx, port, "postgres", "DROP DATABASE IF EXISTS "+quoteIdent(name)+" WITH (FORCE)")
+}
+
 // Databases lists the databases that accept connections, except the templates.
 func Databases(ctx context.Context, port int) ([]string, error) {
 	return query(ctx, port, "postgres", "SELECT datname FROM pg_database WHERE datallowconn AND NOT datistemplate ORDER BY datname")

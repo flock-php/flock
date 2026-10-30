@@ -132,6 +132,50 @@ public class ClientTests : IDisposable
     }
 
     [Fact]
+    public async Task CallsTheWorktreeEndpoints()
+    {
+        var handler = new Handler(r => new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StringContent(r.RequestUri!.AbsolutePath switch
+            {
+                "/v1/worktrees" => """{"path":"C:\\code\\acme-feature","setup":{"state":"queued","log":"worktree-feature.acme"}}""",
+                "/v1/worktrees/remove" => """{"output":"removed"}""",
+                "/v1/sites/my%20app/branches" or "/v1/sites/my app/branches" => """{"current":"main","default":"main","local":["main"],"remote":[]}""",
+                _ => """{"state":"running","step":"Copying the database","db_mode":"copy"}""",
+            }),
+        });
+        using var client = new FlockClient(new HttpClient(handler) { Timeout = Timeout.InfiniteTimeSpan }, WriteApiJson("http://127.0.0.1:1", "t"), clock);
+
+        var branches = await client.SiteBranchesAsync("my app");
+        var created = await client.CreateWorktreeAsync("acme", "feature", db: Status.WorktreeDatabase.Fresh);
+        await client.CreateWorktreeAsync("acme", "feature", from: "main");
+        var setup = await client.SetupWorktreeAsync(created.Path, again: true);
+        var followed = await client.WorktreeSetupAsync(created.Path);
+        await client.SwitchWorktreeDatabaseAsync(created.Path, Status.WorktreeDatabase.Shared);
+        Assert.Equal("removed", await client.RemoveWorktreeAsync(created.Path, force: true));
+
+        Assert.Equal("C:\\code\\acme-feature", created.Path);
+        Assert.Equal((Status.WorktreeState.Running, "copy"), (setup.State, setup.DbMode));
+        Assert.Equal(
+            ["GET /v1/sites/my%20app/branches", "POST /v1/worktrees", "POST /v1/worktrees", "POST /v1/worktrees/setup", "GET /v1/worktrees/setup?path=C%3A%5Ccode%5Cacme-feature", "POST /v1/worktrees/db", "POST /v1/worktrees/remove"],
+            handler.Requests.Select(r => $"{r.Method} {r.RequestUri!.PathAndQuery}"));
+        Assert.Equal(
+        [
+            "",
+            """{"site":"acme","branch":"feature","db":"fresh"}""",
+            """{"site":"acme","branch":"feature","from":"main"}""",
+            """{"path":"C:\\code\\acme-feature","again":true}""",
+            "",
+            """{"path":"C:\\code\\acme-feature","db":"shared"}""",
+            """{"path":"C:\\code\\acme-feature","force":true}""",
+        ], handler.Bodies);
+        // Creating runs git worktree add; removing runs the before_delete hook too.
+        Assert.Equal("main", branches.Current);
+        Assert.Equal("Copying the database", followed.Step);
+        Assert.Equal([TimeSpan.FromSeconds(5), TimeSpan.FromMinutes(2), TimeSpan.FromMinutes(2), TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(5), TimeSpan.FromMinutes(10)], handler.Timeouts);
+    }
+
+    [Fact]
     public async Task ReportsServerErrorsWithTheDaemonsMessage()
     {
         var handler = new Handler(_ => new HttpResponseMessage(HttpStatusCode.Conflict) { Content = new StringContent("""{"error":"PHP 8.5 is the default version"}""") });

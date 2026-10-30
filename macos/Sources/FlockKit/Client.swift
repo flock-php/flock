@@ -175,6 +175,50 @@ public actor FlockClient {
         _ = try await send("DELETE", "/v1/shares/\(escape(site))")
     }
 
+    // MARK: Worktrees
+
+    /// The git branches of a site, for where a new worktree's branch starts.
+    public func siteBranches(_ site: String) async throws -> Branches {
+        try await decode(Branches.self, "GET", "/v1/sites/\(escape(site))/branches")
+    }
+
+    /// Creates a git worktree of a site on branch (a new branch from `from`, the current commit by
+    /// default; a branch that exists is checked out; an empty one gets a name of its own, like
+    /// brave-otter) and starts its setup.
+    public func createWorktree(site: String, branch: String, from: String = "", db: DatabaseMode? = nil) async throws -> WorktreeCreated {
+        struct Request: Encodable { let site: String; let branch: String; let from: String; let db: String }
+        let body = try JSONEncoder().encode(Request(site: site, branch: branch, from: from, db: db?.rawValue ?? ""))
+        return try await decode(WorktreeCreated.self, "POST", "/v1/worktrees", body: body, timeout: 120)
+    }
+
+    /// How a worktree's setup goes, for following it.
+    public func worktreeSetup(path: String) async throws -> WorktreeSetup {
+        try await decode(WorktreeSetup.self, "GET", "/v1/worktrees/setup", query: [URLQueryItem(name: "path", value: path)])
+    }
+
+    /// Sets a worktree up again. It returns at once: the progress shows on the worktree in `status()`.
+    public func setupWorktree(path: String, again: Bool = true) async throws -> WorktreeSetup {
+        struct Request: Encodable { let path: String; let again: Bool }
+        return try await decode(WorktreeSetup.self, "POST", "/v1/worktrees/setup", body: try JSONEncoder().encode(Request(path: path, again: again)))
+    }
+
+    /// Gives a worktree another database, dropping the one Flock made for it. It returns at once,
+    /// like `setupWorktree`.
+    public func switchWorktreeDatabase(path: String, to mode: DatabaseMode) async throws -> WorktreeSetup {
+        struct Request: Encodable { let path: String; let db: String }
+        return try await decode(WorktreeSetup.self, "POST", "/v1/worktrees/db", body: try JSONEncoder().encode(Request(path: path, db: mode.rawValue)))
+    }
+
+    /// Runs a worktree's before_delete hook, removes it with git and drops the database Flock made
+    /// for it; force removes it also with changes or a failing hook. It returns what they printed.
+    @discardableResult
+    public func removeWorktree(path: String, force: Bool = false) async throws -> String {
+        struct Request: Encodable { let path: String; let force: Bool }
+        struct Response: Decodable { let output: String }
+        let body = try JSONEncoder().encode(Request(path: path, force: force))
+        return try await decode(Response.self, "POST", "/v1/worktrees/remove", body: body, timeout: 600).output
+    }
+
     // MARK: AI clients
 
     /// The AI clients Flock's MCP server can be registered with.

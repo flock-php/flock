@@ -21,17 +21,23 @@
                     <ListView x:Name="SiteList" ItemsSource="{Binding Sites}" SelectionChanged="SiteSelectionChanged" SelectionMode="Single">
                         <ListView.ItemTemplate>
                             <DataTemplate>
-                                <Grid Padding="8" ColumnSpacing="8">
+                                <Grid Padding="8" ColumnSpacing="8" Margin="{Binding ListMargin}">
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" />
                                     </Grid.ColumnDefinitions>
                                     <StackPanel Spacing="1">
-                                        <TextBlock Text="{Binding Name}" Style="{StaticResource BodyStrongTextBlockStyle}" TextTrimming="CharacterEllipsis" />
-                                        <TextBlock Text="{Binding Domain}" Style="{StaticResource CaptionTextBlockStyle}" TextTrimming="CharacterEllipsis" />
+                                        <TextBlock Text="{Binding ListTitle}" Style="{StaticResource BodyStrongTextBlockStyle}" TextTrimming="CharacterEllipsis" />
+                                        <TextBlock Text="{Binding Domain}" Style="{StaticResource CaptionTextBlockStyle}" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" />
                                         <TextBlock Text="{Binding Problem}" Foreground="{ThemeResource SystemFillColorCautionBrush}" TextTrimming="CharacterEllipsis"
                                                    Visibility="{Binding Problem, Converter={StaticResource StringVisibilityConverter}}" />
                                     </StackPanel>
                                     <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="4">
+                                        <ProgressRing Width="12" Height="12" ToolTipService.ToolTip="{Binding SetupStep}"
+                                                      Visibility="{Binding IsSettingUp, Converter={StaticResource BooleanVisibilityConverter}}" />
+                                        <Border Style="{StaticResource BadgeStyle}" ToolTipService.ToolTip="{Binding DatabaseTooltip}"
+                                                Visibility="{Binding HasOwnDatabase, Converter={StaticResource BooleanVisibilityConverter}}">
+                                            <TextBlock Text="{Binding DatabaseLabel}" FontSize="11" />
+                                        </Border>
                                         <FontIcon Glyph="&#xE72E;" FontFamily="{StaticResource SymbolsFont}" FontSize="12"
                                                   Visibility="{Binding Secured, Converter={StaticResource BooleanVisibilityConverter}}" />
                                         <Border Style="{StaticResource BadgeStyle}" Visibility="{Binding IsShared, Converter={StaticResource BooleanVisibilityConverter}}">

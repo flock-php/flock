@@ -31,6 +31,9 @@ public sealed class FlockClient : IDisposable
     private static readonly TimeSpan PostgresDownloadTimeout = TimeSpan.FromMinutes(10);
     // Switching a site to FrankenPHP or restarting it waits for the process to come up (~20 s at most).
     private static readonly TimeSpan ServerSwitchTimeout = TimeSpan.FromMinutes(1);
+    // Creating a worktree runs git worktree add (the Go CLI allows 2 min); removing one runs its before_delete hook too.
+    private static readonly TimeSpan WorktreeCreateTimeout = TimeSpan.FromMinutes(2);
+    private static readonly TimeSpan WorktreeRemoveTimeout = TimeSpan.FromMinutes(10);
     // Registering with Claude Code runs its CLI.
     private static readonly TimeSpan McpChangeTimeout = TimeSpan.FromSeconds(30);
     // Adding Flock's Boost guideline runs `php artisan boost:update`, which boots the app.
@@ -124,6 +127,46 @@ public sealed class FlockClient : IDisposable
     /// <summary>Ends a site's share (and forgets a failed one).</summary>
     public Task<List<Status.SiteShare>> StopShareAsync(string site, CancellationToken cancellationToken = default) =>
         Send<List<Status.SiteShare>>(HttpMethod.Delete, $"/v1/shares/{Escape(site)}", cancellationToken: cancellationToken);
+
+    /// <summary>A site's git branches, for where a new worktree's branch starts.</summary>
+    public Task<SiteBranches> SiteBranchesAsync(string site, CancellationToken cancellationToken = default) =>
+        Get<SiteBranches>($"/v1/sites/{Escape(site)}/branches", cancellationToken: cancellationToken);
+
+    /// <summary>
+    /// Creates a git worktree of site on branch (checked out when it exists, else a new branch from
+    /// from, the current commit by default; an empty branch gets a name Flock makes up), at path (null: where flock.yml says), with the database
+    /// mode db (null: the project's). It returns once git has created it: the status follows its setup.
+    /// </summary>
+    public Task<WorktreeCreated> CreateWorktreeAsync(string site, string branch, string? from = null, string? path = null, string? db = null, CancellationToken cancellationToken = default) =>
+        Send<WorktreeCreated>(HttpMethod.Post, "/v1/worktrees", new { site, branch, from, path, db }, timeout: WorktreeCreateTimeout, cancellationToken: cancellationToken);
+
+    /// <summary>Starts the setup of the worktree at path, or joins the one that runs; again sets up one that is set up already.</summary>
+    public Task<Status.WorktreeSetup> SetupWorktreeAsync(string path, bool again = false, string? db = null, CancellationToken cancellationToken = default) =>
+        Send<Status.WorktreeSetup>(HttpMethod.Post, "/v1/worktrees/setup", new { path, again, db }, cancellationToken: cancellationToken);
+
+    /// <summary>The setup (or database switch) of the worktree at path: a 404 while Flock hasn't set it up.</summary>
+    public Task<Status.WorktreeSetup> WorktreeSetupAsync(string path, CancellationToken cancellationToken = default) =>
+        Get<Status.WorktreeSetup>("/v1/worktrees/setup?path=" + Uri.EscapeDataString(path), cancellationToken: cancellationToken);
+
+    /// <summary>
+    /// Gives the worktree a database by mode (WorktreeDatabase), as its job: the status follows it.
+    /// The database Flock made for it before is dropped.
+    /// </summary>
+    public Task<Status.WorktreeSetup> SwitchWorktreeDatabaseAsync(string path, string db, CancellationToken cancellationToken = default) =>
+        Send<Status.WorktreeSetup>(HttpMethod.Post, "/v1/worktrees/db", new { path, db }, cancellationToken: cancellationToken);
+
+    /// <summary>
+    /// Runs the worktree's before_delete hook, removes it with git and drops the database Flock made
+    /// for it; the branch stays. force removes it even with changes or a failing hook. Returns what
+    /// the hook and git printed.
+    /// </summary>
+    public async Task<string> RemoveWorktreeAsync(string path, bool force = false, CancellationToken cancellationToken = default) =>
+        (await Send<WorktreeRemoval>(HttpMethod.Post, "/v1/worktrees/remove", new { path, force }, timeout: WorktreeRemoveTimeout, cancellationToken: cancellationToken)).Output;
+
+    private sealed class WorktreeRemoval
+    {
+        public string Output { get; init; } = "";
+    }
 
     public Task<ExtensionReport> SiteExtensionsAsync(string site, CancellationToken cancellationToken = default) => Get<ExtensionReport>($"/v1/sites/{Escape(site)}/extensions", cancellationToken: cancellationToken);
 

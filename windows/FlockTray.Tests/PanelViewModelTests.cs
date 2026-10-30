@@ -5,10 +5,12 @@ namespace Flock.Tray.Tests;
 
 public sealed class PanelViewModelTests
 {
+    private static PanelSiteRow Row(Status.Site site) => new(new PanelSiteValue(site, [], false));
+
     [Fact]
     public void SiteRowProjectsPanelLabelsAndVisibility()
     {
-        var row = new PanelSiteRow(new Status.Site
+        var row = Row(new Status.Site
         {
             Domain = "app.test",
             Path = "C:\\Projects\\app",
@@ -37,11 +39,37 @@ public sealed class PanelViewModelTests
     [Fact]
     public void SiteRowUsesProblemOrPathForTooltipWithoutUrl()
     {
-        var problemRow = new PanelSiteRow(new Status.Site { Domain = "broken.test", Path = "C:\\broken", Problem = "The site is unavailable." });
-        var pathRow = new PanelSiteRow(new Status.Site { Domain = "missing.test", Path = "C:\\missing" });
+        var problemRow = Row(new Status.Site { Domain = "broken.test", Path = "C:\\broken", Problem = "The site is unavailable." });
+        var pathRow = Row(new Status.Site { Domain = "missing.test", Path = "C:\\missing" });
 
         Assert.Equal("The site is unavailable.", problemRow.SiteTooltip);
         Assert.Equal("C:\\missing", pathRow.SiteTooltip);
+    }
+
+    [Fact]
+    public void SiteRowOffersAToggleAndListsWorktreesOnlyWhenExpanded()
+    {
+        var site = new Status.Site { Name = "acme", Domain = "acme.test", Path = "C:\\acme" };
+        Status.Site[] worktrees =
+        [
+            new() { Name = "a.acme", Parent = "acme", Branch = "feature/a", Url = "https://a.acme.test", Path = "C:\\a" },
+            new() { Name = "b.acme", Parent = "acme", Path = "C:\\b", Worktree = new Status.WorktreeSetup { State = Status.WorktreeState.Failed, Error = "no composer", Database = "acme_b" } },
+        ];
+
+        Assert.Equal(Microsoft.UI.Xaml.Visibility.Collapsed, Row(site).ToggleVisibility);
+
+        var row = new PanelSiteRow(new PanelSiteValue(site, worktrees, false));
+        Assert.Equal(Microsoft.UI.Xaml.Visibility.Visible, row.ToggleVisibility);
+        Assert.Equal(Microsoft.UI.Xaml.Visibility.Collapsed, row.WorktreesVisibility);
+        Assert.Equal("Show 2 worktrees", row.ToggleLabel);
+        Assert.Empty(row.Worktrees);
+
+        row.Update(new PanelSiteValue(site, worktrees, true));
+        Assert.Equal(Microsoft.UI.Xaml.Visibility.Visible, row.WorktreesVisibility);
+        Assert.Equal("Hide worktrees", row.ToggleLabel);
+        Assert.Equal(["feature/a", "b"], row.Worktrees.Select(worktree => worktree.Label));
+        Assert.Equal("no composer", row.Worktrees[1].Message);
+        Assert.Equal(Microsoft.UI.Xaml.Visibility.Visible, row.Worktrees[1].DatabaseVisibility);
     }
 
     [Fact]

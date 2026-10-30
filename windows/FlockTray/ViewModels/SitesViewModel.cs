@@ -3,6 +3,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using Flock.Kit;
 using Flock.Tray.Features.Sites;
 using Flock.Tray.Infrastructure;
+using Microsoft.UI.Xaml;
 
 namespace Flock.Tray.ViewModels;
 
@@ -28,14 +29,17 @@ internal sealed partial class SitesViewModel(SitesService service) : ObservableO
             return false;
         }
         var selectedBefore = Selected;
+        var worktreesBefore = WorktreeNames(selectedBefore);
         var selectedChanged = false;
-        _synchronizer.Synchronize(Sites, status.Sites, site => site.Name, site => site.Name,
+        // Each site's worktrees right after it, so the list nests them.
+        _synchronizer.Synchronize(Sites, status.SitesWithWorktrees(), site => site.Name, site => site.Name,
             site => new SiteRowViewModel(site), (row, site) =>
             {
                 var changed = row.Apply(site);
-                if (ReferenceEquals(row, selectedBefore))
+                // A site's details list its worktrees.
+                if (ReferenceEquals(row, selectedBefore) || (selectedBefore is not null && row.Snapshot.Parent == selectedBefore.Name))
                 {
-                    selectedChanged = changed;
+                    selectedChanged |= changed;
                 }
             });
         if (Selected is null || !Sites.Contains(Selected))
@@ -44,8 +48,11 @@ internal sealed partial class SitesViewModel(SitesService service) : ObservableO
         }
         OnPropertyChanged(nameof(Error));
         OnPropertyChanged(nameof(HasSites));
-        return !ReferenceEquals(selectedBefore, Selected) || selectedChanged;
+        return !ReferenceEquals(selectedBefore, Selected) || selectedChanged || !worktreesBefore.SequenceEqual(WorktreeNames(selectedBefore));
     }
+
+    private List<string> WorktreeNames(SiteRowViewModel? site) =>
+        site is null ? [] : Sites.Where(row => row.Snapshot.Parent == site.Name).Select(row => row.Name).ToList();
 
     public void Select(SiteRowViewModel? row)
     {
@@ -105,6 +112,14 @@ public sealed partial class SiteRowViewModel : ObservableObject
     public bool PhpPinnedHere => Snapshot.PhpPinnedHere;
     public bool NodePinnedHere => Snapshot.NodePinnedHere;
     public bool IsShared => Snapshot.IsShared;
+    public string ListTitle => Snapshot.IsWorktree ? Snapshot.WorktreeLabel : Name;
+    /// <summary>A worktree is indented under its site.</summary>
+    public Thickness ListMargin => new(Snapshot.IsWorktree ? 20 : 0, 0, 0, 0);
+    public bool IsSettingUp => Snapshot.Worktree is { IsBusy: true };
+    public string SetupStep => Snapshot.Worktree is { Step.Length: > 0 } setup ? setup.Step : "Setting up…";
+    public bool HasOwnDatabase => Snapshot.Worktree is { HasOwnDatabase: true };
+    public string DatabaseLabel => Snapshot.Worktree is { DbMode.Length: > 0 } setup ? setup.DbMode : "own database";
+    public string DatabaseTooltip => $"Its own database: {Snapshot.Worktree?.Database}";
 
     public Action SetDraftSecured(bool value)
     {
@@ -175,7 +190,7 @@ public sealed partial class SiteRowViewModel : ObservableObject
                 Domains.Insert(index, row);
             }
         }
-        foreach (var property in new[] { nameof(Name), nameof(Domain), nameof(Path), nameof(Url), nameof(Secured), nameof(Php), nameof(Node), nameof(Server), nameof(Worker), nameof(Parked), nameof(PhpSource), nameof(PhpPinned), nameof(PhpFile), nameof(NodeSource), nameof(NodePinned), nameof(NodeFile), nameof(NodeShadowed), nameof(Problem), nameof(OctaneAvailable), nameof(FrankenPhp), nameof(Boost), nameof(IsFrankenPhp), nameof(PhpPinnedHere), nameof(NodePinnedHere), nameof(IsShared) })
+        foreach (var property in new[] { nameof(Name), nameof(Domain), nameof(Path), nameof(Url), nameof(Secured), nameof(Php), nameof(Node), nameof(Server), nameof(Worker), nameof(Parked), nameof(PhpSource), nameof(PhpPinned), nameof(PhpFile), nameof(NodeSource), nameof(NodePinned), nameof(NodeFile), nameof(NodeShadowed), nameof(Problem), nameof(OctaneAvailable), nameof(FrankenPhp), nameof(Boost), nameof(IsFrankenPhp), nameof(PhpPinnedHere), nameof(NodePinnedHere), nameof(IsShared), nameof(ListTitle), nameof(ListMargin), nameof(IsSettingUp), nameof(SetupStep), nameof(HasOwnDatabase), nameof(DatabaseLabel), nameof(DatabaseTooltip) })
         {
             OnPropertyChanged(property);
         }
@@ -185,6 +200,7 @@ public sealed partial class SiteRowViewModel : ObservableObject
     private static string? Summary(Status.Site site)
     {
         return site.Problem
+               ?? (site.Worktree is { IsFailed: true, Error.Length: > 0 } setup ? setup.Error : null)
                ?? site.Notice
                ?? site.Domains.Select(domain => domain.Problem is { } problem ? $"{domain.Host}: {problem}" : null).FirstOrDefault(problem => problem is not null)
                ?? (site.IsFrankenPhp && site.FrankenPhp is { IsRunning: false, IsInstalling: false, Problem.Length: > 0 } frankenPhp ? frankenPhp.Problem : null);
@@ -221,7 +237,17 @@ public sealed partial class SiteRowViewModel : ObservableObject
                || previous.OctaneAvailable != current.OctaneAvailable
                || !FrankenPhpEqual(previous.FrankenPhp, current.FrankenPhp)
                || previous.Boost != current.Boost
-               || !ShareEqual(previous.Share, current.Share);
+               || !ShareEqual(previous.Share, current.Share)
+               || previous.Parent != current.Parent
+               || previous.Branch != current.Branch
+               || !WorktreeEqual(previous.Worktree, current.Worktree);
+    }
+
+    private static bool WorktreeEqual(Status.WorktreeSetup? previous, Status.WorktreeSetup? current)
+    {
+        return previous is null && current is null || previous is not null && current is not null &&
+            previous.State == current.State && previous.Step == current.Step && previous.Error == current.Error &&
+            previous.Log == current.Log && previous.DbMode == current.DbMode && previous.Database == current.Database;
     }
 
     private static bool DomainsEqual(IReadOnlyList<Status.SiteDomain> previous, IReadOnlyList<Status.SiteDomain> current)

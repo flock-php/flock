@@ -71,6 +71,47 @@ public sealed class SitesService : IAsyncDisposable
     public Task<OperationOutcome> StopShareAsync(string site, CancellationToken token = default) =>
         MutateAsync(Key(site), site, (_, cancellationToken) => client.StopShareAsync(site, cancellationToken), token);
 
+    /// <summary>A site's git branches for the New Worktree dialog; null when the daemon can't list them (an older one, not a git checkout).</summary>
+    public async Task<SiteBranches?> SiteBranchesAsync(string site, CancellationToken token = default)
+    {
+        try
+        {
+            return await client.SiteBranchesAsync(site, token);
+        }
+        catch (FlockException)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Creates a git worktree of site on branch (empty: Flock makes a name up), from from (null: the current commit), with the
+    /// database mode db (null: the project's). The dialog asking for it shows a failure, so it
+    /// returns the error instead of putting it into the window's error bar.
+    /// </summary>
+    public async Task<(string? Path, string? Error)> CreateWorktreeAsync(string site, string branch, string? from, string? db, CancellationToken token = default)
+    {
+        string? path = null;
+        var error = await RunInDialogAsync(Key(site), async cancellationToken =>
+            path = (await client.CreateWorktreeAsync(site, branch, from, db: db, cancellationToken: cancellationToken)).Path, token);
+        return (path, error);
+    }
+
+    /// <summary>Sets the worktree (a site with a parent) up, or once more (again); its progress dialog shows a failure.</summary>
+    public Task<string?> SetupWorktreeAsync(string worktree, string path, bool again, CancellationToken token = default) =>
+        RunInDialogAsync(Key(worktree), cancellationToken => client.SetupWorktreeAsync(path, again, cancellationToken: cancellationToken), token);
+
+    /// <summary>Gives the worktree a database by mode (the one Flock made for it before is dropped); its progress dialog shows a failure.</summary>
+    public Task<string?> SwitchWorktreeDatabaseAsync(string worktree, string path, string db, CancellationToken token = default) =>
+        RunInDialogAsync(Key(worktree), cancellationToken => client.SwitchWorktreeDatabaseAsync(path, db, cancellationToken), token);
+
+    /// <summary>
+    /// Removes the worktree at path, and the database Flock made for it. Returns the error for the
+    /// dialog to offer removing it anyway (force).
+    /// </summary>
+    public Task<string?> RemoveWorktreeAsync(string worktree, string path, bool force, CancellationToken token = default) =>
+        RunInDialogAsync(Key(worktree), cancellationToken => client.RemoveWorktreeAsync(path, force, cancellationToken), token);
+
     /// <summary>Reads one selected site's extensions. A new site retires the prior read; equivalent reads join.</summary>
     public async Task<(ExtensionReport? Report, string? Error)> SiteExtensionsAsync(string site, CancellationToken token = default)
     {
@@ -150,6 +191,23 @@ public sealed class SitesService : IAsyncDisposable
             }
         }
         return outcome;
+    }
+
+    /// <summary>A mutation whose failure its dialog shows: the error message, or null when it succeeded.</summary>
+    private async Task<string?> RunInDialogAsync(string key, Func<CancellationToken, Task> mutation, CancellationToken token)
+    {
+        var errors = new OperationErrors();
+        var outcome = await runner.RunMutationAsync(key, errors, mutation, token);
+        if ((outcome is OperationOutcome.Succeeded or OperationOutcome.Failed) && OnChange is not null)
+        {
+            await OnChange();
+        }
+        return outcome switch
+        {
+            OperationOutcome.Rejected => "Another change to this site is still running. Try again when it's done.",
+            OperationOutcome.Canceled => "Canceled.",
+            _ => errors.Action,
+        };
     }
 
     private OperationErrors ErrorsFor(string resource)

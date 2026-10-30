@@ -18,6 +18,8 @@ final class Screenshots {
         Shot(id: "settings-sites-https") { try await $0.site("acme") },
         Shot(id: "settings-sites-add-domain") { try await $0.addDomain("acme", typing: "admin") },
         Shot(id: "settings-sites-pin") { try await $0.pinMenu("shop") },
+        Shot(id: "settings-sites-worktrees") { try await $0.site("acme", atEnd: true) },
+        Shot(id: "settings-sites-worktree") { try await $0.site("feature-checkout.acme") },
         Shot(id: "settings-php") { await $0.settings(.php) },
         Shot(id: "settings-node") { await $0.settings(.node) },
         Shot(id: "settings-services-postgres") { await $0.service("postgres") },
@@ -27,6 +29,7 @@ final class Screenshots {
         Shot(id: "mail-window") { try await $0.mail() },
         Shot(id: "dumps-window") { await $0.dumps() },
         Shot(id: "panel-running") { await $0.panel() },
+        Shot(id: "panel-worktrees") { await $0.panel(expanding: ["acme"]) },
     ]
 
     let options: Options
@@ -104,15 +107,20 @@ final class Screenshots {
         return window
     }
 
-    func site(_ name: String) async throws -> NSWindow {
+    /// A site selected in Settings → Sites; atEnd scrolls its details to the end.
+    func site(_ name: String, atEnd: Bool = false) async throws -> NSWindow {
         let window = await settings(.sites)
-        // The list shows the sites in the status's order.
-        let sites = model.status?.sites ?? []
+        // The list shows the sites in the status's order, each followed by its worktrees.
+        let sites = (model.status?.sites ?? []).nested
         guard let index = sites.firstIndex(where: { $0.name == name }) else {
             throw CaptureError("no site \(name)")
         }
         try UI.selectRow(in: window, index: index, of: sites.count)
         await UI.settle()
+        if atEnd {
+            try UI.scrollToEnd(window)
+            await UI.settle()
+        }
         return window
     }
 
@@ -156,7 +164,8 @@ final class Screenshots {
         return window
     }
 
-    func panel() async -> NSWindow {
+    func panel(expanding sites: [String] = []) async -> NSWindow {
+        UserDefaults.standard.set(sites.joined(separator: "\n"), forKey: "panel.expandedSites")
         let window = open(Windows.panel(model))
         await UI.settle()
         return window

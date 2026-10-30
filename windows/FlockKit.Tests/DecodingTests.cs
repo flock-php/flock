@@ -56,6 +56,95 @@ public class DecodingTests
     }
 
     [Fact]
+    public void DecodesWorktreesAndTheirSetup()
+    {
+        var status = FlockJson.Decode<Status>("""
+            {"version":"dev","pid":1,"started_at":"2026-10-13T14:10:01Z","processes":[],
+             "sites":[{"name":"acme","domain":"acme.test","path":"C:\\code\\acme","php":"8.4"},
+                      {"name":"feature-auth.acme","domain":"feature-auth.acme.test","path":"C:\\code\\acme-feature-auth","php":"8.4",
+                       "parent":"acme","branch":"feature/auth",
+                       "worktree":{"state":"running","step":"Installing Composer packages","log":"worktree-feature-auth.acme","db_mode":"copy","database":"acme_feature_auth"}},
+                      {"name":"a1b2c3.acme","domain":"a1b2c3.acme.test","path":"C:\\code\\a1b2c3","php":"8.4","parent":"acme",
+                       "worktree":{"state":"failed","error":"composer install failed","log":"worktree-a1b2c3.acme"}},
+                      {"name":"old.acme","domain":"old.acme.test","path":"C:\\code\\old","php":"8.4","parent":"acme","branch":"old"}]}
+            """);
+
+        var (site, running, failed, untouched) = (status.Sites[0], status.Sites[1], status.Sites[2], status.Sites[3]);
+        Assert.False(site.IsWorktree);
+        Assert.Null(site.Worktree);
+        Assert.Equal("", site.Branch);
+
+        Assert.True(running.IsWorktree);
+        Assert.Equal(("acme", "feature/auth", "feature/auth"), (running.Parent, running.Branch, running.WorktreeLabel));
+        var setup = running.Worktree!;
+        Assert.Equal((Status.WorktreeState.Running, "Installing Composer packages", ""), (setup.State, setup.Step, setup.Error));
+        Assert.Equal(("worktree-feature-auth.acme", Status.WorktreeDatabase.Copy, "acme_feature_auth"), (setup.Log, setup.DbMode, setup.Database));
+        Assert.True(setup.IsBusy);
+        Assert.True(setup.HasOwnDatabase);
+
+        // A detached HEAD: listed by the name it is served under.
+        Assert.Equal("a1b2c3", failed.WorktreeLabel);
+        Assert.True(failed.Worktree!.IsFailed);
+        Assert.False(failed.Worktree.IsBusy);
+        Assert.Equal("", failed.Worktree.DbMode);
+        Assert.False(failed.Worktree.HasOwnDatabase);
+
+        // Served, but not set up by Flock.
+        Assert.True(untouched.IsWorktree);
+        Assert.Null(untouched.Worktree);
+    }
+
+    [Fact]
+    public void DecodesASitesBranchesAndOrdersThem()
+    {
+        var branches = FlockJson.Decode<SiteBranches>("""
+            {"current":"develop","default":"main","local":["alpha","develop","feature/x","main"],"remote":["origin/develop","origin/main"]}
+            """);
+        Assert.Equal(["develop", "main", "alpha", "feature/x"], branches.Ordered());
+        Assert.Equal(["origin/develop", "origin/main"], branches.Remote);
+
+        // Detached, and no default: just the local branches.
+        var detached = FlockJson.Decode<SiteBranches>("""{"current":"","default":"","local":["b","a"],"remote":null}""");
+        Assert.Equal(["b", "a"], detached.Ordered());
+        Assert.Empty(detached.Remote);
+    }
+
+    [Fact]
+    public void SlugsABranchLikeTheDaemon()
+    {
+        Assert.Equal("feature-auth", SiteBranches.Slug("feature/auth"));
+        Assert.Equal("fix-v1-2-a-b", SiteBranches.Slug("Fix_v1.2//a--b!"));
+        Assert.Equal("", SiteBranches.Slug("ü/"));
+        Assert.Equal(63, SiteBranches.Slug(new string('a', 70)).Length);
+    }
+
+    [Fact]
+    public void NestsWorktreesUnderTheirSite()
+    {
+        static Status.Site Site(string name, string? parent = null) => new() { Name = name, Parent = parent };
+        var status = new Status
+        {
+            Sites = [Site("acme"), Site("blog"), Site("b.acme", "acme"), Site("x.gone", "gone"), Site("a.blog", "blog"), Site("a.acme", "acme")],
+        };
+
+        Assert.Equal(["acme", "b.acme", "a.acme", "blog", "a.blog", "x.gone"], status.SitesWithWorktrees().Select(s => s.Name));
+        Assert.Equal(["b.acme", "a.acme"], status.WorktreesOf("acme").Select(s => s.Name));
+        Assert.Empty(status.WorktreesOf("b.acme"));
+    }
+
+    [Fact]
+    public void DecodesACreatedWorktree()
+    {
+        var created = FlockJson.Decode<WorktreeCreated>("""
+            {"path":"C:\\code\\acme-feature-auth","branch":"brave-otter","setup":{"state":"queued","log":"worktree-feature-auth.acme"}}
+            """);
+        Assert.Equal("C:\\code\\acme-feature-auth", created.Path);
+        Assert.Equal("brave-otter", created.Branch);
+        Assert.Equal(Status.WorktreeState.Queued, created.Setup.State);
+        Assert.True(created.Setup.IsBusy);
+    }
+
+    [Fact]
     public void DecodesWhereASiteVersionComesFrom()
     {
         var status = FlockJson.Decode<Status>("""

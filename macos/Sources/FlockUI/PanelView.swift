@@ -307,7 +307,8 @@ private struct ServiceRow: View {
 }
 
 /// The panel sizes itself to its content's ideal size, and a ScrollView has none of its own, so
-/// the list is as tall as its rows and scrolls past 240pt.
+/// the list is as tall as its rows and scrolls past 240pt. A site's git worktrees are listed under
+/// it once it's expanded.
 private struct SiteList: View {
     let sites: [Status.Site]
     let open: (Status.Site) -> Void
@@ -318,11 +319,29 @@ private struct SiteList: View {
         nonmutating set { contentHeightState.wrappedValue = newValue }
     }
 
+    /// The sites whose worktrees are shown, by name, separated by newlines.
+    @AppStorage("panel.expandedSites") private var expandedNames = ""
+
+    private var expanded: Set<String> { Set(expandedNames.split(separator: "\n").map(String.init)) }
+
+    private func toggle(_ name: String) {
+        var names = expanded
+        if names.remove(name) == nil { names.insert(name) }
+        expandedNames = names.sorted().joined(separator: "\n")
+    }
+
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 2) {
-                ForEach(sites) { site in
-                    SiteRow(site: site) { open(site) }
+                ForEach(sites.topLevel) { site in
+                    let worktrees = sites.worktrees(of: site.name)
+                    let isExpanded = expanded.contains(site.name)
+                    SiteRow(site: site, worktrees: worktrees.count, expanded: isExpanded, toggle: { toggle(site.name) }) { open(site) }
+                    if isExpanded {
+                        ForEach(worktrees) { worktree in
+                            WorktreeRow(worktree: worktree) { open(worktree) }
+                        }
+                    }
                 }
             }
         }
@@ -335,6 +354,10 @@ private struct SiteList: View {
 
 private struct SiteRow: View {
     let site: Status.Site
+    /// How many git worktrees the site has, and whether they're shown under it.
+    var worktrees = 0
+    var expanded = false
+    var toggle: () -> Void = {}
     let open: () -> Void
 
     private let isHoveredState = State<Bool>(initialValue: false)
@@ -344,6 +367,28 @@ private struct SiteRow: View {
     }
 
     var body: some View {
+        HStack(spacing: 2) {
+            siteButton
+            if worktrees > 0 {
+                // A button of its own: the row still opens the site.
+                Button(action: toggle) {
+                    HStack(spacing: 2) {
+                        Text("\(worktrees)").font(.caption2.monospacedDigit())
+                        Image(systemName: expanded ? "chevron.down" : "chevron.right").font(.caption2.weight(.semibold))
+                    }
+                    .foregroundStyle(.secondary)
+                    .frame(minWidth: 24, minHeight: 20)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .help(expanded ? "Hide its worktrees" : worktrees == 1 ? "Show its worktree" : "Show its \(worktrees) worktrees")
+            }
+        }
+        .background(isHovered ? Color.primary.opacity(0.08) : .clear, in: RoundedRectangle(cornerRadius: 5))
+        .onHover { isHovered = $0 }
+    }
+
+    private var siteButton: some View {
         Button(action: open) {
             HStack(spacing: 6) {
                 Image(systemName: site.secured ? "lock.fill" : "globe")
@@ -379,12 +424,10 @@ private struct SiteRow: View {
             }
             .padding(.vertical, 3)
             .padding(.horizontal, 6)
-            .background(isHovered ? Color.primary.opacity(0.08) : .clear, in: RoundedRectangle(cornerRadius: 5))
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .disabled(site.url == nil)
-        .onHover { isHovered = $0 }
         .help(help)
     }
 
@@ -394,6 +437,57 @@ private struct SiteRow: View {
             return "No public/, www/, web/ or webroot/ with an index.php in \(site.path). Choose the document root in Settings → Sites."
         }
         return site.url ?? site.problem ?? site.path
+    }
+}
+
+/// A git worktree under its site: its branch, and how its setup goes.
+private struct WorktreeRow: View {
+    let worktree: Status.Site
+    let open: () -> Void
+
+    private let isHoveredState = State<Bool>(initialValue: false)
+    private var isHovered: Bool {
+        get { isHoveredState.wrappedValue }
+        nonmutating set { isHoveredState.wrappedValue = newValue }
+    }
+
+    var body: some View {
+        Button(action: open) {
+            HStack(spacing: 6) {
+                Image(systemName: worktree.secured ? "lock.fill" : "globe")
+                    .font(.caption2)
+                    .foregroundStyle(worktree.secured ? Color.green : Color.secondary)
+                    .frame(width: 14)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(worktree.worktreeLabel).font(.callout)
+                    if let setup = worktree.worktree, setup.busy {
+                        HStack(spacing: 4) {
+                            ProgressView().controlSize(.mini)
+                            Text(setup.step.isEmpty ? "Setting up…" : "\(setup.step.prefix(1).uppercased())\(setup.step.dropFirst())…")
+                        }
+                        .font(.caption2).foregroundStyle(.secondary)
+                    } else if let setup = worktree.worktree, setup.state == .failed {
+                        Text("Setup failed: \(setup.error ?? "see its log")").font(.caption2).foregroundStyle(.red)
+                    } else if let problem = worktree.problem {
+                        Text(problem).font(.caption2).foregroundStyle(.red)
+                    }
+                }
+                Spacer()
+                if let setup = worktree.worktree, !setup.database.isEmpty {
+                    Badge(text: setup.dbMode == .fresh ? "Fresh DB" : "Own DB", color: .secondary)
+                        .help("Its own database: \(setup.database)")
+                }
+            }
+            .padding(.vertical, 2)
+            .padding(.leading, 22)
+            .padding(.trailing, 6)
+            .background(isHovered ? Color.primary.opacity(0.08) : .clear, in: RoundedRectangle(cornerRadius: 5))
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .disabled(worktree.url == nil)
+        .onHover { isHovered = $0 }
+        .help(worktree.url ?? worktree.path)
     }
 }
 

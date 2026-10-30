@@ -1,9 +1,11 @@
 package project
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
 
 	"flock/internal/config"
@@ -120,5 +122,35 @@ func TestPinAndUnpinPHPKeepOtherSettings(t *testing.T) {
 	}
 	if changed, _ := Unpin(dir, Node); len(changed) != 0 {
 		t.Fatalf("nothing left to unpin: %v", changed)
+	}
+}
+
+func TestPinningInAWorktreeIsRefusedWhileItsSiteSetsTheVersionInFlock(t *testing.T) {
+	dir := t.TempDir()
+	write(t, filepath.Join(dir, "src", "www", "index.php"), "<?php\n")
+	cfg := &config.Config{DefaultPHP: "8.5"}
+	// It copies acme's settings, which pin nothing over.
+	site := &config.Site{Name: "feature.acme", Path: dir, PHP: "8.4", Node: "22", Root: "src/www", Parent: "acme"}
+
+	for tool, call := range map[string]func() error{
+		PHP:  func() error { _, _, err := PinSite(cfg, site, PHP, "8.5"); return err },
+		Node: func() error { _, _, err := PinSite(cfg, site, Node, "24"); return err },
+		Root: func() error { _, _, err := PinSiteRoot(site, "src/www"); return err },
+	} {
+		if err := call(); !errors.Is(err, ErrInvalid) || !strings.Contains(err.Error(), "in acme first") {
+			t.Errorf("pin %s: %v", tool, err)
+		}
+	}
+	if _, err := os.Stat(filepath.Join(dir, RC)); !os.IsNotExist(err) {
+		t.Fatalf("a refused pin wrote %s", RC)
+	}
+	if _, err := os.Stat(filepath.Join(dir, ".nvmrc")); !os.IsNotExist(err) {
+		t.Fatal("a refused pin wrote .nvmrc")
+	}
+
+	// Without a setting on the site, the branch pins its own version.
+	site.PHP = ""
+	if file, lifted, err := PinSite(cfg, site, PHP, "8.5"); err != nil || lifted || read(t, file) != "php=8.5\n" {
+		t.Fatalf("pin in a worktree of a site without isolation: %q %v %v", file, lifted, err)
 	}
 }

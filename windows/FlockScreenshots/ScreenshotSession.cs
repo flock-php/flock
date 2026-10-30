@@ -26,23 +26,31 @@ internal sealed class ScreenshotSession(App app)
     {
         var window = await ShowSettings(pane);
         await Settled();
+        BringIntoView(window, heading);
+        return window;
+    }
+
+    /// <summary>A site (or worktree, by its name) in Settings → Sites; heading scrolls its details to that section.</summary>
+    internal async Task<Window> ShowSite(string name, string? heading = null)
+    {
+        var window = (SettingsWindow)await ShowSettings(SettingsPane.Sites);
+        await Settled();
+        window.Sites.Select(name);
+        await Settled();
+        if (heading is not null)
+        {
+            BringIntoView(window, heading);
+        }
+        return window;
+    }
+
+    private static void BringIntoView(Window window, string heading) =>
         Find<TextBlock>(window.Content, t => t.Text == heading)?.StartBringIntoView(new BringIntoViewOptions
         {
             AnimationDesired = false,
             VerticalAlignmentRatio = 0,
             VerticalOffset = -16,
         });
-        return window;
-    }
-
-    internal async Task<Window> ShowSite(string name)
-    {
-        var window = (SettingsWindow)await ShowSettings(SettingsPane.Sites);
-        await Settled();
-        window.Sites.Select(name);
-        await Settled();
-        return window;
-    }
 
     /// <summary>The Add Domain dialog of a site, with a domain typed in.</summary>
     internal async Task<Window> ShowAddDomain(string site, string domain)
@@ -99,9 +107,15 @@ internal sealed class ScreenshotSession(App app)
         return window;
     }
 
-    internal Task<Window> ShowPanelForScreenshot()
+    /// <summary>The panel; expanding names sites whose worktrees it shows.</summary>
+    internal Task<Window> ShowPanelForScreenshot(string[]? expanding = null)
     {
-        screenshotPanel = new PanelWindow(new PanelViewModel(app.State));
+        var viewModel = new PanelViewModel(app.State);
+        foreach (var site in expanding ?? [])
+        {
+            viewModel.ShowWorktrees(site);
+        }
+        screenshotPanel = new PanelWindow(viewModel);
         screenshotPanel.ShowNearTray();
         return Task.FromResult<Window>(screenshotPanel);
     }

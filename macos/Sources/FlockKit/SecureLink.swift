@@ -74,6 +74,8 @@ public enum FlockLink: Equatable, Sendable {
     case secure(SecureLink)
     /// `flock://update`, from `flock update`: check for a new version of the app.
     case update
+    /// `flock://site/<name>`: show a site (or worktree) in Settings → Sites, e.g. from a notification.
+    case site(String)
 
     public init?(url: URL) {
         if let link = InstallLink(url: url) {
@@ -82,6 +84,9 @@ public enum FlockLink: Equatable, Sendable {
             self = .secure(link)
         } else if url.scheme?.lowercased() == "flock", url.host?.lowercased() == "update", url.path.trimmingCharacters(in: CharacterSet(charactersIn: "/")).isEmpty {
             self = .update
+        } else if url.scheme?.lowercased() == "flock", url.host?.lowercased() == "site",
+                  case let name = url.path.trimmingCharacters(in: CharacterSet(charactersIn: "/")), !name.isEmpty, !name.contains("/") {
+            self = .site(name)
         } else {
             return nil
         }

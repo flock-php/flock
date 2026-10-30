@@ -65,10 +65,11 @@ func (c *Config) DomainsBySite(sites []Site) map[string][]ExtraDomain {
 		}
 		out[s.Name] = extras
 	}
-	// The alias wins over the subdomain: it is the more specific name.
+	// The alias wins over the subdomain: it is the more specific name. So does a worktree
+	// (feature.app.test) over the same name added to its parent as a subdomain.
 	for _, s := range sites {
 		for i, e := range out[s.Name] {
-			if owner := ownerOf(e.Host, s.Name, aliases); !e.Alias && owner != "" {
+			if owner := ownerOf(e.Host, s.Name, aliases, primary); !e.Alias && owner != "" {
 				out[s.Name][i].Problem = fmt.Sprintf("%s is served by %s", e.Host, owner)
 			}
 		}
@@ -165,7 +166,7 @@ func (c *Config) NormalizeDomain(s Site, name string) (string, error) {
 		}
 	}
 	if !alias {
-		if owner := ownerOf(name+"."+domain, s.Name, aliases); owner != "" {
+		if owner := ownerOf(name+"."+domain, s.Name, aliases, primary); owner != "" {
 			return "", fmt.Errorf("%s.%s is already served by %s", name, domain, owner)
 		}
 	} else if owner := ownerOf(name, s.Name, primary, aliases, subdomains); owner != "" {
