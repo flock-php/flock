@@ -14,8 +14,8 @@ namespace Flock.Tray;
 internal sealed partial class SitesPane
 {
     // The database pickers' modes and their labels, in their order.
-    private static readonly string[] DatabaseModes = [Status.WorktreeDatabase.Shared, Status.WorktreeDatabase.Copy, Status.WorktreeDatabase.Fresh];
-    private static readonly string[] DatabaseChoices = ["The site's", "A copy of the site's", "A new, empty one"];
+    internal static readonly string[] DatabaseModes = [Status.WorktreeDatabase.Shared, Status.WorktreeDatabase.Copy, Status.WorktreeDatabase.Fresh];
+    internal static readonly string[] DatabaseChoices = ["The site's", "A copy of the site's", "A new, empty one"];
 
     /// <summary>A site's worktrees (each selects it) and New Worktree.</summary>
     private StackPanel Worktrees(Status.Site site)
@@ -48,102 +48,21 @@ internal sealed partial class SitesPane
         _ => Ui.Row(0),
     };
 
-    /// <summary>
-    /// Asks for the branch (empty: Flock makes a name up), where a new one starts (the site's
-    /// branches, once loaded) and the database, then creates the worktree; a failure shows in the dialog.
-    /// </summary>
+    /// <summary>Asks for the new worktree in a dialog, then creates it; a failure shows in the dialog.</summary>
     private async Task NewWorktree(Status.Site site)
     {
         var token = activeLifetime?.Token ?? CancellationToken.None;
-        var branch = new TextBox { Header = "Branch", PlaceholderText = "a name like brave-otter" };
-        // Disabled until the branches are loaded; values[i] is where item i starts ("" the current commit, null the separator).
-        var from = new ComboBox { Header = "Start from", MinWidth = 260, IsEnabled = false };
-        var values = new List<string?>();
-        var branches = new SiteBranches();
-        var loaded = false;
-        var database = new ComboBox { Header = "Database", MinWidth = 200 };
-        database.Items.Add("Project default");
-        foreach (var item in DatabaseChoices)
-        {
-            database.Items.Add(item);
-        }
-        database.SelectedIndex = 0;
-        var explanation = Ui.Caption("", Ui.TertiaryText);
+        var form = new NewWorktreeView(site);
         var dialog = new ContentDialog
         {
             Title = $"New worktree of {site.Name}",
-            Content = Ui.Column(12, branch, from,
-                Ui.Column(4, database, Ui.Caption("A database of its own gets the migrations run. Project default is what flock.yml says, else the site's.", Ui.TertiaryText)),
-                explanation),
+            Content = form,
             PrimaryButtonText = "Create",
             CloseButtonText = "Cancel",
             DefaultButton = ContentDialogButton.Primary,
             XamlRoot = Window.XamlRoot,
         };
         dialog.Resources["ContentDialogMaxWidth"] = 520.0;
-
-        // The current commit when detached; the local branches (current, default, the rest); the remote ones.
-        void FillFrom()
-        {
-            from.Items.Clear();
-            values.Clear();
-            if (branches.Current.Length == 0)
-            {
-                from.Items.Add("The current commit");
-                values.Add("");
-            }
-            foreach (var name in branches.Ordered())
-            {
-                from.Items.Add(name == branches.Current ? $"{name} (current)" : name == branches.Default ? $"{name} (default)" : name);
-                values.Add(name);
-            }
-            if (branches.Remote.Count > 0)
-            {
-                from.Items.Add(new ComboBoxItem
-                {
-                    IsEnabled = false,
-                    Content = new Border { Height = 1, Background = Ui.Brush("DividerStrokeColorDefaultBrush") },
-                    HorizontalContentAlignment = HorizontalAlignment.Stretch,
-                });
-                values.Add(null);
-                foreach (var name in branches.Remote)
-                {
-                    from.Items.Add(name);
-                    values.Add(name);
-                }
-            }
-            from.SelectedIndex = Math.Max(0, values.IndexOf(branches.Current));
-        }
-
-        string Typed() => branch.Text.Trim();
-        // A branch that exists is checked out as it is, so it doesn't start anywhere.
-        bool Exists() => branches.Local.Contains(Typed());
-
-        void Update()
-        {
-            from.IsEnabled = loaded && !Exists();
-            var typed = Typed();
-            var address = typed.Length == 0 ? "its own address" : $"{SiteBranches.Slug(typed)}.{site.Domain}";
-            explanation.Text = Exists()
-                ? $"{typed} exists, so the worktree checks it out. Flock creates it next to {site.Name}, sets it up and serves it at {address}."
-                : $"Flock creates the worktree next to {site.Name} on {(typed.Length == 0 ? "a new branch with a name of its own" : $"the new branch {typed}")}, sets it up and serves it at {address}.";
-        }
-
-        async Task LoadBranches()
-        {
-            // An older daemon can't list them: only the current commit is offered.
-            if (await Model.Sites.SiteBranchesAsync(site.Name, token) is { } listed)
-            {
-                branches = listed;
-                FillFrom();
-            }
-            loaded = true;
-            Update();
-        }
-
-        FillFrom();
-        Update();
-        branch.TextChanged += (_, _) => Update();
 
         // Create turns the dialog into the job's progress; it stays open until it is closed.
         WorktreeJobView? job = null;
@@ -155,13 +74,11 @@ internal sealed partial class SitesPane
                 return;
             }
             args.Cancel = true;
-            var start = Exists() || from.SelectedIndex < 0 ? null : values[from.SelectedIndex];
-            var db = database.SelectedIndex > 0 ? DatabaseModes[database.SelectedIndex - 1] : null;
-            var name = Typed();
+            var (name, start, db) = (form.Branch, form.Start, form.Database);
             job = new WorktreeJobView(dialog, Model, $"New Worktree of {site.Name}");
-            run = job.RunAsync(cancellationToken => Model.Sites.CreateWorktreeAsync(site.Name, name, start is { Length: > 0 } ? start : null, db, cancellationToken));
+            run = job.RunAsync(cancellationToken => Model.Sites.CreateWorktreeAsync(site.Name, name, start, db, cancellationToken));
         };
-        var load = LoadBranches();
+        var load = form.LoadBranchesAsync(Model.Sites, token);
         await dialog.ShowAsync();
         await load;
         if (run is not null)

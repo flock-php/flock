@@ -1,0 +1,29 @@
+<UserControl
+    x:Class="Flock.Tray.WorktreeJobView"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <StackPanel Spacing="12">
+        <StackPanel Orientation="Horizontal" Spacing="6" Visibility="{Binding BusyVisibility}">
+            <ProgressRing Width="16" Height="16" />
+            <TextBlock Text="{Binding Headline}" />
+        </StackPanel>
+        <StackPanel Orientation="Horizontal" Spacing="6" Visibility="{Binding ReadyVisibility}">
+            <FontIcon Glyph="{StaticResource GlyphCheck}" FontFamily="{StaticResource SymbolsFont}" FontSize="14"
+                      Foreground="{ThemeResource SystemFillColorSuccessBrush}" />
+            <TextBlock Text="{Binding Headline}" Foreground="{ThemeResource SystemFillColorSuccessBrush}" IsTextSelectionEnabled="True" />
+        </StackPanel>
+        <StackPanel Orientation="Horizontal" Spacing="6" Visibility="{Binding FailedVisibility}">
+            <FontIcon Glyph="{StaticResource GlyphWarning}" FontFamily="{StaticResource SymbolsFont}" FontSize="14" VerticalAlignment="Top"
+                      Foreground="{ThemeResource SystemFillColorCautionBrush}" />
+            <TextBlock Text="{Binding Headline}" Foreground="{ThemeResource SystemFillColorCautionBrush}" IsTextSelectionEnabled="True"
+                       TextWrapping="Wrap" MaxWidth="520" />
+        </StackPanel>
+        <Border Width="560" CornerRadius="6" BorderThickness="1"
+                BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
+            <ScrollViewer x:Name="LogScroller" Height="260" HorizontalScrollBarVisibility="Auto">
+                <TextBlock Text="{Binding Log}" FontFamily="{StaticResource MonoFont}" FontSize="12" IsTextSelectionEnabled="True" Margin="8" />
+            </ScrollViewer>
+        </Border>
+    </StackPanel>
+</UserControl>
