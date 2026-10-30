@@ -144,6 +144,7 @@ Need something built? [Get in touch](https://guava.cz/en).
 - [Guava](https://guava.cz/en)
 - [Lukas Frey](https://github.com/lukas-frey)
 - [Stepan Mocjak](https://github.com/Uolsen)
+- [Marc Beinder](https://github.com/onairmarc)
 - [All contributors](https://github.com/flock-php/flock/graphs/contributors)
 
 ## License
