@@ -1,4 +1,4 @@
-# Outside contributors open an issue first; a PR from them stays open only when it targets develop
+# Outside contributors open an issue first; a PR from them stays open only when it targets main
 # and references an open issue, here or in flock-php/binaries, that a maintainer has approved for it:
 #   - labelled "help wanted": anyone may send a PR for it, or
 #   - assigned to the PR's author: only they may (only maintainers can assign issues).
@@ -56,9 +56,8 @@ jobs:
               await github.rest.pulls.update({ owner, repo, pull_number: pr.number, state: 'closed' });
             };
 
-            // Features go into develop; only maintainers release into main.
-            if (pr.base.ref !== 'develop') {
-              await close(`Pull requests go into \`develop\`, not \`${pr.base.ref}\`, so this one is closed. Please open a new one against \`develop\`.`);
+            if (pr.base.ref !== 'main') {
+              await close(`Pull requests go into \`main\`, not \`${pr.base.ref}\`, so this one is closed. Please open a new one against \`main\`.`);
               return;
             }
             if (context.payload.action === 'edited') return;
@@ -105,5 +104,5 @@ jobs:
               (pushed
                 ? 'This pull request now changes files outside `docs/`, which needs an issue a maintainer has approved, so it is closed. '
                 : 'Flock takes pull requests only for issues a maintainer has approved, so this one is closed. ') +
-              `Please open an issue describing the problem or idea first. Once it's labelled \`${OPEN_TO_ANYONE}\` or assigned to you, open a new PR against \`develop\` that references it (e.g. \`Fixes #123\`).`,
+              `Please open an issue describing the problem or idea first. Once it's labelled \`${OPEN_TO_ANYONE}\` or assigned to you, open a new PR against \`main\` that references it (e.g. \`Fixes #123\`).`,
             );

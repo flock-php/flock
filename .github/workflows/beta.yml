@@ -1,6 +1,5 @@
-# Releases a beta of develop: "Run workflow" in the Actions tab with "Use workflow from" set to
-# develop (or `gh workflow run beta.yml --ref develop`). A maintenance branch like 1.x can have
-# betas too. Nothing is released by pushing; a beta exists only when this runs.
+# Releases a beta of main: "Run workflow" in the Actions tab (or `gh workflow run beta.yml`). A
+# maintenance branch like 1.x can have betas too ("Use workflow from" → 1.x). Nothing is released by pushing; a beta exists only when this runs.
 #
 #   1. tools/release works out the version from the branch's commits since its last stable
 #      release, as release-please will: 1.1.0-beta.1, then 1.1.0-beta.2, ... (never lower than a
@@ -10,7 +9,7 @@
 #      to the update feed: apps with "Beta versions" on offer it, and so do betas until the release
 #      they lead to; others don't.
 #
-# A beta that works is released as stable with promote.yml.
+# The stable release comes from release-please's release PR (release.yml).
 name: Beta release
 
 on:
@@ -44,8 +43,8 @@ jobs:
         env:
           BRANCH: ${{ github.ref_name }}
         run: |
-          if ! [[ "$BRANCH" =~ ^(develop|[0-9]+\.x)$ ]]; then
-            echo "::error::betas are released from develop (Run workflow → Use workflow from → develop) or a maintenance branch like 1.x, not \"$BRANCH\"" && exit 1
+          if ! [[ "$BRANCH" =~ ^(main|[0-9]+\.x)$ ]]; then
+            echo "::error::betas are released from main or a maintenance branch like 1.x, not \"$BRANCH\"" && exit 1
           fi
 
       - uses: actions/checkout@v7
