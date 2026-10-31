@@ -316,7 +316,8 @@ func rustfs(goos string) *Kind {
 				Path: filepath.Join(p.Dir, exe(goos, "rustfs")),
 				Args: []string{"server", "--address", fmt.Sprintf("127.0.0.1:%d", port),
 					"--console-enable", "--console-address", fmt.Sprintf("127.0.0.1:%d", port+1),
-					"--access-key", RustFSAccessKey, "--secret-key", RustFSSecretKey, p.Data},
+					"--access-key", RustFSAccessKey, "--secret-key", RustFSSecretKey, "."},
+				Dir:        p.Data, // RustFS splits its volumes at spaces, as in ~/Library/Application Support
 				StopSignal: syscall.SIGTERM,
 			}
 			if goos == "darwin" {

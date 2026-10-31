@@ -408,6 +408,33 @@ func TestSpecsBindToLocalhost(t *testing.T) {
 	}
 }
 
+func TestRustFSVolumeHasNoSpace(t *testing.T) {
+	// RustFS splits its volumes at spaces, and Flock's root on macOS is in "Application Support".
+	root := filepath.Join(t.TempDir(), "Application Support")
+	for _, goos := range []string{"darwin", "windows"} {
+		for _, k := range Kinds(goos) {
+			if k.ID != "rustfs" {
+				continue
+			}
+			p := PathsOf(root, k, examples[k.ID])
+			spec, err := k.Spec(p, 9000)
+			if err != nil {
+				t.Fatalf("%s: %v", goos, err)
+			}
+			volume := spec.Args[len(spec.Args)-1]
+			if strings.Contains(volume, " ") {
+				t.Errorf("%s: RustFS reads %q as more than one volume", goos, volume)
+			}
+			if !filepath.IsAbs(volume) {
+				volume = filepath.Join(spec.Dir, volume)
+			}
+			if volume != filepath.Clean(p.Data) {
+				t.Errorf("%s: the volume is %q, not the data directory %q", goos, volume, p.Data)
+			}
+		}
+	}
+}
+
 func TestSQLSpecInitialisesOnce(t *testing.T) {
 	root := t.TempDir()
 	p := Paths{Root: root, Dir: filepath.Join(root, "services", "mysql", "9.7.2"), Data: DataDir(root, "mysql", "9.7")}
