@@ -18,6 +18,11 @@ description: |-
   PHP, Node.js, databases and *.test sites with trusted HTTPS, without Docker.
 
 contents:
+  # rpm removes only directories the package owns (dpkg removes empty ones anyway).
+  - dst: /usr/libexec/flockphp
+    type: dir
+    file_info:
+      mode: 0755
   - src: build/linux/flock
     dst: /usr/libexec/flockphp/flock
     file_info:
@@ -63,6 +68,11 @@ contents:
   - src: LICENSE
     dst: /usr/share/doc/flockphp/copyright
     packager: deb
+  - dst: /usr/share/licenses/flockphp
+    type: dir
+    packager: rpm
+    file_info:
+      mode: 0755
   - src: LICENSE
     dst: /usr/share/licenses/flockphp/LICENSE
     packager: rpm

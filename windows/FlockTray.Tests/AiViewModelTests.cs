@@ -36,7 +36,7 @@ public sealed class AiViewModelTests : IDisposable
     [Fact]
     public async Task RefreshKeepsRowsAndPublishesSnippetAndDescriptions()
     {
-        await viewModel.RefreshAsync();
+        await viewModel.RefreshCommand.ExecuteAsync(null);
         var row = Assert.Single(viewModel.Clients);
 
         handler.Registered = true;

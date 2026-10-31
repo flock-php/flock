@@ -8,33 +8,33 @@ using Flock.Tray.Infrastructure;
 namespace Flock.Tray.ViewModels;
 
 /// <summary>Feature-owned MCP state for the AI settings pane.</summary>
-public sealed class AiViewModel : ObservableObject, IDisposable
+public sealed partial class AiViewModel : ObservableObject, IDisposable
 {
-    private readonly McpService service;
+    private readonly McpService _mcpService;
     private readonly CollectionSynchronizer<string, McpClientViewModel> rows = new();
 
-    public AiViewModel(McpService service)
+    public AiViewModel(McpService mcpService)
     {
-        this.service = service;
-        service.Changed += RefreshRows;
-        RefreshCommand = new AsyncRelayCommand(() => service.RefreshAsync());
+        _mcpService = mcpService;
+        mcpService.Changed += RefreshRows;
     }
 
     public ObservableCollection<McpClientViewModel> Clients { get; } = [];
-    public string Snippet => service.Current?.Snippet ?? "";
-    public string? Error => service.Error;
-    public string? ActionError => service.ActionError;
-    public IAsyncRelayCommand RefreshCommand { get; }
+    public string Snippet => _mcpService.Current?.Snippet ?? "";
+    public string? Error => _mcpService.Error;
+    public string? ActionError => _mcpService.ActionError;
+    public Task RefreshAsync(CancellationToken observerToken = default) => _mcpService.RefreshAsync(observerToken);
 
-    public Task RefreshAsync(CancellationToken observerToken = default) => service.RefreshAsync(observerToken);
+    public void Dispose() => _mcpService.Changed -= RefreshRows;
 
-    public void Dispose() => service.Changed -= RefreshRows;
+    [RelayCommand]
+    private Task Refresh() => _mcpService.RefreshAsync();
 
     private void RefreshRows()
     {
-        var incoming = service.Current?.Clients ?? [];
+        var incoming = _mcpService.Current?.Clients ?? [];
         rows.Synchronize(Clients, incoming, row => row.Id, value => value.Id,
-            value => new McpClientViewModel(service, value), (row, value) => row.Update(value));
+            value => new McpClientViewModel(_mcpService, value), (row, value) => row.Update(value));
         OnPropertyChanged(nameof(Snippet));
         OnPropertyChanged(nameof(Error));
         OnPropertyChanged(nameof(ActionError));

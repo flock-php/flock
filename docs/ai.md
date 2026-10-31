@@ -69,6 +69,7 @@ These tools change things, so clients ask you first:
 | `update_site` | Turn HTTPS on or off, isolate, unisolate, pin or unpin a version, add a domain, switch between FrankenPHP (with or without Octane) and PHP-FPM, run or stop its Reverb server, or restart it |
 | `set_debugging` | Turn Xdebug or dump capture on or off |
 | `create_database` | Create a database in PostgreSQL, MySQL or MariaDB |
+| `postgres_extension` | List or install PostGIS, pgRouting, pgvector or TimescaleDB for a PostgreSQL version, and tell the agent the `CREATE EXTENSION` to run |
 
 None of the tools remove anything: an agent can't unlink sites, uninstall versions or services, or delete data, mail or logs.
 

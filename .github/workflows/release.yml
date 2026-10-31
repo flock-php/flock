@@ -2,11 +2,9 @@
 # version and changelog from the conventional commits. "Merge when ready" puts it in the merge queue,
 # which builds and signs it (build.yml) and merges it only once those builds pass. Merging it tags
 # the release, and the merge queue's builds are attached to it, without building again. Then the
-# release goes into the apps' update feed, and main is merged back into develop.
+# release goes into the apps' update feed.
 #
-# Work happens on develop: betas are released from it (beta.yml), and a tested beta is brought to
-# main with promote.yml, which makes this release PR. main gets nothing else but hotfixes
-# (main-pr.yml checks where its PRs come from).
+# Betas are released from the same branch with beta.yml.
 #
 # Off while the repository is private: the merge queue and environments need a paid plan there.
 name: Release
@@ -29,7 +27,7 @@ jobs:
       !github.event.repository.private &&
       (github.ref_name == 'main' || endsWith(github.ref_name, '.x'))
     runs-on: ubuntu-latest
-    # RELEASE_PLEASE_TOKEN is a secret of this environment, so only main, develop and 1.x get it.
+    # RELEASE_PLEASE_TOKEN is a secret of this environment, so only main and 1.x get it.
     environment: release
     permissions:
       contents: write
@@ -171,33 +169,29 @@ jobs:
           signing-key: ${{ secrets.REPO_SIGNING_KEY }}
           token: ${{ github.token }}
 
-  # develop must contain everything main has: the release-please commit (CHANGELOG.md, the version)
-  # and any hotfix. A PR from main into develop merges itself, unless a hotfix conflicts with
-  # develop; then it waits for the conflict to be resolved by hand.
-  merge-back:
-    name: Merge main into develop
+  # A job of its own: the release is out either way, and a failed AUR push can run again from here.
+  aur:
+    name: AUR
     needs: [release-please, publish]
-    if: always() && needs.publish.result == 'success' && github.ref_name == 'main'
+    if: always() && needs.publish.result == 'success'
     runs-on: ubuntu-latest
+    # AUR_SSH_KEY, which pushes to the AUR packages.
     environment: release
     permissions:
-      contents: write
-      pull-requests: write
+      contents: read
     steps:
-      - name: Open and merge
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.release-please.outputs.tag_name }}
+
+      - name: Download the .debs
         env:
-          # A PR opened with the default token wouldn't start develop's checks.
-          GH_TOKEN: ${{ secrets.RELEASE_PLEASE_TOKEN || github.token }}
+          GH_TOKEN: ${{ github.token }}
           TAG: ${{ needs.release-please.outputs.tag_name }}
-        run: |
-          pr=$(gh pr list --repo "$GITHUB_REPOSITORY" --base develop --head main --state open --json url --jq '.[0].url')
-          if [ -z "$pr" ]; then
-            pr=$(gh pr create --repo "$GITHUB_REPOSITORY" --base develop --head main \
-              --title "chore: merge $TAG into develop" \
-              --body "Brings $TAG (and any hotfix in it) into develop. Merges itself unless it conflicts; then resolve the conflict here.")
-          fi
-          # With a merge commit: develop keeps main's history, so the next merge doesn't conflict
-          # on the same changes again.
-          gh pr merge "$pr" --repo "$GITHUB_REPOSITORY" --merge --auto ||
-            gh pr merge "$pr" --repo "$GITHUB_REPOSITORY" --merge ||
-            echo "::warning::$pr could not be merged (a conflict?): resolve it by hand"
+        run: gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --pattern 'flockphp_*.deb' --dir dist
+
+      - uses: ./.github/actions/aur
+        with:
+          version: ${{ needs.release-please.outputs.version }}
+          ssh-key: ${{ secrets.AUR_SSH_KEY }}
+          token: ${{ github.token }}

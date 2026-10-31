@@ -46,6 +46,7 @@ func newServicesCommand() *cobra.Command {
 	}
 
 	var port int
+	var withExtensions bool
 	install := &cobra.Command{
 		Use:   "install <service> [version] [--port <port>]",
 		Short: "Install a service (the newest release of a version line, e.g. `mysql 8.4` or `postgres 17`) and start it",
@@ -65,12 +66,43 @@ func newServicesCommand() *cobra.Command {
 				if port != 0 {
 					return errors.New("--port doesn't apply to PostgreSQL; change its port in the Flock app's settings")
 				}
-				return installPostgres(ctx, s, line, cmd.OutOrStdout(), cmd.ErrOrStderr())
+				var extensions []string
+				if withExtensions {
+					extensions = activeExtensions(s)
+				}
+				return installPostgres(ctx, s, line, extensions, cmd.OutOrStdout(), cmd.ErrOrStderr())
+			}
+			if withExtensions {
+				return errors.New("--with-extensions only applies to PostgreSQL")
 			}
 			return installCatalogService(ctx, s, args[0], line, port, cmd.OutOrStdout(), cmd.ErrOrStderr())
 		},
 	}
 	install.Flags().IntVar(&port, "port", 0, "port to listen on (default: the usual one, or the next free one)")
+	install.Flags().BoolVar(&withExtensions, "with-extensions", false, "PostgreSQL: also install the extensions the active version has (where the new one has a build)")
+
+	var extMajor string
+	var open bool
+	extensions := &cobra.Command{
+		Use:   "extensions postgres [list|install|update|uninstall|dir|pg-config] [extension] [--major <version>]",
+		Short: "List, install, update or remove PostgreSQL extensions (PostGIS, pgRouting, pgvector, TimescaleDB) of a version, or print its folder for your own",
+		Args:  cobra.RangeArgs(1, 3),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if !isPostgres(args[0]) {
+				return fmt.Errorf("only PostgreSQL has extensions, not %q", args[0])
+			}
+			action, name := "", ""
+			if len(args) > 1 {
+				action = args[1]
+			}
+			if len(args) > 2 {
+				name = args[2]
+			}
+			return postgresExtensions(cmd, action, name, extMajor, open)
+		},
+	}
+	extensions.Flags().StringVar(&extMajor, "major", "", "the PostgreSQL version (default: the active one)")
+	extensions.Flags().BoolVar(&open, "open", false, "dir: also open the folder")
 
 	var deleteData bool
 	uninstall := &cobra.Command{
@@ -266,7 +298,7 @@ func newServicesCommand() *cobra.Command {
 		},
 	}
 
-	cmd.AddCommand(install, update, uninstall, use, list, createDB)
+	cmd.AddCommand(install, update, uninstall, use, list, createDB, extensions)
 	return cmd
 }
 

@@ -48,37 +48,6 @@ public sealed class CollectionSynchronizer<TKey, TRow> where TKey : notnull
         ArgumentNullException.ThrowIfNull(key);
         ArgumentNullException.ThrowIfNull(update);
 
-        var incoming = values.ToList();
-        var wanted = incoming.Select(key).ToHashSet();
-        for (var index = rows.Count - 1; index >= 0; index--)
-        {
-            if (!wanted.Contains(key(rows[index])))
-            {
-                rows.RemoveAt(index);
-            }
-        }
-
-        var lookup = rows.ToDictionary(key);
-        for (var index = 0; index < incoming.Count; index++)
-        {
-            var value = incoming[index];
-            var valueKey = key(value);
-            if (!lookup.TryGetValue(valueKey, out var row))
-            {
-                row = value;
-                rows.Insert(index, row);
-                lookup[valueKey] = row;
-            }
-            else
-            {
-                update(row, value);
-                var currentIndex = rows.IndexOf(row);
-                if (currentIndex != index)
-                {
-                    rows.RemoveAt(currentIndex);
-                    rows.Insert(index, row);
-                }
-            }
-        }
+        Synchronize(rows, values, key, key, value => value, update);
     }
 }

@@ -4,7 +4,7 @@
 use std::io::{BufRead, BufReader};
 use std::path::PathBuf;
 use std::process::{Command, Stdio};
-use std::sync::mpsc;
+use std::sync::{OnceLock, mpsc};
 use std::time::Duration;
 
 use gtk::glib;
@@ -25,6 +25,19 @@ pub fn is_set_up() -> bool {
 /// Flock isn't set up for this user yet, and the app can do it.
 pub fn needs_setup() -> bool {
     !is_set_up() && PathBuf::from(PACKAGED_FLOCK).exists()
+}
+
+/// The AUR package Flock is installed from on Arch (flockphp-bin or flockphp-beta-bin, see
+/// linux/packaging/aur), which AUR helpers update; None elsewhere.
+pub fn aur_package() -> Option<&'static str> {
+    static PACKAGE: OnceLock<Option<String>> = OnceLock::new();
+    PACKAGE
+        .get_or_init(|| {
+            let out = Command::new("pacman").args(["-Qqo", PACKAGED_FLOCK]).stderr(Stdio::null()).output().ok()?;
+            let name = String::from_utf8_lossy(&out.stdout).trim().to_owned();
+            (out.status.success() && !name.is_empty()).then_some(name)
+        })
+        .as_deref()
 }
 
 /// The outcome of running flock: whether it succeeded and what it printed.

@@ -310,6 +310,26 @@ public actor FlockClient {
         }
     }
 
+    // MARK: PostgreSQL extensions
+
+    /// The extensions of a major; creates its folder for your own extensions.
+    public func postgresExtensions(_ major: String) async throws -> PostgresExtensions {
+        try await decode(PostgresExtensions.self, "GET", "/v1/postgres/versions/\(escape(major))/extensions")
+    }
+
+    /// Downloads an extension for a major. A preloaded one (TimescaleDB) restarts that major when it runs.
+    public func installPostgresExtension(_ major: String, _ name: String) async throws -> PostgresExtensions {
+        try await decode(PostgresExtensions.self, "POST", "/v1/postgres/versions/\(escape(major))/extensions/\(escape(name))/install", timeout: Self.postgresInstallTimeout)
+    }
+
+    public func updatePostgresExtension(_ major: String, _ name: String) async throws -> PostgresExtensions {
+        try await decode(PostgresExtensions.self, "POST", "/v1/postgres/versions/\(escape(major))/extensions/\(escape(name))/update", timeout: Self.postgresInstallTimeout)
+    }
+
+    public func uninstallPostgresExtension(_ major: String, _ name: String) async throws -> PostgresExtensions {
+        try await decode(PostgresExtensions.self, "DELETE", "/v1/postgres/versions/\(escape(major))/extensions/\(escape(name))", timeout: Self.postgresChangeTimeout)
+    }
+
     // MARK: PostgreSQL versions
 
     /// Cached on the daemon side; it never waits on the network.
@@ -322,9 +342,11 @@ public actor FlockClient {
         try await decode(PostgresVersions.self, "POST", "/v1/postgres/check", timeout: 60)
     }
 
-    /// Downloads and installs the newest release of a major; the first one installed becomes active and starts.
-    public func installPostgres(_ major: String) async throws -> PostgresVersions {
-        try await decode(PostgresVersions.self, "POST", "/v1/postgres/versions/\(escape(major))/install", timeout: Self.postgresInstallTimeout)
+    /// Downloads and installs the newest release of a major, with `extensions` where it has a build
+    /// of them; the first one installed becomes active and starts.
+    public func installPostgres(_ major: String, extensions: [String] = []) async throws -> PostgresVersions {
+        let body = extensions.isEmpty ? nil : try JSONEncoder().encode(["extensions": extensions])
+        return try await decode(PostgresVersions.self, "POST", "/v1/postgres/versions/\(escape(major))/install", body: body, timeout: Self.postgresInstallTimeout)
     }
 
     /// Installs the newest minor of a major; its databases stay, and it restarts when active.

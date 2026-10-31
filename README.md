@@ -122,7 +122,7 @@ The Windows app is described in [windows/README.md](windows/README.md).
 
 ## Contributing
 
-Bug reports and ideas are welcome in [Issues](https://github.com/flock-php/flock/issues), questions in [Discussions](https://github.com/flock-php/flock/discussions). Pull requests start with an approved issue and go to the `develop` branch; see [CONTRIBUTING.md](CONTRIBUTING.md) for how it works.
+Bug reports and ideas are welcome in [Issues](https://github.com/flock-php/flock/issues), questions in [Discussions](https://github.com/flock-php/flock/discussions). Pull requests start with an approved issue and go to the `main` branch; see [CONTRIBUTING.md](CONTRIBUTING.md) for how it works.
 
 ## Developed by Guava
 
@@ -144,6 +144,7 @@ Need something built? [Get in touch](https://guava.cz/en).
 - [Guava](https://guava.cz/en)
 - [Lukas Frey](https://github.com/lukas-frey)
 - [Stepan Mocjak](https://github.com/Uolsen)
+- [Marc Beinder](https://github.com/onairmarc)
 - [All contributors](https://github.com/flock-php/flock/graphs/contributors)
 
 ## License

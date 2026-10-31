@@ -108,7 +108,7 @@ pub fn status_dot(on: bool) -> gtk::Label {
 pub fn report(banner: &adw::Banner, error: Option<String>) {
     match error {
         Some(message) => {
-            banner.set_title(&glib::markup_escape_text(&message));
+            banner.set_title(&message);
             banner.set_revealed(true);
         }
         None => banner.set_revealed(false),

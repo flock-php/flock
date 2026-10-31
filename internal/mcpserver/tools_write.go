@@ -94,6 +94,20 @@ func (s *server) addWriteTools(srv *mcp.Server) {
 	}, s.setDebugging)
 
 	mcp.AddTool(srv, &mcp.Tool{
+		Name: "postgres_extension",
+		Description: "List or install the PostgreSQL extensions Flock offers (PostGIS, pgRouting, pgvector, TimescaleDB), " +
+			"per PostgreSQL version (default: the one that runs). Installing makes the extension available to that " +
+			"version; the database still needs CREATE EXTENSION (the answer says what to run, e.g. in a migration). " +
+			"pgRouting brings PostGIS along; TimescaleDB restarts PostgreSQL to load it. list also shows the user's own " +
+			"extensions in that version's extensions folder.",
+		Annotations: additive(true),
+		InputSchema: schema[postgresExtensionIn](map[string][]any{
+			"action":    {"list", "install"},
+			"extension": {"postgis", "pgrouting", "pgvector", "timescaledb"},
+		}),
+	}, s.postgresExtension)
+
+	mcp.AddTool(srv, &mcp.Tool{
 		Name: "create_database",
 		Description: "Create a database in Flock's PostgreSQL, MySQL or MariaDB (user postgres or root, no password). " +
 			"An existing database is left as it is.",
@@ -347,6 +361,127 @@ func (s *server) installService(ctx context.Context, req *mcp.CallToolRequest, i
 		}
 	}
 	return nil, actionOut{Done: true, Message: msg}, nil
+}
+
+// ---------------------------------------------------------------------------------------------
+// PostgreSQL extensions
+
+type postgresExtensionIn struct {
+	Action    string `json:"action" jsonschema:"list or install"`
+	Extension string `json:"extension,omitempty" jsonschema:"install only: postgis, pgrouting, pgvector or timescaledb"`
+	Major     string `json:"major,omitempty" jsonschema:"the PostgreSQL version, e.g. 18 (default: the one that runs)"`
+}
+
+func (s *server) postgresExtension(ctx context.Context, req *mcp.CallToolRequest, in postgresExtensionIn) (*mcp.CallToolResult, actionOut, error) {
+	major := in.Major
+	if major == "" {
+		v, err := s.Daemon.PostgresVersions(ctx)
+		if err != nil {
+			return nil, actionOut{}, err
+		}
+		if major = v.Active; major == "" {
+			return nil, actionOut{}, errors.New("PostgreSQL isn't installed: install it first with the service tool (service postgres)")
+		}
+	}
+	switch in.Action {
+	case "list":
+		state, err := s.Daemon.PostgresExtensions(ctx, major)
+		if err != nil {
+			return nil, actionOut{}, err
+		}
+		return nil, actionOut{Done: true, Message: describeExtensions(state)}, nil
+	case "install":
+		return s.installPostgresExtension(ctx, req, major, strings.ToLower(in.Extension))
+	}
+	return nil, actionOut{}, fmt.Errorf("unknown action %q: use list or install", in.Action)
+}
+
+func (s *server) installPostgresExtension(ctx context.Context, req *mcp.CallToolRequest, major, name string) (*mcp.CallToolResult, actionOut, error) {
+	e, ok := postgres.FindExtension(name)
+	if !ok {
+		return nil, actionOut{}, fmt.Errorf("unknown extension %q: use postgis, pgrouting, pgvector or timescaledb", name)
+	}
+	what := fmt.Sprintf("%s for PostgreSQL %s", e.Title, major)
+	key := "postgres-extension " + major + "/" + name
+	s.bg.start(key, func(ctx context.Context) error {
+		_, err := s.Daemon.InstallPostgresExtension(ctx, major, name)
+		return err
+	})
+	done, doing, err := s.await(ctx, req, func(ctx context.Context) (step, error) {
+		if done, err := s.bg.state(key); done {
+			return step{done: true}, err
+		}
+		text := "installing"
+		if state, err := s.Daemon.PostgresExtensions(ctx, major); err == nil {
+			for _, x := range state.Extensions {
+				if x.Name == name && x.Busy != "" {
+					text = x.Busy // "waiting" behind another operation, or "installing"
+				}
+			}
+		}
+		return step{text: text}, nil
+	})
+	if err != nil {
+		return nil, actionOut{}, err
+	}
+	if !done {
+		return nil, stillRunning(what, doing, "postgres_extension list"), nil
+	}
+
+	creates := []string{e.Creates}
+	for _, r := range e.Requires {
+		if required, ok := postgres.FindExtension(r); ok {
+			creates = append([]string{required.Creates}, creates...)
+		}
+	}
+	var statements, migration []string
+	for _, c := range creates {
+		statements = append(statements, "CREATE EXTENSION IF NOT EXISTS "+c+";")
+		migration = append(migration, fmt.Sprintf("DB::statement('CREATE EXTENSION IF NOT EXISTS %s');", c))
+	}
+	msg := what + " is installed."
+	if len(e.Requires) > 0 {
+		msg = fmt.Sprintf("%s is installed, with the extensions it needs.", what)
+	}
+	if e.Preload {
+		msg += fmt.Sprintf(" PostgreSQL %s restarted to load it.", major)
+	}
+	msg += " Enable it in each database that uses it: " + strings.Join(statements, " ") +
+		" In a Laravel migration: " + strings.Join(migration, " ")
+	return nil, actionOut{Done: true, Message: msg}, nil
+}
+
+// describeExtensions lists a major's extensions for an agent: Flock's and the user's own.
+func describeExtensions(state api.PostgresExtensions) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "PostgreSQL %s extensions:\n", state.Major)
+	for _, e := range state.Extensions {
+		switch {
+		case e.Busy != "":
+			fmt.Fprintf(&b, "- %s: %s\n", e.Name, e.Busy)
+		case e.Installed != "":
+			line := fmt.Sprintf("- %s %s: installed (CREATE EXTENSION %s)", e.Name, e.Installed, e.Creates)
+			if e.Update {
+				line += ", update to " + e.Latest + " available"
+			}
+			b.WriteString(line + "\n")
+		case e.Supported:
+			fmt.Fprintf(&b, "- %s: not installed (%s %s available)\n", e.Name, e.Title, e.Latest)
+		default:
+			fmt.Fprintf(&b, "- %s: not available for PostgreSQL %s\n", e.Name, state.Major)
+		}
+	}
+	if len(state.Custom) > 0 {
+		b.WriteString("The user's own extensions (" + state.CustomDir + "):\n")
+		for _, x := range state.Custom {
+			if x.Linked {
+				fmt.Fprintf(&b, "- %s: CREATE EXTENSION %s\n", x.Name, x.Name)
+			} else {
+				fmt.Fprintf(&b, "- %s: can't be used: %s\n", x.Name, x.Problem)
+			}
+		}
+	}
+	return strings.TrimSpace(b.String())
 }
 
 // ---------------------------------------------------------------------------------------------

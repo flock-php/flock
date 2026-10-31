@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"strings"
 	"text/tabwriter"
 	"time"
@@ -39,9 +40,9 @@ func isPostgres(id string) bool {
 	return false
 }
 
-// installPostgres installs the newest build of a major (for `flock services install postgres`).
-// A version like "18.6" names its major; "" is the default one.
-func installPostgres(ctx context.Context, s *state, version string, out, errOut io.Writer) error {
+// installPostgres installs the newest build of a major (for `flock services install postgres`),
+// with extensions. A version like "18.6" names its major; "" is the default one.
+func installPostgres(ctx context.Context, s *state, version string, extensions []string, out, errOut io.Writer) error {
 	major := postgres.DefaultMajor
 	if version != "" {
 		major = version
@@ -50,7 +51,7 @@ func installPostgres(ctx context.Context, s *state, version string, out, errOut 
 		}
 	}
 	return runPostgres(ctx, s, out, errOut, major, "installing", func(ctx context.Context, ops pgOps) error {
-		return ops.Install(ctx, major)
+		return ops.Install(ctx, major, extensions...)
 	})
 }
 
@@ -155,10 +156,13 @@ func humanSize(n int64) string {
 // pgOps changes PostgreSQL through the daemon, or directly when it doesn't run.
 type pgOps interface {
 	Versions(ctx context.Context) (postgres.Versions, error)
-	Install(ctx context.Context, major string) error
+	Install(ctx context.Context, major string, extensions ...string) error
 	Update(ctx context.Context, major string) error
 	Activate(ctx context.Context, major string) error
 	Uninstall(ctx context.Context, major string, deleteData bool) error
+	Extensions(ctx context.Context, major string) (postgres.MajorExtensions, error)
+	// Extension installs, updates or uninstalls (action) an extension of major.
+	Extension(ctx context.Context, action, major, name string) error
 }
 
 func postgresOps(ctx context.Context, s *state) (pgOps, error) {
@@ -178,8 +182,23 @@ type daemonPG struct{ c *api.Client }
 func (d daemonPG) Versions(ctx context.Context) (postgres.Versions, error) {
 	return d.c.PostgresVersions(ctx)
 }
-func (d daemonPG) Install(ctx context.Context, major string) error {
-	_, err := d.c.InstallPostgres(ctx, major)
+func (d daemonPG) Install(ctx context.Context, major string, extensions ...string) error {
+	_, err := d.c.InstallPostgres(ctx, major, extensions...)
+	return err
+}
+func (d daemonPG) Extensions(ctx context.Context, major string) (postgres.MajorExtensions, error) {
+	return d.c.PostgresExtensions(ctx, major)
+}
+func (d daemonPG) Extension(ctx context.Context, action, major, name string) error {
+	var err error
+	switch action {
+	case "install":
+		_, err = d.c.InstallPostgresExtension(ctx, major, name)
+	case "update":
+		_, err = d.c.UpdatePostgresExtension(ctx, major, name)
+	case "uninstall":
+		_, err = d.c.UninstallPostgresExtension(ctx, major, name)
+	}
 	return err
 }
 func (d daemonPG) Update(ctx context.Context, major string) error {
@@ -203,8 +222,30 @@ func (d directPG) Versions(ctx context.Context) (postgres.Versions, error) {
 	_ = d.m.Check(ctx) // reported in check_error
 	return d.m.Versions(), nil
 }
-func (d directPG) Install(ctx context.Context, major string) error { return d.m.Install(ctx, major) }
-func (d directPG) Update(ctx context.Context, major string) error  { return d.m.Update(ctx, major) }
+func (d directPG) Install(ctx context.Context, major string, extensions ...string) error {
+	return d.m.Install(ctx, major, extensions...)
+}
+func (d directPG) Extensions(ctx context.Context, major string) (postgres.MajorExtensions, error) {
+	if _, err := postgres.EnsureCustomDir(d.m.Installer.Root, major); err != nil {
+		return postgres.MajorExtensions{}, err
+	}
+	ctx, cancel := context.WithTimeout(ctx, 20*time.Second)
+	defer cancel()
+	_ = d.m.Check(ctx)
+	return d.m.Extensions(major)
+}
+func (d directPG) Extension(ctx context.Context, action, major, name string) error {
+	switch action {
+	case "install":
+		return d.m.InstallExtension(ctx, major, name)
+	case "update":
+		return d.m.UpdateExtension(ctx, major, name)
+	case "uninstall":
+		return d.m.UninstallExtension(ctx, major, name)
+	}
+	return nil
+}
+func (d directPG) Update(ctx context.Context, major string) error { return d.m.Update(ctx, major) }
 func (d directPG) Activate(ctx context.Context, major string) error {
 	return d.m.Activate(ctx, major)
 }
@@ -230,3 +271,129 @@ func (c *cliPGService) Apply(version string, enable bool) error {
 func (c *cliPGService) Running() bool { return false }
 func (c *cliPGService) Port() int     { return c.s.cfg.Ports.Postgres }
 func (c *cliPGService) Live() bool    { return false }
+func (c *cliPGService) Reload() error { return nil } // the daemon applies config.json when it starts
+
+// activeExtensions names the extensions of the active PostgreSQL major, for
+// `flock services install postgres <major> --with-extensions`.
+func activeExtensions(s *state) []string {
+	major := postgres.MajorOf(s.cfg.Services.Postgres)
+	if major == "" {
+		return nil
+	}
+	return postgres.InstalledExtensions(s.root, major)
+}
+
+// postgresExtensions runs `flock services extensions postgres [action] [extension]`: action is
+// list (the default), install, update, uninstall or dir; major "" is the active one.
+func postgresExtensions(cmd *cobra.Command, action, name, major string, open bool) error {
+	s, err := load()
+	if err != nil {
+		return err
+	}
+	if major == "" {
+		if major = postgres.MajorOf(s.cfg.Services.Postgres); major == "" {
+			return errors.New("which version? e.g. `--major 18`, or install PostgreSQL first: `flock services install postgres`")
+		}
+	}
+	ctx, stop := signal.NotifyContext(cmd.Context(), os.Interrupt)
+	defer stop()
+	ops, err := postgresOps(ctx, s)
+	if err != nil {
+		return err
+	}
+	out := cmd.OutOrStdout()
+
+	switch action {
+	case "", "list":
+	case "pg-config":
+		// The build of a major changes with every update, so builds use this rather than a path.
+		ids, err := postgres.InstalledIDs(s.root)
+		if err != nil {
+			return err
+		}
+		for _, id := range ids {
+			if postgres.MajorOf(id) == major {
+				fmt.Fprintln(out, filepath.Join(postgres.BinDir(s.root, id), "pg_config"))
+				return nil
+			}
+		}
+		return fmt.Errorf("PostgreSQL %s is not installed", major)
+	case "dir":
+		v, err := ops.Extensions(ctx, major)
+		if err != nil {
+			return err
+		}
+		fmt.Fprintln(out, v.CustomDir)
+		if open {
+			return openFile(v.CustomDir)
+		}
+		return nil
+	case "install", "update", "uninstall":
+		if name == "" {
+			return fmt.Errorf("which extension? e.g. `flock services extensions postgres %s postgis`", action)
+		}
+		e, ok := postgres.FindExtension(strings.ToLower(name))
+		if !ok {
+			return fmt.Errorf("unknown extension %q: %s", name, extensionNames())
+		}
+		verb := map[string]string{"install": "installing", "update": "updating", "uninstall": "uninstalling"}[action]
+		fmt.Fprintf(cmd.ErrOrStderr(), "%s %s for PostgreSQL %s…\n", verb, e.Title, major)
+		if err := ops.Extension(ctx, action, major, e.Name); err != nil {
+			return err
+		}
+		if action == "install" {
+			fmt.Fprintf(cmd.ErrOrStderr(), "Run CREATE EXTENSION %s; in your database to use it.\n", e.Creates)
+		}
+	default:
+		return fmt.Errorf("unknown action %q: use list, install, update, uninstall, dir or pg-config", action)
+	}
+
+	v, err := ops.Extensions(ctx, major)
+	if err != nil {
+		return err
+	}
+	printPostgresExtensions(out, v)
+	return nil
+}
+
+func extensionNames() string {
+	names := make([]string, len(postgres.Extensions))
+	for i, e := range postgres.Extensions {
+		names[i] = e.Name
+	}
+	return strings.Join(names, ", ")
+}
+
+func printPostgresExtensions(out io.Writer, v postgres.MajorExtensions) {
+	fmt.Fprintf(out, "PostgreSQL %s extensions:\n", v.Major)
+	tw := tabwriter.NewWriter(out, 0, 0, 2, ' ', 0)
+	fmt.Fprintln(tw, "  NAME\tINSTALLED\tLATEST\tCREATE EXTENSION\tLICENSE\t")
+	for _, e := range v.Extensions {
+		installed, latest := dash(e.Installed), dash(e.Latest)
+		switch {
+		case !e.Supported:
+			latest = "not available for " + v.Major
+		case e.Update:
+			latest += " (update)"
+		case e.Discontinued:
+			latest += " (no longer updated for " + v.Major + ")"
+		}
+		if e.Busy != "" {
+			installed += " (" + e.Busy + ")"
+		}
+		fmt.Fprintf(tw, "  %s\t%s\t%s\t%s\t%s\t\n", e.Name, installed, latest, e.Creates, e.License)
+	}
+	_ = tw.Flush()
+	fmt.Fprintf(out, "\nYour own extensions: %s\n", v.CustomDir)
+	if len(v.Custom) > 0 {
+		tw = tabwriter.NewWriter(out, 0, 0, 2, ' ', 0)
+		for _, x := range v.Custom {
+			state := "CREATE EXTENSION " + x.Name + ";"
+			if !x.Linked {
+				state = x.Problem
+			}
+			fmt.Fprintf(tw, "  %s\t%s\t%s\t\n", x.Name, dash(x.Version), state)
+		}
+		_ = tw.Flush()
+	}
+}

@@ -105,7 +105,7 @@ public sealed class ServicesService : IAsyncDisposable
             return error;
         }
         error = new OperationErrors();
-        error.PropertyChanged += (_, _) => Changed?.Invoke();
+        error.PropertyChanged += (_, args) => { if (OperationErrors.IsDirectPropertyChange(args)) Changed?.Invoke(); };
         resourceErrors.Add(id, error);
         return error;
     }

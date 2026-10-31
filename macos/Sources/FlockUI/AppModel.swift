@@ -145,9 +145,9 @@ final class AppModel {
         if previous?.dumpCount != new.dumpCount || previous?.eventCount != new.eventCount {
             Task { await dumps.refreshIfVisible() }
         }
-        // PostgreSQL, Valkey or a catalog service changed (maybe from the CLI): the Services
-        // pane's versions follow.
-        if previous != nil, previous?.postgres != new.postgres || previous?.valkey != new.valkey
+        // PostgreSQL or a catalog service changed (maybe from the CLI): the Services pane's
+        // versions follow.
+        if previous != nil, previous?.postgres != new.postgres
             || previous?.extras.map(\.version) != new.extras.map(\.version) {
             Task { await settings.refreshInstallsIfLoaded() }
         }

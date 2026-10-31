@@ -65,6 +65,8 @@ public struct PostgresMajor: Decodable, Sendable, Equatable, Identifiable {
     /// Upstream end of life, "2030-11-14"; empty when unknown.
     public var eol: String
     public var busy: Busy
+    /// Names of the extensions installed for this major ("postgis", "pgvector").
+    public var extensions: [String]
 
     public var id: String { major }
     public var isInstalled: Bool { !installed.isEmpty }
@@ -88,7 +90,7 @@ public struct PostgresMajor: Decodable, Sendable, Equatable, Identifiable {
         }
     }
 
-    enum CodingKeys: String, CodingKey { case major, installed, latest, update, prerelease, yanked, active, hasData, dataSize, eol, busy }
+    enum CodingKeys: String, CodingKey { case major, installed, latest, update, prerelease, yanked, active, hasData, dataSize, eol, busy, extensions }
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -103,6 +105,7 @@ public struct PostgresMajor: Decodable, Sendable, Equatable, Identifiable {
         dataSize = try c.decodeIfPresent(Int64.self, forKey: .dataSize) ?? 0
         eol = try c.decodeIfPresent(String.self, forKey: .eol) ?? ""
         busy = Busy(try c.decodeIfPresent(String.self, forKey: .busy) ?? "")
+        extensions = try c.decodeIfPresent([String]?.self, forKey: .extensions).flatMap { $0 } ?? []
     }
 
     /// The end-of-life date, parsed from `eol`.
@@ -131,5 +134,111 @@ public struct PostgresMajor: Decodable, Sendable, Equatable, Identifiable {
             return .ended(date)
         }
         return date.timeIntervalSince(now) < 182 * 86_400 ? .endingSoon(date) : .supported(until: date)
+    }
+}
+
+/// GET /v1/postgres/versions/{major}/extensions — the extensions Flock offers for one major
+/// (PostGIS, pgRouting, pgvector, TimescaleDB), each its own download, and the folder for the
+/// user's own extensions, which Flock keeps across updates.
+public struct PostgresExtensions: Decodable, Sendable, Equatable {
+    public var major: String
+    public var extensions: [PostgresExtension]
+    /// The folder for extensions of your own: lib/ and extension/.
+    public var customDir: String
+    /// What is in that folder, read only.
+    public var custom: [PostgresCustomExtension]
+
+    enum CodingKeys: String, CodingKey { case major, extensions, customDir, custom }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        major = try c.decodeIfPresent(String.self, forKey: .major) ?? ""
+        extensions = try c.decodeIfPresent([PostgresExtension]?.self, forKey: .extensions).flatMap { $0 } ?? []
+        customDir = try c.decodeIfPresent(String.self, forKey: .customDir) ?? ""
+        custom = try c.decodeIfPresent([PostgresCustomExtension]?.self, forKey: .custom).flatMap { $0 } ?? []
+    }
+
+    public var isBusy: Bool { extensions.contains(where: \.isBusy) }
+
+    /// "PostGIS, pgvector" for the installed names of a major.
+    public static func titles(_ names: [String]) -> String {
+        names.map { PostgresExtension.knownTitles[$0] ?? $0 }.joined(separator: ", ")
+    }
+}
+
+/// One extension for one PostgreSQL major.
+public struct PostgresExtension: Decodable, Sendable, Equatable, Identifiable {
+    public var name: String
+    public var title: String
+    public var description: String
+    /// What CREATE EXTENSION takes ("vector" for pgvector).
+    public var creates: String
+    public var license: String
+    /// Loaded at server start: installing or removing it restarts PostgreSQL.
+    public var preload: Bool
+    /// A build exists for this major and platform.
+    public var supported: Bool
+    /// The installed version; empty when not installed.
+    public var installed: String
+    public var latest: String
+    public var update: Bool
+    /// Newer versions exist, but no longer for this major.
+    public var discontinued: Bool
+    public var size: Int64
+    public var prerelease: Bool
+    public var yanked: String
+    /// "", "installing", "updating" or "uninstalling".
+    public var busy: String
+
+    public var id: String { name }
+    public var isInstalled: Bool { !installed.isEmpty }
+    public var isBusy: Bool { !busy.isEmpty }
+
+    static let knownTitles = ["postgis": "PostGIS", "pgrouting": "pgRouting", "pgvector": "pgvector", "timescaledb": "TimescaleDB"]
+
+    enum CodingKeys: String, CodingKey {
+        case name, title, description, creates, license, preload, supported, installed, latest, update, discontinued, size, prerelease, yanked, busy
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        name = try c.decode(String.self, forKey: .name)
+        title = try c.decodeIfPresent(String.self, forKey: .title) ?? name
+        description = try c.decodeIfPresent(String.self, forKey: .description) ?? ""
+        creates = try c.decodeIfPresent(String.self, forKey: .creates) ?? name
+        license = try c.decodeIfPresent(String.self, forKey: .license) ?? ""
+        preload = try c.decodeIfPresent(Bool.self, forKey: .preload) ?? false
+        supported = try c.decodeIfPresent(Bool.self, forKey: .supported) ?? false
+        installed = try c.decodeIfPresent(String.self, forKey: .installed) ?? ""
+        latest = try c.decodeIfPresent(String.self, forKey: .latest) ?? ""
+        update = try c.decodeIfPresent(Bool.self, forKey: .update) ?? false
+        discontinued = try c.decodeIfPresent(Bool.self, forKey: .discontinued) ?? false
+        size = try c.decodeIfPresent(Int64.self, forKey: .size) ?? 0
+        prerelease = try c.decodeIfPresent(Bool.self, forKey: .prerelease) ?? false
+        yanked = try c.decodeIfPresent(String.self, forKey: .yanked) ?? ""
+        busy = try c.decodeIfPresent(String.self, forKey: .busy) ?? ""
+    }
+}
+
+/// An extension in a major's own extensions folder: what Flock found, and whether the server has it.
+public struct PostgresCustomExtension: Decodable, Sendable, Equatable, Identifiable {
+    /// What CREATE EXTENSION takes.
+    public var name: String
+    /// Its control file's default_version; empty when it has none.
+    public var version: String
+    public var linked: Bool
+    /// Why it can't be used; empty when nothing is in the way.
+    public var problem: String
+
+    public var id: String { name }
+
+    enum CodingKeys: String, CodingKey { case name, version, linked, problem }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        name = try c.decode(String.self, forKey: .name)
+        version = try c.decodeIfPresent(String.self, forKey: .version) ?? ""
+        linked = try c.decodeIfPresent(Bool.self, forKey: .linked) ?? false
+        problem = try c.decodeIfPresent(String.self, forKey: .problem) ?? ""
     }
 }

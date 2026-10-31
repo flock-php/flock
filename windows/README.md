@@ -17,8 +17,9 @@ windows/
   sign.ps1          Artifact Signing for the above, when CI sets it up (local builds stay unsigned)
 ```
 
-The UI is written in C# instead of XAML markup, the way the macOS app is written in SwiftUI. It
-uses the same WinUI controls, and it compiles (with full type checking) on macOS and Linux too:
+The UI uses compiled WinUI XAML with adjacent C# code-behinds for lifecycle, native-window, and
+runtime-only behavior. It uses the same WinUI controls, and the project compiles (with full type
+checking) on macOS and Linux too:
 
 ```sh
 dotnet msbuild windows/FlockTray -restore -t:Compile -p:RuntimeIdentifier=win-x64 -p:Platform=x64 -p:WindowsAppSDKSelfContained=false

@@ -216,6 +216,26 @@ public sealed class FlockClient : IDisposable
     public Task<PostgresVersions> InstallPostgresAsync(string major, CancellationToken cancellationToken = default) =>
         Send<PostgresVersions>(HttpMethod.Post, $"/v1/postgres/versions/{Escape(major)}/install", timeout: PostgresDownloadTimeout, cancellationToken: cancellationToken);
 
+    /// <summary>Installs a major with the extensions it has a build of.</summary>
+    public Task<PostgresVersions> InstallPostgresAsync(string major, IReadOnlyList<string> extensions, CancellationToken cancellationToken = default) =>
+        Send<PostgresVersions>(HttpMethod.Post, $"/v1/postgres/versions/{Escape(major)}/install", new { extensions }, PostgresDownloadTimeout, cancellationToken);
+
+    // PostgreSQL extensions
+
+    /// <summary>The extensions of a major; creates its folder for your own extensions.</summary>
+    public Task<PostgresExtensions> PostgresExtensionsAsync(string major, CancellationToken cancellationToken = default) =>
+        Get<PostgresExtensions>($"/v1/postgres/versions/{Escape(major)}/extensions", cancellationToken);
+
+    /// <summary>Downloads an extension for a major; a preloaded one (TimescaleDB) restarts that major when it runs.</summary>
+    public Task<PostgresExtensions> InstallPostgresExtensionAsync(string major, string name, CancellationToken cancellationToken = default) =>
+        Send<PostgresExtensions>(HttpMethod.Post, $"/v1/postgres/versions/{Escape(major)}/extensions/{Escape(name)}/install", timeout: PostgresDownloadTimeout, cancellationToken: cancellationToken);
+
+    public Task<PostgresExtensions> UpdatePostgresExtensionAsync(string major, string name, CancellationToken cancellationToken = default) =>
+        Send<PostgresExtensions>(HttpMethod.Post, $"/v1/postgres/versions/{Escape(major)}/extensions/{Escape(name)}/update", timeout: PostgresDownloadTimeout, cancellationToken: cancellationToken);
+
+    public Task<PostgresExtensions> UninstallPostgresExtensionAsync(string major, string name, CancellationToken cancellationToken = default) =>
+        Send<PostgresExtensions>(HttpMethod.Delete, $"/v1/postgres/versions/{Escape(major)}/extensions/{Escape(name)}", timeout: TimeSpan.FromMinutes(2), cancellationToken: cancellationToken);
+
     /// <summary>Installs a major's newest release over the installed one; its databases stay, a running server restarts.</summary>
     public Task<PostgresVersions> UpdatePostgresAsync(string major, CancellationToken cancellationToken = default) =>
         Send<PostgresVersions>(HttpMethod.Post, $"/v1/postgres/versions/{Escape(major)}/update", timeout: PostgresDownloadTimeout, cancellationToken: cancellationToken);
@@ -339,7 +359,7 @@ public sealed class FlockClient : IDisposable
     {
         var data = await Raw(method, path, body, timeout, cancellationToken);
         // Go encodes nil slices as null; an empty list is what every caller wants then.
-        if (data.Length == 0 || data.AsSpan().SequenceEqual("null"u8))
+        if (data.Length == 0)
         {
             data = typeof(T).IsGenericType && typeof(T).GetGenericTypeDefinition() == typeof(List<>) ? "[]"u8.ToArray() : data;
         }

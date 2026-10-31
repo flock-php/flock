@@ -29,10 +29,30 @@ public sealed class MailLifetimeTests : IDisposable
     }
 
     [Fact]
+    public void MailRowsExposeTemplateValuesWithoutChangingTheRetainedRow()
+    {
+        var summary = new MailSummary
+        {
+            Id = "message",
+            Inbox = "acme",
+            From = "Ada <ada@example.com>",
+            To = ["team@example.com", "ops@example.com"],
+            Subject = "Status",
+            Date = DateTimeOffset.Now,
+        };
+        var row = new MailViewModel.MailRow(summary);
+
+        Assert.Equal("Status", row.SubjectLabel);
+        Assert.Equal("team@example.com, ops@example.com", row.Recipients);
+        Assert.Equal("acme", row.Inbox);
+        Assert.NotEmpty(row.DateLabel);
+    }
+
+    [Fact]
     public async Task ChangingMessageSuppressesTheOlderDetail()
     {
         handler.BlockOldDetail = true;
-        await using var detail = new MailDetailViewModel(client, new FakeMailPlatform());
+        await using var detail = new MailDetailViewModel(client, new FakeMailPlatform(), new ImmediateUiDispatcher());
         var old = detail.SelectAsync("old");
         await handler.OldDetailStarted.Task;
 
@@ -46,9 +66,25 @@ public sealed class MailLifetimeTests : IDisposable
     }
 
     [Fact]
+    public async Task DisposingDetailSuppressesAnInFlightRead()
+    {
+        handler.BlockOldDetail = true;
+        var detail = new MailDetailViewModel(client, new FakeMailPlatform(), new ImmediateUiDispatcher());
+        var read = detail.SelectAsync("old");
+        await handler.OldDetailStarted.Task;
+
+        var disposal = detail.DisposeAsync().AsTask();
+        handler.ReleaseOldDetail.TrySetResult();
+        await Task.WhenAll(read, disposal);
+
+        Assert.Null(detail.Current);
+        Assert.Null(detail.Error);
+    }
+
+    [Fact]
     public async Task RawFailureIsSeparateFromContentAndCanRetry()
     {
-        await using var detail = new MailDetailViewModel(client, new FakeMailPlatform());
+        await using var detail = new MailDetailViewModel(client, new FakeMailPlatform(), new ImmediateUiDispatcher());
         await detail.SelectAsync("current");
 
         await detail.SetModeAsync("Raw");
@@ -66,7 +102,7 @@ public sealed class MailLifetimeTests : IDisposable
     public async Task SwitchingAwayFromRawSuppressesAStaleFailure()
     {
         handler.BlockRaw = true;
-        await using var detail = new MailDetailViewModel(client, new FakeMailPlatform());
+        await using var detail = new MailDetailViewModel(client, new FakeMailPlatform(), new ImmediateUiDispatcher());
         await detail.SelectAsync("current");
         var raw = detail.SetModeAsync("Raw");
         await handler.RawStarted.Task;
@@ -115,12 +151,13 @@ public sealed class MailLifetimeTests : IDisposable
     public async Task AttachmentWriteFailureIsVisibleAndPickerCancelIsQuiet()
     {
         var platform = new FakeMailPlatform { Path = Path.Combine(directory, "attachment.bin"), FailWrite = true };
-        await using var detail = new MailDetailViewModel(client, platform);
+        await using var detail = new MailDetailViewModel(client, platform, new ImmediateUiDispatcher());
         await detail.SelectAsync("current");
 
         await detail.SaveAttachmentAsync(detail.Current!.Attachments[0], IntPtr.Zero);
 
-        Assert.Equal("write failed", detail.ActionError);
+        Assert.Equal("unexpected write failure", detail.ActionError);
+        Assert.Equal("unexpected write failure", detail.Error);
         platform.Path = null;
         detail.DismissError();
         await detail.SaveAttachmentAsync(detail.Current.Attachments[0], IntPtr.Zero);
@@ -155,10 +192,21 @@ public sealed class MailLifetimeTests : IDisposable
         {
             if (FailWrite)
             {
-                throw new IOException("write failed");
+                throw new InvalidOperationException("unexpected write failure");
             }
             return File.WriteAllBytesAsync(path, data.ToArray(), cancellationToken);
         }
+    }
+
+    private sealed class ImmediateUiDispatcher : IUiDispatcher
+    {
+        public Task InvokeAsync(Action callback, CancellationToken cancellationToken = default)
+        {
+            callback();
+            return Task.CompletedTask;
+        }
+
+        public Task InvokeAsync(Func<Task> callback, CancellationToken cancellationToken = default) => callback();
     }
 
     private sealed class MailHandler : HttpMessageHandler

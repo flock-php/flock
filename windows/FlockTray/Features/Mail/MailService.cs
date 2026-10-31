@@ -146,7 +146,13 @@ public sealed class MailService : IAsyncDisposable
 
     private void PublishRefreshFailure(Exception error) => errors.SetRefresh(error);
 
-    private void ErrorsChanged(object? sender, PropertyChangedEventArgs args) => Changed?.Invoke();
+    private void ErrorsChanged(object? sender, PropertyChangedEventArgs args)
+    {
+        if (OperationErrors.IsDirectPropertyChange(args))
+        {
+            Changed?.Invoke();
+        }
+    }
 
     private void RunningChanged(string key, bool running)
     {

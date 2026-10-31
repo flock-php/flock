@@ -46,7 +46,6 @@ type Status struct {
 	DumpCount          int                     `json:"dump_count"`
 	EventCount         int                     `json:"event_count"`
 	Postgres           string                  `json:"postgres,omitempty"`
-	Valkey             string                  `json:"valkey,omitempty"`
 	Extras             []ExtraStatus           `json:"extras,omitempty"` // installed catalog services
 	Xdebug             bool                    `json:"xdebug"`           // Xdebug detection; see config.Config.Xdebug
 	XdebugBreakpoints  bool                    `json:"xdebug_breakpoints"`

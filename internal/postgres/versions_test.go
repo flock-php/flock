@@ -44,8 +44,9 @@ func (f *fakeService) Running() bool {
 	defer f.mu.Unlock()
 	return f.running
 }
-func (f *fakeService) Port() int  { return 1 }
-func (f *fakeService) Live() bool { return f.live }
+func (f *fakeService) Port() int     { return 1 }
+func (f *fakeService) Live() bool    { return f.live }
+func (f *fakeService) Reload() error { return nil }
 
 // current is the configured server, for checks while an update may run in the background.
 func (f *fakeService) current() string {
@@ -59,11 +60,13 @@ func (f *fakeService) current() string {
 // unwrapped.
 func pgPackage(t *testing.T) []byte {
 	return binariestest.Zip(t, map[string]string{
-		"bin/postgres":       "#!/bin/sh\n",
-		"bin/initdb":         "#!/bin/sh\nmkdir -p \"$2\" && basename \"$2\" > \"$2/PG_VERSION\"\n",
-		"bin/pg_ctl":         "#!/bin/sh\n",
-		"bin/psql":           "#!/bin/sh\n",
-		"share/postgres.bki": "",
+		"bin/postgres":              "#!/bin/sh\n",
+		"bin/initdb":                "#!/bin/sh\nmkdir -p \"$2\" && basename \"$2\" > \"$2/PG_VERSION\"\n",
+		"bin/pg_ctl":                "#!/bin/sh\n",
+		"bin/psql":                  "#!/bin/sh\n",
+		"share/postgres.bki":        "",
+		"lib/postgresql/plpgsql.so": "",
+		"share/postgresql/extension/plpgsql.control": "",
 	})
 }
 

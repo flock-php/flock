@@ -4,6 +4,7 @@ using Flock.Kit;
 using Flock.Tray.Features.Update;
 using Flock.Tray.Infrastructure;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Time.Testing;
 
 namespace Flock.Tray.Tests;
 
@@ -12,10 +13,11 @@ public sealed class UpdateServiceTests : IDisposable
     private readonly string directory = Directory.CreateTempSubdirectory("flock-update-").FullName;
     private readonly UpdateHandler handler = new();
     private readonly FakeMetadata metadata;
+    private readonly FakeTimeProvider clock = new();
     private readonly FakeVerifier verifier = new();
     private readonly FakeLauncher launcher = new();
     private readonly FakeCleanup cleanup;
-    private readonly FakeShutdown shutdown = new();
+    private int quitRequests;
     private readonly UpdateService service;
     private readonly HttpClient http;
 
@@ -24,8 +26,8 @@ public sealed class UpdateServiceTests : IDisposable
         metadata = new FakeMetadata(directory, AppVersion.Parse("1.0.0")!);
         cleanup = new FakeCleanup();
         http = new HttpClient(handler) { Timeout = Timeout.InfiniteTimeSpan };
-        service = new UpdateService(http, TimeProvider.System, metadata, launcher, verifier, cleanup,
-            new OperationRunner(), shutdown, NullLogger<UpdateService>.Instance, () => metadata.Channel);
+        service = new UpdateService(http, clock, metadata, launcher, verifier, cleanup,
+            new OperationRunner(), () => quitRequests++, NullLogger<UpdateService>.Instance, () => metadata.Channel);
     }
 
     public void Dispose()
@@ -53,7 +55,7 @@ public sealed class UpdateServiceTests : IDisposable
         handler.Feed = Feed("1.1.0", "stable", 1);
         var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        handler.BeforeResponse = async () =>
+        handler.BeforeResponse = async _ =>
         {
             entered.SetResult();
             await release.Task;
@@ -84,6 +86,56 @@ public sealed class UpdateServiceTests : IDisposable
         Assert.Equal(OperationOutcome.Canceled, await install);
         Assert.False(launcher.Called);
         Assert.Single(cleanup.Paths, path => path.EndsWith(".part", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task BlockedFeedRequestTimesOutAtItsDeadlineAndDoesNotChangeLater()
+    {
+        handler.Feed = Feed("1.1.0", "stable", 1);
+        var started = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        handler.BeforeResponse = async token =>
+        {
+            started.SetResult();
+            await Task.Delay(Timeout.InfiniteTimeSpan, token);
+        };
+
+        var check = service.CheckAsync(userInitiated: true);
+        await started.Task;
+        clock.Advance(TimeSpan.FromSeconds(30));
+
+        Assert.Equal(OperationOutcome.Failed, await check);
+        Assert.Equal(UpdatePhase.Idle, service.State);
+        Assert.Equal("The update request took too long.", service.ActionError);
+        var error = service.ActionError;
+        clock.Advance(TimeSpan.FromMinutes(1));
+        await Task.Yield();
+        Assert.Equal(UpdatePhase.Idle, service.State);
+        Assert.Equal(error, service.ActionError);
+        Assert.False(launcher.Called);
+    }
+
+    [Fact]
+    public async Task ChunkedDownloadTimesOutAtItsDeadlineAndCleansPartialWithoutLaunching()
+    {
+        handler.Feed = Feed("1.1.0", "stable", 8);
+        await service.CheckAsync(userInitiated: true);
+        var download = new BlockingStream([1, 2, 3]);
+        handler.Download = download;
+
+        var install = service.InstallAsync();
+        await download.Blocked.Task;
+        clock.Advance(TimeSpan.FromMinutes(15));
+
+        Assert.Equal(OperationOutcome.Failed, await install);
+        Assert.Equal(UpdatePhase.Idle, service.State);
+        Assert.Equal("The update request took too long.", service.ActionError);
+        Assert.Single(cleanup.Paths, path => path.EndsWith(".part", StringComparison.Ordinal));
+        Assert.False(launcher.Called);
+        var error = service.ActionError;
+        clock.Advance(TimeSpan.FromMinutes(1));
+        await Task.Yield();
+        Assert.Equal(UpdatePhase.Idle, service.State);
+        Assert.Equal(error, service.ActionError);
     }
 
     [Fact]
@@ -132,7 +184,7 @@ public sealed class UpdateServiceTests : IDisposable
         launcher.Result = false;
 
         Assert.Equal(OperationOutcome.Failed, await service.InstallAsync());
-        Assert.False(shutdown.Requested);
+        Assert.Equal(0, quitRequests);
         Assert.Contains(cleanup.Paths, path => path.EndsWith(".exe", StringComparison.Ordinal));
         Assert.Equal(UpdatePhase.Idle, service.State);
     }
@@ -146,7 +198,7 @@ public sealed class UpdateServiceTests : IDisposable
         var outcome = await service.InstallAsync();
         Assert.True(outcome == OperationOutcome.Succeeded, service.ActionError ?? "no update error");
         Assert.True(launcher.Called);
-        Assert.True(shutdown.Requested);
+        Assert.Equal(1, quitRequests);
         Assert.Empty(cleanup.Paths);
         Assert.False(service.IsBusy);
         Assert.Equal(["/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART", "/RELAUNCH"], launcher.Arguments.Take(4));
@@ -185,7 +237,7 @@ public sealed class UpdateServiceTests : IDisposable
 
         Assert.Equal(OperationOutcome.Failed, await service.InstallAsync());
         Assert.False(launcher.Called);
-        Assert.False(shutdown.Requested);
+        Assert.Equal(0, quitRequests);
     }
 
     [Fact]
@@ -198,7 +250,7 @@ public sealed class UpdateServiceTests : IDisposable
 
         Assert.Equal(OperationOutcome.Failed, await service.InstallAsync());
 
-        Assert.False(shutdown.Requested);
+        Assert.Equal(0, quitRequests);
         Assert.Equal(UpdatePhase.Idle, service.State);
         Assert.Equal(launcher.ResultMessage, service.ActionError);
         handler.Feed = Feed("1.2.0", "stable", 3);
@@ -355,12 +407,6 @@ public sealed class UpdateServiceTests : IDisposable
         }
     }
 
-    private sealed class FakeShutdown : IShutdownRequest
-    {
-        public bool Requested { get; private set; }
-        public void RequestQuit() => Requested = true;
-    }
-
     private sealed class FakeAuthenticodeVerifier(int trustCode, string publisher) : IAuthenticodeVerifier
     {
         public AuthenticodeVerification Verify(string path) => new(trustCode, publisher);
@@ -372,13 +418,13 @@ public sealed class UpdateServiceTests : IDisposable
         public Stream? Download { get; set; }
         public bool Fail { get; set; }
         public int FeedRequests { get; private set; }
-        public Func<Task>? BeforeResponse { get; set; }
+        public Func<CancellationToken, Task>? BeforeResponse { get; set; }
 
         protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {
             if (BeforeResponse is not null)
             {
-                await BeforeResponse();
+                await BeforeResponse(cancellationToken);
             }
             if (request.RequestUri?.ToString() == UpdateFeed.Url)
             {
@@ -397,6 +443,7 @@ public sealed class UpdateServiceTests : IDisposable
     private sealed class BlockingStream(byte[] first, Exception? error = null) : Stream
     {
         private bool returned;
+        public TaskCompletionSource Blocked { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
         public override async ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default)
         {
@@ -410,6 +457,7 @@ public sealed class UpdateServiceTests : IDisposable
             {
                 throw error;
             }
+            Blocked.SetResult();
             await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
             return 0;
         }

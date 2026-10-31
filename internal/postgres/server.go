@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -32,9 +33,17 @@ func InitDB(binDir, dataDir string) error {
 }
 
 // Spec runs postgres on 127.0.0.1:port. On unix the socket goes to runDir/.s.PGSQL.<port>;
-// AF_UNIX paths are limited to ~104 bytes on macOS, so keep runDir short.
-func Spec(binDir, dataDir, runDir, logFile string, port int) supervisor.Spec {
+// AF_UNIX paths are limited to ~104 bytes on macOS, so keep runDir short. preload goes into
+// shared_preload_libraries.
+func Spec(binDir, dataDir, runDir, logFile string, port int, preload ...string) supervisor.Spec {
 	args := []string{"-D", dataDir, "-p", strconv.Itoa(port), "-c", "listen_addresses=127.0.0.1"}
+	if len(preload) > 0 {
+		args = append(args, "-c", "shared_preload_libraries="+strings.Join(preload, ","))
+	}
+	if slices.Contains(preload, "timescaledb") {
+		// It reports usage to Timescale by default.
+		args = append(args, "-c", "timescaledb.telemetry_level=off")
+	}
 
 	return supervisor.Spec{
 		Name:       "postgres",
