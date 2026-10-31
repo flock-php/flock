@@ -2,6 +2,7 @@ package cli
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"os/exec"
 
@@ -17,11 +18,15 @@ func update(cmd *cobra.Command) error {
 		return errors.New("this Flock isn't installed from its package: install the flockphp package from https://flockphp.com to get updates")
 	}
 	var steps [][]string
+	aur := aurPackage()
 	switch {
 	case hasCommand("apt-get"):
 		steps = [][]string{{"apt-get", "update"}, {"apt-get", "install", "--only-upgrade", "flockphp"}}
 	case hasCommand("dnf"):
 		steps = [][]string{{"dnf", "upgrade", "--refresh", "flockphp"}}
+	case aur != "":
+		// AUR helpers build the package as the user, never with sudo.
+		return fmt.Errorf("Flock comes from the AUR here: update %s with your AUR helper (e.g. `yay -Syu` or `paru -Syu`)", aur)
 	default:
 		return errors.New("neither apt nor dnf is here: update the flockphp package with your package manager")
 	}

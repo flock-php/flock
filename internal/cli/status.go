@@ -48,9 +48,6 @@ func newStatusCommand() *cobra.Command {
 			if st.Postgres != "" {
 				fmt.Fprintf(out, "postgres  %s\n", st.Postgres)
 			}
-			if st.Valkey != "" {
-				fmt.Fprintf(out, "valkey    %s\n", st.Valkey)
-			}
 			for _, x := range st.Extras {
 				state := fmt.Sprintf("%s on 127.0.0.1:%d", x.Version, x.Port)
 				if !x.Enabled {

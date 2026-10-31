@@ -215,7 +215,17 @@ public sealed class UpdateFileVerifier(IAuthenticodeVerifier authenticode) : IUp
 public enum UpdatePhase { Idle, Checking, Downloading, Installing }
 
 /// <summary>Checks, verifies, and hands off app updates without owning any UI or host lifetime.</summary>
-public sealed class UpdateService
+public sealed class UpdateService(HttpClient http,
+    TimeProvider timeProvider,
+    IUpdateInstallationMetadata installation,
+    IUpdateProcessLauncher processLauncher,
+    IUpdateFileVerifier verifier,
+    IUpdateFileCleanup cleanup,
+    OperationRunner operations,
+    Action requestQuit,
+    ILogger<UpdateService> logger,
+    Func<string?> channel,
+    IUiDispatcher? dispatcher = null)
 {
     private const string OperationKey = "updates";
     private static readonly TimeSpan CheckDeadline = TimeSpan.FromSeconds(30);
@@ -224,47 +234,10 @@ public sealed class UpdateService
     public static AppVersion? Current { get; } = AppVersion.FromInformational(
         Assembly.GetExecutingAssembly().GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion);
 
-    private readonly HttpClient http;
-    private readonly TimeProvider timeProvider;
-    private readonly IUpdateInstallationMetadata installation;
-    private readonly IUpdateProcessLauncher processLauncher;
-    private readonly IUpdateFileVerifier verifier;
-    private readonly IUpdateFileCleanup cleanup;
-    private readonly OperationRunner operations;
-    private readonly IShutdownRequest shutdown;
-    private readonly ILogger<UpdateService> logger;
-    private readonly Func<string?> channel;
-    private readonly IUiDispatcher? dispatcher;
     private readonly OperationErrors errors = new();
-    private readonly object checkGate = new();
+    private readonly Lock checkGate = new();
     private Task<CheckExecution>? activeCheck;
     private bool ownershipTransferred;
-
-    public UpdateService(
-        HttpClient http,
-        TimeProvider timeProvider,
-        IUpdateInstallationMetadata installation,
-        IUpdateProcessLauncher processLauncher,
-        IUpdateFileVerifier verifier,
-        IUpdateFileCleanup cleanup,
-        OperationRunner operations,
-        IShutdownRequest shutdown,
-        ILogger<UpdateService> logger,
-        Func<string?> channel,
-        IUiDispatcher? dispatcher = null)
-    {
-        this.http = http;
-        this.timeProvider = timeProvider;
-        this.installation = installation;
-        this.processLauncher = processLauncher;
-        this.verifier = verifier;
-        this.cleanup = cleanup;
-        this.operations = operations;
-        this.shutdown = shutdown;
-        this.logger = logger;
-        this.channel = channel;
-        this.dispatcher = dispatcher;
-    }
 
     public bool IsEnabled => installation.CurrentVersion is not null;
     public UpdateFeed.Item? Available { get; private set; }
@@ -335,8 +308,9 @@ public sealed class UpdateService
             try
             {
                 await SetStateAsync(UpdatePhase.Checking, 0);
-                using var deadline = new RequestDeadline(timeProvider, token, CheckDeadline);
-                var items = UpdateFeed.Parse(await http.GetStringAsync(UpdateFeed.Url, deadline.Token));
+                using var timeout = new CancellationTokenSource(CheckDeadline, timeProvider);
+                using var request = CancellationTokenSource.CreateLinkedTokenSource(token, timeout.Token);
+                var items = UpdateFeed.Parse(await http.GetStringAsync(UpdateFeed.Url, request.Token));
                 Available = UpdateFeed.Pick(items, installation.CurrentVersion, UpdateFeed.TakesBetas(channel()), installation.OperatingSystemVersion);
                 IsUpToDate = Available is null;
             }
@@ -399,8 +373,9 @@ public sealed class UpdateService
     private async Task CheckAndInstallCoreAsync(CancellationToken cancellationToken)
     {
         await SetStateAsync(UpdatePhase.Checking, 0);
-        using var deadline = new RequestDeadline(timeProvider, cancellationToken, CheckDeadline);
-        var items = UpdateFeed.Parse(await http.GetStringAsync(UpdateFeed.Url, deadline.Token));
+        using var timeout = new CancellationTokenSource(CheckDeadline, timeProvider);
+        using var request = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, timeout.Token);
+        var items = UpdateFeed.Parse(await http.GetStringAsync(UpdateFeed.Url, request.Token));
         Available = UpdateFeed.Pick(items, installation.CurrentVersion, UpdateFeed.TakesBetas(channel()), installation.OperatingSystemVersion);
         IsUpToDate = Available is null;
         await SetStateAsync(UpdatePhase.Idle);
@@ -452,11 +427,12 @@ public sealed class UpdateService
         try
         {
             Directory.CreateDirectory(files.Directory);
-            using var deadline = new RequestDeadline(timeProvider, cancellationToken, DownloadDeadline);
-            using var response = await http.GetAsync(update.Url, HttpCompletionOption.ResponseHeadersRead, deadline.Token);
+            using var timeout = new CancellationTokenSource(DownloadDeadline, timeProvider);
+            using var request = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, timeout.Token);
+            using var response = await http.GetAsync(update.Url, HttpCompletionOption.ResponseHeadersRead, request.Token);
             response.EnsureSuccessStatusCode();
             var total = response.Content.Headers.ContentLength ?? update.Length;
-            await using (var source = await response.Content.ReadAsStreamAsync(deadline.Token))
+            await using (var source = await response.Content.ReadAsStreamAsync(request.Token))
             await using (var target = new FileStream(files.Partial, FileMode.Create, FileAccess.Write, FileShare.None,
                 81920, FileOptions.Asynchronous | FileOptions.SequentialScan))
             {
@@ -464,9 +440,9 @@ public sealed class UpdateService
                 var buffer = new byte[81920];
                 long completed = 0;
                 int read;
-                while ((read = await source.ReadAsync(buffer.AsMemory(), deadline.Token)) > 0)
+                while ((read = await source.ReadAsync(buffer.AsMemory(), request.Token)) > 0)
                 {
-                    await target.WriteAsync(buffer.AsMemory(0, read), deadline.Token);
+                    await target.WriteAsync(buffer.AsMemory(0, read), request.Token);
                     completed += read;
                     var progress = total > 0 ? (int)Math.Min(100, completed * 100 / total) : 0;
                     if (progress != Progress)
@@ -474,7 +450,7 @@ public sealed class UpdateService
                         await SetStateAsync(UpdatePhase.Downloading, progress);
                     }
                 }
-                await target.FlushAsync(deadline.Token);
+                await target.FlushAsync(request.Token);
             }
             File.Move(files.Partial, files.Installer, overwrite: true);
             files.PartialOwned = false;
@@ -509,7 +485,7 @@ public sealed class UpdateService
         ownershipTransferred = false;
         if (outcome == OperationOutcome.Succeeded && transferred)
         {
-            shutdown.RequestQuit();
+            requestQuit();
         }
         else if (outcome == OperationOutcome.Succeeded && action)
         {
@@ -621,33 +597,4 @@ public sealed class UpdateService
         public bool InstallerOwned { get; set; }
     }
 
-    private sealed class RequestDeadline : IDisposable
-    {
-        private readonly CancellationTokenSource cancellation;
-        private readonly ITimer timer;
-
-        public RequestDeadline(TimeProvider timeProvider, CancellationToken parent, TimeSpan deadline)
-        {
-            cancellation = CancellationTokenSource.CreateLinkedTokenSource(parent);
-            timer = timeProvider.CreateTimer(static state =>
-            {
-                try
-                {
-                    ((CancellationTokenSource)state!).Cancel();
-                }
-                catch (ObjectDisposedException)
-                {
-                }
-            }, cancellation,
-                deadline, Timeout.InfiniteTimeSpan);
-        }
-
-        public CancellationToken Token => cancellation.Token;
-
-        public void Dispose()
-        {
-            timer.Dispose();
-            cancellation.Dispose();
-        }
-    }
 }

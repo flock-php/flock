@@ -2,6 +2,7 @@ using Flock.Tray.Infrastructure;
 
 namespace Flock.Tray.Tests;
 
+[Collection("Native tray")]
 public sealed class TrayServiceTests
 {
     [Fact]

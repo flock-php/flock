@@ -13,13 +13,20 @@
   "https_port": 443,
   "mail": "127.0.0.1:2525",
   "postgres": "18.6 on 127.0.0.1:5432",
-  "valkey": "9.1.2 on 127.0.0.1:6379",
   "extras": [
     {
       "id": "mysql",
       "name": "MySQL",
       "version": "8.4.11",
       "port": 3306,
+      "enabled": true,
+      "up": true
+    },
+    {
+      "id": "valkey",
+      "name": "Valkey",
+      "version": "9.1.2",
+      "port": 6379,
       "enabled": true,
       "up": true
     }

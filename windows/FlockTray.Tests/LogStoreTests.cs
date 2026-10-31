@@ -9,7 +9,7 @@ using Flock.Tray.ViewModels;
 
 namespace Flock.Tray.Tests;
 
-public sealed class LogsViewModelTests : IAsyncLifetime
+public sealed class LogStoreTests : IAsyncLifetime
 {
     private readonly string dir = Directory.CreateTempSubdirectory("flock-logs-").FullName;
     private readonly Handler handler = new();
@@ -18,7 +18,7 @@ public sealed class LogsViewModelTests : IAsyncLifetime
     private readonly FlockClient client;
     private readonly LogsViewModel viewModel;
 
-    public LogsViewModelTests()
+    public LogStoreTests()
     {
         var path = Path.Combine(dir, "api.json");
         File.WriteAllText(path, """{"url":"http://127.0.0.1:1","token":"test"}""");
@@ -312,7 +312,47 @@ public sealed class LogsViewModelTests : IAsyncLifetime
 
         Assert.Equal(OperationOutcome.Failed, outcome);
         Assert.Equal("clear failed", viewModel.ActionError);
+        Assert.Equal("clear failed", viewModel.Error);
         Assert.Equal("remote contents", Text(service: false));
+    }
+
+    [Fact]
+    public async Task ClearCommandFailureIsPublishedForTheInfoBar()
+    {
+        var source = new LogsViewModel.SiteSource("a");
+        var load = LoadAsync(source);
+        (await handler.NextAsync()).Log(source, "before clear");
+        await load;
+
+        var clear = viewModel.ClearCommand.ExecuteAsync(null);
+        var clearResponse = await handler.NextAsync();
+        clearResponse.Fail("clear failed");
+        (await handler.NextAsync()).Log(source, "remote contents");
+        await clear;
+
+        Assert.Equal("clear failed", viewModel.Error);
+        Assert.Equal("remote contents", Text(service: false));
+    }
+
+    [Fact]
+    public async Task UnexpectedClearFailureIsCaughtAndLoggedWithoutEscaping()
+    {
+        var error = new InvalidOperationException("unexpected clear failure");
+        Exception? logged = null;
+
+        await LogsWindow.ObserveClearAsync(() => Task.FromException(error), exception => logged = exception);
+
+        Assert.Same(error, logged);
+    }
+
+    [Fact]
+    public async Task ClearCancellationIsIgnoredByTheEventBoundary()
+    {
+        Exception? logged = null;
+
+        await LogsWindow.ObserveClearAsync(() => Task.FromException(new OperationCanceledException()), exception => logged = exception);
+
+        Assert.Null(logged);
     }
 
     [Fact]

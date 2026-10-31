@@ -268,7 +268,13 @@ public sealed class DumpsService : IAsyncDisposable
         headerRequest.Invalidate();
     }
 
-    private void ErrorsChanged(object? sender, PropertyChangedEventArgs args) => Changed?.Invoke();
+    private void ErrorsChanged(object? sender, PropertyChangedEventArgs args)
+    {
+        if (OperationErrors.IsDirectPropertyChange(args))
+        {
+            Changed?.Invoke();
+        }
+    }
 
     private void RunningChanged(string key, bool running)
     {

@@ -1,0 +1,10 @@
+<UserControl
+    x:Class="Flock.Tray.BusyContent"
+    x:Name="Root"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <StackPanel Orientation="Horizontal" Spacing="8">
+        <ProgressRing x:Name="Ring" Width="14" Height="14" IsActive="False" Visibility="Collapsed" />
+        <TextBlock x:Name="Label" VerticalAlignment="Center" />
+    </StackPanel>
+</UserControl>

@@ -34,7 +34,9 @@ type Daemon interface {
 
 	SetServiceRunning(ctx context.Context, id string, on bool) ([]api.Service, error)
 	InstallService(ctx context.Context, id, line string, port int) (api.Catalog, error)
-	InstallPostgres(ctx context.Context, major string) (api.PostgresVersions, error)
+	InstallPostgres(ctx context.Context, major string, extensions ...string) (api.PostgresVersions, error)
+	PostgresExtensions(ctx context.Context, major string) (api.PostgresExtensions, error)
+	InstallPostgresExtension(ctx context.Context, major, name string) (api.PostgresExtensions, error)
 	InstallPHP(ctx context.Context, minor string) (api.PHPVersions, error)
 	InstallNode(ctx context.Context, major string) (api.NodeVersions, error)
 

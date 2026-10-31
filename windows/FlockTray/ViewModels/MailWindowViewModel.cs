@@ -3,31 +3,31 @@ using System.ComponentModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Flock.Kit;
+using Flock.Tray;
 using Flock.Tray.Features.Mail;
 using Flock.Tray.Infrastructure;
 
 namespace Flock.Tray.ViewModels;
 
-/// <summary>Owns one mail window's retained list, selection, detail, and lifetime.</summary>
+/// <summary>Owns one mail window's retained list and detail lifetime.</summary>
 public sealed class MailViewModel : ObservableObject, IAsyncDisposable
 {
-    private readonly MailService service;
-    private readonly MailDetailViewModel detail;
-    private readonly RuntimeService model;
-    private readonly IDisposable visibility;
-    private readonly ObservableCollection<MailRow> rows = [];
+    private readonly MailService _mailService;
+    private readonly MailDetailViewModel _detail;
+    private readonly RuntimeService _model;
+    private readonly IDisposable _visibility;
+    private readonly ObservableCollection<MailRow> _rows = [];
     private readonly CollectionSynchronizer<string, MailRow> synchronizer = new();
     private bool released;
-    private string? selectedId;
     private Task? selectionTask;
 
-    public MailViewModel(MailService service, MailDetailViewModel detail, RuntimeService model)
+    public MailViewModel(MailService mailService, MailDetailViewModel detail, RuntimeService model)
     {
-        this.service = service;
-        this.detail = detail;
-        this.model = model;
-        visibility = service.AcquireVisibility();
-        service.Changed += ServiceChanged;
+        this._mailService = mailService;
+        this._detail = detail;
+        this._model = model;
+        _visibility = mailService.AcquireVisibility();
+        mailService.Changed += ServiceChanged;
         model.Changed += ModelChanged;
         detail.PropertyChanged += DetailChanged;
         RefreshCommand = new AsyncRelayCommand(RefreshAsync);
@@ -35,17 +35,17 @@ public sealed class MailViewModel : ObservableObject, IAsyncDisposable
         ApplyMessages();
     }
 
-    public IReadOnlyList<MailRow> Messages => rows;
-    public RuntimeService Model => model;
-    public string? SelectedId => selectedId;
-    public MailDetailViewModel Detail => detail;
-    public string? Error => service.Error ?? detail.Error;
-    public string? ListError => service.Error;
+    public IReadOnlyList<MailRow> Messages => _rows;
+    public RuntimeService Model => _model;
+    public string? SelectedId => _detail.SelectedId;
+    public MailDetailViewModel Detail => _detail;
+    public string? Error => _mailService.Error ?? _detail.Error;
+    public string? ListError => _mailService.Error;
     public bool IsLoading { get; private set; }
-    public bool IsClearing => service.IsClearing;
-    public bool CanClear => rows.Count > 0 && !service.IsClearing;
-    public string SmtpAddress => model.Status?.Mail is { Length: > 0 } value ? value : "127.0.0.1:2525";
-    public string Env => service.Env;
+    public bool IsClearing => _mailService.IsClearing;
+    public bool CanClear => _rows.Count > 0 && !_mailService.IsClearing;
+    public string SmtpAddress => _model.Status?.Mail is { Length: > 0 } value ? value : "127.0.0.1:2525";
+    public string Env => _mailService.Env;
     public IAsyncRelayCommand RefreshCommand { get; }
     public IAsyncRelayCommand ClearCommand { get; }
 
@@ -61,7 +61,7 @@ public sealed class MailViewModel : ObservableObject, IAsyncDisposable
         OnPropertyChanged(nameof(IsLoading));
         try
         {
-            await service.RefreshAsync();
+            await _mailService.RefreshAsync();
         }
         finally
         {
@@ -70,22 +70,18 @@ public sealed class MailViewModel : ObservableObject, IAsyncDisposable
         }
     }
 
-    /// <summary>Invalidates selection before any detail read starts and hides the old detail.</summary>
+    /// <summary>Invalidates selection before any _detail read starts and hides the old _detail.</summary>
     public Task SelectAsync(string? id)
     {
         if (released)
         {
             return Task.CompletedTask;
         }
-        if (selectedId == id)
+        if (_detail.SelectedId == id)
         {
             return selectionTask ?? Task.CompletedTask;
         }
-        selectedId = id;
-        OnPropertyChanged(nameof(SelectedId));
-        OnPropertyChanged(nameof(Error));
-        Changed?.Invoke();
-        selectionTask = detail.SelectAsync(id);
+        selectionTask = _detail.SelectAsync(id);
         return selectionTask;
     }
 
@@ -96,25 +92,25 @@ public sealed class MailViewModel : ObservableObject, IAsyncDisposable
             return;
         }
         released = true;
-        service.Changed -= ServiceChanged;
-        model.Changed -= ModelChanged;
-        detail.PropertyChanged -= DetailChanged;
-        visibility.Dispose();
-        await detail.DisposeAsync();
+        _mailService.Changed -= ServiceChanged;
+        _model.Changed -= ModelChanged;
+        _detail.PropertyChanged -= DetailChanged;
+        _visibility.Dispose();
+        await _detail.DisposeAsync();
         selectionTask = null;
     }
 
     private async Task ClearAsync()
     {
         await SelectAsync(null);
-        await service.ClearAsync();
+        await _mailService.ClearAsync();
         ClearCommand.NotifyCanExecuteChanged();
     }
 
     private void ServiceChanged()
     {
         ApplyMessages();
-        if (selectedId is not null && !rows.Any(row => row.Id == selectedId))
+        if (SelectedId is not null && !_rows.Any(row => row.Id == SelectedId))
         {
             selectionTask = SelectAsync(null);
         }
@@ -133,13 +129,17 @@ public sealed class MailViewModel : ObservableObject, IAsyncDisposable
 
     private void DetailChanged(object? sender, PropertyChangedEventArgs args)
     {
+        if (args.PropertyName == nameof(MailDetailViewModel.SelectedId))
+        {
+            OnPropertyChanged(nameof(SelectedId));
+        }
         OnPropertyChanged(nameof(Error));
         Changed?.Invoke();
     }
 
     private void ApplyMessages()
     {
-        synchronizer.Synchronize(rows, service.Messages, row => row.Id, summary => summary.Id,
+        synchronizer.Synchronize(_rows, _mailService.Messages, row => row.Id, summary => summary.Id,
             summary => new MailRow(summary), (row, summary) => row.Update(summary));
         OnPropertyChanged(nameof(Messages));
     }
@@ -157,6 +157,9 @@ public sealed class MailViewModel : ObservableObject, IAsyncDisposable
         public string Subject => summary.Subject;
         public DateTimeOffset Date => summary.Date;
         public int Size => summary.Size;
+        public string DateLabel => Ui.Relative(summary.Date);
+        public string SubjectLabel => summary.Subject.Length == 0 ? "(no subject)" : summary.Subject;
+        public string Recipients => string.Join(", ", summary.To);
 
         internal void Update(MailSummary value)
         {
@@ -175,8 +178,8 @@ public sealed class MailDetailViewModel : ObservableObject, IAsyncDisposable
 {
     private readonly FlockClient client;
     private readonly IMailPlatform platform;
-    private readonly LatestRequest detailRequest;
-    private readonly LatestRequest rawRequest;
+    private readonly SharedRead<MailDetail> detailRequest;
+    private readonly SharedRead<string> rawRequest;
     private readonly CancellationTokenSource lifetime = new();
     private readonly object gate = new();
     private MailDetail? detail;
@@ -191,12 +194,12 @@ public sealed class MailDetailViewModel : ObservableObject, IAsyncDisposable
     private bool rawLoading;
     private bool released;
 
-    public MailDetailViewModel(FlockClient client, IMailPlatform platform, IUiDispatcher? dispatcher = null)
+    public MailDetailViewModel(FlockClient client, IMailPlatform platform, IUiDispatcher dispatcher)
     {
         this.client = client;
         this.platform = platform;
-        detailRequest = new LatestRequest();
-        rawRequest = new LatestRequest();
+        detailRequest = new SharedRead<MailDetail>(dispatcher);
+        rawRequest = new SharedRead<string>(dispatcher);
     }
 
     public MailDetail? Current => detail;
@@ -240,9 +243,9 @@ public sealed class MailDetailViewModel : ObservableObject, IAsyncDisposable
             await detailRequest.RunReadAsync(
                 token => client.MailAsync(id, token),
                 value => ApplyDetail(selection, id, value),
+                error => ApplyDetailFailure(selection, id, error),
                 applicationToken: CancellationToken.None,
-                lifetimeToken: lifetime.Token,
-                publishFailure: error => ApplyDetailFailure(selection, id, error));
+                lifetimeToken: lifetime.Token);
         }
         catch (OperationCanceledException)
         {
@@ -315,12 +318,6 @@ public sealed class MailDetailViewModel : ObservableObject, IAsyncDisposable
         catch (OperationCanceledException) when (lifetime.IsCancellationRequested)
         {
         }
-        catch (Exception error) when (error is FlockException or IOException or UnauthorizedAccessException)
-        {
-            actionError = error.Message;
-            OnPropertyChanged(nameof(ActionError));
-            OnPropertyChanged(nameof(Error));
-        }
         catch (Exception error)
         {
             actionError = error.Message;
@@ -370,9 +367,9 @@ public sealed class MailDetailViewModel : ObservableObject, IAsyncDisposable
             await rawRequest.RunReadAsync(
                 token => client.RawMailAsync(id, token),
                 value => ApplyRaw(selection, mode, id, value),
+                error => ApplyRawFailure(selection, mode, id, error),
                 applicationToken: CancellationToken.None,
-                lifetimeToken: lifetime.Token,
-                publishFailure: error => ApplyRawFailure(selection, mode, id, error));
+                lifetimeToken: lifetime.Token);
         }
         catch (OperationCanceledException)
         {
