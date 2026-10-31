@@ -75,7 +75,8 @@ type daemon struct {
 	php       *php.Manager
 	// binaries is the manifest of prebuilt packages for the configured channel, shared by the managers.
 	binaries *binaries.Catalog
-	// frankenphp installs FrankenPHP builds; restarts counts RestartSite calls per site (see frankenphp.Site.Restart).
+	// frankenphp installs FrankenPHP builds; restarts counts RestartSite calls per site (see
+	// frankenphp.Site.Restart and reverb.Site.Restart).
 	frankenphp *frankenphp.Manager
 	restarts   map[string]int
 	// pg manages the PostgreSQL versions, catalog the other services (MySQL, Valkey, Meilisearch, ...).
@@ -641,6 +642,7 @@ func (d *daemon) reload() error {
 			// Its names get a page that says what's missing instead of the site (see web.Waiting).
 			w := d.waitingFor(site, phpVersion, domain, aliases)
 			status.Problem = waitingProblem(w)
+			status.Reverb = reverbBlocked(cfg, site, scheme, status.Problem)
 			waiting = append(waiting, w)
 			domains = append(append(domains, domain), served...)
 			statuses = append(statuses, status)
@@ -658,6 +660,7 @@ func (d *daemon) reload() error {
 			if root.State == project.RootMissing {
 				status.Problem = rootProblem(root)
 			}
+			status.Reverb = reverbBlocked(cfg, site, scheme, "the site has no usable document root")
 			rootless = append(rootless, r)
 			status.URL = scheme + "://" + domain + portSuffix(scheme, cfg)
 			domains = append(append(domains, domain), served...)
@@ -693,6 +696,27 @@ func (d *daemon) reload() error {
 			if ws.FPM, err = pool(version); err != nil {
 				return err
 			}
+		}
+		if site.Reverb {
+			spec, rs := d.reverbSite(cfg, site, version, scheme, extraEnv)
+			if spec != nil {
+				restarted := d.procs.Ensure(*spec)
+				keep[spec.Name] = true
+				ws.Reverb = fmt.Sprintf("127.0.0.1:%d", site.ReverbPort)
+				wait := 300 * time.Millisecond
+				if restarted {
+					wait = 10 * time.Second // Reverb boots the app first
+				}
+				if php.WaitReady([]string{ws.Reverb}, wait) {
+					rs.State = api.ReverbRunning
+				} else {
+					rs.State, rs.Problem = api.ReverbFailed, fmt.Sprintf("Reverb did not start — see `flock logs %s`", spec.Name)
+					warnings = append(warnings, fmt.Sprintf("reverb: %s did not start — see `flock logs %s`", site.Name, spec.Name))
+				}
+			} else if w := reverbPreflightWarning(site.Name, rs); w != "" {
+				warnings = append(warnings, w)
+			}
+			status.Reverb = &rs
 		}
 		if cfg.Xdebug && cfg.XdebugBreakpoints {
 			breakpoints[site.Path] = d.breakpoints.Has(site.Path)
@@ -922,6 +946,9 @@ func serviceName(id string) string {
 	case "postgres":
 		return "PostgreSQL"
 	}
+	if site, ok := strings.CutPrefix(id, "reverb-"); ok {
+		return site + "'s Reverb server"
+	}
 	for _, k := range catalog.Kinds(runtime.GOOS) {
 		if k.ID == id {
 			return k.Name
@@ -1041,12 +1068,29 @@ func (d *daemon) ReleasePHP(minor string) {
 	d.reloadMu.Lock()
 	defer d.reloadMu.Unlock()
 
-	keep := map[string]bool{}
-	for _, name := range d.procs.Running() {
-		usesPHP := name == "dump-server" || strings.HasPrefix(name, "php"+minor)
-		keep[name] = !usesPHP
+	d.mu.Lock()
+	cfg := d.cfg
+	d.mu.Unlock()
+	d.procs.Retain(notUsingPHP(cfg, minor, d.procs.Running()))
+}
+
+// notUsingPHP marks which of the running processes don't run PHP minor: the dump server, the
+// version's pools and the Reverb servers of the sites on it do.
+func notUsingPHP(cfg *config.Config, minor string, running []string) map[string]bool {
+	// A site's Reverb server is a php.exe of the site's version, named after the site.
+	reverbs := map[string]bool{}
+	if cfg != nil {
+		for _, site := range cfg.AllSites() {
+			if site.Reverb && (minor == "" || project.PHPFor(cfg, &site, site.Path).Version == minor) {
+				reverbs[config.ReverbPortID(site.Name)] = true
+			}
+		}
 	}
-	d.procs.Retain(keep)
+	keep := map[string]bool{}
+	for _, name := range running {
+		keep[name] = !(name == "dump-server" || strings.HasPrefix(name, "php"+minor) || reverbs[name])
+	}
+	return keep
 }
 
 // Services implements api.Backend.
