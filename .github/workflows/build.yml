@@ -2,7 +2,10 @@
 # (signed with Artifact Signing) and keeps them as run artifacts. Signing takes the secrets and
 # variables of the "release" environment, and is required in the merge queue and for releases.
 #
-#   - on every pull request: the Go tests only; the builds are skipped (which counts as passed)
+#   - on every pull request: the Go tests, and the apps compiled and tested unsigned ("macOS app",
+#     "Windows app"); the signed builds are skipped (which counts as passed).
+#     One that changes only docs/ skips the Go tests too, unless it goes into main, and one that
+#     changes docs/ gets the docs check (tools/docslint)
 #   - in the merge queue: everything, named with the version in .release-please-manifest.json. These
 #     are the checks that must pass before a PR (the release PR) is merged, and release.yml attaches
 #     these very files to the release.
@@ -64,36 +67,145 @@ jobs:
           fi
           echo "version=$version" >> "$GITHUB_OUTPUT"
 
+  # What a pull request changes: "code" unless it's only docs/, "docs" if any of docs/. Into main
+  # it's always "code", so everything that's released has had the Go tests run on it.
+  # (With git, not the API: beta.yml and release.yml call this workflow with contents: read only.)
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      code: ${{ steps.changes.outputs.code }}
+      docs: ${{ steps.changes.outputs.docs }}
+    steps:
+      - uses: actions/checkout@v7
+        if: github.event_name == 'pull_request'
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+
+      - name: Changed files
+        id: changes
+        env:
+          EVENT: ${{ github.event_name }}
+          BASE: ${{ github.event.pull_request.base.ref }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          if [ "$EVENT" != pull_request ]; then
+            echo "code=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          # Since the PR's branch left its base; --no-renames lists both sides of a rename.
+          files=$(git diff --name-only --no-renames "$BASE_SHA...$HEAD_SHA")
+          code=false
+          if [ "$BASE" = main ] || grep -v '^docs/' <<< "$files" | grep -q .; then code=true; fi
+          docs=false
+          if grep -q '^docs/' <<< "$files"; then docs=true; fi
+          echo "code=$code" >> "$GITHUB_OUTPUT"
+          echo "docs=$docs" >> "$GITHUB_OUTPUT"
+
+  # The pages, navigation.json, links and images in docs/, as flockphp.com reads them.
+  docs:
+    name: Docs
+    needs: changes
+    if: needs.changes.outputs.docs == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+
+      - name: Check
+        run: go run ./tools/docslint
+
   # The Go tests on both platforms Flock supports (the race detector needs cgo, so macOS only).
+  # Without code changes the steps are skipped, not the job: a skipped matrix job reports under its
+  # unexpanded name, so the required "Go tests (...)" checks would never pass.
   go-test:
     name: Go tests (${{ matrix.name }})
-    needs: version
+    needs: [version, changes]
     strategy:
       fail-fast: false
       matrix:
         include:
           - { name: macOS, os: macos-26, flags: -race }
           - { name: Windows, os: windows-2025, flags: "" }
+          - { name: Linux, os: ubuntu-24.04, flags: -race }
+          - { name: Linux arm64, os: ubuntu-24.04-arm, flags: -race }
     runs-on: ${{ matrix.os }}
+    env:
+      CODE: ${{ needs.changes.outputs.code }}
     steps:
       - uses: actions/checkout@v7
+        if: env.CODE == 'true'
         with:
           ref: ${{ inputs.ref || github.event.pull_request.head.sha }}
 
       - uses: actions/setup-go@v7
+        if: env.CODE == 'true'
         with:
           go-version-file: go.mod
 
       - name: Vet
+        if: env.CODE == 'true'
         run: go vet ./...
 
       - name: Test
+        if: env.CODE == 'true'
         run: go test ${{ matrix.flags }} ./...
 
       # The licenses that ship with the builds; run `make notices` after changing dependencies.
       - name: Third-party notices
-        if: matrix.name == 'macOS'
+        if: env.CODE == 'true' && matrix.name == 'macOS'
         run: go run ./tools/notices -check
+
+  # On pull requests the apps are only compiled and tested (unsigned, no secrets, so forks get it
+  # too); the signed builds below run in the merge queue and for releases.
+  macos-check:
+    name: macOS app
+    needs: changes
+    if: github.event_name == 'pull_request' && needs.changes.outputs.code == 'true'
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      # Every target, FlockScreenshots too: it reaches the app's views through @testable import.
+      - name: Build
+        run: swift build --package-path macos
+
+      - name: Test
+        run: swift test --package-path macos
+
+  windows-check:
+    name: Windows app
+    needs: changes
+    if: github.event_name == 'pull_request' && needs.changes.outputs.code == 'true'
+    runs-on: windows-2025
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Test
+        run: dotnet test windows/FlockKit.Tests
+
+      # FlockScreenshots compiles the app's sources with SCREENSHOTS defined, so a change can break
+      # it without touching it.
+      - name: Build
+        run: |
+          dotnet build windows/FlockTray -c Release -p:Platform=x64
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          dotnet build windows/FlockScreenshots -c Release -p:Platform=x64
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
   macos:
     name: macOS (Apple silicon)
@@ -271,4 +383,119 @@ jobs:
         with:
           name: flock-windows
           path: windows/dist/Flock-Setup-*-x64.exe
+          if-no-files-found: error
+
+  # The Linux app (linux/, Rust with GTK 4 and libadwaita) against Ubuntu 24.04's GTK 4.14 and
+  # libadwaita 1.5, the oldest Flock supports.
+  linux-app:
+    name: Linux app
+    needs: [version, changes]
+    runs-on: ubuntu-24.04
+    env:
+      CODE: ${{ needs.changes.outputs.code }}
+    steps:
+      - uses: actions/checkout@v7
+        if: env.CODE == 'true'
+        with:
+          ref: ${{ inputs.ref || github.event.pull_request.head.sha }}
+
+      - name: GTK, libadwaita and WebKitGTK
+        if: env.CODE == 'true'
+        # The runner image's package lists go stale: updated packages 404.
+        run: sudo apt-get update -qq && sudo apt-get install -y --no-install-recommends libgtk-4-dev libadwaita-1-dev libwebkitgtk-6.0-dev
+
+      - name: Format
+        if: env.CODE == 'true'
+        run: cargo fmt --manifest-path linux/Cargo.toml --check
+
+      - name: Clippy
+        if: env.CODE == 'true'
+        run: cargo clippy --manifest-path linux/Cargo.toml --all-targets --all-features --locked -- -D warnings
+
+      - name: Test
+        if: env.CODE == 'true'
+        run: cargo test --manifest-path linux/Cargo.toml --all-features --locked
+
+  # The flockphp .deb and .rpm per architecture (linux/build-packages.sh): the CLI and the app,
+  # built on Ubuntu 24.04 (the oldest GTK and glibc Flock supports), then installed, run and
+  # removed again on the distributions Flock supports. Unsigned packages: the repository signs
+  # its index, not the packages.
+  linux:
+    name: Linux (${{ matrix.arch }})
+    needs: version
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { arch: amd64, os: ubuntu-24.04 }
+          - { arch: arm64, os: ubuntu-24.04-arm }
+    runs-on: ${{ matrix.os }}
+    env:
+      VERSION: ${{ needs.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref || github.event.pull_request.head.sha }}
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+
+      - name: GTK, libadwaita and WebKitGTK
+        # The runner image's package lists go stale: updated packages 404.
+        run: sudo apt-get update -qq && sudo apt-get install -y --no-install-recommends libgtk-4-dev libadwaita-1-dev libwebkitgtk-6.0-dev
+
+      - name: Build packages
+        run: linux/build-packages.sh "${{ matrix.arch }}"
+
+      - name: Install, run and remove
+        run: |
+          for image in ubuntu:24.04 ubuntu:26.04 fedora:latest; do
+            echo "::group::$image"
+            case "$image" in
+              fedora*) install='dnf install -y -q /pkgs/flockphp*.rpm'; remove='dnf remove -y -q flockphp' ;;
+              *) install='apt-get update -qq && DEBIAN_FRONTEND=noninteractive apt-get install -y -qq /pkgs/flockphp*.deb'
+                 remove='DEBIAN_FRONTEND=noninteractive apt-get remove -y -qq flockphp' ;;
+            esac
+            docker run --rm -v "$PWD/build/linux:/pkgs:ro" "$image" sh -ec "
+              $install
+              test -x /usr/libexec/flockphp/flock && test -f /usr/lib/systemd/system/flock@.service
+              test -f /usr/share/applications/dev.flock.Flock.desktop
+              ! ldd /usr/libexec/flockphp/flock-app | grep 'not found'
+              flk version
+              flk --help >/dev/null
+              $remove
+              ! test -e /usr/bin/flk
+            "
+            echo "::endgroup::"
+          done
+
+      - name: Install, run and remove on Arch (AUR package)
+        # The AUR's flockphp-bin repackages the release's .deb: built here from this one with
+        # makepkg (as a user, as AUR helpers do). Arch has no arm64 image.
+        if: matrix.arch == 'amd64'
+        run: |
+          docker run --rm -e VERSION -v "$PWD/build/linux:/pkgs:ro" -v "$PWD/linux/packaging/aur/flockphp:/aur:ro" archlinux:latest sh -ec '
+            pacman -Syu --noconfirm --needed base-devel >/dev/null
+            useradd -m builder
+            cp -r /aur /home/builder/pkg && cp /pkgs/flockphp_*_amd64.deb /home/builder/pkg/
+            cd /home/builder/pkg
+            sed -i -e "s|^_tag=.*|_tag=$VERSION|" -e "s|\"https://[^\"]*/|\"|" PKGBUILD
+            chown -R builder . && su builder -c "makepkg --nodeps --noconfirm"
+            pacman -U --noconfirm flockphp-bin-*.pkg.tar.zst
+            test -x /usr/libexec/flockphp/flock && test -f /usr/lib/systemd/system/flock@.service
+            test -f /usr/share/applications/dev.flock.Flock.desktop && test -f /usr/share/polkit-1/rules.d/50-flock.rules
+            ! ldd /usr/libexec/flockphp/flock-app | grep "not found"
+            flk version
+            flk --help >/dev/null
+            pacman -R --noconfirm flockphp-bin
+            ! test -e /usr/bin/flk
+          '
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: flock-linux-${{ matrix.arch }}
+          path: |
+            build/linux/flockphp*.deb
+            build/linux/flockphp*.rpm
           if-no-files-found: error

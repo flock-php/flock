@@ -19,6 +19,7 @@ import (
 
 	"flock/internal/api"
 	"flock/internal/binaries"
+	"flock/internal/capture"
 	"flock/internal/catalog"
 	"flock/internal/certs"
 	"flock/internal/config"
@@ -34,6 +35,7 @@ import (
 	"flock/internal/ports"
 	"flock/internal/postgres"
 	"flock/internal/project"
+	"flock/internal/share"
 	"flock/internal/supervisor"
 	"flock/internal/web"
 	"flock/internal/xdebug"
@@ -47,6 +49,10 @@ type Config struct {
 
 // retryInterval is how often a degraded daemon tries to start what failed.
 var retryInterval = 15 * time.Second
+
+// trustInBrowsers adds the CA to the browsers' own trust stores (Linux). Tests replace it: it
+// writes to the user's home.
+var trustInBrowsers = certs.TrustInBrowsers
 
 // ErrAlreadyRunning is returned when another daemon owns the socket.
 var ErrAlreadyRunning = errors.New("flock daemon is already running")
@@ -63,8 +69,10 @@ type daemon struct {
 	dns      *dns.Server // written under reloadMu and mu
 	dnsErr   error       // why the DNS server isn't running (Windows, where it is optional)
 	mail     *mail.Server
-	webUp    bool
-	php      *php.Manager
+	// collector receives the PHP agent's dumps and events while capture is on.
+	collector *capture.Collector
+	webUp     bool
+	php       *php.Manager
 	// binaries is the manifest of prebuilt packages for the configured channel, shared by the managers.
 	binaries *binaries.Catalog
 	// frankenphp installs FrankenPHP builds; restarts counts RestartSite calls per site (see frankenphp.Site.Restart).
@@ -73,6 +81,8 @@ type daemon struct {
 	// pg manages the PostgreSQL versions, catalog the other services (MySQL, Valkey, Meilisearch, ...).
 	pg      *postgres.Manager
 	catalog *catalog.Manager
+	// shares are the sites shared through tunnels (`flock share`); never kept across restarts.
+	shares *share.Manager
 
 	// leaves issues certificates for deep subdomains, aliases and unknown names during handshakes.
 	leaves *certs.Leaves
@@ -88,9 +98,15 @@ type daemon struct {
 	breakpointSites map[string]bool
 	cfg             *config.Config
 	wildcard        wildcardState
+
+	defaults defaults // the first run's default PHP and Node.js
 }
 
 func (d *daemon) shutdown() {
+	// First, while reloads still work: stopping a share reloads the web server.
+	if d.shares != nil {
+		d.shares.StopAll()
+	}
 	d.reloadMu.Lock()
 	defer d.reloadMu.Unlock()
 
@@ -102,6 +118,9 @@ func (d *daemon) shutdown() {
 	}
 	if d.mail != nil {
 		_ = d.mail.Shutdown()
+	}
+	if d.collector != nil {
+		_ = d.collector.Close()
 	}
 	d.procs.StopAll()
 }
@@ -210,6 +229,24 @@ func (d *daemon) ensureMail(cfg *config.Config) error {
 	return nil
 }
 
+// ensureCollector runs the agent's collector while capture is on, on the configured port.
+func (d *daemon) ensureCollector(cfg *config.Config) error {
+	addr := fmt.Sprintf("127.0.0.1:%d", cfg.Ports.Agent)
+	if d.collector != nil && (!cfg.Dumps || d.collector.Addr() != addr) {
+		_ = d.collector.Close()
+		d.collector = nil
+	}
+	if !cfg.Dumps || d.collector != nil {
+		return nil
+	}
+	c, err := capture.Listen(d.root, addr)
+	if err != nil {
+		return fmt.Errorf("capture: %s", busy(cfg.Ports.Agent, err))
+	}
+	d.collector = c
+	return nil
+}
+
 // busy turns "address already in use" into a message naming the program that holds the port.
 // The last two are Windows' wording of EADDRINUSE and EACCES.
 func busy(port int, err error) string {
@@ -240,7 +277,10 @@ func Run(ctx context.Context, cfg Config) error {
 	d.pg = postgres.NewManager(cfg.Root, d.binaries, pgService{d})
 	d.php = php.NewManager(cfg.Root, d.binaries)
 	d.php.Release = d.ReleasePHP
-	d.php.Finished = func(string) { _ = d.reload() }
+	d.php.Finished = func(string) {
+		_ = d.reload()
+		d.ensureDefaults()
+	}
 	go d.php.Run(ctx)
 	d.frankenphp = frankenphp.NewManager(cfg.Root, d.binaries)
 	d.frankenphp.Release = d.releaseFrankenPHP
@@ -248,12 +288,24 @@ func Run(ctx context.Context, cfg Config) error {
 	go d.frankenphp.Run(ctx)
 	d.catalog = catalog.NewManager(cfg.Root, catalog.Kinds(runtime.GOOS), d.binaries, d.Mutate)
 	go d.catalog.Run(ctx)
+	d.shares = share.NewManager(cfg.Root, d.binaries)
+	d.shares.Changed = func() {
+		if err := d.reload(); err != nil {
+			d.setWarnings([]string{err.Error()})
+		}
+	}
 
 	// A broken config or a busy port must not kill the daemon: launchd would restart it in a loop
 	// and `flock status` could not explain what is wrong. Problems become warnings instead.
 	if err := d.reload(); err != nil {
 		d.setWarnings([]string{err.Error()})
 	}
+	// What the first reload served, taken before the API answers: a folder parked once a client
+	// can see the daemon is a change.
+	files, extFiles := d.projectFiles(), d.postgresExtensionFiles()
+	// The first run installs the default PHP and Node.js once a manifest arrives (reload already
+	// started it from the cached one).
+	d.binaries.OnChange(d.ensureDefaults)
 
 	ln, err := net.Listen("unix", socket)
 	if err != nil {
@@ -287,10 +339,10 @@ func Run(ctx context.Context, cfg Config) error {
 	// a policy arrives, port 53 frees up), so it is checked again regularly.
 	wildcard := time.NewTicker(wildcardInterval)
 	defer wildcard.Stop()
-	// Follow the projects' version files, so a `git pull` that pins another PHP takes effect.
+	// Follow the projects' version files, so a `git pull` that pins another PHP takes effect,
+	// and the parked paths, so a new project folder is served as soon as it exists.
 	watch := time.NewTicker(projectWatchInterval)
 	defer watch.Stop()
-	files := d.projectFiles()
 	// Follow PhpStorm breakpoints, so a site switches to Xdebug as soon as one is set.
 	breakpoints := time.NewTicker(breakpointInterval)
 	defer breakpoints.Stop()
@@ -317,8 +369,9 @@ loop:
 		case <-wildcard.C:
 			go d.recheckWildcard()
 		case <-watch.C:
-			if current := d.projectFiles(); current != files {
-				files = current
+			current, ext := d.projectFiles(), d.postgresExtensionFiles()
+			if current != files || ext != extFiles {
+				files, extFiles = current, ext
 				if err := d.reload(); err != nil {
 					d.setWarnings([]string{err.Error()})
 				}
@@ -332,11 +385,24 @@ loop:
 	return apiServer.Shutdown(shutdownCtx)
 }
 
-// projectWatchInterval is how often the sites' project files are checked for changes.
+// postgresExtensionFiles fingerprints the active PostgreSQL major's custom extensions folder, so
+// what is added to it is linked into the server without a restart.
+func (d *daemon) postgresExtensionFiles() string {
+	d.mu.Lock()
+	cfg := d.cfg
+	d.mu.Unlock()
+	if cfg == nil || cfg.Services.Postgres == "" {
+		return ""
+	}
+	return postgres.CustomFiles(d.root, postgres.MajorOf(cfg.Services.Postgres))
+}
+
+// projectWatchInterval is how often the sites and their project files are checked for changes.
 var projectWatchInterval = 3 * time.Second
 
-// projectFiles fingerprints the sites' project files (.flockrc, .nvmrc, .node-version, also in
-// parent directories) by size and modification time.
+// projectFiles fingerprints the sites, so folders added to or removed from a parked path count,
+// their project files (.flockrc, .nvmrc, .node-version, also in parent directories) by size and
+// modification time, and which of the files that decide their document root exist.
 func (d *daemon) projectFiles() string {
 	d.mu.Lock()
 	cfg := d.cfg
@@ -347,6 +413,7 @@ func (d *daemon) projectFiles() string {
 	var b strings.Builder
 	seen := map[string]bool{}
 	for _, site := range cfg.AllSites() {
+		fmt.Fprintf(&b, "site %s %s\n", site.Name, site.Path)
 		for _, file := range project.Files(site.Path) {
 			if seen[file] {
 				continue
@@ -354,6 +421,11 @@ func (d *daemon) projectFiles() string {
 			seen[file] = true
 			if info, err := os.Stat(file); err == nil {
 				fmt.Fprintf(&b, "%s %d %d\n", file, info.Size(), info.ModTime().UnixNano())
+			}
+		}
+		for _, file := range project.RootFiles(&site) {
+			if _, err := os.Stat(file); err == nil {
+				fmt.Fprintf(&b, "%s\n", file)
 			}
 		}
 	}
@@ -442,7 +514,11 @@ func (d *daemon) reload() error {
 	}
 
 	var warnings []string
-	for _, ensure := range []func(*config.Config) error{d.ensureDNS, d.ensureMail} {
+	// Linux browsers keep their own trust stores, and one installed since `flock install` lacks the CA.
+	if err := trustInBrowsers(ca.CertPath()); err != nil {
+		warnings = append(warnings, "browsers don't trust Flock's HTTPS certificates: "+err.Error())
+	}
+	for _, ensure := range []func(*config.Config) error{d.ensureDNS, d.ensureMail, d.ensureCollector} {
 		if err := ensure(cfg); err != nil {
 			warnings = append(warnings, err.Error())
 		}
@@ -456,6 +532,8 @@ func (d *daemon) reload() error {
 	var (
 		statuses    []api.SiteStatus
 		webSites    []web.Site
+		waiting     []web.Waiting  // sites whose PHP isn't installed
+		rootless    []web.Rootless // sites without a document root
 		domains     []string
 		keep        = map[string]bool{}
 		pools       = map[string][]string{} // version → FastCGI upstreams
@@ -477,9 +555,15 @@ func (d *daemon) reload() error {
 
 	installed, _ := php.Installed(d.root)
 
+	// With capture on, versions with the agent load it (Sync writes their ini); the others send
+	// dumps to the dump server, which the agent unsets the dump server's variables for.
+	agent := capture.Settings{On: cfg.Dumps, Addr: fmt.Sprintf("127.0.0.1:%d", cfg.Ports.Agent), Off: cfg.CaptureOff, DumpsInPage: cfg.DumpsInPage}
+	if _, err := capture.Sync(d.root, agent); err != nil {
+		warnings = append(warnings, "capture: "+err.Error())
+	}
 	var extraEnv []string
 	if cfg.Dumps {
-		extraEnv = dumps.Env(cfg.Ports.Dumps)
+		extraEnv = append(dumps.Env(cfg.Ports.Dumps), agent.Env(d.root)...)
 	}
 	// pool starts a version's FastCGI pool the first time a site needs it.
 	pool := func(version string) ([]string, error) {
@@ -506,6 +590,10 @@ func (d *daemon) reload() error {
 		}
 		return debugPools[version]
 	}
+
+	// shareable are the served sites a share can serve: their document root and PHP version.
+	type shareable struct{ root, version string }
+	shareables := map[string]shareable{}
 
 	sites := cfg.AllSites()
 	extras := cfg.DomainsBySite(sites)
@@ -540,17 +628,44 @@ func (d *daemon) reload() error {
 			status.Domains = append(status.Domains, sd)
 		}
 
-		if !contains(installed, version) {
-			status.Problem = fmt.Sprintf("PHP %s is not installed", version)
-			if phpVersion.Source == project.Project {
-				status.Problem = fmt.Sprintf("PHP %s (pinned in %s) is not installed", version, filepath.Base(phpVersion.File))
+		root := project.RootFor(&site)
+		status.Root, status.RootSource, status.RootPinned, status.RootFile, status.RootState = root.Rel, root.Source, root.Pinned, root.File, root.State
+		if root.State != "" {
+			status.RootSuggestions = project.SuggestRoots(site.Path)
+			if root.State == project.RootNotFound {
+				status.Notice = "No document root found"
 			}
+		}
+
+		if version == "" || !contains(installed, version) {
+			// Its names get a page that says what's missing instead of the site (see web.Waiting).
+			w := d.waitingFor(site, phpVersion, domain, aliases)
+			status.Problem = waitingProblem(w)
+			waiting = append(waiting, w)
+			domains = append(append(domains, domain), served...)
 			statuses = append(statuses, status)
 			continue
 		}
 		status.Problem = extensionsProblem(d.root, site.Path, version)
 
-		ws := web.Site{Domain: domain, Aliases: aliases, Root: web.DocumentRoot(site.Path)}
+		if root.State != "" {
+			// Its names get a page that says why and suggests roots instead of the site (see web.Rootless).
+			r := web.Rootless{Domain: domain, Aliases: aliases, Name: site.Name, State: root.State, Root: root.Rel,
+				Set: root.Source != project.Default, Suggestions: status.RootSuggestions}
+			if root.Source == project.Project {
+				r.File = filepath.Base(root.File)
+			}
+			if root.State == project.RootMissing {
+				status.Problem = rootProblem(root)
+			}
+			rootless = append(rootless, r)
+			status.URL = scheme + "://" + domain + portSuffix(scheme, cfg)
+			domains = append(append(domains, domain), served...)
+			statuses = append(statuses, status)
+			continue
+		}
+
+		ws := web.Site{Domain: domain, Aliases: aliases, Root: root.Dir}
 		if cfg.Xdebug {
 			ws.DebugFPM = debugPool(version)
 		}
@@ -590,10 +705,34 @@ func (d *daemon) reload() error {
 			}
 		}
 		status.URL = scheme + "://" + domain + portSuffix(scheme, cfg)
+		shareables[site.Name] = shareable{root: ws.Root, version: version}
 
 		webSites = append(webSites, ws)
 		domains = append(append(domains, domain), served...)
 		statuses = append(statuses, status)
+	}
+
+	// Shares always go through the version's normal FastCGI pool, also for FrankenPHP sites: only
+	// FastCGI takes the per-request settings that keep a share safe (see web.Share).
+	var shares []web.Share
+	if d.shares != nil {
+		keep := map[string]bool{}
+		for name := range shareables {
+			keep[name] = true
+		}
+		d.shares.Retain(keep)
+		for _, s := range d.shares.Serving() {
+			info, ok := shareables[s.Site]
+			if !ok {
+				continue
+			}
+			upstreams, err := pool(info.version)
+			if err != nil {
+				return err
+			}
+			site, _ := cfg.FindSite(s.Site)
+			shares = append(shares, web.Share{Port: s.Port, Root: info.root, Public: filepath.Join(site.Path, "public"), FPM: upstreams, Debug: s.Debug})
+		}
 	}
 
 	if runtime.GOOS == "windows" {
@@ -601,7 +740,10 @@ func (d *daemon) reload() error {
 	}
 
 	if v := cfg.Services.Postgres; v != "" && cfg.Services.Running("postgres") {
-		spec, err := d.postgresSpec(cfg, v)
+		spec, pgWarnings, err := d.postgresSpec(cfg, v)
+		for _, w := range pgWarnings {
+			warnings = append(warnings, "postgres: "+w)
+		}
 		switch {
 		case err != nil:
 			warnings = append(warnings, "postgres: "+err.Error())
@@ -665,7 +807,7 @@ func (d *daemon) reload() error {
 		bind = ""
 	}
 
-	if err := d.applyWeb(cfg, bind, webSites, ca); err != nil {
+	if err := d.applyWeb(cfg, bind, webSites, waiting, rootless, shares, ca); err != nil {
 		warnings = append(warnings, "web: "+err.Error())
 	}
 
@@ -674,12 +816,16 @@ func (d *daemon) reload() error {
 	d.mu.Unlock()
 
 	go d.checkWildcard()
+	// Until there are defaults: one may be installed now (the first run's, or one the user installed).
+	if cfg.DefaultPHP == "" || cfg.DefaultNode == "" {
+		go d.ensureDefaults()
+	}
 	return nil
 }
 
 // applyWeb (re)configures Caddy. Before the first successful start it checks the ports itself,
 // because Caddy's own error does not say who holds them.
-func (d *daemon) applyWeb(cfg *config.Config, bind string, sites []web.Site, ca *certs.CA) error {
+func (d *daemon) applyWeb(cfg *config.Config, bind string, sites []web.Site, waiting []web.Waiting, rootless []web.Rootless, shares []web.Share, ca *certs.CA) error {
 	owned := map[int]bool{}
 	if d.webUp && d.cfg != nil {
 		owned[d.cfg.Ports.HTTP], owned[d.cfg.Ports.HTTPS] = true, true
@@ -687,6 +833,11 @@ func (d *daemon) applyWeb(cfg *config.Config, bind string, sites []web.Site, ca 
 	for _, port := range []int{cfg.Ports.HTTP, cfg.Ports.HTTPS} {
 		if !owned[port] && !ports.Free(bind, port) {
 			return errors.New(ports.Describe(port))
+		}
+		// On Linux the service gives the daemon the capability for ports below 1024; one started
+		// some other way (`flock daemon` in a terminal) lacks it.
+		if !owned[port] && runtime.GOOS == "linux" && ports.Denied(bind, port) {
+			return fmt.Errorf("the daemon may not use port %d: it needs the CAP_NET_BIND_SERVICE capability, which it has when systemd starts it — run `flock restart` instead of `flock daemon`", port)
 		}
 	}
 
@@ -697,6 +848,9 @@ func (d *daemon) applyWeb(cfg *config.Config, bind string, sites []web.Site, ca 
 		HTTPSPort:  cfg.Ports.HTTPS,
 		Bind:       bind,
 		Sites:      sites,
+		Waiting:    waiting,
+		Rootless:   rootless,
+		Shares:     shares,
 		TLD:        cfg.TLD,
 		Issue:      func(name string) (*tls.Certificate, error) { return d.leaves.Get(ca, name) },
 	})
@@ -716,15 +870,32 @@ func (d *daemon) procUp(name string) bool {
 	return false
 }
 
-func (d *daemon) postgresSpec(cfg *config.Config, id string) (supervisor.Spec, error) {
+func (d *daemon) postgresSpec(cfg *config.Config, id string) (supervisor.Spec, []string, error) {
 	if !postgres.Installed(d.root, id) {
-		return supervisor.Spec{}, fmt.Errorf("version %s is not installed — reinstall it with `flock services install postgres`", id)
+		return supervisor.Spec{}, nil, fmt.Errorf("version %s is not installed — reinstall it with `flock services install postgres`", id)
 	}
-	bin, data := postgres.BinDir(d.root, id), postgres.DataDir(d.root, postgres.MajorOf(id))
+	major := postgres.MajorOf(id)
+	bin, data := postgres.BinDir(d.root, id), postgres.DataDir(d.root, major)
 	if err := postgres.InitDB(bin, data); err != nil {
-		return supervisor.Spec{}, err
+		return supervisor.Spec{}, nil, err
 	}
-	return postgres.Spec(bin, data, filepath.Join(d.root, "run"), filepath.Join(d.root, "log", "postgres.log"), cfg.Ports.Postgres), nil
+	// Every reload: the custom folder may have changed (see the watch in Run).
+	_, warnings, err := postgres.Link(d.root, id)
+	if err != nil {
+		warnings = append(warnings, "extensions: "+err.Error())
+	}
+	run := "" // Windows has no unix sockets: clients connect over TCP
+	if runtime.GOOS != "windows" {
+		var err error
+		if run, err = paths.EnsureRun(d.root); err != nil {
+			return supervisor.Spec{}, nil, err
+		}
+	}
+	preload := postgres.PreloadLibraries(d.root, major)
+	spec := postgres.Spec(bin, data, run, filepath.Join(d.root, "log", "postgres.log"), cfg.Ports.Postgres, preload...)
+	// A changed environment restarts the server (the supervisor compares Env), so new libraries load.
+	spec.Env = postgres.ServerEnv(d.root, major)
+	return spec, warnings, nil
 }
 
 // PostgresVersions implements api.Backend.
@@ -746,6 +917,8 @@ func serviceName(id string) string {
 		return "the mail catcher"
 	case "dumps":
 		return "the dump server"
+	case "agent":
+		return "the capture collector"
 	case "postgres":
 		return "PostgreSQL"
 	}
@@ -789,6 +962,8 @@ func (s pgService) Port() int {
 
 func (s pgService) Live() bool { return true }
 
+func (s pgService) Reload() error { return s.d.reload() }
+
 // Status implements api.Backend.
 func (d *daemon) Status() api.Status {
 	d.mu.Lock()
@@ -798,7 +973,7 @@ func (d *daemon) Status() api.Status {
 		Version:   d.version,
 		PID:       os.Getpid(),
 		StartedAt: d.startedAt,
-		Sites:     withBoost(d.liveSites()),
+		Sites:     d.withShares(withBoost(d.liveSites())),
 		Processes: d.procs.Status(),
 		Warnings:  d.warnings,
 	}
@@ -809,6 +984,15 @@ func (d *daemon) Status() api.Status {
 		st.MailCount = len(messages)
 	}
 	st.DumpCount = dumps.Count(d.root)
+	st.EventCount = capture.Count(d.root)
+	st.CaptureUnsupported = []string{}
+	if installed, err := php.Installed(d.root); err == nil {
+		for _, minor := range installed {
+			if !capture.Supported(d.root, minor) {
+				st.CaptureUnsupported = append(st.CaptureUnsupported, minor)
+			}
+		}
+	}
 	st.DNS = api.DNSStatus{Wildcard: d.wildcard.ok, WildcardProblem: d.wildcard.problem, MaxDepth: config.MaxDepth}
 	if d.cfg != nil {
 		st.DNS.TLD = d.cfg.TLD
@@ -821,9 +1005,6 @@ func (d *daemon) Status() api.Status {
 		if d.cfg.Services.Postgres != "" {
 			st.Postgres = fmt.Sprintf("%s on 127.0.0.1:%d", postgres.VersionOf(d.cfg.Services.Postgres), d.cfg.Ports.Postgres)
 		}
-		if x, ok := d.cfg.Services.Extra("valkey"); ok {
-			st.Valkey = fmt.Sprintf("%s on 127.0.0.1:%d", x.Version, x.Port)
-		}
 		if d.catalog != nil {
 			for _, k := range d.catalog.Kinds() {
 				if x, ok := d.cfg.Services.Extra(k.ID); ok {
@@ -834,7 +1015,9 @@ func (d *daemon) Status() api.Status {
 		}
 		st.Xdebug, st.XdebugBreakpoints = d.cfg.Xdebug, d.cfg.XdebugBreakpoints
 		st.Channel = api.ChannelOf(d.cfg)
-		st.Dumps = d.cfg.Dumps
+		st.Dumps, st.DumpsInPage = d.cfg.Dumps, d.cfg.DumpsInPage
+		st.CaptureOff = append([]string{}, d.cfg.CaptureOff...)
+		st.Defaults = d.defaultsStatus(d.cfg)
 
 		// Without the helper, sites resolve only through the DNS rule: say so when that fails too.
 		if runtime.GOOS == "windows" && d.wildcard.problem != "" && hosts.Blocked(d.root) && !hosts.HelperStatus().Installed {
@@ -883,7 +1066,7 @@ func (d *daemon) Services() []api.Service {
 			Env: fmt.Sprintf("MAIL_MAILER=smtp\nMAIL_HOST=127.0.0.1\nMAIL_PORT=%d\nMAIL_USERNAME=${APP_NAME}\nMAIL_PASSWORD=null\nMAIL_SCHEME=null", p.SMTP),
 			URL: fmt.Sprintf("smtp://127.0.0.1:%d", p.SMTP)},
 		{ID: "dumps", Name: "Dump server", Category: "Debugging", Port: p.Dumps, Installed: true, Enabled: cfg.Dumps, Running: d.procUp("dump-server"), Stoppable: true,
-			Env: fmt.Sprintf("VAR_DUMPER_FORMAT=server\nVAR_DUMPER_SERVER=127.0.0.1:%d", p.Dumps), Log: "dump-server"},
+			Log: "dump-server"},
 	}
 	if runtime.GOOS != "windows" {
 		services = append(services, api.Service{ID: "dns", Name: "DNS (*." + cfg.TLD + ")", Category: "Core", Port: p.DNS, Installed: true, Enabled: true, Running: dnsUp,

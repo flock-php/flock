@@ -68,4 +68,61 @@ private func fixtures() throws -> ([Service], ServiceCatalog, PostgresVersions) 
     #expect(InstallLink(service: "mysql").resolve(services: [], catalog: catalog, postgres: postgres) == nil)
     #expect(InstallLink(service: "mysql").resolve(services: services, catalog: nil, postgres: postgres) == nil)
     #expect(InstallLink(service: "postgres").resolve(services: services, catalog: catalog, postgres: nil) == nil)
+    #expect(InstallLink(service: "php").resolve(php: nil) == nil)
+    #expect(InstallLink(service: "node").resolve(node: nil) == nil)
+}
+
+@Test func resolvesPHPInstallLinks() throws {
+    let catalog = try FlockJSON.decoder().decode(PHPCatalog.self, from: Data("""
+    {"versions":[
+      {"minor":"8.4","latest":"8.4.27","installed":"8.4.27","status":"installed"},
+      {"minor":"8.10","latest":"8.10.1","status":"available",
+       "job":{"action":"install","state":"running","phase":"downloading"}},
+      {"minor":"8.9","latest":"8.9.3","status":"available"},
+      {"minor":"8.11","latest":"8.11.0RC1","status":"available","prerelease":true},
+      {"minor":"7.4","latest":"","installed":"7.4.33","status":"installed"},
+      {"minor":"7.2","latest":"","status":"available"}
+    ]}
+    """.utf8))
+    let resolve = { (line: String?) in InstallLink(service: "php", line: line).resolve(php: catalog) }
+
+    let install = try #require(resolve("8.9")?.confirmation)
+    #expect(install == InstallLink.Install(service: "php", name: "PHP", line: "8.9", label: "8.9", version: "8.9.3"))
+    #expect(resolve("8.9")?.title == "Install PHP 8.9?")
+    #expect(resolve("8.9")?.message == "A link asked Flock to install PHP 8.9.3. Sites that use it are served as soon as it's installed.")
+    #expect(resolve("8.4") == .installed(name: "PHP 8.4", pane: "PHP"))
+    #expect(resolve("7.4") == .installed(name: "PHP 7.4", pane: "PHP"))
+    #expect(resolve("8.10") == .installing(name: "PHP 8.10"))
+    #expect(resolve("8.11")?.confirmation?.version == "8.11.0RC1")
+    #expect(resolve("7.2") == .noBuild(name: "PHP", line: "7.2"))
+    #expect(resolve("7.3") == .noBuild(name: "PHP", line: "7.3"))
+    #expect(resolve("7.3")?.title == "Flock doesn't offer PHP 7.3")
+    #expect(resolve("7.3")?.message == "There's no build of it for this computer, or the link is meant for a newer Flock.")
+    #expect(resolve("8.4")?.message == "You'll find it in Settings → PHP.")
+    // Without a version: the newest that isn't a pre-release ("8.10" is newer than "8.9").
+    #expect(resolve(nil) == .installing(name: "PHP 8.10"))
+
+    let empty = try FlockJSON.decoder().decode(PHPCatalog.self, from: Data(#"{"versions":[]}"#.utf8))
+    #expect(InstallLink(service: "php").resolve(php: empty) == .noBuild(name: "PHP", line: ""))
+}
+
+@Test func resolvesNodeInstallLinks() throws {
+    let catalog = try FlockJSON.decoder().decode(NodeCatalog.self, from: Data("""
+    {"versions":[
+      {"major":"22","latest":"22.21.0","installed":"22.20.0","default":true},
+      {"major":"24","latest":"24.11.0"},
+      {"major":"9","latest":"9.11.2"}
+    ]}
+    """.utf8))
+    let resolve = { (line: String?, installing: Set<String>) in
+        InstallLink(service: "node", line: line).resolve(node: catalog, installing: installing)
+    }
+
+    #expect(resolve("24", [])?.confirmation == InstallLink.Install(service: "node", name: "Node.js", line: "24", label: "24", version: "24.11.0"))
+    #expect(resolve(nil, [])?.confirmation?.line == "24")
+    #expect(resolve("22", []) == .installed(name: "Node.js 22", pane: "Node"))
+    #expect(resolve("22", [])?.message == "You'll find it in Settings → Node.")
+    #expect(resolve("24", ["24"]) == .installing(name: "Node.js 24"))
+    #expect(resolve("24", ["24"])?.title == "Node.js 24 is already being installed")
+    #expect(resolve("12", []) == .noBuild(name: "Node.js", line: "12"))
 }

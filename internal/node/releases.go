@@ -34,6 +34,21 @@ func Lines(manifest *binaries.Manifest) []Line {
 	return lines
 }
 
+// LatestLTS is the newest major whose newest published release is a long-term support release,
+// or "" when the manifest has none.
+func LatestLTS(manifest *binaries.Manifest) string {
+	newest := -1
+	for major, v := range published(manifest) {
+		if n := majorOf(major); v.LTS && n >= MinimumMajor && n > newest {
+			newest = n
+		}
+	}
+	if newest < 0 {
+		return ""
+	}
+	return strconv.Itoa(newest)
+}
+
 // Newer reports whether version a is newer than b ("22.11.0" > "22.9.1").
 func Newer(a, b string) bool {
 	versions := []string{a, b}

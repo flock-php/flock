@@ -298,3 +298,32 @@ func TestWindowsOffersPHPOnlyWithItsExtensionPack(t *testing.T) {
 		t.Errorf("PHP 8.6 on macOS: %+v %v", o, ok)
 	}
 }
+
+func TestLatestStableSkipsPreReleasesAndWithdrawnBuilds(t *testing.T) {
+	entry := binaries.Entry{Build: 1, URL: "u", SHA256: "s"}
+	rc := binaries.Entry{Build: 1, URL: "u", SHA256: "s", Prerelease: true}
+	yanked := binaries.Entry{Build: 1, URL: "u", SHA256: "s", Yanked: map[string]string{"1": "broken"}}
+	m := &binaries.Manifest{Packages: map[string]map[string]map[string]binaries.Entry{
+		Package: {
+			"8.6.0RC3": {"macos-arm64": rc},
+			"8.5.12":   {"macos-arm64": yanked},
+			"8.4.20":   {"macos-arm64": entry, "windows-x64": entry},
+			"8.10.1":   {"windows-x64": entry},
+		},
+		ExtensionsPackage: {"8.4": {"windows-x64": entry}},
+	}}
+	if got := latestStable(m, "macos-arm64"); got != "8.4" {
+		t.Errorf("macOS: got %q, want 8.4 (8.6 is an RC, 8.5's only build is withdrawn)", got)
+	}
+	// 8.10 is newer than 8.4, but Windows only offers PHP with its extension pack.
+	if got := latestStable(m, "windows-x64"); got != "8.4" {
+		t.Errorf("Windows: got %q, want 8.4", got)
+	}
+	m.Packages[ExtensionsPackage]["8.10"] = map[string]binaries.Entry{"windows-x64": entry}
+	if got := latestStable(m, "windows-x64"); got != "8.10" {
+		t.Errorf("Windows with the 8.10 pack: got %q, want 8.10", got)
+	}
+	if got := latestStable(nil, "macos-arm64"); got != "" {
+		t.Errorf("no manifest: got %q", got)
+	}
+}

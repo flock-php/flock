@@ -40,6 +40,35 @@ public class ServiceVersionsTests
     }
 
     [Fact]
+    public void DecodesPostgresExtensions()
+    {
+        var major = FlockJson.Decode<PostgresMajor>("""{"major":"18","installed":"18.6","extensions":["postgis","pgvector"]}""");
+        Assert.Equal("PostGIS, pgvector", PostgresExtensions.Titles(major.Extensions));
+        Assert.Empty(FlockJson.Decode<PostgresMajor>("""{"major":"17"}""").Extensions);
+
+        var state = FlockJson.Decode<PostgresExtensions>("""
+            {"major":"17","custom_dir":"C:\\Users\\demo\\AppData\\Roaming\\Flock\\services\\postgres\\extensions\\custom\\17",
+             "extensions":[
+              {"name":"timescaledb","title":"TimescaleDB","creates":"timescaledb","preload":true,"supported":true,
+               "installed":"2.30.2","latest":"2.30.2","discontinued":true,"busy":"updating","size":123},
+              {"name":"pgvector","supported":false}],
+             "custom":[{"name":"hello","version":"1.2","linked":true,"problem":""},{"name":"broken","problem":"its library broken isn't in lib/"}]}
+            """);
+        Assert.EndsWith(@"custom\17", state.CustomDir);
+        Assert.True(state.AnyBusy);
+        var timescale = state.Extensions[0];
+        Assert.True(timescale.Preload && timescale.Discontinued && timescale.IsInstalled && timescale.IsBusy);
+        Assert.Equal(123, timescale.Size);
+        Assert.False(state.Extensions[1].Supported);
+        Assert.False(state.Extensions[1].IsInstalled);
+        Assert.Equal(["hello", "broken"], state.Custom.Select(c => c.Name));
+        Assert.True(state.Custom[0].Linked);
+        Assert.Equal("1.2", state.Custom[0].Version);
+        Assert.False(state.Custom[1].Linked);
+        Assert.Contains("lib/", state.Custom[1].Problem);
+    }
+
+    [Fact]
     public void DecodesPostgresVersionsBeforeTheFirstCheck()
     {
         var versions = FlockJson.Decode<PostgresVersions>("""
@@ -101,6 +130,20 @@ public class ServiceVersionsTests
         // Without a progress field the job is indeterminate.
         Assert.False(job.HasProgress);
         Assert.Equal("Working…", FlockJson.Decode<ComponentJob>("""{"action":"install","state":"running","phase":""}""").PhaseText);
+    }
+
+    [Fact]
+    public void CatalogJobsShareProgressBoundariesAndKeepCatalogFields()
+    {
+        var job = FlockJson.Decode<CatalogJob>("""
+            {"action":"install","state":"running","phase":"verifying","progress":1,"version":"8.2.1","line":"8.2"}
+            """);
+
+        Assert.True(job.IsRunning);
+        Assert.True(job.HasProgress);
+        Assert.Equal("Working…", job.PhaseText);
+        Assert.Equal(("8.2.1", "8.2"), (job.Version, job.Line));
+        Assert.False(FlockJson.Decode<CatalogJob>("""{"progress":1.1}""").HasProgress);
     }
 
     [Fact]

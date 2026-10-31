@@ -30,7 +30,8 @@ func read(t *testing.T, path string) string {
 
 func TestVersionsFollowIsolationThenProjectThenDefault(t *testing.T) {
 	dir := t.TempDir()
-	cfg := config.Default() // PHP 8.5, Node 22
+	cfg := config.Default()
+	cfg.DefaultPHP, cfg.DefaultNode = "8.5", "22"
 	site := &config.Site{Path: dir}
 
 	if v := PHPFor(cfg, site, dir); v.Version != "8.5" || v.Source != Default || v.Pinned != "" {

@@ -540,8 +540,13 @@ func (m *Manager) Start(id, line string, port int) error {
 			return fmt.Errorf("%w: %s runs on port %d; change the port of the service itself (Settings → Services)", ErrInvalid, k.Name, current.Port)
 		}
 		port = current.Port
-	} else if port == 0 {
-		port = SuggestPort(cfg, id, k.DefaultPort)
+	} else {
+		if port == 0 {
+			port = SuggestPort(cfg, id, k.DefaultPort)
+		}
+		if err := CheckFree(m.root, port); err != nil {
+			return err
+		}
 	}
 	if err := CheckPort(cfg, id, port); err != nil {
 		return err
@@ -567,6 +572,15 @@ func (m *Manager) Start(id, line string, port int) error {
 		defer cancel()
 		m.run(ctx, k, j, offer, port)
 	}()
+	return nil
+}
+
+// CheckFree fails when another program (not one of Flock's, which run from root) listens on port,
+// saying how to free it.
+func CheckFree(root string, port int) error {
+	if taken := ports.Taken(port, root); taken != "" {
+		return fmt.Errorf("%w: %s", ErrInvalid, taken)
+	}
 	return nil
 }
 

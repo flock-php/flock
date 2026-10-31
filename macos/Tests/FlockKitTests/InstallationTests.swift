@@ -68,3 +68,24 @@ private final class Lines: @unchecked Sendable {
     func add(_ line: String) { lock.withLock { lines.append(line) } }
     var all: [String] { lock.withLock { lines } }
 }
+
+@Test func decodesAndGroupsConflicts() throws {
+    struct Response: Decodable { var conflicts: [Installation.Conflict] }
+    let response = try FlockJSON.decoder().decode(Response.self, from: Data("""
+    {"conflicts":[
+      {"port":80,"service":"HTTP","holder":"Herd (nginx-arm64, pid 812)","app":"Herd","hint":"quit Herd","message":"port 80 (HTTP) is used by Herd"},
+      {"port":2525,"service":"mail","holder":"Homebrew (mailpit, pid 9)","app":"Homebrew's mailpit","hint":"run `brew services stop mailpit`","message":"…"},
+      {"port":443,"service":"HTTPS","holder":"Herd (nginx-arm64, pid 812)","app":"Herd","hint":"quit Herd","message":"…"},
+      {"file":"/etc/resolver/test","service":"*.test DNS","holder":"Herd (dnsmasq, pid 40)","app":"Herd","hint":"quit Herd","message":"…"},
+      {"port":53531,"service":"app API","holder":"another program","app":"the other program","message":"…"}
+    ]}
+    """.utf8))
+
+    let apps = Installation.group(response.conflicts)
+    #expect(apps.map(\.app) == ["Herd", "Homebrew's mailpit", "the other program"])
+    #expect(apps[0].title == "Quit Herd")
+    #expect(apps[0].detail == "Herd (nginx-arm64, pid 812) uses port 80 (HTTP) and port 443 (HTTPS), and answers for *.test (/etc/resolver/test).")
+    #expect(apps[1].title == "Run `brew services stop mailpit`")
+    #expect(apps[2].title == "Quit the other program")
+    #expect(apps[2].detail == "Another program uses port 53531 (app API).")
+}

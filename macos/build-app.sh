@@ -38,6 +38,13 @@ swift build -c release --product FlockBar "${ARCHS[@]}"
 
 APP="$OUT/Flock.app"
 BIN="$(swift build -c release "${ARCHS[@]}" --show-bin-path)"
+
+# FlockScreenshots (demo data, a fake daemon) uses the app's views for the docs' screenshots; none
+# of it may reach the app.
+if grep -qaE 'FlockScreenshots|FakeDaemon' "$BIN/FlockBar"; then
+	echo "FlockBar contains screenshot code: does it depend on FlockScreenshots?" >&2
+	exit 1
+fi
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources" "$APP/Contents/Frameworks"
 cp "$BIN/FlockBar" "$APP/Contents/MacOS/FlockBar"

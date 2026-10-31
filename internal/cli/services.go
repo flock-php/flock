@@ -1,11 +1,15 @@
 package cli
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
+	"slices"
+	"strings"
 
 	"github.com/spf13/cobra"
 
+	"flock/internal/capture"
 	"flock/internal/dumps"
 	"flock/internal/envutil"
 	"flock/internal/php"
@@ -123,9 +127,17 @@ func newDebugCommand() *cobra.Command {
 
 func newDumpsCommand() *cobra.Command {
 	return &cobra.Command{
-		Use:   "dumps [on|off|clear]",
-		Short: "Send dump()/dd() output to Flock instead of the page or terminal, or list captured dumps",
-		Args:  cobra.MaximumNArgs(1),
+		Use:   "dumps [on|off|clear|page on|page off]",
+		Short: "Send dump()/dd() output (and queries, logs, ... — see flock events) to Flock instead of the page or terminal, or list captured dumps",
+		Long: `Capture sends dump() and dd() output to Flock instead of the page or terminal. On PHP versions
+with Flock's agent it also records queries, logs, views, jobs and requests (see flock events);
+other versions capture dumps only.
+
+  flock dumps                list captured dumps
+  flock dumps on|off         turn capture on or off
+  flock dumps clear          delete captured dumps and events
+  flock dumps page on|off    also show dump() output in the page or terminal (dd() always shows there)`,
+		Args: cobra.MaximumNArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			s, err := load()
 			if err != nil {
@@ -143,6 +155,9 @@ func newDumpsCommand() *cobra.Command {
 					state = "on"
 				}
 				cmd.Printf("dump capture is %s — %d dump(s)\n", state, len(entries))
+				if s.cfg.Dumps {
+					printCaptureNotes(cmd, s)
+				}
 				for i := len(entries) - 1; i >= 0; i-- {
 					e := entries[i]
 					where := ""
@@ -153,7 +168,23 @@ func newDumpsCommand() *cobra.Command {
 				}
 				return nil
 			case args[0] == "clear":
+				if err := capture.Clear(s.root); err != nil {
+					return err
+				}
 				return dumps.Clear(s.root)
+			case args[0] == "page" && len(args) == 2 && (args[1] == "on" || args[1] == "off"):
+				s.cfg.DumpsInPage = args[1] == "on"
+				if err := s.commit(cmd.Context(), cmd.ErrOrStderr()); err != nil {
+					return err
+				}
+				if s.cfg.DumpsInPage {
+					cmd.Println("dump() output also shows in the page or terminal")
+				} else {
+					cmd.Println("dump() output goes to Flock only (dd() still shows in the page)")
+				}
+				return nil
+			case len(args) == 2:
+				return fmt.Errorf("expected page on or page off, got %q", strings.Join(args, " "))
 			case args[0] == "on" || args[0] == "off":
 				s.cfg.Dumps = args[0] == "on"
 				if err := s.commit(cmd.Context(), cmd.ErrOrStderr()); err != nil {
@@ -165,4 +196,135 @@ func newDumpsCommand() *cobra.Command {
 			return fmt.Errorf("expected on, off or clear, got %q", args[0])
 		},
 	}
+}
+
+// printCaptureNotes says which kinds are switched off and which PHP versions only capture dumps.
+func printCaptureNotes(cmd *cobra.Command, s *state) {
+	if len(s.cfg.CaptureOff) > 0 {
+		cmd.Printf("not captured: %s (flock events on <kind>)\n", strings.Join(s.cfg.CaptureOff, ", "))
+	}
+	installed, _ := php.Installed(s.root)
+	var only []string
+	for _, minor := range installed {
+		if !capture.Supported(s.root, minor) {
+			only = append(only, minor)
+		}
+	}
+	if len(only) > 0 {
+		cmd.Printf("PHP %s: dumps only — these builds don't have the %s extension yet (update them with flock php install)\n",
+			strings.Join(only, ", "), capture.Extension)
+	}
+}
+
+func newEventsCommand() *cobra.Command {
+	var limit int
+	cmd := &cobra.Command{
+		Use:   "events [kind...|clear|on <kind...>|off <kind...>]",
+		Short: "List the queries, logs, views, jobs and requests Flock captured, or choose which it captures",
+		Long: `While capture is on (flock dumps on), Flock's agent records what PHP apps do. Kinds: query, log,
+view, job and request. Queue workers only report what happens inside their jobs.
+
+  flock events               the latest events, oldest first
+  flock events query log     only these kinds
+  flock events clear         delete captured events
+  flock events off view      stop capturing views (on: start again)`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			s, err := load()
+			if err != nil {
+				return err
+			}
+
+			if len(args) > 0 && (args[0] == "on" || args[0] == "off") {
+				kinds := args[1:]
+				if len(kinds) == 0 {
+					return fmt.Errorf("name the kinds to switch %s: %s", args[0], strings.Join(capture.Kinds, ", "))
+				}
+				if err := capture.Valid(kinds); err != nil {
+					return err
+				}
+				off := slices.DeleteFunc(slices.Clone(s.cfg.CaptureOff), func(k string) bool { return slices.Contains(kinds, k) })
+				if args[0] == "off" {
+					off = append(off, kinds...)
+				}
+				s.cfg.CaptureOff = nil
+				for _, k := range capture.Kinds {
+					if slices.Contains(off, k) {
+						s.cfg.CaptureOff = append(s.cfg.CaptureOff, k)
+					}
+				}
+				if err := s.commit(cmd.Context(), cmd.ErrOrStderr()); err != nil {
+					return err
+				}
+				cmd.Printf("capturing %s %s\n", strings.Join(kinds, ", "), args[0])
+				return nil
+			}
+			if len(args) == 1 && args[0] == "clear" {
+				return capture.Clear(s.root)
+			}
+			if err := capture.Valid(args); err != nil {
+				return err
+			}
+
+			events, err := capture.List(s.root, limit, args...)
+			if err != nil {
+				return err
+			}
+			if !s.cfg.Dumps {
+				cmd.Println("capture is off — turn it on with flock dumps on")
+			} else {
+				printCaptureNotes(cmd, s)
+			}
+			group := ""
+			for i := len(events) - 1; i >= 0; i-- {
+				e := events[i]
+				if e.Group != group {
+					group = e.Group
+					cmd.Printf("\n── %s\n", eventOrigin(e))
+				}
+				cmd.Printf("%s %-7s %s\n", e.Time.Local().Format("15:04:05"), e.Kind, eventSummary(e))
+			}
+			return nil
+		},
+	}
+	cmd.Flags().IntVarP(&limit, "limit", "n", 50, "how many events to show")
+	return cmd
+}
+
+func eventOrigin(e capture.Event) string {
+	switch {
+	case e.Request != nil:
+		return e.Request.Method + " " + e.Request.URI
+	case e.CommandLine != nil:
+		return *e.CommandLine
+	}
+	return "?"
+}
+
+func eventSummary(e capture.Event) string {
+	ms := ""
+	if e.DurationMS > 0 {
+		ms = fmt.Sprintf(" (%.2f ms)", e.DurationMS)
+	}
+	switch e.Kind {
+	case "query":
+		sql := e.SQL
+		if len(e.Bindings) > 0 {
+			b, _ := json.Marshal(e.Bindings)
+			sql += " " + string(b)
+		}
+		return sql + ms
+	case "log":
+		return e.Level + ": " + e.Message
+	case "view":
+		return e.View
+	case "job":
+		s := e.State + " " + e.Job + ms
+		if e.Exception != "" {
+			s += " — " + e.Exception
+		}
+		return s
+	case "request":
+		return fmt.Sprintf("%d%s", e.StatusCode, ms)
+	}
+	return ""
 }

@@ -2,7 +2,9 @@ import Foundation
 
 /// A link from the website or the docs that asks to install a service:
 /// `flock://install/<service>` or `flock://install/<service>/<version line>`, e.g.
-/// `flock://install/mysql/8.4` or `flock://install/postgres/18`.
+/// `flock://install/mysql/8.4` or `flock://install/postgres/18`. PHP and Node.js take the same
+/// form (`flock://install/php/8.5`, `flock://install/node/24`); the page the daemon serves for a
+/// site whose PHP is missing links to it.
 ///
 /// Any web page can open such a link, so it never installs anything by itself: the app shows
 /// what it would install and waits for the user to confirm (see `resolve`).
@@ -64,17 +66,73 @@ public struct InstallLink: Equatable, Sendable {
         return .install(Install(service: entry.id, name: entry.name, line: target.id, label: target.label, version: target.latest))
     }
 
+    /// What a link for PHP asks for, measured against the PHP versions. Without a version it
+    /// means the newest one that isn't a pre-release. Nil while the versions are still loading.
+    public func resolve(php catalog: PHPCatalog?) -> Resolution? {
+        guard let catalog else { return nil }
+        let wanted: PHPRelease?
+        if let line {
+            wanted = catalog.versions.first { $0.minor == line }
+        } else {
+            wanted = Self.newest(catalog.versions.filter { !$0.prerelease && !$0.latest.isEmpty }, by: \.minor)
+        }
+        // A version without a build in the channel is only listed while it's installed.
+        guard let release = wanted, release.isInstalled || !release.latest.isEmpty else {
+            return .noBuild(name: "PHP", line: line ?? "")
+        }
+        if release.isInstalled {
+            return .installed(name: "PHP \(release.minor)", pane: "PHP")
+        }
+        if release.job?.isRunning == true {
+            return .installing(name: "PHP \(release.minor)")
+        }
+        return .install(Install(service: "php", name: "PHP", line: release.minor, label: release.minor, version: release.latest))
+    }
+
+    /// What a link for Node.js asks for, measured against the Node.js versions; `installing` are
+    /// the majors an install already runs for (the first run's default, or one started from a link).
+    /// Without a version it means the newest listed major (the versions don't say which are LTS). Nil while the versions are still loading.
+    public func resolve(node catalog: NodeCatalog?, installing: Set<String> = []) -> Resolution? {
+        guard let catalog else { return nil }
+        let wanted: NodeRelease?
+        if let line {
+            wanted = catalog.versions.first { $0.major == line }
+        } else {
+            wanted = Self.newest(catalog.versions.filter { !$0.latest.isEmpty }, by: \.major)
+        }
+        guard let release = wanted, release.isInstalled || !release.latest.isEmpty else {
+            return .noBuild(name: "Node.js", line: line ?? "")
+        }
+        if release.isInstalled {
+            return .installed(name: "Node.js \(release.major)", pane: "Node")
+        }
+        if installing.contains(release.major) {
+            return .installing(name: "Node.js \(release.major)")
+        }
+        return .install(Install(service: "node", name: "Node.js", line: release.major, label: release.major, version: release.latest))
+    }
+
+    /// The newest of `items` by a version number ("8.10" is newer than "8.9").
+    private static func newest<T>(_ items: [T], by version: KeyPath<T, String>) -> T? {
+        items.max { $0[keyPath: version].compare($1[keyPath: version], options: .numeric) == .orderedAscending }
+    }
+
     public enum Resolution: Equatable, Sendable {
         /// Can be installed once the user confirms.
         case install(Install)
-        /// Already installed: nothing to do.
-        case installed(name: String)
+        /// Already installed: nothing to do. `pane` is the Settings pane that lists it.
+        case installed(name: String, pane: String = "Services")
+        /// An install of it already runs: nothing to do.
+        case installing(name: String)
         /// The service doesn't run on this platform.
         case unavailable(name: String, reason: String)
         /// This Flock doesn't know the service.
         case unknown(name: String)
         /// This Flock doesn't offer that version line.
         case unknownVersion(name: String, line: String)
+        /// This Flock has no build of that PHP or Node.js version for this computer, or doesn't
+        /// know the version yet; `line` is empty when the link named none and none is offered.
+        case noBuild(name: String, line: String)
     }
 
     public struct Install: Equatable, Sendable {
@@ -93,10 +151,12 @@ extension InstallLink.Resolution {
     public var title: String {
         switch self {
         case .install(let install): "Install \(install.name) \(install.label)?"
-        case .installed(let name): "\(name) is already installed"
+        case .installed(let name, _): "\(name) is already installed"
+        case .installing(let name): "\(name) is already being installed"
         case .unavailable(let name, _): "\(name) isn't available on this computer"
         case .unknown(let name): "Flock doesn't offer \(name)"
         case .unknownVersion(let name, let line): "Flock doesn't offer \(name) \(line)"
+        case .noBuild(let name, let line): line.isEmpty ? "Flock doesn't offer \(name)" : "Flock doesn't offer \(name) \(line)"
         }
     }
 
@@ -104,13 +164,21 @@ extension InstallLink.Resolution {
         switch self {
         case .install(let install):
             let what = install.version.isEmpty ? "\(install.name) \(install.label)" : "\(install.name) \(install.version)"
-            return "A link asked Flock to install \(what). It runs on 127.0.0.1 for your sites."
-        case .installed:
-            return "You'll find it in Settings → Services."
+            switch install.service {
+            case "php": return "A link asked Flock to install \(what). Sites that use it are served as soon as it's installed."
+            case "node": return "A link asked Flock to install \(what). Projects that use it can run it as soon as it's installed."
+            default: return "A link asked Flock to install \(what). It runs on 127.0.0.1 for your sites."
+            }
+        case .installed(_, let pane):
+            return "You'll find it in Settings → \(pane)."
+        case .installing:
+            return "It's ready in a moment; there's nothing more to do."
         case .unavailable(_, let reason):
             return reason.isEmpty ? "Flock can't run it on this platform." : reason
         case .unknown, .unknownVersion:
             return "The link may be meant for a newer Flock. Update Flock, then try again."
+        case .noBuild:
+            return "There's no build of it for this computer, or the link is meant for a newer Flock."
         }
     }
 

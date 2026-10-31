@@ -34,12 +34,21 @@ func newChannelCommand() *cobra.Command {
 				return err
 			}
 			if ch == current {
+				// The repository may still be on the other suite (a beta's package install).
+				if err := followChannel(cmd, ch); err != nil {
+					return err
+				}
 				cmd.Printf("already on the %s channel\n", ch)
 				return nil
 			}
 			s.cfg.Channel = string(ch)
 			if ch == binaries.Stable {
 				s.cfg.Channel = ""
+			}
+			// Linux: Flock's own updates come from its package repository's suite. First, so a
+			// declined password prompt leaves the channel as it was.
+			if err := followChannel(cmd, ch); err != nil {
+				return err
 			}
 			if err := s.commit(cmd.Context(), cmd.OutOrStdout()); err != nil {
 				return err

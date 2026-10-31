@@ -1,0 +1,29 @@
+[
+  {
+    "id": "mail-3",
+    "inbox": "acme",
+    "from": "Acme <hello@acme.test>",
+    "to": ["ada@example.com"],
+    "subject": "Your order #1042 is on its way",
+    "date": "{{now-2m}}",
+    "size": 18234
+  },
+  {
+    "id": "mail-2",
+    "inbox": "acme",
+    "from": "Acme <hello@acme.test>",
+    "to": ["grace@example.com"],
+    "subject": "Reset Password Notification",
+    "date": "{{now-25m}}",
+    "size": 12877
+  },
+  {
+    "id": "mail-1",
+    "inbox": "shop",
+    "from": "Shop <orders@shop.test>",
+    "to": ["alan@example.com"],
+    "subject": "Welcome to Shop",
+    "date": "{{now-3h}}",
+    "size": 9411
+  }
+]

@@ -11,9 +11,11 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/jsonschema-go/jsonschema"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"flock/internal/api"
+	"flock/internal/capture"
 	"flock/internal/dumps"
 	"flock/internal/laravellog"
 	"flock/internal/mail"
@@ -90,6 +92,16 @@ func (s *server) addReadTools(srv *mcp.Server) {
 	}, s.getDumps)
 
 	mcp.AddTool(srv, &mcp.Tool{
+		Name: "get_events",
+		Description: "What the apps did, captured by Flock's agent while capture is on: database queries (SQL, bindings, " +
+			"duration, the app code that ran them), log messages, rendered views, queued jobs (state, duration, exception) " +
+			"and requests (status, duration), grouped by request or CLI run, newest first. Use it to see what a page or " +
+			"command actually does, e.g. N+1 queries or a failing job. Needs capture on (see set_debugging, feature dumps).",
+		Annotations: readOnly,
+		InputSchema: eventsSchema(),
+	}, s.getEvents)
+
+	mcp.AddTool(srv, &mcp.Tool{
 		Name:        "list_mail",
 		Description: "Mail the apps sent, caught by Flock instead of being delivered (newest first).",
 		Annotations: readOnly,
@@ -126,6 +138,7 @@ type statusOut struct {
 	Xdebug      bool     `json:"xdebug"`
 	Mail        int      `json:"caught_mail"`
 	Dumps       int      `json:"captured_dumps"`
+	Events      int      `json:"captured_events"`
 	Sites       int      `json:"sites"`
 	Warnings    []string `json:"warnings,omitempty"`
 }
@@ -140,7 +153,7 @@ func (s *server) status(ctx context.Context, _ *mcp.CallToolRequest, _ struct{})
 	}
 	out := statusOut{
 		Running: true, Version: st.Version, TLD: st.DNS.TLD, HTTPPort: st.HTTPPort, HTTPSPort: st.HTTPSPort,
-		DumpCapture: st.Dumps, Xdebug: st.Xdebug, Mail: st.MailCount, Dumps: st.DumpCount, Sites: len(st.Sites), Warnings: st.Warnings,
+		DumpCapture: st.Dumps, Xdebug: st.Xdebug, Mail: st.MailCount, Dumps: st.DumpCount, Events: st.EventCount, Sites: len(st.Sites), Warnings: st.Warnings,
 	}
 	if cfg, err := s.Daemon.Config(ctx); err == nil {
 		out.DefaultPHP, out.DefaultNode = cfg.DefaultPHP, cfg.DefaultNode
@@ -160,6 +173,17 @@ type versionInfo struct {
 	Pinned string `json:"pinned,omitempty"` // what File pins, when an isolation wins over it
 }
 
+type rootInfo struct {
+	Path string `json:"path"` // relative to the project, "." for the project folder itself
+	// Source is "isolated" (set for the site in Flock, this machine only), "project" (root= in
+	// File, committed with the project) or "default" (detected: public/, www/, web/ or webroot/).
+	Source string `json:"source"`
+	File   string `json:"file,omitempty"`
+	// Suggestions are folders with an index.php, when Flock found no usable root and serves a page
+	// saying so instead of the site.
+	Suggestions []string `json:"suggestions,omitempty"`
+}
+
 type siteInfo struct {
 	Name      string      `json:"name"`
 	URL       string      `json:"url"`
@@ -168,6 +192,7 @@ type siteInfo struct {
 	HTTPS     bool        `json:"https"`
 	PHP       versionInfo `json:"php"`
 	Node      versionInfo `json:"node"`
+	Root      rootInfo    `json:"document_root"`
 	// Server is "fastcgi" (PHP-FPM; php-cgi on Windows) or "frankenphp"; Worker "octane" in worker mode.
 	Server     string `json:"server"`
 	Worker     string `json:"worker,omitempty"`
@@ -175,14 +200,16 @@ type siteInfo struct {
 	Octane     bool   `json:"octane_installed,omitempty"`
 	Parked     bool   `json:"parked,omitempty"`
 	Problem    string `json:"problem,omitempty"`
+	Notice     string `json:"notice,omitempty"`
 }
 
 func siteInfoOf(st api.SiteStatus) siteInfo {
 	info := siteInfo{
 		Name: st.Name, URL: st.URL, Path: st.Path, HTTPS: st.Secured, Server: st.Server, Worker: st.Worker,
-		Octane: st.OctaneAvailable, Parked: st.Parked, Problem: st.Problem,
+		Octane: st.OctaneAvailable, Parked: st.Parked, Problem: st.Problem, Notice: st.Notice,
 		PHP:  versionInfo{Version: st.PHP, Source: st.PHPSource, File: st.PHPFile},
 		Node: versionInfo{Version: st.Node, Source: st.NodeSource, File: st.NodeFile},
+		Root: rootInfo{Path: st.Root, Source: st.RootSource, File: st.RootFile, Suggestions: st.RootSuggestions},
 	}
 	if info.URL == "" {
 		scheme := "http"
@@ -578,7 +605,7 @@ func (s *server) getDumps(ctx context.Context, _ *mcp.CallToolRequest, in dumpsI
 	}
 	out := dumpsOut{Capturing: st.Dumps, Dumps: []dumpOut{}}
 	for _, e := range entries {
-		site := siteForDump(st.Sites, e)
+		site := siteFor(st.Sites, e.Source, e.Request)
 		if only != nil && site != only.Name {
 			continue
 		}
@@ -606,15 +633,118 @@ func (s *server) getDumps(ctx context.Context, _ *mcp.CallToolRequest, in dumpsI
 	return nil, out, nil
 }
 
-// siteForDump attributes a dump to a site by the file that called dump(), or by the request host.
-func siteForDump(sites []api.SiteStatus, e dumps.Entry) string {
-	if e.Source != nil {
-		if site, ok := siteForDir(sites, e.Source.File); ok {
+// ---------------------------------------------------------------------------------------------
+// events
+
+type eventsIn struct {
+	Site          string   `json:"site,omitempty" jsonschema:"only events of this site (name, domain or project folder); omit for every site"`
+	Kinds         []string `json:"kinds,omitempty" jsonschema:"only these kinds; omit for all"`
+	LatestRequest bool     `json:"latest_request,omitempty" jsonschema:"only the most recent request or CLI run (of the site, when given)"`
+	Limit         int      `json:"limit,omitempty" jsonschema:"how many events to return (default 50)"`
+}
+
+// eventsSchema is eventsIn's schema with the kinds an item of "kinds" can be.
+func eventsSchema() *jsonschema.Schema {
+	sch := schema[eventsIn](nil)
+	kinds := make([]any, len(capture.Kinds))
+	for i, k := range capture.Kinds {
+		kinds[i] = k
+	}
+	sch.Properties["kinds"].Items.Enum = kinds
+	return sch
+}
+
+type eventOut struct {
+	Time   time.Time `json:"time"`
+	Kind   string    `json:"kind"`
+	Site   string    `json:"site,omitempty"`
+	Origin string    `json:"origin,omitempty"` // "GET https://..." or the command line
+	Group  string    `json:"group"`
+	Source string    `json:"source,omitempty"` // file:line of the app code
+	capture.Event
+}
+
+type eventsOut struct {
+	Capturing bool       `json:"capturing"`
+	Events    []eventOut `json:"events"`
+	Note      string     `json:"note,omitempty"`
+}
+
+func (s *server) getEvents(ctx context.Context, _ *mcp.CallToolRequest, in eventsIn) (*mcp.CallToolResult, eventsOut, error) {
+	st, err := s.Daemon.Status(ctx)
+	if err != nil {
+		return nil, eventsOut{}, err
+	}
+	if err := capture.Valid(in.Kinds); err != nil {
+		return nil, eventsOut{}, err
+	}
+	var only *api.SiteStatus
+	if in.Site != "" {
+		site, err := s.site(ctx, in.Site)
+		if err != nil {
+			return nil, eventsOut{}, err
+		}
+		only = &site
+	}
+	limit := in.Limit
+	if limit <= 0 {
+		limit = 50
+	}
+
+	events, err := capture.List(s.Root, 0, in.Kinds...)
+	if err != nil {
+		return nil, eventsOut{}, err
+	}
+	out := eventsOut{Capturing: st.Dumps, Events: []eventOut{}}
+	group := ""
+	for _, e := range events {
+		site := siteFor(st.Sites, e.Source, e.Request)
+		if only != nil && site != only.Name {
+			continue
+		}
+		if in.LatestRequest {
+			if group == "" {
+				group = e.Group
+			} else if e.Group != group {
+				continue
+			}
+		}
+		o := eventOut{Time: e.Time, Kind: e.Kind, Site: site, Group: e.Group, Event: e}
+		switch {
+		case e.Request != nil:
+			o.Origin = e.Request.Method + " " + e.Request.URI
+		case e.CommandLine != nil:
+			o.Origin = *e.CommandLine
+		}
+		if e.Source != nil {
+			o.Source = fmt.Sprintf("%s:%d", e.Source.File, e.Source.Line)
+		}
+		// The embedded event repeats these; leave only the flattened form.
+		o.Event.ID, o.Event.Site, o.Event.Request, o.Event.CommandLine, o.Event.Source = "", "", nil, nil, nil
+		o.Event.SQL, o.Event.Message = truncate(e.SQL, 4000), truncate(e.Message, 4000)
+		out.Events = append(out.Events, o)
+		if len(out.Events) == limit {
+			break
+		}
+	}
+	switch {
+	case !st.Dumps:
+		out.Note = "Capture is off, so nothing new is recorded. Turn it on with set_debugging (feature dumps)."
+	case len(st.CaptureUnsupported) > 0:
+		out.Note = "PHP " + strings.Join(st.CaptureUnsupported, ", ") + " only capture dumps: their builds lack the agent's extension (a newer build of that PHP version has it)."
+	}
+	return nil, out, nil
+}
+
+// siteFor attributes a dump or event to a site by the file that caused it, or by the request host.
+func siteFor(sites []api.SiteStatus, source *dumps.Source, request *dumps.Request) string {
+	if source != nil {
+		if site, ok := siteForDir(sites, source.File); ok {
 			return site.Name
 		}
 	}
-	if e.Request != nil {
-		if u, err := url.Parse(e.Request.URI); err == nil {
+	if request != nil {
+		if u, err := url.Parse(request.URI); err == nil {
 			if site, ok := findSite(sites, u.Hostname()); ok {
 				return site.Name
 			}

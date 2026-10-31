@@ -20,6 +20,7 @@ import (
 	"flock/internal/frankenphp"
 	"flock/internal/php"
 	"flock/internal/postgres"
+	"flock/internal/share"
 	"flock/internal/supervisor"
 )
 
@@ -28,26 +29,56 @@ var ErrDaemonNotRunning = errors.New("flock daemon is not running (start it with
 
 // Status describes the running daemon.
 type Status struct {
-	Version           string                  `json:"version"`
-	PID               int                     `json:"pid"`
-	StartedAt         time.Time               `json:"started_at"`
-	DNS               DNSStatus               `json:"dns"`
-	HTTPPort          int                     `json:"http_port"`
-	HTTPSPort         int                     `json:"https_port"`
-	Mail              string                  `json:"mail"`
-	Dumps             bool                    `json:"dumps"`
-	MailCount         int                     `json:"mail_count"`
-	DumpCount         int                     `json:"dump_count"`
-	Postgres          string                  `json:"postgres,omitempty"`
-	Valkey            string                  `json:"valkey,omitempty"`
-	Extras            []ExtraStatus           `json:"extras,omitempty"` // installed catalog services
-	Xdebug            bool                    `json:"xdebug"`           // Xdebug detection; see config.Config.Xdebug
-	XdebugBreakpoints bool                    `json:"xdebug_breakpoints"`
-	Sites             []SiteStatus            `json:"sites"`
-	Processes         []supervisor.ProcStatus `json:"processes"`
-	Warnings          []string                `json:"warnings,omitempty"`
-	Channel           string                  `json:"channel"` // see ChannelOf; the apps' own updates follow it too
+	Version     string    `json:"version"`
+	PID         int       `json:"pid"`
+	StartedAt   time.Time `json:"started_at"`
+	DNS         DNSStatus `json:"dns"`
+	HTTPPort    int       `json:"http_port"`
+	HTTPSPort   int       `json:"https_port"`
+	Mail        string    `json:"mail"`
+	Dumps       bool      `json:"dumps"`
+	CaptureOff  []string  `json:"capture_off"`   // event kinds not captured (see config.Config.CaptureOff)
+	DumpsInPage bool      `json:"dumps_in_page"` // dump() shows in the page / terminal too
+	// CaptureUnsupported lists installed PHP versions without the agent's extension: only their
+	// dumps are captured (through the dump server).
+	CaptureUnsupported []string                `json:"capture_unsupported"`
+	MailCount          int                     `json:"mail_count"`
+	DumpCount          int                     `json:"dump_count"`
+	EventCount         int                     `json:"event_count"`
+	Postgres           string                  `json:"postgres,omitempty"`
+	Extras             []ExtraStatus           `json:"extras,omitempty"` // installed catalog services
+	Xdebug             bool                    `json:"xdebug"`           // Xdebug detection; see config.Config.Xdebug
+	XdebugBreakpoints  bool                    `json:"xdebug_breakpoints"`
+	Sites              []SiteStatus            `json:"sites"`
+	Processes          []supervisor.ProcStatus `json:"processes"`
+	Warnings           []string                `json:"warnings,omitempty"`
+	Channel            string                  `json:"channel"` // see ChannelOf; the apps' own updates follow it too
+	// Defaults is set while there is no default PHP or Node.js yet: the first run installs the
+	// newest stable ones and makes them the defaults.
+	Defaults *DefaultsStatus `json:"defaults,omitempty"`
 }
+
+// DefaultsStatus is the first run's install of the default PHP and Node.js.
+type DefaultsStatus struct {
+	PHP  DefaultInstall `json:"php"`
+	Node DefaultInstall `json:"node"`
+}
+
+// DefaultInstall is the install of one default. Version is "" until the package manifest names it.
+type DefaultInstall struct {
+	Version string `json:"version,omitempty"`
+	State   string `json:"state"` // DefaultWaiting, DefaultInstalling, DefaultFailed or DefaultDone
+	Error   string `json:"error,omitempty"`
+}
+
+// States of a DefaultInstall: waiting for the package manifest (offline), installing, failed (the
+// PHP or Node pane can try again), or done (the default is set).
+const (
+	DefaultWaiting    = "waiting"
+	DefaultInstalling = "installing"
+	DefaultFailed     = "failed"
+	DefaultDone       = "done"
+)
 
 // ExtraStatus is an installed catalog service (MySQL, Redis, ...).
 type ExtraStatus struct {
@@ -81,6 +112,24 @@ type SiteStatus struct {
 	Parked       bool   `json:"parked"`
 	URL          string `json:"url,omitempty"`
 	Problem      string `json:"problem,omitempty"`
+	// Notice is something about the site that needs a decision from the user but isn't broken,
+	// e.g. that Flock found no document root in it.
+	Notice string `json:"notice,omitempty"`
+	// Root is the document root, relative to Path ("." for Path itself). RootSource is "isolated"
+	// (set for the site on this machine), "project" (root= in the project's .flockrc) or "default"
+	// (detected: public/, www/, web/ or webroot/ with an index.php, else Path). RootPinned is what
+	// the project's .flockrc says, in RootFile, also when an isolation wins over it.
+	Root       string `json:"root"`
+	RootSource string `json:"root_source"`
+	RootPinned string `json:"root_pinned"`
+	RootFile   string `json:"root_file"`
+	// RootState is "" when the site is served from Root, else why Flock serves its page instead:
+	// "missing" (the root set for it isn't a folder; see Problem), "not_found" (a Composer
+	// project without an index.php in Path or a conventional root; see Notice) or "empty" (Root
+	// has no index.php or index.html). RootSuggestions are then the folders with an index.php
+	// that could be the root.
+	RootState       string   `json:"root_state,omitempty"`
+	RootSuggestions []string `json:"root_suggestions,omitempty"`
 	// Debugging is set while PhpStorm breakpoints send every request of the site to Xdebug.
 	Debugging bool `json:"debugging,omitempty"`
 	// Domains are the site's extra domains (subdomains and aliases), in the order they were added.
@@ -97,6 +146,8 @@ type SiteStatus struct {
 	// Boost is whether the project uses Laravel Boost and has Flock's guideline (see package boost):
 	// "" (no Boost), "missing", "current", "outdated" or "custom".
 	Boost string `json:"boost,omitempty"`
+	// Share is the site's tunnel (`flock share`), while there is one.
+	Share *share.Status `json:"share,omitempty"`
 }
 
 // FrankenPHP states of a site.
@@ -142,11 +193,14 @@ type DNSStatus struct {
 
 // Settings are the global toggles a UI can change; nil fields stay as they are.
 type Settings struct {
-	Xdebug            *bool   `json:"xdebug"`
-	XdebugBreakpoints *bool   `json:"xdebug_breakpoints"`
-	Dumps             *bool   `json:"dumps"`
-	DefaultPHP        *string `json:"default_php"`
-	DefaultNode       *string `json:"default_node"`
+	Xdebug            *bool `json:"xdebug"`
+	XdebugBreakpoints *bool `json:"xdebug_breakpoints"`
+	Dumps             *bool `json:"dumps"`
+	// CaptureOff replaces the list of event kinds not captured.
+	CaptureOff  *[]string `json:"capture_off"`
+	DumpsInPage *bool     `json:"dumps_in_page"`
+	DefaultPHP  *string   `json:"default_php"`
+	DefaultNode *string   `json:"default_node"`
 	// Channel is "stable", "beta" or "experimental" (see config.Config.Channel).
 	Channel *string `json:"channel"`
 }
@@ -174,6 +228,10 @@ type Backend interface {
 	Binaries() *binaries.Catalog
 	// RestartSite restarts a FrankenPHP site's process, e.g. so Octane's workers load changed code.
 	RestartSite(name string) error
+	// Shares runs the sites' tunnels (nil when unavailable); StartShare starts one after checking
+	// that the site can be shared, with the app's debug mode on for visitors when debug is set.
+	Shares() *share.Manager
+	StartShare(site string, allow []string, debug bool) error
 }
 
 // NewHandler builds the API routes. A non-empty token requires `Authorization: Bearer <token>`
@@ -214,9 +272,11 @@ func NewHandler(b Backend, token string) http.Handler {
 	registerFrankenPHP(mux, b)
 	registerMail(mux, b)
 	registerDumps(mux, b)
+	registerEvents(mux, b)
 	registerLogs(mux, b)
 	registerMCP(mux, b)
 	registerBoost(mux, b)
+	registerShares(mux, b)
 
 	if token == "" {
 		return mux

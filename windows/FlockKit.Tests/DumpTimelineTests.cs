@@ -60,4 +60,13 @@ public class DumpTimelineTests
         Assert.Equal("phpstorm://open?file=C:/code/x.php&line=9", Editor.PhpStorm.Url(@"C:\code\x.php", 9));
         Assert.Equal("app/Models/Cart.php", DumpTimeline.ShortPath(@"C:\code\shop\app\Models\Cart.php"));
     }
+
+    [Fact]
+    public void PhpStormEncodesQueryDelimitersAndUnicodeWithoutChangingPathSchemes()
+    {
+        var file = @"C:\code\a&b=1?c#d-é.php";
+
+        Assert.Equal("phpstorm://open?file=C:/code/a%26b%3D1%3Fc%23d-%C3%A9.php&line=4", Editor.PhpStorm.Url(file, 4));
+        Assert.Equal("vscode://file/C:/code/a&b=1%3Fc%23d-%C3%A9.php:4", Editor.VsCode.Url(file, 4));
+    }
 }

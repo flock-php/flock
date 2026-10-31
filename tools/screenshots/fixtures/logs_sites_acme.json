@@ -1,0 +1,37 @@
+[
+  {
+    "time": "{{now-40s}}",
+    "env": "local",
+    "level": "error",
+    "message": "SQLSTATE[23505]: Unique violation: 7 ERROR:  duplicate key value violates unique constraint \"orders_number_unique\"",
+    "details": "{\"exception\":\"[object] (Illuminate\\\\Database\\\\UniqueConstraintViolationException(code: 23505): SQLSTATE[23505]: Unique violation at C:\\\\Users\\\\demo\\\\Code\\\\acme\\\\vendor\\\\laravel\\\\framework\\\\src\\\\Illuminate\\\\Database\\\\Connection.php:822)\"}\n#0 C:\\Users\\demo\\Code\\acme\\vendor\\laravel\\framework\\src\\Illuminate\\Database\\Connection.php(776): Illuminate\\Database\\Connection->runQueryCallback()\n#1 C:\\Users\\demo\\Code\\acme\\app\\Actions\\PlaceOrder.php(48): Illuminate\\Database\\Eloquent\\Model->save()\n#2 C:\\Users\\demo\\Code\\acme\\app\\Http\\Controllers\\OrderController.php(57): App\\Actions\\PlaceOrder->handle()"
+  },
+  {
+    "time": "{{now-3m}}",
+    "env": "local",
+    "level": "warning",
+    "message": "Payment webhook retried: signature timestamp is 312 seconds old",
+    "details": "{\"provider\":\"stripe\",\"event\":\"evt_1R2x9TAcme\"}"
+  },
+  {
+    "time": "{{now-6m}}",
+    "env": "local",
+    "level": "info",
+    "message": "Order #1042 placed by ada@example.com",
+    "details": "{\"order_id\":1042,\"total\":\"129.90\"}"
+  },
+  {
+    "time": "{{now-9m}}",
+    "env": "local",
+    "level": "info",
+    "message": "Imported 128 products (3 skipped) in 1.84s",
+    "details": ""
+  },
+  {
+    "time": "{{now-14m}}",
+    "env": "local",
+    "level": "debug",
+    "message": "Cache miss: products.featured",
+    "details": ""
+  }
+]

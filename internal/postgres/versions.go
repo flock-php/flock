@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"flock/internal/binaries"
+	"flock/internal/ports"
 )
 
 // Errors of Manager operations; the API maps them to HTTP status codes.
@@ -18,6 +19,7 @@ var (
 	ErrInvalidMajor = errors.New("invalid PostgreSQL version")
 	ErrNotInstalled = errors.New("not installed")
 	ErrBusy         = errors.New("another PostgreSQL operation is in progress")
+	ErrPortTaken    = errors.New("PostgreSQL's port is taken")
 )
 
 // Service is how the Manager changes and observes the PostgreSQL service: the daemon (through
@@ -34,6 +36,9 @@ type Service interface {
 	Port() int
 	// Live reports whether Apply starts processes (a daemon), so the Manager waits for them.
 	Live() bool
+	// Reload applies the current configuration again: the server restarts when its command line
+	// changed, e.g. a preloaded extension was installed.
+	Reload() error
 }
 
 // Versions is the state of every offered or installed major (GET /v1/postgres/versions).
@@ -49,18 +54,19 @@ type Versions struct {
 
 // MajorVersion is one major line with what is installed of it.
 type MajorVersion struct {
-	Major      string `json:"major"`
-	Installed  string `json:"installed"` // version, e.g. "18.6"
-	Latest     string `json:"latest"`    // newest version in the channel
-	Update     bool   `json:"update"`    // Latest (or a newer build of it) can be installed
-	Size       int64  `json:"size"`      // download size of Latest
-	Prerelease bool   `json:"prerelease"`
-	Yanked     string `json:"yanked"` // why the installed build was withdrawn, "" when it wasn't
-	Active     bool   `json:"active"`
-	HasData    bool   `json:"has_data"`
-	DataSize   int64  `json:"data_size"`
-	EOL        string `json:"eol"`
-	Busy       string `json:"busy"` // "" | "installing" | "updating" | "switching" | "uninstalling"
+	Major      string   `json:"major"`
+	Installed  string   `json:"installed"` // version, e.g. "18.6"
+	Latest     string   `json:"latest"`    // newest version in the channel
+	Update     bool     `json:"update"`    // Latest (or a newer build of it) can be installed
+	Size       int64    `json:"size"`      // download size of Latest
+	Prerelease bool     `json:"prerelease"`
+	Yanked     string   `json:"yanked"` // why the installed build was withdrawn, "" when it wasn't
+	Active     bool     `json:"active"`
+	HasData    bool     `json:"has_data"`
+	DataSize   int64    `json:"data_size"`
+	EOL        string   `json:"eol"`
+	Busy       string   `json:"busy"`       // "" | "installing" | "updating" | "switching" | "uninstalling"
+	Extensions []string `json:"extensions"` // names of the extensions installed for it
 }
 
 // Find returns the state of major.
@@ -84,7 +90,7 @@ type Manager struct {
 	Service   Service
 	platform  string
 
-	op    sync.Mutex // held for the duration of an operation
+	op    chan struct{} // holds a token for the duration of an operation
 	mu    sync.Mutex
 	busy  map[string]string
 	sizes map[string]sizeEntry
@@ -98,9 +104,10 @@ type sizeEntry struct {
 // NewManager creates a manager for the PostgreSQL installs under root. A withdrawn (yanked) build
 // is replaced by the next good one as soon as the manifest has it.
 func NewManager(root string, catalog *binaries.Catalog, service Service) *Manager {
-	m := &Manager{Installer: NewInstaller(root), Catalog: catalog, Service: service, platform: binaries.Platform()}
+	m := &Manager{Installer: NewInstaller(root), Catalog: catalog, Service: service, platform: binaries.Platform(), op: make(chan struct{}, 1)}
 	if catalog != nil {
 		catalog.OnChange(m.replaceYanked)
+		catalog.OnChange(m.replaceYankedExtensions)
 	}
 	return m
 }
@@ -205,12 +212,13 @@ func (m *Manager) Versions() Versions {
 	for _, major := range list {
 		dir := DataDir(m.root(), major)
 		v := MajorVersion{
-			Major:     major,
-			Installed: VersionOf(installed[major]),
-			Active:    major == out.Active,
-			HasData:   HasCluster(dir),
-			EOL:       EndOfLife[major],
-			Busy:      m.busy[major],
+			Major:      major,
+			Installed:  VersionOf(installed[major]),
+			Active:     major == out.Active,
+			HasData:    HasCluster(dir),
+			EOL:        EndOfLife[major],
+			Busy:       m.busy[major],
+			Extensions: InstalledExtensions(m.root(), major),
 		}
 		offer, ok := available[major]
 		if ok {
@@ -267,22 +275,31 @@ func (m *Manager) begin(major, what string) (func(), error) {
 	if !majorPattern.MatchString(major) {
 		return nil, fmt.Errorf("%w %q: give a major version like %s", ErrInvalidMajor, major, DefaultMajor)
 	}
-	if !m.op.TryLock() {
-		return nil, ErrBusy
+	return m.claim(context.Background(), major, what, false)
+}
+
+// claim takes the operation lock and marks key (a major, or "<major>/<extension>") busy. With
+// wait, it waits for the operation that runs to end (key is "waiting" meanwhile); without, it
+// fails with ErrBusy.
+func (m *Manager) claim(ctx context.Context, key, what string, wait bool) (func(), error) {
+	select {
+	case m.op <- struct{}{}:
+	default:
+		if !wait {
+			return nil, ErrBusy
+		}
+		m.setBusy(key, "waiting")
+		select {
+		case m.op <- struct{}{}:
+		case <-ctx.Done():
+			m.clearBusy(key)
+			return nil, ctx.Err()
+		}
 	}
-	m.mu.Lock()
-	if m.busy == nil {
-		m.busy = map[string]string{}
-	}
-	m.busy[major] = what
-	delete(m.sizes, major)
-	m.mu.Unlock()
+	m.setBusy(key, what)
 	return func() {
-		m.mu.Lock()
-		delete(m.busy, major)
-		delete(m.sizes, major)
-		m.mu.Unlock()
-		m.op.Unlock()
+		m.clearBusy(key)
+		<-m.op
 	}, nil
 }
 
@@ -307,8 +324,9 @@ func (m *Manager) latest(ctx context.Context, major string) (binaries.Version, e
 
 // Install installs the newest build of major and, when no major is active yet, makes it the
 // active one and starts it. Installing a major that is installed already updates it when the
-// channel has a newer build, and does nothing otherwise.
-func (m *Manager) Install(ctx context.Context, major string) error {
+// channel has a newer build, and does nothing otherwise. extensions are installed for it too,
+// skipping those that have no build for major.
+func (m *Manager) Install(ctx context.Context, major string, extensions ...string) error {
 	done, err := m.begin(major, "installing")
 	if err != nil {
 		return err
@@ -322,21 +340,36 @@ func (m *Manager) Install(ctx context.Context, major string) error {
 
 	active, _ := m.Service.Active()
 	if current := m.installedByMajor(active)[major]; current != "" {
+		extErr := m.installExtensions(ctx, major, extensions)
 		if !Newer(ID(latest.Version, latest.Build), current) {
-			return nil
+			if extErr == nil {
+				_, _, extErr = Link(m.root(), current)
+			}
+			return extErr
 		}
 		m.setBusy(major, "updating")
-		return m.update(ctx, major, current, latest)
+		return errors.Join(m.update(ctx, major, current, latest), extErr)
+	}
+
+	// The first major starts right away: say who holds the port before downloading.
+	activate := active == "" || !m.Installer.Installed(active)
+	if activate {
+		if taken := ports.Taken(m.Service.Port(), m.root()); taken != "" {
+			return fmt.Errorf("%w: %s", ErrPortTaken, taken)
+		}
 	}
 
 	id, err := m.Installer.Install(ctx, latest)
 	if err != nil {
 		return err
 	}
-	if active == "" || !m.Installer.Installed(active) {
-		return m.activate(ctx, id, "")
+	// Before the server first starts, so a preloaded extension is in its command line.
+	extErr := m.installExtensions(ctx, major, extensions)
+	if activate {
+		return errors.Join(m.activate(ctx, id, ""), extErr)
 	}
-	return nil
+	_, _, err = Link(m.root(), id)
+	return errors.Join(err, extErr)
 }
 
 // Update installs the newest build of an installed major, restarts it when it is the active one,
@@ -390,9 +423,20 @@ func (m *Manager) update(ctx context.Context, major, current string, latest bina
 	return nil
 }
 
-func (m *Manager) setBusy(major, what string) {
+func (m *Manager) setBusy(key, what string) {
 	m.mu.Lock()
-	m.busy[major] = what
+	if m.busy == nil {
+		m.busy = map[string]string{}
+	}
+	m.busy[key] = what
+	delete(m.sizes, key)
+	m.mu.Unlock()
+}
+
+func (m *Manager) clearBusy(key string) {
+	m.mu.Lock()
+	delete(m.busy, key)
+	delete(m.sizes, key)
 	m.mu.Unlock()
 }
 
@@ -442,7 +486,8 @@ func (m *Manager) activate(ctx context.Context, id, previous string) error {
 		}
 		return fmt.Errorf("PostgreSQL %s did not start: %w", MajorOf(id), err)
 	}
-	return nil
+	// A preloaded extension updated while another major ran: its databases still name the old version.
+	return m.updateExtensionInDatabases(ctx, MajorOf(id))
 }
 
 // Uninstall removes the binaries of major, and its cluster when deleteData is set. When it was the
@@ -486,6 +531,10 @@ func (m *Manager) Uninstall(ctx context.Context, major string, deleteData bool) 
 	}
 
 	m.removeOthers(major, "")
+	// Its extensions go with it; the custom folder stays, like its data.
+	for _, e := range Extensions {
+		_ = os.RemoveAll(filepath.Join(ExtensionsRoot(m.root()), e.Name, major))
+	}
 	if deleteData {
 		if err := os.RemoveAll(DataDir(m.root(), major)); err != nil {
 			return fmt.Errorf("delete the PostgreSQL %s data: %w", major, err)
@@ -495,9 +544,13 @@ func (m *Manager) Uninstall(ctx context.Context, major string, deleteData bool) 
 }
 
 // prepare makes sure id's major has a cluster, so a failing initdb is reported to the caller
-// instead of only as a daemon warning.
+// instead of only as a daemon warning, and that its extensions are linked into it.
 func (m *Manager) prepare(id string) error {
-	return InitDB(m.Installer.BinDir(id), DataDir(m.root(), MajorOf(id)))
+	if err := InitDB(m.Installer.BinDir(id), DataDir(m.root(), MajorOf(id))); err != nil {
+		return err
+	}
+	_, _, err := Link(m.root(), id)
+	return err
 }
 
 // waitReady waits until the service's postgres runs and accepts connections.

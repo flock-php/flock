@@ -157,6 +157,24 @@ public actor FlockClient {
         try await decode(ExtensionReport.self, "POST", "/v1/sites/\(escape(site))/extensions/\(escape(name))/require", timeout: 300)
     }
 
+    // MARK: Sharing
+
+    /// Shares a site at a temporary public URL; allow limits it to these emails (or *@domain).
+    /// It returns at once: the share's progress shows on the site in `status()`.
+    public func startShare(site: String, allow: [String], debug: Bool = false) async throws -> ShareStatus {
+        struct Request: Encodable { let allow: [String]; let debug: Bool }
+        return try await decode(ShareStatus.self, "POST", "/v1/shares/\(escape(site))", body: try JSONEncoder().encode(Request(allow: allow, debug: debug)))
+    }
+
+    /// Builds a running share's assets again, so visitors see the latest changes when they reload.
+    public func rebuildShare(site: String) async throws -> ShareStatus {
+        try await decode(ShareStatus.self, "POST", "/v1/shares/\(escape(site))/rebuild")
+    }
+
+    public func stopShare(site: String) async throws {
+        _ = try await send("DELETE", "/v1/shares/\(escape(site))")
+    }
+
     // MARK: AI clients
 
     /// The AI clients Flock's MCP server can be registered with.
@@ -292,6 +310,26 @@ public actor FlockClient {
         }
     }
 
+    // MARK: PostgreSQL extensions
+
+    /// The extensions of a major; creates its folder for your own extensions.
+    public func postgresExtensions(_ major: String) async throws -> PostgresExtensions {
+        try await decode(PostgresExtensions.self, "GET", "/v1/postgres/versions/\(escape(major))/extensions")
+    }
+
+    /// Downloads an extension for a major. A preloaded one (TimescaleDB) restarts that major when it runs.
+    public func installPostgresExtension(_ major: String, _ name: String) async throws -> PostgresExtensions {
+        try await decode(PostgresExtensions.self, "POST", "/v1/postgres/versions/\(escape(major))/extensions/\(escape(name))/install", timeout: Self.postgresInstallTimeout)
+    }
+
+    public func updatePostgresExtension(_ major: String, _ name: String) async throws -> PostgresExtensions {
+        try await decode(PostgresExtensions.self, "POST", "/v1/postgres/versions/\(escape(major))/extensions/\(escape(name))/update", timeout: Self.postgresInstallTimeout)
+    }
+
+    public func uninstallPostgresExtension(_ major: String, _ name: String) async throws -> PostgresExtensions {
+        try await decode(PostgresExtensions.self, "DELETE", "/v1/postgres/versions/\(escape(major))/extensions/\(escape(name))", timeout: Self.postgresChangeTimeout)
+    }
+
     // MARK: PostgreSQL versions
 
     /// Cached on the daemon side; it never waits on the network.
@@ -304,9 +342,11 @@ public actor FlockClient {
         try await decode(PostgresVersions.self, "POST", "/v1/postgres/check", timeout: 60)
     }
 
-    /// Downloads and installs the newest release of a major; the first one installed becomes active and starts.
-    public func installPostgres(_ major: String) async throws -> PostgresVersions {
-        try await decode(PostgresVersions.self, "POST", "/v1/postgres/versions/\(escape(major))/install", timeout: Self.postgresInstallTimeout)
+    /// Downloads and installs the newest release of a major, with `extensions` where it has a build
+    /// of them; the first one installed becomes active and starts.
+    public func installPostgres(_ major: String, extensions: [String] = []) async throws -> PostgresVersions {
+        let body = extensions.isEmpty ? nil : try JSONEncoder().encode(["extensions": extensions])
+        return try await decode(PostgresVersions.self, "POST", "/v1/postgres/versions/\(escape(major))/install", body: body, timeout: Self.postgresInstallTimeout)
     }
 
     /// Installs the newest minor of a major; its databases stay, and it restarts when active.
@@ -419,6 +459,23 @@ public actor FlockClient {
 
     public func clearDumps() async throws {
         _ = try await send("DELETE", "/v1/dumps")
+    }
+
+    /// Queries, logs, views, jobs and requests captured by the PHP agent, newest first. Kinds this
+    /// app doesn't know are left out; a daemon without the endpoint (older Flock) has none.
+    public func events() async throws -> [Event] {
+        do {
+            let data = try await send("GET", "/v1/events")
+            return (try FlockJSON.eventDecoder().decode([Event]?.self, from: data) ?? []).filter { $0.kind != nil }
+        } catch FlockError.server(404, _) {
+            return []
+        }
+    }
+
+    public func clearEvents() async throws {
+        do {
+            _ = try await send("DELETE", "/v1/events")
+        } catch FlockError.server(404, _) {}
     }
 
     public func logs() async throws -> LogIndex {

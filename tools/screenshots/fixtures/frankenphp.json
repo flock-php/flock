@@ -1,0 +1,51 @@
+{
+  "available": true,
+  "checked_at": "{{now-3h}}",
+  "check_error": "",
+  "builds": [
+    {
+      "php": "8.5",
+      "installed": "",
+      "php_version": "",
+      "latest": "8.5.11",
+      "update": false,
+      "size": 70450533,
+      "prerelease": false,
+      "yanked": "",
+      "job": null
+    },
+    {
+      "php": "8.4",
+      "installed": "",
+      "php_version": "",
+      "latest": "8.4.26",
+      "update": false,
+      "size": 69406272,
+      "prerelease": false,
+      "yanked": "",
+      "job": null
+    },
+    {
+      "php": "8.3",
+      "installed": "",
+      "php_version": "",
+      "latest": "8.3.35",
+      "update": false,
+      "size": 68183296,
+      "prerelease": false,
+      "yanked": "",
+      "job": null
+    },
+    {
+      "php": "8.2",
+      "installed": "",
+      "php_version": "",
+      "latest": "8.2.34",
+      "update": false,
+      "size": 67742323,
+      "prerelease": false,
+      "yanked": "",
+      "job": null
+    }
+  ]
+}

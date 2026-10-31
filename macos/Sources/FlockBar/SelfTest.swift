@@ -51,6 +51,11 @@ enum SelfTest {
                 let origin = first.request.map { "\($0.method) \($0.uri)" } ?? first.commandLine ?? "?"
                 return "\(dumps.count) dumps; newest from \(first.shortSource ?? "unknown source") via \(origin), html \(first.html.count)B, text \(first.text.count)B"
             }
+            await check("GET /v1/events") {
+                let events = try await client.events()
+                let kinds = Dictionary(grouping: events) { $0.kind?.rawValue ?? "?" }.map { "\($0.key) \($0.value.count)" }.sorted()
+                return "\(events.count) events" + (kinds.isEmpty ? "" : ": " + kinds.joined(separator: ", "))
+            }
             await check("GET /v1/logs") {
                 let index = try await client.logs()
                 var result = "services \(index.services), sites \(index.sites.count)"

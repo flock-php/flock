@@ -95,3 +95,42 @@ func TestDebugCGIPortsStayClearOfTheWorkers(t *testing.T) {
 		}
 	}
 }
+
+func TestDefaultsYieldToPhpIni(t *testing.T) {
+	root := t.TempDir()
+	flockIni := func() string {
+		if err := EnsureIni(root, "8.5"); err != nil {
+			t.Fatal(err)
+		}
+		data, _ := os.ReadFile(filepath.Join(Dir(root, "8.5"), "conf.d", "00-flock.ini"))
+		return string(data)
+	}
+
+	// A new php.ini sets output_buffering itself, so Flock's ini doesn't.
+	if ini := flockIni(); strings.Contains(ini, "output_buffering") {
+		t.Errorf("default repeated next to a new php.ini:\n%s", ini)
+	}
+	if data, _ := os.ReadFile(IniPath(root, "8.5")); !strings.Contains(string(data), "output_buffering = 1048576") {
+		t.Errorf("new php.ini lacks output_buffering:\n%s", data)
+	}
+
+	// A php.ini from before the default (or a commented-out setting) gets it from Flock's ini.
+	old := "memory_limit = 1G\n; output_buffering = Off\n"
+	if err := os.WriteFile(IniPath(root, "8.5"), []byte(old), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if ini := flockIni(); !strings.Contains(ini, "\noutput_buffering = 1048576\n") {
+		t.Errorf("default missing for an older php.ini:\n%s", ini)
+	}
+	if data, _ := os.ReadFile(IniPath(root, "8.5")); string(data) != old {
+		t.Errorf("php.ini was changed: %q", data)
+	}
+
+	// Setting it in php.ini wins.
+	if err := os.WriteFile(IniPath(root, "8.5"), []byte(old+"Output_Buffering=0\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if ini := flockIni(); strings.Contains(ini, "output_buffering") {
+		t.Errorf("default overrides php.ini:\n%s", ini)
+	}
+}

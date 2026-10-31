@@ -8,15 +8,18 @@ notification area icon, and the Mail, Dumps, Logs and Settings windows.
 windows/
   FlockKit/         models + API client (net10.0, no UI — the macOS app's FlockKit)
   FlockKit.Tests/   xUnit tests, run anywhere: dotnet test windows/FlockKit.Tests
+  FlockTray.Tests/  tray state tests, run on Windows: dotnet test windows/FlockTray.Tests -p:Platform=x64
   FlockTray/        the WinUI 3 app (unpackaged, self-contained Windows App SDK)
+  FlockScreenshots/ the app's windows with demo data, as PNGs for the docs (never shipped)
   installer/        the Inno Setup script for Flock-Setup-x64.exe
   build.ps1         tests + publishes FlockTray to windows\dist\FlockTray-x64\
   build-installer.ps1  the CLI, the hosts helper, build.ps1 and the installer around them
   sign.ps1          Artifact Signing for the above, when CI sets it up (local builds stay unsigned)
 ```
 
-The UI is written in C# instead of XAML markup, the way the macOS app is written in SwiftUI. It
-uses the same WinUI controls, and it compiles (with full type checking) on macOS and Linux too:
+The UI uses compiled WinUI XAML with adjacent C# code-behinds for lifecycle, native-window, and
+runtime-only behavior. It uses the same WinUI controls, and the project compiles (with full type
+checking) on macOS and Linux too:
 
 ```sh
 dotnet msbuild windows/FlockTray -restore -t:Compile -p:RuntimeIdentifier=win-x64 -p:Platform=x64 -p:WindowsAppSDKSelfContained=false
@@ -37,8 +40,11 @@ Running and publishing it needs Windows (the Windows App SDK's packaging tools a
 | CA trusted in the System keychain | CA added to the machine's Trusted Root store (`certutil -addstore Root`). PHP gets a bundle of the Windows root store + Flock's CA. |
 
 `flock install` asks for administrator rights once (UAC), for the hosts helper, the NRPT rule and the
-CA. It asks again only when the helper is outdated (after updating Flock), the rule is missing, or
-either is set up for another TLD.
+CA. It asks again only when the helper's revision changed (`hosts.HelperRevision`, raised with
+changes to the helper, not with every release), the rule is missing, or either is set up for
+another TLD. It asks before replacing anything: declining leaves the installed version as it was.
+Updates do the same: the installer runs the new `flock.exe install --privileged-only` before it
+replaces the app, and stops when the prompt is declined.
 
 Everything comes from the binaries manifest of the configured channel (stable, beta), verified by
 SHA-256 against a signed list — nothing is built on the machine:
@@ -80,6 +86,24 @@ fails, or a service hasn't exited after 10 seconds, it is killed. php-cgi worker
    `.\windows\build.ps1` and start `windows\dist\FlockTray-x64\FlockTray.exe`.
    `FlockTray.exe --selftest` checks every API call against the running daemon.
 
+### Running the development tray alongside an installed copy
+
+Run `dotnet run --project windows/FlockTray -p:Platform=x64` from the repository root, or launch the executable produced by `windows/build.ps1`.
+An executable without the installer's adjacent `unins000.exe` runs as **Flock Dev**, in Debug or Release. Use `--dev` to force this mode when testing
+from an installed directory.
+
+Each local executable path has its own single-instance mutex and activation window. Starting that executable again opens its existing dev window;
+it never hands the launch to the installed production tray. Windows show `[Dev]`, and the tray tooltip and panel header show **Flock Dev**.
+
+Dev builds use separate tray preferences and WebView2 data under `%LocalAppData%\Flock\Flock.Tray.Dev.<path-hash>`. Versioned dev builds support the
+same update checks, signature verification, and installer launch as production. The downloaded installer updates the installed app, not the local build output.
+Automatic bundled CLI replacement is disabled. The dev tray still connects to the installed daemon by default: its sites, services, and daemon version are real,
+and actions in the dev UI affect that daemon. `FLOCK_HOME` still selects a different daemon data folder when needed.
+
+Rider's default build uses version `0.1.0`, so updates can be tested directly. To test from a specific version, build with
+`dotnet build windows/FlockTray -p:Platform=x64 -p:InformationalVersion=1.0.0`. For `windows/build.ps1`, set `FLOCK_VERSION=1.0.0` first;
+its default Git description may not be a version the updater can compare.
+
 ### First-run checklist
 
 - [ ] `flock install` finishes; Task Scheduler shows "Flock Daemon"; `flock status` answers
@@ -110,3 +134,25 @@ fails, or a service hasn't exited after 10 seconds, it is killed. php-cgi worker
 
 Logs: `%AppData%\Flock\log\` (daemon.log, web.log, php8.x-cgi.log, php8.x-install.log) and
 `%LocalAppData%\Flock\tray.log` for unexpected errors in the tray app.
+
+## Screenshots for the docs
+
+`FlockScreenshots` renders the tray app's windows with demo data, for the website's docs: every
+shot in `FlockScreenshots/Screenshots.cs`, in the light and the dark theme, as
+`{shot}-windows-{light|dark}.png` (the shot ids are the website's `screenshot:…` placeholders).
+
+```powershell
+dotnet build windows/FlockScreenshots -c Release -p:Platform=x64
+windows\FlockScreenshots\bin\x64\Release\net10.0-windows10.0.22621.0\win-x64\FlockScreenshots.exe --out screenshots
+# or a few: --only settings-php,mail-window   one theme: --theme dark
+```
+
+It needs no daemon and changes nothing on the machine: a fake daemon answers from
+`tools/screenshots/fixtures` (Flock's data folder points at a scratch folder through `FLOCK_HOME`).
+The windows open on screen, on top of everything, for a few seconds each; the PNGs are what the
+screen shows, at the display's scale. `tools/screenshots/make-dumps.php` regenerates the Dumps
+fixtures with the dump server's VarDumper. The **Screenshots** workflow does the same in CI.
+
+The project references `FlockTray` through `ProjectReference`, so it renders the same assembly that ships. Its own entry point supplies the theme,
+isolated preferences, and startup callback, with background polling and update checks disabled. Assets flow through the project reference; fixtures
+belong only to the capture runner. `build.ps1` checks that the published tray contains neither the capture runner nor its fixtures.

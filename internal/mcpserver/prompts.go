@@ -76,7 +76,7 @@ func (s *server) debugSite(ctx context.Context, req *mcp.GetPromptRequest) (*mcp
 	if problem := strings.TrimSpace(req.Params.Arguments["problem"]); problem != "" {
 		fmt.Fprintf(&b, "The problem: %s\n", problem)
 	}
-	b.WriteString("\nThis is what Flock has captured. Use get_errors, get_dumps, list_mail/read_mail and service_logs for more, " +
+	b.WriteString("\nThis is what Flock has captured. Use get_errors, get_dumps, get_events, list_mail/read_mail and service_logs for more, " +
 		"and fix the cause rather than the symptom.\n")
 
 	section := func(title string, v any) {
@@ -90,6 +90,9 @@ func (s *server) debugSite(ctx context.Context, req *mcp.GetPromptRequest) (*mcp
 	}
 	if _, dumps, err := s.getDumps(ctx, nil, dumpsIn{Site: site.Name, Limit: 5}); err == nil {
 		section("Recent dumps (newest first)", dumps)
+	}
+	if _, events, err := s.getEvents(ctx, nil, eventsIn{Site: site.Name, LatestRequest: true, Limit: 40}); err == nil && len(events.Events) > 0 {
+		section("The latest request or command (queries, logs, views, jobs, newest first)", events)
 	}
 	if _, mail, err := s.listMail(ctx, nil, listMailIn{Limit: 5}); err == nil {
 		section("Recent mail (newest first)", mail)

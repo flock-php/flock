@@ -1,0 +1,18 @@
+{
+  "tld": "test",
+  "default_php": "8.5",
+  "default_node": "24",
+  "xdebug": true,
+  "xdebug_breakpoints": false,
+  "dumps": true,
+  "channel": "stable",
+  "root": "C:\\Users\\demo\\AppData\\Roaming\\Flock",
+  "ports": { "http": 80, "https": 443, "dns": 53535, "smtp": 2525, "postgres": 5432, "dumps": 9912, "api": 53531 },
+  "parked": ["C:\\Users\\demo\\Code"],
+  "php": [
+    { "version": "8.5", "full_version": "8.5.11", "ini": "C:\\Users\\demo\\AppData\\Roaming\\Flock\\php\\8.5\\php.ini", "xdebug_available": true },
+    { "version": "8.4", "full_version": "8.4.26", "ini": "C:\\Users\\demo\\AppData\\Roaming\\Flock\\php\\8.4\\php.ini", "xdebug_available": true },
+    { "version": "8.3", "full_version": "8.3.34", "ini": "C:\\Users\\demo\\AppData\\Roaming\\Flock\\php\\8.3\\php.ini", "xdebug_available": true }
+  ],
+  "node": ["24.22.0", "22.23.3"]
+}

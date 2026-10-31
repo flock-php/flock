@@ -25,6 +25,10 @@ import (
 // tools are the commands Flock puts on PATH as shims.
 var tools = append([]string{"php", "composer", "node", "npm", "npx", "redis-cli", "valkey-cli"}, postgres.ClientTools...)
 
+// cliAliases are other names for the flock command, installed next to it. On Linux `flk` is also
+// the one that never hands a call to util-linux's flock (see PassThrough).
+var cliAliases = []string{"flk"}
+
 // ShimTool returns the tool a shim executable stands for ("php" for ...\bin\php.exe), or "".
 func ShimTool(argv0 string) string {
 	name := strings.ToLower(filepath.Base(argv0))
@@ -111,6 +115,9 @@ func resolveTool(s *state, cwd, tool string, args []string) (path string, argv, 
 	case "php", "composer":
 		// Isolated for the site, else pinned in the project (.flockrc), else the default.
 		minor := project.PHPFor(s.cfg, siteFor(s, cwd), cwd).Version
+		if minor == "" {
+			return "", nil, nil, errNoDefaultPHP
+		}
 
 		installed, _ := php.Installed(s.root)
 		if !slices.Contains(installed, minor) {
@@ -136,6 +143,9 @@ func resolveTool(s *state, cwd, tool string, args []string) (path string, argv, 
 		// Isolated for the site, else pinned in the project (.flockrc, .nvmrc, .node-version),
 		// else the default.
 		spec := project.NodeFor(s.cfg, siteFor(s, cwd), cwd).Version
+		if spec == "" {
+			return "", nil, nil, errNoDefaultNode
+		}
 
 		binDir, version, err := node.Resolve(s.root, spec)
 		if err != nil {

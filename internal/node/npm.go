@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -197,4 +198,22 @@ func (c *Catalog) Npm(ctx context.Context, refresh bool) (func(nodeVersion strin
 	}
 	p := *c.npm
 	return p.latestNpmFor, c.npmErr
+}
+
+// RunNpm runs npm in dir with a version's Node and global prefix (as the shims would), writing
+// its output to out.
+func RunNpm(ctx context.Context, root, version, dir string, out io.Writer, args ...string) error {
+	binDir, err := BinDir(root, version)
+	if err != nil {
+		return err
+	}
+	_, cli := Npm(root, version)
+	if cli == "" {
+		return fmt.Errorf("Node.js %s has no npm", version)
+	}
+	cmd := exec.CommandContext(ctx, filepath.Join(binDir, nodeExe()), append([]string{cli}, args...)...)
+	cmd.Dir = dir
+	cmd.Env = append(os.Environ(), NpmEnv(root, version, binDir)...)
+	cmd.Stdout, cmd.Stderr = out, out
+	return cmd.Run()
 }

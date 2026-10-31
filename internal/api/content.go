@@ -12,6 +12,7 @@ import (
 	"strconv"
 	"strings"
 
+	"flock/internal/capture"
 	"flock/internal/dumps"
 	"flock/internal/laravellog"
 	"flock/internal/mail"
@@ -101,7 +102,7 @@ func registerDumps(mux *http.ServeMux, b Backend) {
 		}
 		sites := b.Status().Sites
 		for i := range entries {
-			entries[i].Site = siteForDump(sites, entries[i])
+			entries[i].Site = siteFor(sites, entries[i].Source, entries[i].Request)
 		}
 		writeJSON(w, http.StatusOK, entries)
 	})
@@ -125,23 +126,66 @@ func registerDumps(mux *http.ServeMux, b Backend) {
 	})
 }
 
-// siteForDump attributes a dump to a site by the file that called dump(), or by the request host.
-func siteForDump(sites []SiteStatus, e dumps.Entry) string {
-	if e.Source != nil {
+// registerEvents serves what the agent captured besides dumps (see package capture).
+func registerEvents(mux *http.ServeMux, b Backend) {
+	mux.HandleFunc("GET /v1/events", func(w http.ResponseWriter, r *http.Request) {
+		var kinds []string
+		if k := r.URL.Query().Get("kind"); k != "" {
+			kinds = strings.Split(k, ",")
+			if err := capture.Valid(kinds); err != nil {
+				writeError(w, http.StatusBadRequest, err)
+				return
+			}
+		}
+		limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
+		events, err := capture.List(b.Root(), limit, kinds...)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, err)
+			return
+		}
+		sites := b.Status().Sites
+		for i := range events {
+			events[i].Site = siteFor(sites, events[i].Source, events[i].Request)
+		}
+		writeJSON(w, http.StatusOK, events)
+	})
+
+	mux.HandleFunc("DELETE /v1/events", func(w http.ResponseWriter, _ *http.Request) {
+		if err := capture.Clear(b.Root()); err != nil {
+			writeError(w, http.StatusInternalServerError, err)
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
+	})
+}
+
+// siteFor attributes a dump or event to a site by the file that caused it, or by the request host.
+func siteFor(sites []SiteStatus, source *dumps.Source, request *dumps.Request) string {
+	if source != nil {
 		for _, s := range sites {
-			if inDir(e.Source.File, s.Path) {
+			if inDir(source.File, s.Path) {
 				return s.Domain
 			}
 		}
 	}
-	if e.Request != nil {
-		if u, err := url.Parse(e.Request.URI); err == nil {
-			host := u.Hostname()
+	if request != nil {
+		if u, err := url.Parse(request.URI); err == nil {
+			// The longest name wins, as in routing: accounts.shop.test can be another site's alias.
+			host, best, site := u.Hostname(), "", ""
 			for _, s := range sites {
-				if host == s.Domain || strings.HasSuffix(host, "."+s.Domain) {
-					return s.Domain
+				names := []string{s.Domain}
+				for _, d := range s.Domains {
+					if d.Alias && d.Problem == "" {
+						names = append(names, d.Host)
+					}
+				}
+				for _, name := range names {
+					if (host == name || strings.HasSuffix(host, "."+name)) && len(name) > len(best) {
+						best, site = name, s.Domain
+					}
 				}
 			}
+			return site
 		}
 	}
 	return ""
