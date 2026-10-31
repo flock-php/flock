@@ -25,11 +25,11 @@ type wildcardState struct {
 // recheckWildcard retries a DNS server that couldn't start (Windows: port 53 was taken) and checks again.
 func (d *daemon) recheckWildcard() {
 	d.mu.Lock()
-	cfg, down := d.cfg, d.dns == nil
+	cfg, down, listen := d.cfg, d.dns == nil, d.listen
 	d.mu.Unlock()
 	if cfg != nil && down && runtime.GOOS == "windows" {
 		d.reloadMu.Lock()
-		_ = d.ensureDNS(cfg)
+		_ = d.ensureDNS(cfg, listen)
 		d.reloadMu.Unlock()
 	}
 	d.checkWildcard()

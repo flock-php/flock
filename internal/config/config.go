@@ -20,6 +20,10 @@ type Config struct {
 	DefaultNode string   `json:"default_node"`
 	Ports       Ports    `json:"ports"`
 	Services    Services `json:"services"`
+	// Listen are addresses of this machine, besides 127.0.0.1, that the sites and the DNS server
+	// also listen on, for other machines: its tailnet address, say, to work on it from a laptop.
+	// Requests arriving there are served whoever sends them, so list only trusted networks' addresses.
+	Listen []string `json:"listen,omitempty"`
 	// Xdebug routes requests that ask for Xdebug (browser extension, XDEBUG_TRIGGER) to a PHP pool
 	// that loads it; XdebugBreakpoints also routes sites with PhpStorm breakpoints there. The key
 	// is new: the old "xdebug" loaded Xdebug for every request and defaulted to off.

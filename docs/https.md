@@ -34,6 +34,8 @@ When you install Flock, it creates its own certificate authority (CA) and adds i
 
 The CA's root certificate is **name-constrained** to your local TLD and `localhost`. Even if its private key ever leaked, it could not be used to issue certificates for real websites.
 
+To open your sites over HTTPS from another machine, that machine has to trust the CA too (see [Working from another machine](configuration.md#working-from-another-machine)).
+
 Each secured site gets a certificate for `acme.test` and `*.acme.test`. Certificates for deeper subdomains and for the site's aliases are issued on demand the first time they're requested.
 
 ## Outgoing HTTPS from PHP
