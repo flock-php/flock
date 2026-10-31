@@ -21,17 +21,15 @@ jobs:
                         const issue = context.payload.issue;
                         const author = issue.user.login;
 
-                        try {
-                            await github.rest.repos.getCollaboratorPermissionLevel({ owner, repo, username: author });
+                        if (['OWNER', 'MEMBER', 'COLLABORATOR'].includes(issue.author_association)) {
                             core.info(`${author} is a repository collaborator`);
-                        } catch (error) {
-                            if (error.status !== 404) throw error;
-
-                            await github.rest.issues.addLabels({
-                                owner,
-                                repo,
-                                issue_number: issue.number,
-                                labels: ['needs triage'],
-                            });
-                            core.info(`Added "needs triage" to #${issue.number}, opened by ${author}`);
+                            return;
                         }
+
+                        await github.rest.issues.addLabels({
+                            owner,
+                            repo,
+                            issue_number: issue.number,
+                            labels: ['needs triage'],
+                        });
+                        core.info(`Added "needs triage" to #${issue.number}, opened by ${author}`);
