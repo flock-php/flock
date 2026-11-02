@@ -74,8 +74,8 @@ func (d *daemon) frankenPHPSite(cfg *config.Config, site config.Site, minor, doc
 	return fp
 }
 
-// RestartSite implements api.Backend: it restarts a FrankenPHP site's process, e.g. so Octane's
-// workers load changed code.
+// RestartSite implements api.Backend: it restarts a site's FrankenPHP and Reverb processes, e.g. so
+// Octane's workers or Reverb load changed code.
 func (d *daemon) RestartSite(name string) error {
 	d.mu.Lock()
 	cfg := d.cfg
@@ -87,8 +87,8 @@ func (d *daemon) RestartSite(name string) error {
 	if !ok {
 		return fmt.Errorf("no site named %s", name)
 	}
-	if !site.FrankenPHP() {
-		return fmt.Errorf("%s doesn't run on FrankenPHP", name)
+	if !site.FrankenPHP() && !site.Reverb {
+		return fmt.Errorf("%s runs neither FrankenPHP nor Reverb", name)
 	}
 	d.mu.Lock()
 	d.restarts[name]++
