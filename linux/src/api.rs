@@ -1556,7 +1556,8 @@ mod tests {
         // An older daemon sends no command: the default one.
         assert!(!ns.custom);
         assert_eq!(ns.command_line(), "npm run dev -- --port 21001");
-        let custom = r#"{"state":"running","port":21003,"command":"pnpm dev --port 21003","custom":true,"configured":"pnpm dev --port {port}"}"#;
+        let custom =
+            r#"{"state":"running","port":21003,"command":"pnpm dev --port 21003","custom":true,"configured":"pnpm dev --port {port}"}"#;
         let custom: SiteNodeServer = serde_json::from_str(custom).unwrap();
         assert!(custom.custom && ns.configured.is_empty());
         assert_eq!(custom.configured, "pnpm dev --port {port}");

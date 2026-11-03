@@ -1039,12 +1039,8 @@ impl Inner {
             .filter(|ns| ns.custom)
             .map(|ns| if ns.configured.is_empty() { ns.command.clone() } else { ns.configured.clone() })
             .unwrap_or_default();
-        let entry = gtk::Entry::builder()
-            .placeholder_text("npm run dev")
-            .text(custom.as_str())
-            .hexpand(true)
-            .valign(gtk::Align::Center)
-            .build();
+        let entry =
+            gtk::Entry::builder().placeholder_text("npm run dev").text(custom.as_str()).hexpand(true).valign(gtk::Align::Center).build();
         let row = adw::ActionRow::builder().title("Command").build();
         if let Some(ns) = ns.as_ref().filter(|ns| !ns.command.is_empty()) {
             row.set_subtitle(&glib::markup_escape_text(&format!("Runs {}", ns.command)));
