@@ -283,6 +283,10 @@ struct SitesPane: View {
                 Image(systemName: "exclamationmark.triangle.fill").font(.caption).foregroundStyle(.orange)
                     .help(problem)
             }
+            Circle()
+                .fill(proxy.running ? Color.green : Color.secondary.opacity(0.5))
+                .frame(width: 6, height: 6)
+                .help(proxy.running ? proxy.server ?? "Running" : "Not running")
             if proxy.secured {
                 Image(systemName: "lock.fill").font(.caption).foregroundStyle(.secondary)
                     .help("Served over HTTPS")
@@ -336,6 +340,20 @@ struct SitesPane: View {
             }
 
             section("Proxy") {
+                field("Server") {
+                    VStack(alignment: .leading, spacing: 2) {
+                        HStack(spacing: 6) {
+                            Circle()
+                                .fill(proxy.running ? Color.green : Color.secondary.opacity(0.5))
+                                .frame(width: 7, height: 7)
+                            Text(proxy.running ? proxy.server ?? "Running" : "Not running")
+                        }
+                        if !proxy.running {
+                            Text("Nothing answers at \(upstreamLabel(proxy.upstream)) yet.")
+                                .font(.caption).foregroundStyle(.secondary)
+                        }
+                    }
+                }
                 field("HTTPS") {
                     Toggle("HTTPS", isOn: Binding(
                         get: { proxy.secured },

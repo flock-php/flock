@@ -83,6 +83,10 @@ public struct Status: Decodable, Sendable, Equatable {
         public var url: String?
         /// Why it isn't served, e.g. a site of the same name serves its domain.
         public var problem: String?
+        /// Something answers at the upstream; `server` names it when it runs on this Mac, e.g.
+        /// "Node.js 22.23.4" for one of Flock's Node.js versions.
+        public var running: Bool
+        public var server: String?
 
         public var id: String { name }
     }

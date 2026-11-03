@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"flock/internal/config"
+	"flock/internal/ports"
 )
 
 // upstream is a dev server: it answers with the Host and X-Forwarded-Proto it got, and echoes a
@@ -57,6 +58,10 @@ func TestProxiesPassRequestsAndUpgradesToTheirServer(t *testing.T) {
 	}
 	if len(status.Proxies) != 1 || status.Proxies[0].URL != "http://softpack.test:"+strconv.Itoa(cfg.Ports.HTTP) || status.Proxies[0].Problem != "" {
 		t.Fatalf("unexpected proxies: %+v", status.Proxies)
+	}
+	// The test binary listens there, so it's running and named.
+	if !status.Proxies[0].Running || status.Proxies[0].Server == "" {
+		t.Errorf("the upstream answers: %+v", status.Proxies[0])
 	}
 
 	web := "127.0.0.1:" + strconv.Itoa(cfg.Ports.HTTP)
@@ -121,5 +126,41 @@ func TestAProxyWinsOverAParkedFolderOfTheSameName(t *testing.T) {
 	resp.Body.Close()
 	if resp.StatusCode != http.StatusOK || !strings.HasPrefix(string(body), "blog.test") {
 		t.Fatalf("got %d %q", resp.StatusCode, body)
+	}
+}
+
+func TestAProxyWhoseServerIsDownSaysSo(t *testing.T) {
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	closed := ln.Addr().String()
+	ln.Close()
+	root, _ := testRoot(t, func(c *config.Config) {
+		c.Proxies = []config.Proxy{{Name: "api", Upstream: "http://" + closed}}
+	})
+	client := startDaemon(t, root)
+
+	status, err := client.Status(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(status.Proxies) != 1 || status.Proxies[0].Running || status.Proxies[0].Server != "" {
+		t.Fatalf("unexpected proxies: %+v", status.Proxies)
+	}
+}
+
+func TestServerNameNamesFlocksNode(t *testing.T) {
+	root := filepath.Join(string(filepath.Separator)+"data", "Flock")
+	for h, want := range map[ports.Holder]string{
+		{Process: "node", Path: filepath.Join(root, "node", "22.23.4", "bin", "node")}: "Node.js 22.23.4",
+		{Process: "node", Path: "/opt/homebrew/bin/node"}:                              "Node.js",
+		{Process: "next-server (v15.5.28)"}:                                            "next-server (v15.5.28)",
+		{Process: "bun", Path: "/Users/me/.bun/bin/bun"}:                               "bun",
+		{}: "",
+	} {
+		if got := serverName(root, h); got != want {
+			t.Errorf("serverName(%+v) = %q, want %q", h, got, want)
+		}
 	}
 }

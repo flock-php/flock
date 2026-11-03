@@ -67,6 +67,10 @@ type ProxyStatus struct {
 	Secured  bool   `json:"secured"`
 	URL      string `json:"url,omitempty"`
 	Problem  string `json:"problem,omitempty"` // why it isn't served, e.g. a site serves its domain
+	// Running is set while something answers at the upstream. Server names it when it runs on this
+	// machine: "Node.js 22.23.4" (one of Flock's versions), "Node.js", or the program's name.
+	Running bool   `json:"running"`
+	Server  string `json:"server,omitempty"`
 }
 
 // DefaultsStatus is the first run's install of the default PHP and Node.js.

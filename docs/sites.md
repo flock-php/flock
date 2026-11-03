@@ -73,7 +73,7 @@ Remove a link with `flock unlink [name]`.
 Apps that aren't PHP, such as a Next.js, Nuxt or Vite dev server, an object store or a dashboard, run a server of their own on a port. A proxy serves that port at a `.test` domain, so the app gets a name, and HTTPS, like a site:
 
 :::app
-On macOS, click **Add Proxy…** in **Settings → Sites**, and give a name and the port (or host:port or URL). Proxies are listed under the sites; select one to turn on HTTPS, change its upstream or remove it.
+On macOS, click **Add Proxy…** in **Settings → Sites**, and give a name and the port (or host:port or URL). Proxies are listed under the sites, here and in the Flock panel, with what serves them (for example Node.js 22, when it's one of Flock's versions) or **Not running**; select one to turn on HTTPS, change its upstream or remove it.
 :::
 
 :::cli
@@ -88,7 +88,7 @@ A port means `127.0.0.1`; give a host and port (`localhost:5173`) or a URL (`htt
 | --- | --- |
 | `--secure` | Serve it over HTTPS right away |
 
-`flock secure softpack` and `flock unsecure softpack` work on proxies too, `flock proxies` lists them, and `flock unproxy softpack` removes one.
+`flock secure softpack` and `flock unsecure softpack` work on proxies too, `flock proxies` lists them with what serves them (or `not running`), and `flock unproxy softpack` removes one.
 :::
 
 Requests pass to the server with their `Host` header, so the app sees `softpack.test`, and WebSocket upgrades pass through too, so hot reload works. Some dev servers only answer the hosts they know: allow the domain in Vite's `server.allowedHosts`, or Next.js's `allowedDevOrigins`. Start the server itself as usual, e.g. with `npm run dev`: until it runs, the domain answers with 502 Bad Gateway.

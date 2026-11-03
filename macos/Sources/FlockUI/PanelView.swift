@@ -27,7 +27,7 @@ struct PanelView: View {
                 Divider()
                 services(status)
                 Divider()
-                sites(status.sites)
+                sites(status.sites, proxies: status.proxies)
                 Divider()
                 toggles(status)
                 Divider()
@@ -181,15 +181,17 @@ struct PanelView: View {
         return process.restarts > 0 ? "up (restarted \(process.restarts)×)" : "up"
     }
 
-    private func sites(_ sites: [Status.Site]) -> some View {
+    private func sites(_ sites: [Status.Site], proxies: [Status.Proxy]) -> some View {
         VStack(alignment: .leading, spacing: 4) {
             SectionTitle("Sites")
-            if sites.isEmpty {
+            if sites.isEmpty && proxies.isEmpty {
                 Text("No sites yet — run `flock link` or `flock park`.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             } else {
-                SiteList(sites: sites) { model.open($0) }
+                SiteList(sites: sites, proxies: proxies) { model.open($0) } openProxy: { proxy in
+                    if let text = proxy.url, let url = URL(string: text) { NSWorkspace.shared.open(url) }
+                }
             }
         }
     }
@@ -311,7 +313,10 @@ private struct ServiceRow: View {
 /// it once it's expanded.
 private struct SiteList: View {
     let sites: [Status.Site]
+    /// Proxies (`flock proxy`) follow the sites.
+    var proxies: [Status.Proxy] = []
     let open: (Status.Site) -> Void
+    var openProxy: (Status.Proxy) -> Void = { _ in }
 
     private let contentHeightState = State<CGFloat>(initialValue: 0)
     private var contentHeight: CGFloat {
@@ -342,6 +347,9 @@ private struct SiteList: View {
                             WorktreeRow(worktree: worktree) { open(worktree) }
                         }
                     }
+                }
+                ForEach(proxies) { proxy in
+                    ProxyRow(proxy: proxy) { openProxy(proxy) }
                 }
             }
         }
@@ -437,6 +445,51 @@ private struct SiteRow: View {
             return "No public/, www/, web/ or webroot/ with an index.php in \(site.path). Choose the document root in Settings → Sites."
         }
         return site.url ?? site.problem ?? site.path
+    }
+}
+
+/// A proxy among the sites: its domain, and what answers at its upstream (the Node.js version when
+/// it is one of Flock's) or that nothing does yet.
+private struct ProxyRow: View {
+    let proxy: Status.Proxy
+    let open: () -> Void
+
+    private let isHoveredState = State<Bool>(initialValue: false)
+    private var isHovered: Bool {
+        get { isHoveredState.wrappedValue }
+        nonmutating set { isHoveredState.wrappedValue = newValue }
+    }
+
+    var body: some View {
+        Button(action: open) {
+            HStack(spacing: 6) {
+                Image(systemName: proxy.secured ? "lock.fill" : "globe")
+                    .font(.caption)
+                    .foregroundStyle(proxy.secured ? Color.green : Color.secondary)
+                    .frame(width: 14)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(proxy.domain).font(.callout)
+                    if let problem = proxy.problem {
+                        Text(problem).font(.caption2).foregroundStyle(.red)
+                    }
+                }
+                Spacer()
+                Circle()
+                    .fill(proxy.running ? Color.green : Color.secondary.opacity(0.5))
+                    .frame(width: 6, height: 6)
+                Text(proxy.running ? proxy.server ?? "Running" : "Not running")
+                    .font(.caption2.monospacedDigit())
+                    .foregroundStyle(.secondary)
+            }
+            .padding(.vertical, 3)
+            .padding(.horizontal, 6)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .disabled(proxy.url == nil)
+        .help(proxy.running ? "\(proxy.url ?? proxy.domain) → \(proxy.upstream)" : "Nothing answers at \(proxy.upstream) — start the server there, e.g. with npm run dev")
+        .background(isHovered ? Color.primary.opacity(0.08) : .clear, in: RoundedRectangle(cornerRadius: 5))
+        .onHover { isHovered = $0 }
     }
 }
 

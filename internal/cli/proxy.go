@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"cmp"
 	"fmt"
 	"net"
 	"net/url"
@@ -94,20 +95,20 @@ func newProxiesCommand() *cobra.Command {
 			}
 
 			w := tabwriter.NewWriter(cmd.OutOrStdout(), 0, 0, 2, ' ', 0)
-			fmt.Fprintln(w, "PROXY\tURL\tUPSTREAM")
+			fmt.Fprintln(w, "PROXY\tURL\tUPSTREAM\tSERVER")
 			var live *api.Status
 			if st, err := s.client().Status(cmd.Context()); err == nil {
 				live = &st
 			}
 			for _, p := range proxyRows(live, s.cfg) {
-				fmt.Fprintf(w, "%s\t%s\t%s\n", p.name, p.url, p.upstream)
+				fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", p.name, p.url, p.upstream, p.server)
 			}
 			return w.Flush()
 		},
 	}
 }
 
-type proxyRow struct{ name, url, upstream string }
+type proxyRow struct{ name, url, upstream, server string }
 
 // proxyRows are the proxies as the daemon serves them (st), or as cfg has them while it's down (nil st).
 func proxyRows(st *api.Status, cfg *config.Config) []proxyRow {
@@ -118,12 +119,16 @@ func proxyRows(st *api.Status, cfg *config.Config) []proxyRow {
 			if p.Problem != "" {
 				u = "⚠ " + p.Problem
 			}
-			rows = append(rows, proxyRow{p.Name, u, p.Upstream})
+			server := "not running"
+			if p.Running {
+				server = cmp.Or(p.Server, "running")
+			}
+			rows = append(rows, proxyRow{p.Name, u, p.Upstream, server})
 		}
 		return rows
 	}
 	for _, p := range cfg.Proxies {
-		rows = append(rows, proxyRow{p.Name, proxyURL(cfg, p), p.Upstream})
+		rows = append(rows, proxyRow{p.Name, proxyURL(cfg, p), p.Upstream, "-"})
 	}
 	return rows
 }

@@ -99,6 +99,7 @@ type daemon struct {
 	mu       sync.Mutex
 	sites    []api.SiteStatus
 	proxies  []api.ProxyStatus
+	probe    serverProbe // what answers at the proxies' upstreams
 	warnings []string
 	problems map[string]string // why an installed catalog service isn't running, by id
 	// breakpoints finds PhpStorm breakpoints; breakpointSites is what the last reload found, by site path.
@@ -1031,6 +1032,12 @@ func (s pgService) Reload() error { return s.d.reload() }
 
 // Status implements api.Backend.
 func (d *daemon) Status() api.Status {
+	// Probed outside the lock: a dev server that doesn't answer takes a moment to say so.
+	d.mu.Lock()
+	served := d.proxies
+	d.mu.Unlock()
+	proxies := d.probe.live(d.root, served)
+
 	d.mu.Lock()
 	defer d.mu.Unlock()
 
@@ -1039,7 +1046,7 @@ func (d *daemon) Status() api.Status {
 		PID:       os.Getpid(),
 		StartedAt: d.startedAt,
 		Sites:     d.withWorktrees(d.withShares(withBoost(d.liveSites()))),
-		Proxies:   d.proxies,
+		Proxies:   proxies,
 		Processes: d.procs.Status(),
 		Warnings:  d.warnings,
 	}
