@@ -53,6 +53,12 @@ struct SitesPane: View {
         nonmutating set { editingUpstreamState.wrappedValue = newValue }
     }
     private let upstreamDraftState = State<String>(initialValue: "")
+    /// Commands typed for Node.js sites and not saved yet, by site name.
+    private let commandDraftsState = State<[String: String]>(initialValue: [:])
+    private var commandDrafts: [String: String] {
+        get { commandDraftsState.wrappedValue }
+        nonmutating set { commandDraftsState.wrappedValue = newValue }
+    }
 
     var body: some View {
         let store = model.settings
@@ -514,10 +520,8 @@ struct SitesPane: View {
                 }
             }
 
-            if site.server != .node {
-                section("Share") {
-                    shareFields(site)
-                }
+            section("Share") {
+                shareFields(site)
             }
 
             section("Versions") {
@@ -805,7 +809,7 @@ struct SitesPane: View {
                 }
             }
             .disabled(ns == nil || ns?.state == .unavailable || restarting == site.name)
-            .help("Restart npm run \(ns?.script ?? "dev")")
+            .help("Restart \(ns?.command ?? "the dev server")")
             Button("Show Log") {
                 model.logs.requested = .service(ns?.log ?? "node-\(site.name)")
                 openWindow.activating(WindowID.logs)
@@ -815,16 +819,38 @@ struct SitesPane: View {
             }
         }
         .controlSize(.small)
-        Text("Flock runs npm run \(ns?.script ?? "dev") -- --port \(ns.map { String($0.port) } ?? "…") in the project with the Node.js under Versions, restarts it when it exits, and serves the site's domains and HTTPS from it, hot reload included. A Node.js version picked or pinned here restarts it.")
+        field("Command") {
+            HStack(spacing: 6) {
+                TextField("npm run dev", text: Binding(
+                    get: { commandDrafts[site.name] ?? (ns?.custom == true ? site.nodeServer?.command ?? "" : "") },
+                    set: { commandDrafts[site.name] = $0 }
+                ))
+                .textFieldStyle(.roundedBorder)
+                .font(.callout.monospaced())
+                .onSubmit { saveCommand(site) }
+                if let draft = commandDrafts[site.name], draft != (ns?.custom == true ? ns?.command ?? "" : "") {
+                    Button("Save") { saveCommand(site) }.controlSize(.small)
+                }
+            }
+        }
+        Text("Flock runs \(ns.map { $0.command.isEmpty ? "npm run dev" : $0.command } ?? "npm run dev") in the project with the Node.js under Versions, restarts it when it exits, and serves the site's domains and HTTPS from it, hot reload included. A Node.js version picked or pinned here restarts it. Leave the command empty for npm run dev; {port} in it becomes the dev server's port, and PORT is set too.")
             .font(.caption).foregroundStyle(.secondary)
             .fixedSize(horizontal: false, vertical: true)
+    }
+
+    /// Saves the Command typed for a Node.js site ("" goes back to npm run dev).
+    private func saveCommand(_ site: Status.Site) {
+        guard let draft = commandDrafts[site.name] else { return }
+        let command = draft.trimmingCharacters(in: .whitespaces)
+        commandDrafts[site.name] = nil
+        Task { await model.settings.perform { _ = try await $0.updateSite(site.name, SiteChange(command: command)) } }
     }
 
     private func nodeStateText(_ ns: Status.SiteNodeServer?) -> String {
         guard let ns else { return "Starting…" }
         switch ns.state {
         case .running: return "Running on Node.js \(ns.version) — port \(ns.port)"
-        case .starting: return "Starting npm run \(ns.script) on Node.js \(ns.version)…"
+        case .starting: return "Starting on Node.js \(ns.version)…"
         case .failed: return "Not running"
         case .unavailable: return "Node.js isn't installed"
         case .unknown: return "Unknown"
@@ -968,7 +994,9 @@ struct SitesPane: View {
             VStack(alignment: .leading, spacing: 6) {
                 Button("Share…") { sharing = site.name }
                     .disabled(site.url == nil)
-                Text("Show the site at a temporary public address to preview work in progress, never for production. Visitors don't get debug pages, dumps or the dev tools.")
+                Text(site.server == .node
+                     ? "Show the app at a temporary public address to preview work in progress, never for production. Visitors reach its dev server, so they see what you see: its error overlay and source maps included."
+                     : "Show the site at a temporary public address to preview work in progress, never for production. Visitors don't get debug pages, dumps or the dev tools.")
                     .font(.caption).foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }

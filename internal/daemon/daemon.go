@@ -611,8 +611,9 @@ func (d *daemon) reload() error {
 		return debugPools[version]
 	}
 
-	// shareable are the served sites a share can serve: their document root and PHP version.
-	type shareable struct{ root, version string }
+	// shareable are the served sites a share can serve: their document root and PHP version, or
+	// a Node.js app's dev server and domain.
+	type shareable struct{ root, version, devServer, domain string }
 	shareables := map[string]shareable{}
 
 	sites := cfg.AllSites()
@@ -669,6 +670,7 @@ func (d *daemon) reload() error {
 				}
 			}
 			status.URL = scheme + "://" + domain + portSuffix(scheme, cfg)
+			shareables[site.Name] = shareable{devServer: ns.upstream, domain: domain}
 			webSites = append(webSites, ws)
 			domains = append(append(domains, domain), served...)
 			statuses = append(statuses, status)
@@ -790,7 +792,8 @@ func (d *daemon) reload() error {
 	}
 
 	// Shares always go through the version's normal FastCGI pool, also for FrankenPHP sites: only
-	// FastCGI takes the per-request settings that keep a share safe (see web.Share).
+	// FastCGI takes the per-request settings that keep a share safe (see web.Share). A Node.js
+	// app's share goes to its dev server, which is the app.
 	var shares []web.Share
 	if d.shares != nil {
 		keep := map[string]bool{}
@@ -801,6 +804,10 @@ func (d *daemon) reload() error {
 		for _, s := range d.shares.Serving() {
 			info, ok := shareables[s.Site]
 			if !ok {
+				continue
+			}
+			if info.devServer != "" {
+				shares = append(shares, web.Share{Port: s.Port, DevServer: info.devServer, Domain: info.domain})
 				continue
 			}
 			upstreams, err := pool(info.version)

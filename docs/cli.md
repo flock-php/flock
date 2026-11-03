@@ -56,7 +56,7 @@ This page lists the `flock` commands. The other pages show where to find each ac
 | `flock node install <version>` | Install the newest release of a Node.js major, e.g. `22` |
 | `flock node list` | List installed Node.js versions |
 | `flock node default <major>` | Set the default Node.js version |
-| `flock node serve [site]` | Serve a site as a Node.js app: Flock runs its `npm run dev` with the site's Node.js |
+| `flock node serve [site] [--command <command>]` | Serve a site as a Node.js app: Flock runs its `npm run dev`, or the command given, with the site's Node.js |
 | `flock node unserve [site]` | Stop a site's dev server and serve it with PHP again |
 | `flock node restart [site]` | Restart a Node.js site's dev server |
 | `flock isolate <php\|node> <version> [--site <site>]` | Use a version for this site, on this machine only |

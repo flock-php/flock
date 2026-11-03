@@ -603,3 +603,29 @@ func TestSitesSwitchToNodeAndBack(t *testing.T) {
 		t.Fatalf("site: %+v", site)
 	}
 }
+
+func TestNodeSitesTakeACommandOfTheirOwn(t *testing.T) {
+	b := &fakeBackend{root: t.TempDir()}
+	srv := serve(t, b, "")
+	cfg := b.config(t)
+	cfg.Upsert(config.Site{Name: "app", Path: t.TempDir()})
+	if err := cfg.Save(b.root); err != nil {
+		t.Fatal(err)
+	}
+
+	if resp, body := call(t, "PATCH", srv.URL+"/v1/sites/app", "", `{"server":"node","command":"  pnpm dev --port {port} "}`); resp.StatusCode != http.StatusOK {
+		t.Fatalf("command: %d %s", resp.StatusCode, body)
+	}
+	if site, _ := b.config(t).FindSite("app"); !site.RunsNode() || site.Command != "pnpm dev --port {port}" {
+		t.Fatalf("site: %+v", site)
+	}
+	if resp, _ := call(t, "PATCH", srv.URL+"/v1/sites/app", "", `{"command":"npm run dev\nrm -rf ~"}`); resp.StatusCode != http.StatusBadRequest {
+		t.Errorf("a command of two lines, got %d", resp.StatusCode)
+	}
+	if resp, _ := call(t, "PATCH", srv.URL+"/v1/sites/app", "", `{"command":""}`); resp.StatusCode != http.StatusOK {
+		t.Fatalf("reset: %d", resp.StatusCode)
+	}
+	if site, _ := b.config(t).FindSite("app"); site.Command != "" {
+		t.Fatalf("site: %+v", site)
+	}
+}

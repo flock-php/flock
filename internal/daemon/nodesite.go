@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"syscall"
@@ -35,7 +36,7 @@ func (d *daemon) nodeSite(cfg *config.Config, site config.Site, spec string, hos
 	name := config.NodePortID(site.Name)
 	ns := nodeSite{
 		upstream: "http://localhost:" + strconv.Itoa(site.Port),
-		status:   api.SiteNodeServer{Script: nodeScript, Port: site.Port, Log: name},
+		status:   api.SiteNodeServer{Port: site.Port, Log: name},
 	}
 	fail := func(state, format string, args ...any) nodeSite {
 		ns.status.State, ns.status.Problem = state, fmt.Sprintf(format, args...)
@@ -45,9 +46,11 @@ func (d *daemon) nodeSite(cfg *config.Config, site config.Site, spec string, hos
 	if site.Port == 0 {
 		return fail(api.NodeFailed, "the site has no port for its dev server — switch it to Node.js again")
 	}
-	script := packageScript(site.Path, nodeScript)
-	if script == "" {
-		return fail(api.NodeFailed, "%s has no %q script in package.json", site.Path, nodeScript)
+	script := ""
+	if site.Command == "" {
+		if script = packageScript(site.Path, nodeScript); script == "" {
+			return fail(api.NodeFailed, "%s has no %q script in package.json — add one, or give the site a command of its own", site.Path, nodeScript)
+		}
 	}
 	_, version, err := node.Resolve(d.root, spec)
 	if err != nil {
@@ -59,13 +62,22 @@ func (d *daemon) nodeSite(cfg *config.Config, site config.Site, spec string, hos
 	}
 
 	port := strconv.Itoa(site.Port)
-	npmArgs := []string{"run", nodeScript, "--", "--port", port}
-	// next dev listens on every interface, so the LAN could reach it past the web server (which
-	// answers this machine only); Vite and Nuxt listen on localhost already.
-	if first, _, _ := strings.Cut(strings.TrimSpace(script), " "); first == "next" {
-		npmArgs = append(npmArgs, "--hostname", "127.0.0.1")
+	var path string
+	var args, env []string
+	if site.Command != "" {
+		path, args, env, err = d.customCommand(version, site.Path, strings.ReplaceAll(site.Command, "{port}", port))
+		ns.status.Command, ns.status.Custom = strings.ReplaceAll(site.Command, "{port}", port), true
+	} else {
+		ns.status.Script = nodeScript
+		npmArgs := []string{"run", nodeScript, "--", "--port", port}
+		// next dev listens on every interface, so the LAN could reach it past the web server
+		// (which answers this machine only); Vite and Nuxt listen on localhost already.
+		if first, _, _ := strings.Cut(strings.TrimSpace(script), " "); first == "next" {
+			npmArgs = append(npmArgs, "--hostname", "127.0.0.1")
+		}
+		ns.status.Command = "npm " + strings.Join(npmArgs, " ")
+		path, args, env, err = node.NpmCommand(d.root, version, npmArgs...)
 	}
-	path, args, env, err := node.NpmCommand(d.root, version, npmArgs...)
 	if err != nil {
 		return fail(api.NodeFailed, "%v", err)
 	}
@@ -91,6 +103,26 @@ func (d *daemon) nodeSite(cfg *config.Config, site config.Site, spec string, hos
 	ns.spec = &s
 	ns.status.State = api.NodeStarting
 	return ns
+}
+
+// customCommand runs a site's own dev server command through the shell in dir, with the site's
+// Node.js and npm's global prefix as for npm, and the project's node_modules/.bin first on PATH, as
+// `npm run` has it (so "next dev --port {port}" works as it does in a script).
+func (d *daemon) customCommand(version, dir, command string) (path string, args, env []string, err error) {
+	_, _, env, err = node.NpmCommand(d.root, version)
+	if err != nil {
+		return "", nil, nil, err
+	}
+	bin := filepath.Join(dir, "node_modules", ".bin")
+	for i, e := range env {
+		if rest, ok := strings.CutPrefix(e, "PATH="); ok {
+			env[i] = "PATH=" + bin + string(os.PathListSeparator) + rest
+		}
+	}
+	if runtime.GOOS == "windows" {
+		return "cmd.exe", []string{"/d", "/s", "/c", command}, env, nil
+	}
+	return "/bin/sh", []string{"-c", command}, env, nil
 }
 
 // packageScript is a script of dir's package.json ("" when there's none).

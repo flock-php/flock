@@ -80,4 +80,21 @@ flock node serve
 `flock node restart` restarts the dev server, and `flock node unserve` serves the site with PHP again.
 :::
 
-The project needs a `dev` script in its `package.json`. Vite only answers the hosts it knows: Flock tells it the site's domains. Share isn't available for a Node.js app yet.
+### Another command
+
+A project that starts with something else, such as `pnpm dev`, `bun run dev` or a script of another name, gets a command of its own. Flock runs it through the shell in the project, with the project's Node.js and its `node_modules/.bin` on the PATH, as `npm run` does. `{port}` in it becomes the dev server's port, and `PORT` is set too.
+
+:::app
+Type it into **Command** under **Server**, and press Return. Empty, the site runs `npm run dev` again.
+:::
+
+:::cli
+```bash
+flock node serve --command "pnpm dev --port {port}"
+flock node serve --command ""   # npm run dev again
+```
+:::
+
+Unless it has a command of its own, the project needs a `dev` script in its `package.json`. Vite only answers the hosts it knows: Flock tells it the site's domains. Each git worktree of the app runs a dev server of its own, at its own address (see [Git worktrees](worktrees.md)).
+
+[Sharing](sharing.md) a Node.js app shares its dev server: visitors see what you see, its error overlay and source maps included (the env files and the git repository are never served). The dev server gets the site's own name as the host, so Vite and Next.js take the visitors' requests, hot reload included.

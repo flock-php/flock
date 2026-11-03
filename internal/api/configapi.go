@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"time"
 
 	"flock/internal/binaries"
@@ -250,6 +251,8 @@ func registerConfig(mux *http.ServeMux, b Backend) {
 			// Root is the document root on this machine, relative to the project ("" lets the
 			// project's .flockrc or detection decide again).
 			Root *string `json:"root"`
+			// Command is a Node.js site's dev server ("" runs `npm run dev`; see config.Site.Command).
+			Command *string `json:"command"`
 		}
 		if err := decodeBody(r, &body); err != nil {
 			writeError(w, http.StatusBadRequest, err)
@@ -287,6 +290,13 @@ func registerConfig(mux *http.ServeMux, b Backend) {
 					}
 					site.Root = root
 				}
+			}
+			if body.Command != nil {
+				command := strings.TrimSpace(*body.Command)
+				if err := config.ValidCommand(command); err != nil {
+					return invalid("%v", err)
+				}
+				site.Command = command
 			}
 			if body.Server != nil || body.Worker != nil {
 				server, worker := site.Server, site.Worker
@@ -596,6 +606,7 @@ type SiteChange struct {
 	Server  *string `json:"server,omitempty"`
 	Worker  *string `json:"worker,omitempty"`
 	Root    *string `json:"root,omitempty"`
+	Command *string `json:"command,omitempty"`
 }
 
 // Config fetches config.json plus the installed versions.

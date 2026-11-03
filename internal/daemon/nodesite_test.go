@@ -6,6 +6,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"os/exec"
 	"os/signal"
 	"path/filepath"
 	"runtime"
@@ -171,4 +172,91 @@ func portFree(port int) bool {
 	}
 	ln.Close()
 	return true
+}
+
+func TestTheWorktreesOfANodeSiteRunDevServersOfTheirOwn(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git is not installed")
+	}
+	project := nodeProject(t, `"dev":"vite"`)
+	git := func(args ...string) {
+		t.Helper()
+		cmd := exec.Command("git", append([]string{"-C", project, "-c", "user.name=Flock", "-c", "user.email=flock@example.test"}, args...)...)
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v\n%s", args, err, out)
+		}
+	}
+	git("init", "-q")
+	git("add", ".")
+	git("commit", "-q", "-m", "init")
+	git("worktree", "add", "-q", "-b", "feature", filepath.Join(t.TempDir(), "feature"))
+
+	root, cfg := testRoot(t, func(c *config.Config) {
+		c.Sites = []config.Site{{Name: "app", Path: project, Server: config.ServerNode, Port: freePort(t)}}
+	})
+	installFakeNode(t, root)
+	client := startDaemon(t, root)
+
+	deadline := time.Now().Add(10 * time.Second)
+	for {
+		wt := siteStatus(t, client, "feature.app")
+		if wt.Server == config.ServerNode && wt.NodeServer != nil && wt.NodeServer.State == api.NodeRunning {
+			if wt.NodeServer.Port == siteStatus(t, client, "app").NodeServer.Port || wt.NodeServer.Port < config.FirstWorktreePort {
+				t.Fatalf("the worktree's port: %+v", wt.NodeServer)
+			}
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("the worktree's dev server: %+v %+v", wt.Server, wt.NodeServer)
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+
+	req, _ := http.NewRequest(http.MethodGet, "http://127.0.0.1:"+strconv.Itoa(cfg.Ports.HTTP)+"/", nil)
+	req.Host = "feature.app.test"
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, _ := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	if !strings.HasPrefix(string(body), "node feature.app.test ") {
+		t.Fatalf("got %q", body)
+	}
+}
+
+func TestANodeSiteRunsACommandOfItsOwn(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("the command runs through /bin/sh here")
+	}
+	project := t.TempDir() // no package.json: a command of its own needs no dev script
+	port := freePort(t)
+	root, cfg := testRoot(t, func(c *config.Config) {
+		c.Sites = []config.Site{{Name: "app", Path: project, Server: config.ServerNode, Port: port, Command: "node serve --port {port}"}}
+	})
+	installFakeNode(t, root)
+	client := startDaemon(t, root)
+
+	deadline := time.Now().Add(10 * time.Second)
+	for siteStatus(t, client, "app").NodeServer.State != api.NodeRunning {
+		if time.Now().After(deadline) {
+			t.Fatalf("not running: %+v", siteStatus(t, client, "app").NodeServer)
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	if ns := siteStatus(t, client, "app").NodeServer; !ns.Custom || ns.Command != "node serve --port "+strconv.Itoa(port) || ns.Script != "" {
+		t.Fatalf("unexpected dev server: %+v", ns)
+	}
+
+	req, _ := http.NewRequest(http.MethodGet, "http://127.0.0.1:"+strconv.Itoa(cfg.Ports.HTTP)+"/", nil)
+	req.Host = "app.test"
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, _ := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	if want := "node app.test serve --port " + strconv.Itoa(port) + " "; !strings.HasPrefix(string(body), want) {
+		t.Fatalf("got %q, want %q…", body, want)
+	}
 }

@@ -37,6 +37,11 @@ func (d *daemon) StartShare(name string, allow []string, debug bool) error {
 		}
 	}
 	req := share.Request{Site: name, Allow: allow, Debug: debug}
+	if site.RunsNode() {
+		// The dev server is the app: nothing to build, and no debug mode to turn off.
+		req.Warning = "Visitors reach the app's dev server, so they see what you see: its error overlay and source maps included."
+		return d.shares.Start(req)
+	}
 	if !debug && share.ConfigCached(site.Path) {
 		req.Warning = "The app's config is cached, so visitors get its own debug setting (APP_DEBUG). Run `php artisan config:clear` and share again to turn debug mode off for them."
 	}

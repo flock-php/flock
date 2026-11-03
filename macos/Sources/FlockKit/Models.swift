@@ -284,7 +284,11 @@ public struct Status: Decodable, Sendable, Equatable {
         public var state: State
         /// The Node.js it runs on, e.g. "22.23.4"; empty when none matches.
         public var version: String
+        /// The package.json script it runs; empty for a command of the site's own.
         public var script: String
+        /// What runs, e.g. "npm run dev -- --port 21000"; `custom` when it's the site's own command.
+        public var command: String
+        public var custom: Bool
         public var port: Int
         public var problem: String
         /// The name of its service log.
@@ -305,13 +309,15 @@ public struct Status: Decodable, Sendable, Equatable {
             }
         }
 
-        enum CodingKeys: String, CodingKey { case state, version, script, port, problem, log }
+        enum CodingKeys: String, CodingKey { case state, version, script, command, custom, port, problem, log }
 
         public init(from decoder: Decoder) throws {
             let c = try decoder.container(keyedBy: CodingKeys.self)
             state = try c.decodeIfPresent(State.self, forKey: .state) ?? .unknown
             version = try c.decodeIfPresent(String.self, forKey: .version) ?? ""
-            script = try c.decodeIfPresent(String.self, forKey: .script) ?? "dev"
+            script = try c.decodeIfPresent(String.self, forKey: .script) ?? ""
+            command = try c.decodeIfPresent(String.self, forKey: .command) ?? ""
+            custom = try c.decodeIfPresent(Bool.self, forKey: .custom) ?? false
             port = try c.decodeIfPresent(Int.self, forKey: .port) ?? 0
             problem = try c.decodeIfPresent(String.self, forKey: .problem) ?? ""
             log = try c.decodeIfPresent(String.self, forKey: .log) ?? ""

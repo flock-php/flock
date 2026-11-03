@@ -138,3 +138,13 @@ func TestAWorktreeWinsOverTheSameSubdomainOfItsSite(t *testing.T) {
 		t.Error("adding a worktree's domain as a subdomain must be refused")
 	}
 }
+
+func TestWorktreePortsAreStableAndDistinct(t *testing.T) {
+	a := worktreePort("/code/app-feature", map[int]bool{})
+	if a != worktreePort("/code/app-feature/", map[int]bool{}) || a < FirstWorktreePort || a >= FirstWorktreePort+worktreePorts {
+		t.Fatalf("port %d", a)
+	}
+	if b := worktreePort("/code/app-feature", map[int]bool{a: true}); b == a {
+		t.Fatalf("a taken port was handed out again: %d", b)
+	}
+}

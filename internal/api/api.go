@@ -197,8 +197,12 @@ type SiteFrankenPHP struct {
 type SiteNodeServer struct {
 	State   string `json:"state"`             // NodeStarting, NodeRunning, NodeFailed or NodeUnavailable
 	Version string `json:"version,omitempty"` // the Node.js it runs on, e.g. "22.23.4"
-	Script  string `json:"script"`            // the package.json script it runs: "dev"
-	Port    int    `json:"port"`              // loopback port the web server proxies to
+	Script  string `json:"script"`            // the package.json script it runs: "dev" ("" for a custom command)
+	// Command is what runs, e.g. "npm run dev -- --port 21000"; Custom is set when it's the
+	// site's own (config.Site.Command).
+	Command string `json:"command"`
+	Custom  bool   `json:"custom,omitempty"`
+	Port    int    `json:"port"` // loopback port the web server proxies to
 	Problem string `json:"problem,omitempty"`
 	Log     string `json:"log"` // name for /v1/logs/services/{name}
 }

@@ -681,12 +681,13 @@ func (s *server) proxySite(ctx context.Context, _ *mcp.CallToolRequest, in proxy
 
 type updateSiteIn struct {
 	siteArg
-	Action  string `json:"action" jsonschema:"what to change; see the tool's description"`
-	Tool    string `json:"tool,omitempty" jsonschema:"isolate, unisolate, pin and unpin: php or node"`
-	Version string `json:"version,omitempty" jsonschema:"isolate and pin: e.g. 8.4 for PHP or 22 for Node.js"`
-	Domain  string `json:"domain,omitempty" jsonschema:"add_domain: a subdomain (tenant1) or an alias (my-app-2.test)"`
-	Server  string `json:"server,omitempty" jsonschema:"set_server: fastcgi, frankenphp, or node (a Node.js app: Flock runs its npm run dev with the site's Node.js)"`
-	Worker  string `json:"worker,omitempty" jsonschema:"set_server with frankenphp: classic (the default) or octane (Laravel Octane's worker mode)"`
+	Action  string  `json:"action" jsonschema:"what to change; see the tool's description"`
+	Tool    string  `json:"tool,omitempty" jsonschema:"isolate, unisolate, pin and unpin: php or node"`
+	Version string  `json:"version,omitempty" jsonschema:"isolate and pin: e.g. 8.4 for PHP or 22 for Node.js"`
+	Domain  string  `json:"domain,omitempty" jsonschema:"add_domain: a subdomain (tenant1) or an alias (my-app-2.test)"`
+	Server  string  `json:"server,omitempty" jsonschema:"set_server: fastcgi, frankenphp, or node (a Node.js app: Flock runs its npm run dev with the site's Node.js)"`
+	Worker  string  `json:"worker,omitempty" jsonschema:"set_server with frankenphp: classic (the default) or octane (Laravel Octane's worker mode)"`
+	Command *string `json:"command,omitempty" jsonschema:"set_server with node: the dev server's command instead of npm run dev, e.g. pnpm dev --port {port} ({port} becomes its port; empty goes back to npm run dev)"`
 }
 
 func (s *server) updateSite(ctx context.Context, _ *mcp.CallToolRequest, in updateSiteIn) (*mcp.CallToolResult, siteActionOut, error) {
@@ -749,6 +750,9 @@ func (s *server) updateSite(ctx context.Context, _ *mcp.CallToolRequest, in upda
 			return nil, siteActionOut{}, errors.New("set_server needs server: fastcgi, frankenphp or node")
 		}
 		change := api.SiteChange{Server: &in.Server}
+		if in.Server == config.ServerNode {
+			change.Command = in.Command
+		}
 		switch in.Worker {
 		case "octane":
 			change.Worker = ptr(config.WorkerOctane)

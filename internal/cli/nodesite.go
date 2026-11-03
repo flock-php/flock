@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"os/signal"
+	"strings"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -16,13 +17,18 @@ import (
 // nodeSiteCommands are `flock node serve`, `unserve` and `restart`: a site as a Node.js app, whose
 // `npm run dev` Flock runs with the site's Node.js and serves the site from.
 func nodeSiteCommands() []*cobra.Command {
+	var command string
 	serve := &cobra.Command{
 		Use:   "serve [site]",
 		Short: "Serve a site as a Node.js app: Flock runs its `npm run dev` with the site's Node.js",
 		Long: `Flock runs the site's ` + "`npm run dev -- --port <port>`" + ` (PORT is set too) with the Node.js the
 project pins (.flockrc, .nvmrc or .node-version), an isolated one or the default, restarts it when
 it exits, and serves the site's domains and HTTPS from it, WebSocket upgrades (hot reload) included.
-Its output: ` + "`flock logs node-<site>`" + `. Back to PHP: ` + "`flock node unserve`" + `.`,
+Its output: ` + "`flock logs node-<site>`" + `. Back to PHP: ` + "`flock node unserve`" + `.
+
+--command runs another dev server instead, through the shell in the project with the project's
+node_modules/.bin on PATH; {port} in it becomes the port (PORT is set too), e.g.
+` + "`flock node serve --command \"pnpm dev --port {port}\"`" + `. --command "" goes back to npm run dev.`,
 		Args: cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			s, err := load()
@@ -32,6 +38,13 @@ Its output: ` + "`flock logs node-<site>`" + `. Back to PHP: ` + "`flock node un
 			site, err := siteArg(s, args)
 			if err != nil {
 				return err
+			}
+			if cmd.Flags().Changed("command") {
+				command = strings.TrimSpace(command)
+				if err := config.ValidCommand(command); err != nil {
+					return err
+				}
+				site.Command = command
 			}
 			if err := s.cfg.SetServer(&site, config.ServerNode, ""); err != nil {
 				return err
@@ -47,6 +60,8 @@ Its output: ` + "`flock logs node-<site>`" + `. Back to PHP: ` + "`flock node un
 			return waitForNodeServer(ctx, cmd, s, site.Name)
 		},
 	}
+
+	serve.Flags().StringVar(&command, "command", "", `the dev server's command instead of "npm run dev" ({port} becomes its port)`)
 
 	unserve := &cobra.Command{
 		Use:   "unserve [site]",
@@ -124,13 +139,13 @@ func waitForNodeServer(ctx context.Context, cmd *cobra.Command, s *state, name s
 			ns := x.NodeServer
 			switch ns.State {
 			case api.NodeRunning:
-				cmd.Printf("%s runs `npm run %s` on Node.js %s — %s, log: `flock logs %s`\n", name, ns.Script, ns.Version, x.URL, ns.Log)
+				cmd.Printf("%s runs `%s` on Node.js %s — %s, log: `flock logs %s`\n", name, ns.Command, ns.Version, x.URL, ns.Log)
 				return nil
 			case api.NodeFailed, api.NodeUnavailable:
 				return errors.New(name + ": " + ns.Problem)
 			}
 			if !said {
-				cmd.Printf("starting `npm run %s` for %s on Node.js %s…\n", ns.Script, name, ns.Version)
+				cmd.Printf("starting `%s` for %s on Node.js %s…\n", ns.Command, name, ns.Version)
 				said = true
 			}
 		}

@@ -146,6 +146,9 @@ type Site struct {
 	// It is kept while the site runs on FastCGI, for switching back.
 	Worker string `json:"worker,omitempty"`
 	Port   int    `json:"port,omitempty"` // FrankenPHP's or the dev server's loopback port, assigned by SetServer
+	// Command is a Node.js site's dev server, run in the project through the shell ("" runs
+	// `npm run dev`); {port} in it becomes the dev server's port. Kept while the site runs on PHP.
+	Command string `json:"command,omitempty"`
 }
 
 // Servers and worker modes of a site (see Site.Server and Site.Worker).
@@ -162,6 +165,17 @@ const FirstSitePort = 21000
 // SitePortID is how UsedPorts names the port of a FrankenPHP site: "frankenphp-<site>", which is
 // also the name of its process and log.
 func SitePortID(site string) string { return "frankenphp-" + site }
+
+// ValidCommand checks a Node.js site's dev server command (see Site.Command).
+func ValidCommand(command string) error {
+	switch {
+	case strings.ContainsAny(command, "\r\n\x00"):
+		return fmt.Errorf("the command must be one line")
+	case len(command) > 1000:
+		return fmt.Errorf("the command is too long")
+	}
+	return nil
+}
 
 // NodePortID is how UsedPorts names the port of a Node.js site: "node-<site>", which is also the
 // name of its process and log.
