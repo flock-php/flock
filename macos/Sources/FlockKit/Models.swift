@@ -289,6 +289,8 @@ public struct Status: Decodable, Sendable, Equatable {
         /// What runs, e.g. "npm run dev -- --port 21000"; `custom` when it's the site's own command.
         public var command: String
         public var custom: Bool
+        /// The site's own command as set, {port} and all, for editing.
+        public var configured: String
         public var port: Int
         public var problem: String
         /// The name of its service log.
@@ -309,7 +311,7 @@ public struct Status: Decodable, Sendable, Equatable {
             }
         }
 
-        enum CodingKeys: String, CodingKey { case state, version, script, command, custom, port, problem, log }
+        enum CodingKeys: String, CodingKey { case state, version, script, command, custom, configured, port, problem, log }
 
         public init(from decoder: Decoder) throws {
             let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -318,6 +320,7 @@ public struct Status: Decodable, Sendable, Equatable {
             script = try c.decodeIfPresent(String.self, forKey: .script) ?? ""
             command = try c.decodeIfPresent(String.self, forKey: .command) ?? ""
             custom = try c.decodeIfPresent(Bool.self, forKey: .custom) ?? false
+            configured = try c.decodeIfPresent(String.self, forKey: .configured) ?? ""
             port = try c.decodeIfPresent(Int.self, forKey: .port) ?? 0
             problem = try c.decodeIfPresent(String.self, forKey: .problem) ?? ""
             log = try c.decodeIfPresent(String.self, forKey: .log) ?? ""

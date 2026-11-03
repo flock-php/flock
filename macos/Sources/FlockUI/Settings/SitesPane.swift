@@ -822,13 +822,13 @@ struct SitesPane: View {
         field("Command") {
             HStack(spacing: 6) {
                 TextField("npm run dev", text: Binding(
-                    get: { commandDrafts[site.name] ?? (ns?.custom == true ? site.nodeServer?.command ?? "" : "") },
+                    get: { commandDrafts[site.name] ?? savedCommand(ns) },
                     set: { commandDrafts[site.name] = $0 }
                 ))
                 .textFieldStyle(.roundedBorder)
                 .font(.callout.monospaced())
                 .onSubmit { saveCommand(site) }
-                if let draft = commandDrafts[site.name], draft != (ns?.custom == true ? ns?.command ?? "" : "") {
+                if let draft = commandDrafts[site.name], draft != savedCommand(ns) {
                     Button("Save") { saveCommand(site) }.controlSize(.small)
                 }
             }
@@ -836,6 +836,12 @@ struct SitesPane: View {
         Text("Flock runs \(ns.map { $0.command.isEmpty ? "npm run dev" : $0.command } ?? "npm run dev") in the project with the Node.js under Versions, restarts it when it exits, and serves the site's domains and HTTPS from it, hot reload included. A Node.js version picked or pinned here restarts it. Leave the command empty for npm run dev; {port} in it becomes the dev server's port, and PORT is set too.")
             .font(.caption).foregroundStyle(.secondary)
             .fixedSize(horizontal: false, vertical: true)
+    }
+
+    /// The site's own command as set ({port} and all), "" when it runs npm run dev.
+    private func savedCommand(_ ns: Status.SiteNodeServer?) -> String {
+        guard let ns, ns.custom else { return "" }
+        return ns.configured.isEmpty ? ns.command : ns.configured
     }
 
     /// Saves the Command typed for a Node.js site ("" goes back to npm run dev).

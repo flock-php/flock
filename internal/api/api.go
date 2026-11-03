@@ -199,12 +199,13 @@ type SiteNodeServer struct {
 	Version string `json:"version,omitempty"` // the Node.js it runs on, e.g. "22.23.4"
 	Script  string `json:"script"`            // the package.json script it runs: "dev" ("" for a custom command)
 	// Command is what runs, e.g. "npm run dev -- --port 21000"; Custom is set when it's the
-	// site's own (config.Site.Command).
-	Command string `json:"command"`
-	Custom  bool   `json:"custom,omitempty"`
-	Port    int    `json:"port"` // loopback port the web server proxies to
-	Problem string `json:"problem,omitempty"`
-	Log     string `json:"log"` // name for /v1/logs/services/{name}
+	// site's own (config.Site.Command), and Configured is that as set, {port} and all, for editing.
+	Command    string `json:"command"`
+	Custom     bool   `json:"custom,omitempty"`
+	Configured string `json:"configured,omitempty"`
+	Port       int    `json:"port"` // loopback port the web server proxies to
+	Problem    string `json:"problem,omitempty"`
+	Log        string `json:"log"` // name for /v1/logs/services/{name}
 }
 
 // States of a Node.js site's dev server: started but not answering yet (a dev server compiles

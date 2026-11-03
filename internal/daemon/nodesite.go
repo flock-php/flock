@@ -66,7 +66,7 @@ func (d *daemon) nodeSite(cfg *config.Config, site config.Site, spec string, hos
 	var args, env []string
 	if site.Command != "" {
 		path, args, env, err = d.customCommand(version, site.Path, strings.ReplaceAll(site.Command, "{port}", port))
-		ns.status.Command, ns.status.Custom = strings.ReplaceAll(site.Command, "{port}", port), true
+		ns.status.Command, ns.status.Custom, ns.status.Configured = strings.ReplaceAll(site.Command, "{port}", port), true, site.Command
 	} else {
 		ns.status.Script = nodeScript
 		npmArgs := []string{"run", nodeScript, "--", "--port", port}

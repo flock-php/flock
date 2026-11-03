@@ -244,7 +244,7 @@ func TestANodeSiteRunsACommandOfItsOwn(t *testing.T) {
 		}
 		time.Sleep(50 * time.Millisecond)
 	}
-	if ns := siteStatus(t, client, "app").NodeServer; !ns.Custom || ns.Command != "node serve --port "+strconv.Itoa(port) || ns.Script != "" {
+	if ns := siteStatus(t, client, "app").NodeServer; !ns.Custom || ns.Command != "node serve --port "+strconv.Itoa(port) || ns.Configured != "node serve --port {port}" || ns.Script != "" {
 		t.Fatalf("unexpected dev server: %+v", ns)
 	}
 
