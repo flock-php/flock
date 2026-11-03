@@ -105,6 +105,8 @@ public sealed record SettingsChange(
 
 /// <summary>
 /// Body of PATCH /v1/sites/{name}; null fields are left out. An empty Php means "use the default";
-/// Server is "fastcgi" or "frankenphp", Worker "" (classic) or "octane" (see Status.SiteServer).
+/// Server is "fastcgi", "frankenphp" or "node", Worker "" (classic) or "octane" (see Status.SiteServer).
+/// Command is a Node.js site's dev server command ("pnpm dev"; {port} is replaced by its port); "" goes back to npm run dev.
 /// </summary>
-public sealed record SiteChange(bool? Secured = null, string? Php = null, string? Node = null, string? Server = null, string? Worker = null, string? Root = null);
+public sealed record SiteChange(bool? Secured = null, string? Php = null, string? Node = null, string? Server = null, string? Worker = null, string? Root = null,
+    string? Command = null);

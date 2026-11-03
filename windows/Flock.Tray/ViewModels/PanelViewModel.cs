@@ -340,7 +340,18 @@ public sealed class PanelSiteRow(PanelSiteValue value) : ObservableObject
     public bool HasUrl => Url is not null;
     public string SiteTooltip => Url ?? Problem ?? Path;
     public string SecurityGlyph => Secured ? "\uE72E" : "\uE774";
-    public string PhpLabel => $"PHP {Php}";
+    /// <summary>A Node.js app: its dev server's Node.js version, or that it doesn't run.</summary>
+    public bool IsNode => current.IsNode;
+    public string PhpLabel => IsNode
+        ? current.NodeServer is { } node && (node.IsRunning || node.IsStarting) ? $"Node.js {node.Version}".TrimEnd() : "Not running"
+        : $"PHP {Php}";
+    public Visibility NodeVisibility => IsNode ? Visibility.Visible : Visibility.Collapsed;
+    public Brush NodeStateBrush => (Brush)Application.Current.Resources[current.NodeServer switch
+    {
+        { IsRunning: true } => "SystemFillColorSuccessBrush",
+        { IsStarting: true } => "SystemFillColorCautionBrush",
+        _ => "ControlStrongFillColorDisabledBrush",
+    }];
     public string WorkerLabel => Worker == Status.SiteServer.Octane ? "Octane" : "FrankenPHP";
     public string ShareTooltip => $"Shared at {ShareUrl}";
     public Visibility ProblemVisibility => Problem is not null ? Visibility.Visible : Visibility.Collapsed;

@@ -387,6 +387,24 @@ public class ClientTests : IDisposable
     }
 
     [Fact]
+    public async Task SwitchesASiteToNodeAndSetsItsCommand()
+    {
+        var handler = new Handler(_ => new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StringContent("""{"version":"dev","pid":1,"started_at":"2026-10-13T14:10:01Z"}"""),
+        });
+        using var client = new FlockClient(new HttpClient(handler) { Timeout = Timeout.InfiniteTimeSpan }, WriteApiJson("http://127.0.0.1:1", "t"), clock);
+
+        await client.UpdateSiteAsync("shop", new SiteChange(Server: Status.SiteServer.Node));
+        await client.UpdateSiteAsync("shop", new SiteChange(Command: "pnpm dev"));
+        await client.UpdateSiteAsync("shop", new SiteChange(Command: ""));
+
+        Assert.Equal(["PATCH /v1/sites/shop", "PATCH /v1/sites/shop", "PATCH /v1/sites/shop"], handler.Requests.Select(r => $"{r.Method} {r.RequestUri!.PathAndQuery}"));
+        // An empty command goes back to npm run dev.
+        Assert.Equal(["""{"server":"node"}""", """{"command":"pnpm dev"}""", """{"command":""}"""], handler.Bodies);
+    }
+
+    [Fact]
     public async Task ReportsAMissingCatalogLogAsAServerError()
     {
         var handler = new Handler(_ => new HttpResponseMessage(HttpStatusCode.NotFound) { Content = new StringContent("""{"error":"no log for redis"}""") });

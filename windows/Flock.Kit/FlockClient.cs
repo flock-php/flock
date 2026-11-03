@@ -83,7 +83,7 @@ public sealed class FlockClient : IDisposable
         Send<Status>(HttpMethod.Patch, $"/v1/sites/{Escape(name)}", change,
             timeout: change.Server is not null || change.Worker is not null ? ServerSwitchTimeout : null, cancellationToken: cancellationToken);
 
-    /// <summary>Restarts a FrankenPHP site's process, e.g. so Octane's workers load changed code.</summary>
+    /// <summary>Restarts a FrankenPHP site's process (e.g. so Octane's workers load changed code) or a Node.js site's dev server.</summary>
     public Task<Status> RestartSiteAsync(string name, CancellationToken cancellationToken = default) => Send<Status>(HttpMethod.Post, $"/v1/sites/{Escape(name)}/restart", timeout: ServerSwitchTimeout, cancellationToken: cancellationToken);
 
     public Task<Status> UnlinkSiteAsync(string name, CancellationToken cancellationToken = default) => Send<Status>(HttpMethod.Delete, $"/v1/sites/{Escape(name)}", cancellationToken: cancellationToken);
