@@ -1563,11 +1563,8 @@ impl Inner {
 
     /// Asks for a proxy's new upstream; its HTTPS stays as it is.
     fn change_upstream(self: &Rc<Self>, proxy: &ProxyStatus) {
-        let entry = gtk::Entry::builder()
-            .text(proxy.upstream_label())
-            .placeholder_text("Port, host:port or URL")
-            .activates_default(true)
-            .build();
+        let entry =
+            gtk::Entry::builder().text(proxy.upstream_label()).placeholder_text("Port, host:port or URL").activates_default(true).build();
         let dialog = adw::AlertDialog::new(
             Some(&format!("Change the upstream of {}", proxy.name)),
             Some("A port means 127.0.0.1; give a host and port (localhost:5173) or a URL (https://127.0.0.1:8443) for anything else."),
