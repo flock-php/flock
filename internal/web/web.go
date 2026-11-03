@@ -42,6 +42,9 @@ type Site struct {
 	KeyFile  string
 }
 
+// proxied reports whether the site is a proxied name (config.Proxy) rather than a PHP site.
+func (s Site) proxied() bool { return s.Root == "" && s.Proxy != "" }
+
 // Waiting is a linked site that can't be served because its PHP isn't installed: its names get
 // Flock's page saying so (and offering the install) instead of the "not linked" page.
 type Waiting struct {
@@ -151,8 +154,12 @@ func Caddyfile(cfg Config) string {
 
 			fmt.Fprintf(&b, "\n%s {\n\timport flock_site\n%s}\n", addresses("http", hosts, cfg), app(s))
 			// Over HTTPS, a site that isn't secured names itself, so the page asks to secure it rather than link it.
-			fmt.Fprintf(&b, "\n%s {\n\timport flock_site\n%s\tvars flock_site %s\n%s}\n",
-				addresses("https", hosts, cfg), tlsBlock, quote(siteName(s.Domain, cfg.TLD)), unlinked(cfg))
+			// A proxy says so too: the apps can't secure one yet, so the page offers only the command.
+			vars := fmt.Sprintf("\tvars flock_site %s\n", quote(siteName(s.Domain, cfg.TLD)))
+			if s.proxied() {
+				vars = fmt.Sprintf("\tvars {\n\t\tflock_site %s\n\t\tflock_proxy \"1\"\n\t}\n", quote(siteName(s.Domain, cfg.TLD)))
+			}
+			fmt.Fprintf(&b, "\n%s {\n\timport flock_site\n%s%s%s}\n", addresses("https", hosts, cfg), tlsBlock, vars, unlinked(cfg))
 		}
 	}
 
@@ -254,6 +261,7 @@ func app(s Site) string {
 // proxied name's server. The Host header passes unchanged, so the app sees its own domain, and
 // WebSocket upgrades (a dev server's hot reload) pass through.
 func proxy(upstream, indent string) string {
+	// Caddy sends an HTTPS upstream its own host:port as the Host header; keep the request's instead.
 	if strings.HasPrefix(upstream, "https://") {
 		return fmt.Sprintf("%sreverse_proxy %s {\n%s\theader_up Host {http.request.hostport}\n%s}\n", indent, quote(upstream), indent, indent)
 	}

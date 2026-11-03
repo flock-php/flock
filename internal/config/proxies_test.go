@@ -9,6 +9,8 @@ func TestNormalizeUpstreamAcceptsPortsHostsAndURLs(t *testing.T) {
 	for in, want := range map[string]string{
 		"3000":                    "http://127.0.0.1:3000",
 		" 5173 ":                  "http://127.0.0.1:5173",
+		"+3000":                   "http://127.0.0.1:3000",
+		"03000":                   "http://127.0.0.1:3000",
 		"localhost:5173":          "http://localhost:5173",
 		"127.0.0.1:9000":          "http://127.0.0.1:9000",
 		"http://127.0.0.1:3000/":  "http://127.0.0.1:3000",

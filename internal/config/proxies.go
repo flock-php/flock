@@ -34,7 +34,7 @@ func NormalizeUpstream(s string) (string, error) {
 		if port < 1 || port > 65535 {
 			return "", fmt.Errorf("%d is not a port", port)
 		}
-		return "http://127.0.0.1:" + s, nil
+		return "http://127.0.0.1:" + strconv.Itoa(port), nil
 	}
 	if !strings.Contains(s, "://") {
 		s = "http://" + s

@@ -452,12 +452,14 @@ footer code { font-family: var(--mono); font-size: 0.75rem; color: var(--ink-sof
                         <button type="button">copy</button>
                     </div>
                 </div>
+{{if not (placeholder "http.vars.flock_proxy")}}
                 <div class="panel">
                     <span class="label">02 &middot; Prefer the app?</span>
                     <h2>Secure it in Flock</h2>
                     <p>Flock asks before it changes anything, and this page shows the site once it&rsquo;s secured. Or turn on HTTPS in Settings &rarr; Sites.</p>
                     <a class="action" href="flock://secure/{{html $site}}" data-wait>Secure in Flock</a>
                 </div>
+{{end}}
 {{else}}
                 <div class="panel primary">
                     <span class="label">01 &middot; Link a project</span>

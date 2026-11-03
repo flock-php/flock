@@ -136,6 +136,7 @@ func TestCaddyfileProxiesNamesToTheirServer(t *testing.T) {
 	cfg.Sites = append(cfg.Sites,
 		Site{Domain: "next.test", Proxy: "http://127.0.0.1:3000"},
 		Site{Domain: "s3.test", Proxy: "http://127.0.0.1:9000", CertFile: "/c/s3.crt", KeyFile: "/c/s3.key"},
+		Site{Domain: "api.test", Proxy: "https://127.0.0.1:8443"},
 	)
 	cf := Caddyfile(cfg)
 	if _, _, err := caddyconfig.GetAdapter("caddyfile").Adapt([]byte(cf), nil); err != nil {
@@ -145,11 +146,15 @@ func TestCaddyfileProxiesNamesToTheirServer(t *testing.T) {
 	for _, want := range []string{
 		"http://next.test:80, http://*.next.test:80, http://*.*.next.test:80, http://*.*.*.next.test:80, http://*.*.*.*.next.test:80 {\n\timport flock_site\n\treverse_proxy \"http://127.0.0.1:3000\"\n}",
 		"https://s3.test:443, https://*.s3.test:443, https://*.*.s3.test:443, https://*.*.*.s3.test:443, https://*.*.*.*.s3.test:443 {\n\timport flock_site\n\ttls {\n\t\tget_certificate flock\n\t}\n\treverse_proxy \"http://127.0.0.1:9000\"\n}",
-		`vars flock_site "next"`,
+		"\tvars {\n\t\tflock_site \"next\"\n\t\tflock_proxy \"1\"\n\t}\n",
+		"\treverse_proxy \"https://127.0.0.1:8443\" {\n\t\theader_up Host {http.request.hostport}\n\t}\n",
 	} {
 		if !strings.Contains(cf, want) {
 			t.Errorf("missing %q in:\n%s", want, cf)
 		}
+	}
+	if !strings.Contains(cf, `vars flock_site "plain"`+"\n") || strings.Count(cf, "flock_proxy") != 2 {
+		t.Errorf("only the unsecured proxies' HTTPS pages say they're proxies:\n%s", cf)
 	}
 	if strings.Contains(cf, `root * ""`) {
 		t.Errorf("a proxy has no document root:\n%s", cf)
