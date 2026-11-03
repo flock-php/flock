@@ -251,10 +251,10 @@ internal sealed partial class SettingsWindow : FlockWindow
         return await PickFolder() is { } path ? [path] : [];
     }
 
-    /// <summary>Asks for one line of text; null when cancelled or left empty.</summary>
-    public async Task<string?> Ask(string question, string details, string placeholder, string action)
+    /// <summary>Asks for one line of text, starting from text; null when cancelled or left empty.</summary>
+    public async Task<string?> Ask(string question, string details, string placeholder, string action, string text = "")
     {
-        var box = new TextBox { PlaceholderText = placeholder };
+        var box = new TextBox { PlaceholderText = placeholder, Text = text };
         var content = new StackPanel { Spacing = 12 };
         content.Children.Add(new TextBlock { Text = details, TextWrapping = TextWrapping.Wrap });
         content.Children.Add(box);
@@ -276,8 +276,8 @@ internal sealed partial class SettingsWindow : FlockWindow
             }
         };
         var result = await dialog.ShowAsync();
-        var text = box.Text.Trim();
-        return (result == ContentDialogResult.Primary || box.Tag is "submitted") && text.Length > 0 ? text : null;
+        var answer = box.Text.Trim();
+        return (result == ContentDialogResult.Primary || box.Tag is "submitted") && answer.Length > 0 ? answer : null;
     }
 
     public override async Task ReleaseAsync()

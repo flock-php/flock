@@ -232,6 +232,36 @@ public class DecodingTests
     }
 
     [Fact]
+    public void DecodesProxies()
+    {
+        var status = FlockJson.Decode<Status>("""
+            {"version":"dev","pid":1,"started_at":"2026-10-13T14:10:01Z",
+             "proxies":[{"name":"softpack","domain":"softpack.test","upstream":"http://127.0.0.1:3000","secured":true,"url":"https://softpack.test","running":true,"server":"Node.js 22.23.4"},
+                        {"name":"blog","domain":"blog.test","upstream":"https://127.0.0.1:8443","secured":false,"problem":"blog.test is served by a site of the same name","running":false}]}
+            """);
+
+        Assert.Equal(["softpack", "blog"], status.Proxies.Select(p => p.Name));
+        var softpack = status.Proxies[0];
+        Assert.True(softpack.Secured);
+        Assert.Equal(("https://softpack.test", null), (softpack.Url, softpack.Problem));
+        Assert.True(softpack.Running);
+        Assert.Equal("Node.js 22.23.4", softpack.ServerLabel);
+        Assert.Equal("127.0.0.1:3000", softpack.UpstreamLabel);
+        var blog = status.Proxies[1];
+        Assert.Null(blog.Url);
+        Assert.NotNull(blog.Problem);
+        Assert.False(blog.Running);
+        Assert.Null(blog.Server);
+        Assert.Equal("Not running", blog.ServerLabel);
+        // Only Flock's own http:// is left out.
+        Assert.Equal("https://127.0.0.1:8443", blog.UpstreamLabel);
+
+        // An older daemon sends none, a newer one null when there are none.
+        Assert.Empty(FlockJson.Decode<Status>("""{"version":"dev","pid":1,"started_at":"2026-10-13T14:10:01Z"}""").Proxies);
+        Assert.Empty(FlockJson.Decode<Status>("""{"version":"dev","pid":1,"started_at":"2026-10-13T14:10:01Z","proxies":null}""").Proxies);
+    }
+
+    [Fact]
     public void DecodesWhatRunsASite()
     {
         var status = FlockJson.Decode<Status>("""

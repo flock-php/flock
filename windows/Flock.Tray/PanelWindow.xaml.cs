@@ -230,6 +230,14 @@ internal sealed partial class PanelWindow : Window
         }
     }
 
+    private void OpenProxy(object sender, RoutedEventArgs args)
+    {
+        if (sender is Button { DataContext: PanelProxyRow { Url: { Length: > 0 } url } })
+        {
+            viewModel.OpenSite(url);
+        }
+    }
+
     private void OpenWorktree(object sender, RoutedEventArgs args)
     {
         if (sender is Button { DataContext: PanelWorktreeRow { Url: { Length: > 0 } url } })

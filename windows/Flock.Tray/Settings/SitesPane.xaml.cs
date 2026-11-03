@@ -11,7 +11,8 @@ namespace Flock.Tray.Settings;
 ///     offers the project's pinned version (or the default) first, then the installed versions, which
 ///     isolate the site on this machine; the document root picker works the same way. The "…" menu
 ///     pins a version or the document root into the project or removes it again. Each site runs on
-///     php-cgi or on FrankenPHP (classic, or Laravel Octane's worker mode).
+///     php-cgi or on FrankenPHP (classic, or Laravel Octane's worker mode). Proxies (`flock proxy`)
+///     follow the sites in a group of their own.
 /// </summary>
 internal sealed partial class SitesPane : UserControl, ISettingsPane
 {
@@ -208,10 +209,11 @@ internal sealed partial class SitesPane : UserControl, ISettingsPane
     internal void Select(string name)
     {
         var previous = viewModel.Selected;
+        var previousProxy = viewModel.SelectedProxy;
         // Before the pane was shown (a notification opening it), its rows aren't there yet.
         viewModel.Apply(Model.Status);
         viewModel.Select(name);
-        if (!ReferenceEquals(previous, viewModel.Selected))
+        if (!ReferenceEquals(previous, viewModel.Selected) || !ReferenceEquals(previousProxy, viewModel.SelectedProxy))
         {
             DetailScroller.ChangeView(null, 0, null, true);
         }
@@ -225,7 +227,8 @@ internal sealed partial class SitesPane : UserControl, ISettingsPane
     private void ApplyStatus()
     {
         var selectedBefore = viewModel.Selected;
-        if (viewModel.Apply(Model.Status) && ReferenceEquals(selectedBefore, viewModel.Selected))
+        var proxyBefore = viewModel.SelectedProxy;
+        if (viewModel.Apply(Model.Status) && ReferenceEquals(selectedBefore, viewModel.Selected) && ReferenceEquals(proxyBefore, viewModel.SelectedProxy))
         {
             RefreshDetail();
         }
@@ -242,12 +245,24 @@ internal sealed partial class SitesPane : UserControl, ISettingsPane
         {
             return;
         }
+        // A proxy: the site list has no selection, and the other way round.
+        if (viewModel.SelectedProxy is { } proxy)
+        {
+            SiteList.SelectedItem = null;
+            if (!ReferenceEquals(ProxyList.SelectedItem, proxy))
+            {
+                ProxyList.SelectedItem = proxy;
+            }
+            DetailHost.Content = ProxyDetail(proxy.Snapshot);
+            return;
+        }
         // No sites: the pane shows its empty state instead (HasSites).
         if (viewModel.Selected is not { } row)
         {
             DetailHost.Content = null;
             return;
         }
+        ProxyList.SelectedItem = null;
         if (!ReferenceEquals(SiteList.SelectedItem, row))
         {
             SiteList.SelectedItem = row;
@@ -265,6 +280,133 @@ internal sealed partial class SitesPane : UserControl, ISettingsPane
         if (SiteList.SelectedItem is SiteRowViewModel row)
         {
             Select(row.Name);
+        }
+    }
+
+    private void ProxySelectionChanged(object sender, SelectionChangedEventArgs args)
+    {
+        if (ProxyList.SelectedItem is ProxyRowViewModel row)
+        {
+            Select(row.Name);
+        }
+    }
+
+    private void AddProxyClicked(object sender, RoutedEventArgs args)
+    {
+        Start("add-proxy", AddProxyAsync, false);
+    }
+
+    /// <summary>Asks for a name and an upstream, and serves &lt;name&gt;.test from it.</summary>
+    private async Task AddProxyAsync()
+    {
+        var tld = Model.Status?.Dns.Tld is { Length: > 0 } t ? t : "test";
+        var name = new TextBox { Header = "Name", PlaceholderText = "my-app" };
+        var upstream = new TextBox { Header = "Upstream", PlaceholderText = "Port, host:port or URL, e.g. 3000" };
+        var dialog = new ContentDialog
+        {
+            Title = "Add a proxy",
+            Content = Ui.Column(12,
+                Ui.Text($"Flock serves <name>.{tld} from a server of its own, e.g. a Next.js, Nuxt or Vite dev server. A port means 127.0.0.1."),
+                name, upstream),
+            PrimaryButtonText = "Add",
+            CloseButtonText = "Cancel",
+            DefaultButton = ContentDialogButton.Primary,
+            XamlRoot = Window.XamlRoot
+        };
+        if (await dialog.ShowAsync() != ContentDialogResult.Primary)
+        {
+            return;
+        }
+        var proxyName = name.Text.Trim();
+        var proxyUpstream = upstream.Text.Trim();
+        if (proxyName.Length == 0 || proxyUpstream.Length == 0)
+        {
+            return;
+        }
+        if (await Model.Sites.ProxyAsync(proxyName, proxyUpstream) == OperationOutcome.Succeeded)
+        {
+            Select(proxyName);
+        }
+    }
+
+    /// <summary>The selected proxy: its address and actions, then its server, HTTPS and upstream.</summary>
+    private Border ProxyDetail(Status.Proxy proxy)
+    {
+        var panel = new StackPanel { Spacing = 20 };
+
+        var heading = Ui.Column(2, Ui.Row(8, Ui.Text(proxy.Name, "SubtitleTextBlockStyle", wrap: false), Ui.Badge("Proxy", Ui.Tone.Neutral)));
+        if (proxy.Url is { } proxyUrl)
+        {
+            var link = Ui.Link(proxyUrl, () => Model.Open(proxyUrl));
+            link.Padding = new Thickness(0);
+            heading.Children.Add(link);
+        }
+        var open = Ui.IconButton(Ui.GlyphOpen, $"Open {proxy.Url ?? proxy.Domain}", () =>
+        {
+            if (proxy.Url is { } url)
+            {
+                Model.Open(url);
+            }
+        });
+        open.IsEnabled = proxy.Url is not null;
+        var actions = Ui.Row(0, open, Ui.IconButton(Ui.GlyphDelete, "Remove proxy", () => Start(proxy.Name, () => RemoveProxyAsync(proxy))));
+        actions.VerticalAlignment = VerticalAlignment.Top;
+        var header = new Grid { ColumnSpacing = 8 };
+        header.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        header.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        Grid.SetColumn(actions, 1);
+        header.Children.Add(heading);
+        header.Children.Add(actions);
+        panel.Children.Add(header);
+        if (proxy.Problem is { } problem)
+        {
+            panel.Children.Add(Warning(problem));
+        }
+
+        var server = Ui.Column(2, Ui.Row(6, Ui.StatusDot(proxy.Running), Ui.Text(proxy.ServerLabel, wrap: false)));
+        if (!proxy.Running)
+        {
+            server.Children.Add(Ui.Caption($"Nothing answers at {proxy.UpstreamLabel} yet.", Ui.TertiaryText));
+        }
+        var https = new ToggleSwitch { IsOn = proxy.Secured, MinWidth = 0 };
+        Ui.AutomationName(https, "HTTPS");
+        https.Toggled += (_, _) =>
+        {
+            // Rerendered afterwards, so a refused change snaps back.
+            var on = https.IsOn;
+            Start(proxy.Name, () => Model.Sites.SecureProxyAsync(proxy.Name, on));
+        };
+        var upstream = Ui.MonoText(proxy.Upstream);
+        upstream.VerticalAlignment = VerticalAlignment.Center;
+        var change = Ui.Button("Change…", () => Start(proxy.Name, () => ChangeUpstreamAsync(proxy)));
+        panel.Children.Add(Section("Proxy",
+            Field("Server", server),
+            Field("HTTPS", https),
+            Field("Upstream", Ui.Row(8, upstream, change)),
+            Ui.Caption(
+                $"Every request passes to the upstream with its Host header, WebSocket upgrades (hot reload) included. Start the server itself as usual, e.g. with npm run dev: until it runs, {proxy.Domain} answers 502 Bad Gateway.",
+                Ui.TertiaryText)));
+
+        var card = Ui.Card(panel, new Thickness(20, 16, 16, 20));
+        card.VerticalAlignment = VerticalAlignment.Top;
+        return card;
+    }
+
+    private async Task ChangeUpstreamAsync(Status.Proxy proxy)
+    {
+        if (await Window.Ask($"Change the upstream of {proxy.Name}",
+                "A port means 127.0.0.1; give a host and port (localhost:5173) or a URL (https://127.0.0.1:8443) for anything else.",
+                "Port, host:port or URL", "Change", proxy.UpstreamLabel) is { } upstream && upstream != proxy.UpstreamLabel)
+        {
+            await Model.Sites.ProxyAsync(proxy.Name, upstream);
+        }
+    }
+
+    private async Task RemoveProxyAsync(Status.Proxy proxy)
+    {
+        if (await Window.Confirm($"Remove {proxy.Name}?", $"Flock stops serving {proxy.Domain}. The server at {proxy.Upstream} keeps running.", "Remove", true))
+        {
+            await Model.Sites.RemoveProxyAsync(proxy.Name);
         }
     }
 

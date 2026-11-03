@@ -44,6 +44,8 @@ public sealed class Status
     public int DumpCount { get; init; }
     public int EventCount { get; init; }
     public List<Site> Sites { get; init; } = [];
+    /// <summary>Names served by a server of their own, e.g. a Node.js dev server (`flock proxy`); empty from older daemons.</summary>
+    public List<Proxy> Proxies { get; init; } = [];
     public List<Process> Processes { get; init; } = [];
     public List<string> Warnings { get; init; } = [];
     /// <summary>
@@ -140,6 +142,33 @@ public sealed class Status
         public string WildcardProblem { get; init; } = "";
         /// <summary>Subdomain levels below a site (and its aliases) that are served.</summary>
         public int MaxDepth { get; init; }
+    }
+
+    /// <summary>
+    /// A name served by a server of its own rather than by PHP, e.g. a Node.js dev server: every
+    /// request, WebSocket upgrades included, passes to Upstream with its Host header.
+    /// </summary>
+    public sealed class Proxy
+    {
+        public string Name { get; init; } = "";
+        public string Domain { get; init; } = "";
+        /// <summary>Where requests go, e.g. http://127.0.0.1:3000.</summary>
+        public string Upstream { get; init; } = "";
+        public bool Secured { get; init; }
+        public string? Url { get; init; }
+        /// <summary>Why it isn't served, e.g. a site of the same name serves its domain.</summary>
+        public string? Problem { get; init; }
+        /// <summary>Something answers at the upstream; Server names it when it runs on this machine, e.g. "Node.js 22.23.4".</summary>
+        public bool Running { get; init; }
+        public string? Server { get; init; }
+
+        /// <summary>The upstream without the http:// Flock adds: 127.0.0.1:3000.</summary>
+        [JsonIgnore]
+        public string UpstreamLabel => Upstream.StartsWith("http://", StringComparison.Ordinal) ? Upstream["http://".Length..] : Upstream;
+
+        /// <summary>What answers at the upstream: the server's name, "Running" or "Not running".</summary>
+        [JsonIgnore]
+        public string ServerLabel => Running ? Server is { Length: > 0 } server ? server : "Running" : "Not running";
     }
 
     /// <summary>One of a site's extra domains: a subdomain ("tenant1") or an alias ("my-app-2.test").</summary>

@@ -14,6 +14,7 @@ public sealed class PanelViewModel : ObservableObject, IDisposable
     private readonly RuntimeService model;
     private readonly CollectionSynchronizer<string, PanelSiteRow> siteSynchronizer = new();
     private readonly CollectionSynchronizer<string, PanelServiceRow> serviceSynchronizer = new();
+    private readonly CollectionSynchronizer<string, PanelProxyRow> proxySynchronizer = new();
     private readonly DaemonSwitch xdebug;
     private readonly DaemonSwitch dumps;
     private HashSet<string>? expanded;
@@ -80,7 +81,7 @@ public sealed class PanelViewModel : ObservableObject, IDisposable
     public UpdateFeed.Item? AvailableUpdate => model.UpdateService.Available;
     public Features.Update.UpdatePhase UpdateState => model.UpdateService.State;
     public bool HasStatusContent => Status is not null && !NeedsSetup;
-    public bool HasSites => HasStatusContent && Sites.Count > 0;
+    public bool HasSites => HasStatusContent && (Sites.Count > 0 || Proxies.Count > 0);
     public string NotRunningMessage => model.Error ?? "Flock is not running";
     public bool HasActionError => ActionError is not null;
     public bool HasUpdate => AvailableUpdate is not null;
@@ -107,6 +108,8 @@ public sealed class PanelViewModel : ObservableObject, IDisposable
     public bool RestartEnabled => IsRunning && !IsRestarting;
     public ObservableCollection<PanelSiteRow> Sites { get; } = [];
     public ObservableCollection<PanelServiceRow> Services { get; } = [];
+    /// <summary>Proxies (`flock proxy`), listed after the sites.</summary>
+    public ObservableCollection<PanelProxyRow> Proxies { get; } = [];
     public IAsyncRelayCommand<bool> ToggleDumpsCommand { get; }
     public IAsyncRelayCommand<bool> ToggleXdebugCommand { get; }
     public IAsyncRelayCommand RestartCommand { get; }
@@ -245,6 +248,9 @@ public sealed class PanelViewModel : ObservableObject, IDisposable
             .Select(site => new PanelSiteValue(site, status.WorktreesOf(site.Name), Expanded.Contains(site.Name))).ToList();
         siteSynchronizer.Synchronize(Sites, sites, row => row.Domain, value => value.Site.Domain,
             value => new PanelSiteRow(value), (row, value) => row.Update(value));
+        List<Status.Proxy> proxies = status?.Proxies ?? [];
+        proxySynchronizer.Synchronize(Proxies, proxies, row => row.Name, proxy => proxy.Name,
+            proxy => new PanelProxyRow(proxy), (row, proxy) => row.Update(proxy));
 
         List<PanelServiceValue> values = status is null ? [] : BuildServices(status);
         serviceSynchronizer.Synchronize(Services, values, row => row.Id, row => row.Id,
@@ -347,6 +353,31 @@ public sealed class PanelSiteRow(PanelSiteValue value) : ObservableObject
     {
         entry = value;
         current = value.Site;
+        OnPropertyChanged(string.Empty);
+    }
+}
+
+/// <summary>A proxy after the sites: its domain, and what answers at its upstream or that nothing does yet.</summary>
+public sealed class PanelProxyRow(Status.Proxy proxy) : ObservableObject
+{
+    private Status.Proxy current = proxy;
+
+    public string Name => current.Name;
+    public string Domain => current.Domain;
+    public string? Url => current.Url;
+    public bool HasUrl => Url is not null;
+    public string? Problem => current.Problem;
+    public bool Running => current.Running;
+    public string ServerLabel => current.ServerLabel;
+    public string Tooltip => Running ? $"{Url ?? Domain} → {current.Upstream}" : $"Nothing answers at {current.Upstream} — start the server there, e.g. with npm run dev";
+    public string SecurityGlyph => current.Secured ? "\uE72E" : "\uE774";
+    public Visibility ProblemVisibility => Problem is not null ? Visibility.Visible : Visibility.Collapsed;
+    public Brush SecurityBrush => (Brush)Application.Current.Resources[current.Secured ? "SystemFillColorSuccessBrush" : "TextFillColorSecondaryBrush"];
+    public Brush StatusBrush => (Brush)Application.Current.Resources[Running ? "SystemFillColorSuccessBrush" : "ControlStrongFillColorDisabledBrush"];
+
+    public void Update(Status.Proxy value)
+    {
+        current = value;
         OnPropertyChanged(string.Empty);
     }
 }

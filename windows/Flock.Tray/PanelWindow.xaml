@@ -105,6 +105,7 @@
                         TextWrapping="Wrap"
                         Visibility="{Binding EmptySitesVisibility}" />
                     <ScrollViewer MaxHeight="240" VerticalScrollBarVisibility="Auto" Visibility="{Binding SitesVisibility}">
+                        <StackPanel Spacing="2">
                         <ItemsControl ItemsSource="{Binding Sites}">
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate>
@@ -222,6 +223,44 @@
                                 </DataTemplate>
                             </ItemsControl.ItemTemplate>
                         </ItemsControl>
+                        <!-- Proxies (flock proxy) follow the sites. -->
+                        <ItemsControl ItemsSource="{Binding Proxies}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Button
+                                        HorizontalAlignment="Stretch"
+                                        HorizontalContentAlignment="Stretch"
+                                        Padding="6,4"
+                                        Background="Transparent"
+                                        BorderThickness="0"
+                                        IsEnabled="{Binding HasUrl}"
+                                        ToolTipService.ToolTip="{Binding Tooltip}"
+                                        Click="OpenProxy">
+                                        <Grid ColumnSpacing="8">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="Auto" />
+                                            </Grid.ColumnDefinitions>
+                                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                                <FontIcon Glyph="{Binding SecurityGlyph}" FontFamily="{StaticResource SymbolsFont}" FontSize="12"
+                                                          Foreground="{Binding SecurityBrush}" />
+                                                <StackPanel Spacing="0">
+                                                    <TextBlock Text="{Binding Domain}" TextTrimming="CharacterEllipsis" />
+                                                    <TextBlock Text="{Binding Problem}" Foreground="{ThemeResource SystemFillColorCriticalBrush}"
+                                                               TextTrimming="CharacterEllipsis" Visibility="{Binding ProblemVisibility}" />
+                                                </StackPanel>
+                                            </StackPanel>
+                                            <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                                                <Ellipse Width="6" Height="6" Fill="{Binding StatusBrush}" VerticalAlignment="Center" />
+                                                <TextBlock Text="{Binding ServerLabel}" Style="{StaticResource CaptionTextBlockStyle}"
+                                                           Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                            </StackPanel>
+                                        </Grid>
+                                    </Button>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                        </StackPanel>
                     </ScrollViewer>
                 </StackPanel>
 

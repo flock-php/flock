@@ -364,6 +364,29 @@ public class ClientTests : IDisposable
     }
 
     [Fact]
+    public async Task TalksToTheProxyEndpoints()
+    {
+        var handler = new Handler(_ => new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StringContent("""{"version":"dev","pid":1,"started_at":"2026-10-13T14:10:01Z"}"""),
+        });
+        using var client = new FlockClient(new HttpClient(handler) { Timeout = Timeout.InfiniteTimeSpan }, WriteApiJson("http://127.0.0.1:1", "t"), clock);
+
+        await client.ProxyAsync("softpack", "3000");
+        await client.ProxyAsync("softpack", "3001", secured: true);
+        await client.SecureProxyAsync("soft pack", false);
+        await client.RemoveProxyAsync("softpack");
+
+        Assert.Equal(
+            ["POST /v1/proxies", "POST /v1/proxies", "PATCH /v1/proxies/soft%20pack", "DELETE /v1/proxies/softpack"],
+            handler.Requests.Select(r => $"{r.Method} {r.RequestUri!.PathAndQuery}"));
+        // A new proxy leaves secured out, so the daemon keeps an existing one's setting.
+        Assert.Equal(
+            ["""{"name":"softpack","upstream":"3000"}""", """{"name":"softpack","upstream":"3001","secured":true}""", """{"secured":false}""", ""],
+            handler.Bodies);
+    }
+
+    [Fact]
     public async Task ReportsAMissingCatalogLogAsAServerError()
     {
         var handler = new Handler(_ => new HttpResponseMessage(HttpStatusCode.NotFound) { Content = new StringContent("""{"error":"no log for redis"}""") });

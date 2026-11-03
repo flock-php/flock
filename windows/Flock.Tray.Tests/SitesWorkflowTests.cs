@@ -183,6 +183,35 @@ public sealed class SitesWorkflowTests : IDisposable
     }
 
     [Fact]
+    public void OneSelectionCoversSitesAndProxies()
+    {
+        var model = new SitesViewModel(service);
+        Status.Proxy[] proxies = [new() { Name = "softpack", Domain = "softpack.test", Upstream = "http://127.0.0.1:3000" }];
+        model.Apply(new Status { Sites = [Site("acme", "8.4")], Proxies = [.. proxies] });
+
+        Assert.Equal("acme", model.Selected?.Name);
+        Assert.True(model.HasProxies);
+        Assert.Equal("softpack.test → 127.0.0.1:3000", model.Proxies[0].Route);
+
+        model.Select("softpack");
+        Assert.Null(model.Selected);
+        Assert.Same(model.Proxies[0], model.SelectedProxy);
+        // A proxy's change rerenders its details; the same status does not.
+        Assert.False(model.Apply(new Status { Sites = [Site("acme", "8.4")], Proxies = [.. proxies] }));
+        Assert.True(model.Apply(new Status { Sites = [Site("acme", "8.4")], Proxies = [new() { Name = "softpack", Domain = "softpack.test", Upstream = "http://127.0.0.1:3000", Running = true }] }));
+
+        // The proxy gone: the first site again.
+        model.Apply(new Status { Sites = [Site("acme", "8.4")] });
+        Assert.Null(model.SelectedProxy);
+        Assert.Equal("acme", model.Selected?.Name);
+
+        // Only proxies: the pane isn't empty and the first proxy is selected.
+        model.Apply(new Status { Proxies = [.. proxies] });
+        Assert.True(model.HasSites);
+        Assert.Equal("softpack", model.SelectedProxy?.Name);
+    }
+
+    [Fact]
     public void ListsWorktreesRightAfterTheirSite()
     {
         var model = new SitesViewModel(service);
