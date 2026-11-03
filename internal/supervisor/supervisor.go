@@ -26,8 +26,8 @@ type Spec struct {
 	Dir        string
 	LogFile    string    // stdout+stderr are appended here
 	StopSignal os.Signal // graceful stop signal; ignored on Windows (see Stop)
-	// Group stops the process's whole group, not only the process: for a launcher such as npm,
-	// whose children (a dev server) would otherwise keep running and keep its port. Unix only.
+	// Group stops the process's whole group (its tree on Windows), not only the process: for a
+	// launcher such as npm, whose children (a dev server) would otherwise keep running and keep its port.
 	Group bool
 
 	// Stop, when set, asks the process to exit instead of StopSignal, for processes signals can't
