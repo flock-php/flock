@@ -1,6 +1,9 @@
 package config
 
 import (
+	"os"
+	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -59,7 +62,7 @@ func TestProxiesDontShareNamesWithSites(t *testing.T) {
 	}
 
 	for name, want := range map[string]string{
-		"app":    "a site's name",
+		"app":    "a linked site's name",
 		"app-2":  "already served by app",
 		"store":  "already served by shop",
 		"My App": "not a valid name",
@@ -80,6 +83,30 @@ func TestProxiesDontShareNamesWithSites(t *testing.T) {
 
 	if !cfg.RemoveProxy("softpack") || cfg.RemoveProxy("softpack") || len(cfg.Proxies) != 0 {
 		t.Fatalf("remove: %+v", cfg.Proxies)
+	}
+}
+
+func TestAProxyServesAParkedDirectoryOfTheSameName(t *testing.T) {
+	parked := t.TempDir()
+	for _, dir := range []string{"softpack", "blog"} {
+		if err := os.Mkdir(filepath.Join(parked, dir), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	cfg := Default()
+	cfg.Parked = []string{parked}
+
+	if err := cfg.UpsertProxy(Proxy{Name: "softpack", Upstream: "http://127.0.0.1:3000"}); err != nil {
+		t.Fatalf("a parked directory's name: %v", err)
+	}
+	if _, ok := cfg.FindSite("softpack"); ok {
+		t.Error("the parked directory is still a site")
+	}
+	if _, ok := cfg.FindSite("blog"); !ok {
+		t.Error("the other parked directory isn't a site any more")
+	}
+	if cfg.RemoveProxy("softpack"); !slices.ContainsFunc(cfg.AllSites(), func(s Site) bool { return s.Name == "softpack" }) {
+		t.Error("without the proxy, the parked directory is a site again")
 	}
 }
 

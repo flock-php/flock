@@ -93,7 +93,7 @@ A port means `127.0.0.1`; give a host and port (`localhost:5173`) or a URL (`htt
 
 Requests pass to the server with their `Host` header, so the app sees `softpack.test`, and WebSocket upgrades pass through too, so hot reload works. Some dev servers only answer the hosts they know: allow the domain in Vite's `server.allowedHosts`, or Next.js's `allowedDevOrigins`. Start the server itself as usual, e.g. with `npm run dev`: until it runs, the domain answers with 502 Bad Gateway.
 
-A proxy's name can't be a site's: Flock refuses it, and a site that comes from a project folder later wins over the proxy.
+A proxy's name can't be a linked site's: Flock refuses it. A folder of the same name in a project folder is served by the proxy instead, so `flock proxy softpack 3000` works for `~/Code/softpack`; `flock unproxy softpack` serves the folder again.
 
 ## Listing sites
 

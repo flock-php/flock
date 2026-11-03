@@ -304,7 +304,8 @@ func (c *Config) NodeFor(s Site) string {
 }
 
 // AllSites returns linked sites plus every directory found in parked paths, and the git worktrees
-// of both (see worktreeSites). A linked site wins over a parked directory with the same name.
+// of both (see worktreeSites). A linked site wins over a parked directory with the same name, and
+// so does a proxy: the directory isn't a site then.
 // Sorted by name, so a site's worktrees follow it.
 func (c *Config) AllSites() []Site {
 	byName := map[string]Site{}
@@ -319,6 +320,9 @@ func (c *Config) AllSites() []Site {
 				continue
 			}
 			name := SiteName(e.Name())
+			if _, proxied := c.FindProxy(name); proxied {
+				continue
+			}
 			byName[name] = Site{Name: name, Path: filepath.Join(dir, e.Name()), Parked: true}
 		}
 	}

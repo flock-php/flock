@@ -91,10 +91,11 @@ func TestProxiesPassRequestsAndUpgradesToTheirServer(t *testing.T) {
 	}
 }
 
-func TestASiteWinsOverAProxyOfTheSameName(t *testing.T) {
+func TestAProxyWinsOverAParkedFolderOfTheSameName(t *testing.T) {
+	dev := upstream(t)
 	parked := t.TempDir()
-	root, _ := testRoot(t, func(c *config.Config) {
-		c.Proxies = []config.Proxy{{Name: "blog", Upstream: "http://127.0.0.1:1"}}
+	root, cfg := testRoot(t, func(c *config.Config) {
+		c.Proxies = []config.Proxy{{Name: "blog", Upstream: dev.URL}}
 		c.Parked = []string{parked}
 	})
 	if err := os.Mkdir(filepath.Join(parked, "blog"), 0o755); err != nil {
@@ -106,7 +107,19 @@ func TestASiteWinsOverAProxyOfTheSameName(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(status.Proxies) != 1 || !strings.Contains(status.Proxies[0].Problem, "served by a site") || status.Proxies[0].URL != "" {
-		t.Fatalf("unexpected proxies: %+v", status.Proxies)
+	if len(status.Sites) != 0 || len(status.Proxies) != 1 || status.Proxies[0].Problem != "" {
+		t.Fatalf("sites %+v, proxies %+v", status.Sites, status.Proxies)
+	}
+
+	req, _ := http.NewRequest(http.MethodGet, "http://127.0.0.1:"+strconv.Itoa(cfg.Ports.HTTP)+"/", nil)
+	req.Host = "blog.test"
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, _ := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusOK || !strings.HasPrefix(string(body), "blog.test") {
+		t.Fatalf("got %d %q", resp.StatusCode, body)
 	}
 }

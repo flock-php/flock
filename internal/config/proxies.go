@@ -69,14 +69,15 @@ func (c *Config) FindProxy(name string) (Proxy, bool) {
 	return Proxy{}, false
 }
 
-// UpsertProxy adds or replaces a proxy by name. Its name can't be a site's: the domain would be
-// served twice.
+// UpsertProxy adds or replaces a proxy by name. Its name can't be a linked site's: the domain
+// would be served twice. A directory of the same name in a parked path is served by the proxy
+// instead (see AllSites), as a Node.js app in the projects folder usually is.
 func (c *Config) UpsertProxy(p Proxy) error {
 	if !hostLabel.MatchString(p.Name) {
 		return fmt.Errorf("%q is not a valid name: it may only contain a-z, 0-9 and inner hyphens", p.Name)
 	}
-	if _, ok := c.FindSite(p.Name); ok {
-		return fmt.Errorf("%s is a site's name — unlink the site first, or choose another name", p.Name)
+	if slices.ContainsFunc(c.Sites, func(s Site) bool { return s.Name == p.Name }) {
+		return fmt.Errorf("%s is a linked site's name — unlink the site first, or choose another name", p.Name)
 	}
 	domain := c.ProxyDomain(p)
 	for _, s := range c.AllSites() {
