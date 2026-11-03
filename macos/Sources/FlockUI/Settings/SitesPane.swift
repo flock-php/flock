@@ -7,7 +7,8 @@ import UniformTypeIdentifiers
 /// domains and document root, its PHP and Node.js versions and what serves it. Each version picker
 /// offers the project's pinned version (or the default) first, then the installed versions, which
 /// isolate the site on this machine; the document root picker works the same way. The pin menu
-/// pins a version or the document root into the project or removes it again.
+/// pins a version or the document root into the project or removes it again. Proxies (`flock proxy`)
+/// follow the sites in a section of their own.
 struct SitesPane: View {
     @Environment(AppModel.self) private var model
     @Environment(\.openWindow) private var openWindow
@@ -41,15 +42,31 @@ struct SitesPane: View {
         nonmutating set { sharingState.wrappedValue = newValue }
     }
 
+    /// The Add Proxy alert is open; its name and upstream typed so far.
+    private let addingProxyState = State<Bool>(initialValue: false)
+    private let newProxyNameState = State<String>(initialValue: "")
+    private let newProxyUpstreamState = State<String>(initialValue: "")
+    /// The proxy whose upstream is being changed, and the upstream typed so far.
+    private let editingUpstreamState = State<String?>(initialValue: nil)
+    private var editingUpstream: String? {
+        get { editingUpstreamState.wrappedValue }
+        nonmutating set { editingUpstreamState.wrappedValue = newValue }
+    }
+    private let upstreamDraftState = State<String>(initialValue: "")
+
     var body: some View {
         let store = model.settings
         let sites = model.status?.sites ?? []
+        let proxies = model.status?.proxies ?? []
         let phpVersions = store.config?.php.map(\.version) ?? []
         let nodeMajors = store.config?.nodeMajors ?? []
 
         VStack(alignment: .leading, spacing: 0) {
             HStack(alignment: .bottom) {
                 PaneHeader(title: "Sites", subtitle: "Sites you added one by one, plus every folder inside your project folders.")
+                Button("Add Proxy…") { addingProxyState.wrappedValue = true }
+                    .help("Serve a server of its own, e.g. a Node.js dev server on a port, at a .\(model.status?.dns.tld ?? "test") domain")
+                    .padding(.bottom, 6)
                 Button("Add Site…") {
                     for url in SettingsStore.chooseDirectories(prompt: "Add", multiple: false) {
                         Task { await store.perform { _ = try await $0.linkSite(path: url.path) } }
@@ -59,17 +76,20 @@ struct SitesPane: View {
                 .padding(.bottom, 6)
             }
 
-            if sites.isEmpty {
+            if sites.isEmpty && proxies.isEmpty {
                 ContentUnavailableView("No sites", systemImage: "globe",
                                        description: Text("Add a single site here, or add a project folder in General."))
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 // The sites in a list, the selected one's details beside it, as in Services.
-                let selected = sites.first { $0.id == selectionState.wrappedValue } ?? sites[0]
+                // Site and proxy names never clash (the daemon refuses it), so one selection covers both.
+                let selectedProxy = proxies.first { $0.id == selectionState.wrappedValue } ?? (sites.isEmpty ? proxies.first : nil)
+                let selected = selectedProxy == nil ? sites.first { $0.id == selectionState.wrappedValue } ?? sites.first : nil
+                let selectedID = selectedProxy?.id ?? selected?.id
                 HStack(spacing: 0) {
                     // The details are rebuilt for each site, which takes the focus off the list; it is
                     // given back so the arrow keys keep moving through the sites.
-                    List(selection: Binding<Status.Site.ID?>(get: { selected.id }, set: {
+                    List(selection: Binding<Status.Site.ID?>(get: { selectedID }, set: {
                         selectionState.wrappedValue = $0
                         listFocusState.wrappedValue = true
                     })) {
@@ -78,6 +98,13 @@ struct SitesPane: View {
                             // Its git worktrees, under it.
                             ForEach(sites.worktrees(of: site.name)) { worktree in
                                 worktreeRow(worktree).tag(worktree.id)
+                            }
+                        }
+                        if !proxies.isEmpty {
+                            Section("Proxies") {
+                                ForEach(proxies) { proxy in
+                                    proxyRow(proxy).tag(proxy.id)
+                                }
                             }
                         }
                     }
@@ -89,22 +116,24 @@ struct SitesPane: View {
 
                     ScrollView {
                         Group {
-                            if selected.isWorktree {
+                            if let selectedProxy {
+                                proxyDetail(selectedProxy)
+                            } else if let selected, selected.isWorktree {
                                 WorktreeDetail(worktree: selected) { selectionState.wrappedValue = selected.parent }
-                            } else {
+                            } else if let selected {
                                 detail(selected, phpVersions: phpVersions, nodeMajors: nodeMajors)
                             }
                         }
                         .padding(16)
                     }
                     // Another site's details start at the top.
-                    .id(selected.id)
+                    .id(selectedID)
                     .frame(minWidth: 340, maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
                     .background(Color(nsColor: .controlBackgroundColor).opacity(0.5))
                 }
                 .onChange(of: model.pendingSite, initial: true) { _, name in
                     // A notification or link asks for this site: selected once.
-                    if let name, sites.contains(where: { $0.name == name }) {
+                    if let name, sites.contains(where: { $0.name == name }) || proxies.contains(where: { $0.name == name }) {
                         selectionState.wrappedValue = name
                         model.pendingSite = nil
                     }
@@ -148,6 +177,39 @@ struct SitesPane: View {
             Button("Cancel", role: .cancel) { newDomainState.wrappedValue = "" }
         } message: {
             Text(domainHelp)
+        }
+        .alert("Add a proxy", isPresented: addingProxyState.projectedValue) {
+            TextField("Name, e.g. my-app", text: newProxyNameState.projectedValue)
+            TextField("Port, host:port or URL, e.g. 3000", text: newProxyUpstreamState.projectedValue)
+            Button("Add") {
+                let name = newProxyNameState.wrappedValue.trimmingCharacters(in: .whitespaces)
+                let upstream = newProxyUpstreamState.wrappedValue.trimmingCharacters(in: .whitespaces)
+                newProxyNameState.wrappedValue = ""
+                newProxyUpstreamState.wrappedValue = ""
+                if !name.isEmpty, !upstream.isEmpty {
+                    selectionState.wrappedValue = name
+                    Task { await store.perform { _ = try await $0.proxy(name: name, upstream: upstream) } }
+                }
+            }
+            Button("Cancel", role: .cancel) {
+                newProxyNameState.wrappedValue = ""
+                newProxyUpstreamState.wrappedValue = ""
+            }
+        } message: {
+            Text("Flock serves <name>.\(model.status?.dns.tld ?? "test") from a server of its own, e.g. a Next.js, Nuxt or Vite dev server. A port means 127.0.0.1.")
+        }
+        .alert("Change the upstream of \(editingUpstream ?? "")", isPresented: Binding(get: { editingUpstream != nil }, set: { if !$0 { editingUpstream = nil } })) {
+            TextField("Port, host:port or URL", text: upstreamDraftState.projectedValue)
+            Button("Change") {
+                let name = editingUpstream ?? ""
+                let upstream = upstreamDraftState.wrappedValue.trimmingCharacters(in: .whitespaces)
+                if !name.isEmpty, !upstream.isEmpty {
+                    Task { await store.perform { _ = try await $0.proxy(name: name, upstream: upstream) } }
+                }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("A port means 127.0.0.1; give a host and port (localhost:5173) or a URL (https://127.0.0.1:8443) for anything else.")
         }
         // A flock://secure link (AppModel.handle): nothing changes until the user confirms here.
         .alert(linkRequest?.title ?? "", isPresented: Binding(get: { linkRequest != nil }, set: { if !$0 { model.pendingSecure = nil } }),
@@ -205,6 +267,99 @@ struct SitesPane: View {
         }
         .padding(.vertical, 2)
         .help(site.path)
+    }
+
+    /// A proxy in the list: its name and where it passes requests, a lock when it is secured, a
+    /// warning when it isn't served.
+    private func proxyRow(_ proxy: Status.Proxy) -> some View {
+        HStack(spacing: 6) {
+            VStack(alignment: .leading, spacing: 1) {
+                Text(proxy.name).fontWeight(.medium).lineLimit(1)
+                Text("\(proxy.domain) → \(upstreamLabel(proxy.upstream))").font(.caption).foregroundStyle(.secondary)
+                    .lineLimit(1).truncationMode(.middle)
+            }
+            Spacer(minLength: 4)
+            if let problem = proxy.problem {
+                Image(systemName: "exclamationmark.triangle.fill").font(.caption).foregroundStyle(.orange)
+                    .help(problem)
+            }
+            if proxy.secured {
+                Image(systemName: "lock.fill").font(.caption).foregroundStyle(.secondary)
+                    .help("Served over HTTPS")
+            }
+        }
+        .padding(.vertical, 2)
+        .help(proxy.upstream)
+    }
+
+    /// An upstream without the http:// Flock adds: 127.0.0.1:3000.
+    private func upstreamLabel(_ upstream: String) -> String {
+        upstream.hasPrefix("http://") ? String(upstream.dropFirst("http://".count)) : upstream
+    }
+
+    /// The selected proxy: its address and actions, then its HTTPS and upstream.
+    private func proxyDetail(_ proxy: Status.Proxy) -> some View {
+        let store = model.settings
+        return VStack(alignment: .leading, spacing: 20) {
+            HStack(alignment: .top, spacing: 10) {
+                VStack(alignment: .leading, spacing: 2) {
+                    HStack(spacing: 6) {
+                        Text(proxy.name).font(.title3.weight(.semibold))
+                        Badge(text: "Proxy", color: .secondary)
+                    }
+                    if let text = proxy.url, let url = URL(string: text) {
+                        Link(text, destination: url).font(.callout)
+                    }
+                }
+                Spacer(minLength: 8)
+                HStack(spacing: 8) {
+                    Button {
+                        if let text = proxy.url, let url = URL(string: text) { NSWorkspace.shared.open(url) }
+                    } label: { Image(systemName: "safari") }
+                        .help("Open \(proxy.url ?? proxy.domain)")
+                        .disabled(proxy.url == nil)
+                    Button {
+                        confirm = ConfirmAction(
+                            title: "Remove \(proxy.name)?", button: "Remove", destructive: true,
+                            message: "Flock stops serving \(proxy.domain). The server at \(proxy.upstream) keeps running.",
+                            run: { [name = proxy.name] client in try await client.removeProxy(name) })
+                    } label: { Image(systemName: "minus.circle") }
+                        .help("Remove proxy")
+                }
+                .buttonStyle(.borderless)
+            }
+            if let problem = proxy.problem {
+                Label(problem, systemImage: "exclamationmark.triangle.fill")
+                    .font(.callout).foregroundStyle(.orange)
+                    .textSelection(.enabled)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            section("Proxy") {
+                field("HTTPS") {
+                    Toggle("HTTPS", isOn: Binding(
+                        get: { proxy.secured },
+                        set: { on in Task { await store.perform { _ = try await $0.secureProxy(proxy.name, on) } } }
+                    ))
+                    .labelsHidden()
+                    .toggleStyle(.switch)
+                    .controlSize(.small)
+                }
+                field("Upstream") {
+                    HStack(spacing: 8) {
+                        Text(proxy.upstream).font(.callout.monospaced()).textSelection(.enabled)
+                        Button("Change…") {
+                            upstreamDraftState.wrappedValue = upstreamLabel(proxy.upstream)
+                            editingUpstream = proxy.name
+                        }
+                        .controlSize(.small)
+                    }
+                }
+                Text("Every request passes to the upstream with its Host header, WebSocket upgrades (hot reload) included. Start the server itself as usual, e.g. with npm run dev: until it runs, \(proxy.domain) answers 502 Bad Gateway.")
+                    .font(.caption).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
     }
 
     /// A worktree in the list, indented under its site: its branch, and how its setup goes.

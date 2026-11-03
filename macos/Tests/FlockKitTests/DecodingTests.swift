@@ -41,6 +41,20 @@ private func decode<T: Decodable>(_ type: T.Type, _ json: String) throws -> T {
     #expect(status.channel == "beta")
 }
 
+@Test func decodesProxies() throws {
+    let status = try decode(Status.self, """
+    {"version":"dev","pid":1,"started_at":"2026-10-13T14:10:01Z",
+     "proxies":[{"name":"softpack","domain":"softpack.test","upstream":"http://127.0.0.1:3000","secured":true,"url":"https://softpack.test"},
+                {"name":"blog","domain":"blog.test","upstream":"http://127.0.0.1:3001","secured":false,"problem":"blog.test is served by a site of the same name"}]}
+    """)
+    #expect(status.proxies.map(\.id) == ["softpack", "blog"])
+    #expect(status.proxies[0].secured && status.proxies[0].url == "https://softpack.test" && status.proxies[0].problem == nil)
+    #expect(status.proxies[1].url == nil && status.proxies[1].problem != nil)
+
+    // An older daemon sends none.
+    #expect(try decode(Status.self, #"{"version":"dev","pid":1,"started_at":"2026-10-13T14:10:01Z"}"#).proxies.isEmpty)
+}
+
 @Test func decodesExtraDomainsAndTheWildcardState() throws {
     let status = try decode(Status.self, """
     {"version":"dev","pid":1,"started_at":"2026-10-13T14:10:01Z",

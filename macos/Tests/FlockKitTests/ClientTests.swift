@@ -142,6 +142,26 @@ struct ClientTests {
         #expect(json?["secured"] as? Bool == false)
     }
 
+    @Test func talksToTheProxyEndpoints() async throws {
+        StubProtocol.reset { _ in (200, #"{"version":"dev","pid":1,"started_at":"2026-10-13T14:10:01Z"}"#) }
+        let client = client(try apiJSON(token: "t"))
+
+        _ = try await client.proxy(name: "softpack", upstream: "3000")
+        _ = try await client.proxy(name: "softpack", upstream: "3001", secured: true)
+        _ = try await client.secureProxy("soft pack", false)
+        _ = try await client.removeProxy("softpack")
+
+        let requests = StubProtocol.requests
+        #expect(requests.map(\.method) == ["POST", "POST", "PATCH", "DELETE"])
+        #expect(requests.map { URL(string: $0.url)?.path ?? "" } == ["/v1/proxies", "/v1/proxies", "/v1/proxies/soft pack", "/v1/proxies/softpack"])
+        // A new proxy leaves secured out, so the daemon keeps an existing one's setting.
+        let first = try JSONSerialization.jsonObject(with: Data(requests[0].body.utf8)) as? [String: Any]
+        #expect(first?.keys.sorted() == ["name", "upstream"] && first?["upstream"] as? String == "3000")
+        let second = try JSONSerialization.jsonObject(with: Data(requests[1].body.utf8)) as? [String: Any]
+        #expect(second?["secured"] as? Bool == true)
+        #expect(requests[2].body == #"{"secured":false}"#)
+    }
+
     @Test func givesSlowEndpointsLongerThanTheDefault() async throws {
         StubProtocol.reset { request in
             request.url.contains("/php/") ? (200, #"{"versions":[]}"#) : request.url.contains("/node/") ? (200, #"{"versions":[]}"#)

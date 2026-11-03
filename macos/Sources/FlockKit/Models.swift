@@ -30,6 +30,8 @@ public struct Status: Decodable, Sendable, Equatable {
     /// Installed PHP versions whose build has no agent extension: they only capture dumps.
     public var captureUnsupported: [String]
     public var sites: [Site]
+    /// Names served by a server of their own, e.g. a Node.js dev server (`flock proxy`).
+    public var proxies: [Proxy]
     public var processes: [Process]
     public var warnings: [String]
     /// The channel config.json follows: "stable", "beta" or "experimental" (`flock channel`).
@@ -68,6 +70,21 @@ public struct Status: Decodable, Sendable, Equatable {
             wildcardProblem = try c.decodeIfPresent(String.self, forKey: .wildcardProblem) ?? ""
             maxDepth = try c.decodeIfPresent(Int.self, forKey: .maxDepth) ?? 4
         }
+    }
+
+    /// A name served by a server of its own rather than by PHP, e.g. a Node.js dev server: every
+    /// request, WebSocket upgrades included, passes to `upstream` with its Host header.
+    public struct Proxy: Decodable, Sendable, Equatable, Identifiable {
+        public var name: String
+        public var domain: String
+        /// Where requests go, e.g. http://127.0.0.1:3000.
+        public var upstream: String
+        public var secured: Bool
+        public var url: String?
+        /// Why it isn't served, e.g. a site of the same name serves its domain.
+        public var problem: String?
+
+        public var id: String { name }
     }
 
     /// One of a site's extra domains: a subdomain ("tenant1") or an alias ("my-app-2.test").
@@ -430,7 +447,7 @@ public struct Status: Decodable, Sendable, Equatable {
     enum CodingKeys: String, CodingKey {
         case version, pid, startedAt, dns, httpPort, httpsPort, mail, postgres, extras
         case xdebug, xdebugBreakpoints, dumps, captureOff, dumpsInPage, mailCount, dumpCount, eventCount, captureUnsupported
-        case sites, processes, warnings, channel, defaults
+        case sites, proxies, processes, warnings, channel, defaults
     }
 
     // Go omits empty slices (`omitempty`) or sends null; treat both as empty.
@@ -455,6 +472,7 @@ public struct Status: Decodable, Sendable, Equatable {
         eventCount = try c.decodeIfPresent(Int.self, forKey: .eventCount) ?? 0
         captureUnsupported = try c.decodeIfPresent([String].self, forKey: .captureUnsupported) ?? []
         sites = try c.decodeIfPresent([Site].self, forKey: .sites) ?? []
+        proxies = try c.decodeIfPresent([Proxy].self, forKey: .proxies) ?? []
         processes = try c.decodeIfPresent([Process].self, forKey: .processes) ?? []
         warnings = try c.decodeIfPresent([String].self, forKey: .warnings) ?? []
         channel = try c.decodeIfPresent(String.self, forKey: .channel) ?? "stable"

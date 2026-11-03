@@ -72,6 +72,10 @@ Remove a link with `flock unlink [name]`.
 
 Apps that aren't PHP, such as a Next.js, Nuxt or Vite dev server, an object store or a dashboard, run a server of their own on a port. A proxy serves that port at a `.test` domain, so the app gets a name, and HTTPS, like a site:
 
+:::app
+On macOS, click **Add Proxy…** in **Settings → Sites**, and give a name and the port (or host:port or URL). Proxies are listed under the sites; select one to turn on HTTPS, change its upstream or remove it.
+:::
+
 :::cli
 ```bash
 flock proxy softpack 3000
