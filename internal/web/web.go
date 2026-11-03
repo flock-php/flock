@@ -254,6 +254,9 @@ func app(s Site) string {
 // proxied name's server. The Host header passes unchanged, so the app sees its own domain, and
 // WebSocket upgrades (a dev server's hot reload) pass through.
 func proxy(upstream, indent string) string {
+	if strings.HasPrefix(upstream, "https://") {
+		return fmt.Sprintf("%sreverse_proxy %s {\n%s\theader_up Host {http.request.hostport}\n%s}\n", indent, quote(upstream), indent, indent)
+	}
 	return fmt.Sprintf("%sreverse_proxy %s\n", indent, quote(upstream))
 }
 
