@@ -7,7 +7,7 @@ using CatalogService = Flock.Kit.CatalogService;
 namespace Flock.Tray.Settings;
 
 /// <summary>
-///     The catalog services (MySQL, MariaDB, Redis, MongoDB, Meilisearch, RustFS): pick a version line
+///     The catalog services (MySQL, MariaDB, Redis, MongoDB, Meilisearch, RustFS, Keycloak): pick a version line
 ///     and a port and install, follow the install (a job in the daemon); like PostgreSQL's majors,
 ///     lines install side by side: install more, switch, update or uninstall them. Each keeps its own data.
 /// </summary>

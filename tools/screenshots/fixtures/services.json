@@ -218,5 +218,21 @@
     "env": "",
     "log": "rustfs",
     "url": ""
+  },
+  {
+    "id": "keycloak",
+    "name": "Keycloak",
+    "category": "Identity",
+    "description": "Single sign-on with OAuth 2.0 and OpenID Connect, with an admin console in the browser. User admin, password admin.",
+    "available": true,
+    "version": "",
+    "port": 8080,
+    "installed": false,
+    "enabled": false,
+    "running": false,
+    "stoppable": false,
+    "env": "",
+    "log": "keycloak",
+    "url": ""
   }
 ]

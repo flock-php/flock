@@ -18,6 +18,7 @@ struct ServiceStyle {
         case "meilisearch": ServiceStyle(symbol: "magnifyingglass", color: .pink)
         case "typesense": ServiceStyle(symbol: "text.magnifyingglass", color: .purple)
         case "rustfs": ServiceStyle(symbol: "externaldrive.fill", color: .teal)
+        case "keycloak": ServiceStyle(symbol: "person.badge.key.fill", color: .cyan)
         default: ServiceStyle(symbol: "server.rack", color: .gray)
         }
     }
@@ -35,7 +36,7 @@ struct UnavailableNotice: View {
     }
 }
 
-/// A catalog service (MySQL, MariaDB, Redis, MongoDB, Meilisearch, Typesense, RustFS): pick a
+/// A catalog service (MySQL, MariaDB, Redis, MongoDB, Meilisearch, Typesense, RustFS, Keycloak): pick a
 /// version line and port and install it, follow the install; like PostgreSQL's majors, lines
 /// install side by side and one runs: install more, switch, update or uninstall them.
 struct CatalogDetail: View {

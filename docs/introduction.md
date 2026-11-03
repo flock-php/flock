@@ -7,7 +7,7 @@ Flock is a free, open-source local development environment for Laravel on **Wind
 - **Sites**: every project is served on a `.test` domain, optionally over HTTPS with a locally trusted certificate.
 - **PHP**: versions 8.1 to 8.5 side by side (on Windows also 7.4 and 8.0), with the common extensions built in and Xdebug ready to switch on.
 - **Node.js**: official builds from Node 16 up, chosen per project from `.nvmrc` or `.flockrc`.
-- **Services**: PostgreSQL, MySQL, MariaDB, MongoDB, Valkey, Redis, Meilisearch, Typesense and RustFS.
+- **Services**: PostgreSQL, MySQL, MariaDB, MongoDB, Valkey, Redis, Meilisearch, Typesense, RustFS and Keycloak.
 - **Tools**: a mail catcher, a `dump()` viewer, a Laravel log viewer and one-click Xdebug.
 
 ## How it works

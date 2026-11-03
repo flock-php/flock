@@ -15,6 +15,7 @@ Flock installs databases, caches, search engines and object storage as native pr
 | Meilisearch | Search | 7700 | 1.x |
 | Typesense | Search | 8108 | 30, 29 (macOS and Linux) |
 | RustFS | Storage | 9000 | 1.x |
+| Keycloak | Identity | 8080 | 26.8, 26.7 |
 
 PostgreSQL has its own section. See [PostgreSQL](postgres.md).
 
@@ -146,6 +147,19 @@ AWS_ENDPOINT=http://127.0.0.1:9000
 AWS_URL=http://127.0.0.1:9000/laravel
 AWS_USE_PATH_STYLE_ENDPOINT=true
 ```
+
+### Keycloak (single sign-on)
+
+Keycloak is an identity provider for OAuth 2.0 and OpenID Connect. Its package includes the Java runtime it needs, so you don't have to install Java. It takes a little while to start, longer the first time, and its admin console is at `http://127.0.0.1:8080/admin/`: user `admin`, password `admin`. Create a realm and a client there, and add your app's callback URL to the client's valid redirect URIs. The management port is the one after the main port (8081).
+
+```bash
+KEYCLOAK_BASE_URL=http://127.0.0.1:8080
+KEYCLOAK_REALM=master
+KEYCLOAK_CLIENT_ID=
+KEYCLOAK_CLIENT_SECRET=
+```
+
+Each Keycloak version line keeps its own data: a new line starts empty. To move a realm to it, export the realm from the old line's admin console and import it in the new one. Updates within a line keep your data.
 
 ## Valkey or Redis?
 

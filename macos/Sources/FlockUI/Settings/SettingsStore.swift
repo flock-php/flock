@@ -20,7 +20,7 @@ final class SettingsStore {
     private(set) var node: NodeCatalog?
     /// PostgreSQL majors with install state; loaded by the Services pane.
     private(set) var postgres: PostgresVersions?
-    /// MySQL, MariaDB, Redis, MongoDB, Meilisearch, Typesense, RustFS; loaded by the Services pane.
+    /// MySQL, MariaDB, Redis, MongoDB, Meilisearch, Typesense, RustFS, Keycloak; loaded by the Services pane.
     private(set) var catalog: ServiceCatalog?
     /// The AI clients Flock's MCP server can be registered with; loaded by the AI pane.
     private(set) var mcp: MCPState?

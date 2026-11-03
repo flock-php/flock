@@ -29,6 +29,7 @@ func Kinds(goos string) []*Kind {
 		meilisearch(goos),
 		typesense(goos),
 		rustfs(goos),
+		keycloak(goos),
 	}
 }
 
@@ -325,6 +326,70 @@ func rustfs(goos string) *Kind {
 				spec.Env = []string{"DYLD_FALLBACK_LIBRARY_PATH=/usr/lib"}
 			}
 			return spec, nil
+		},
+	}
+}
+
+// ---------------------------------------------------------------------------------------------
+// Keycloak: upstream's jars with a Temurin JRE in jre/, in development mode on its H2 file database.
+
+// Keycloak's admin login, for its local-only development mode.
+const (
+	KeycloakAdminUser     = "admin"
+	KeycloakAdminPassword = "admin"
+)
+
+// keycloakJVMArgs are the options kc.sh and kc.bat give Java, with headless AWT for the Linux
+// package, which has no X11 libraries.
+var keycloakJVMArgs = []string{
+	"-XX:MetaspaceSize=96M", "-XX:MaxMetaspaceSize=256m", "-Xms64m", "-Xmx512m",
+	"-XX:+ExitOnOutOfMemoryError", "-XX:+UseG1GC", "-XX:FlightRecorderOptions=stackdepth=512",
+	"-Dfile.encoding=UTF-8", "-Dsun.stdout.encoding=UTF-8", "-Dsun.err.encoding=UTF-8",
+	"-Dstdout.encoding=UTF-8", "-Dstderr.encoding=UTF-8", "-Djava.security.egd=file:/dev/urandom",
+	"-Djdk.tls.rejectClientInitiatedRenegotiation=true", "-Duser.language=en", "-Duser.country=US",
+	"--add-opens=java.base/java.util=ALL-UNNAMED", "--add-opens=java.base/java.util.concurrent=ALL-UNNAMED",
+	"--add-opens=java.base/java.security=ALL-UNNAMED", "--add-opens=java.base/java.lang=ALL-UNNAMED",
+	"--enable-native-access=ALL-UNNAMED",
+	"-Djava.util.concurrent.ForkJoinPool.common.threadFactory=io.quarkus.bootstrap.forkjoin.QuarkusForkJoinWorkerThreadFactory",
+	"-Djava.util.logging.manager=org.jboss.logmanager.LogManager", "-Dpicocli.disable.closures=true",
+	"-Dquarkus-log-max-startup-records=10000", "-Djava.awt.headless=true",
+}
+
+func keycloak(goos string) *Kind {
+	return &Kind{
+		ID: "keycloak", Name: "Keycloak", Category: "Identity", DefaultPort: 8080, Line: majorMinor,
+		Description: "Single sign-on with OAuth 2.0 and OpenID Connect, with an admin console in the browser. User " + KeycloakAdminUser + ", password " + KeycloakAdminPassword + ".",
+		Env: func(port int) string {
+			return fmt.Sprintf("KEYCLOAK_BASE_URL=http://127.0.0.1:%d\nKEYCLOAK_REALM=master\nKEYCLOAK_CLIENT_ID=\nKEYCLOAK_CLIENT_SECRET=", port)
+		},
+		URL:     func(port int) string { return fmt.Sprintf("http://127.0.0.1:%d/admin/", port) },
+		Prepare: needs("lib/quarkus-run.jar", "jre/bin/"+exe(goos, "java")),
+		Spec: func(p Paths, port int) (supervisor.Spec, error) {
+			// Java itself rather than kc.sh or kc.bat: on Windows, stopping a script would leave Java
+			// running. When its configuration changed Keycloak rebuilds itself and exits with code 10
+			// for a relaunch, which the supervisor's restart does.
+			home := filepath.ToSlash(p.Dir)
+			args := append(append([]string{}, keycloakJVMArgs...),
+				"-Dkc.home.dir="+home,
+				"-Djboss.server.config.dir="+home+"/conf",
+				"-Dkeycloak.theme.dir="+home+"/themes",
+				// The default is in the version's folder, which an update of the line removes.
+				"-Dkc.db-url-path="+filepath.ToSlash(p.Data),
+				"-cp", filepath.Join(p.Dir, "lib", "quarkus-run.jar"), "io.quarkus.bootstrap.runner.QuarkusEntryPoint",
+				"start-dev", "--http-host=127.0.0.1", fmt.Sprintf("--http-port=%d", port),
+				// H2 writes commits to disk after a delay, and a killed Keycloak (every stop on Windows,
+				// where there are no signals) would lose them.
+				"--db-url-properties=;WRITE_DELAY=0",
+				// Not its default 9000, RustFS's port.
+				fmt.Sprintf("--http-management-port=%d", port+1), "--health-enabled=true")
+			return supervisor.Spec{
+				Path: filepath.Join(p.Dir, "jre", "bin", exe(goos, "java")),
+				Args: args,
+				Env: []string{"KC_BOOTSTRAP_ADMIN_USERNAME=" + KeycloakAdminUser,
+					"KC_BOOTSTRAP_ADMIN_PASSWORD=" + KeycloakAdminPassword},
+				Dir:        p.Data,
+				StopSignal: syscall.SIGTERM,
+			}, nil
 		},
 	}
 }

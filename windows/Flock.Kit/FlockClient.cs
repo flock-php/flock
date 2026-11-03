@@ -291,7 +291,7 @@ public sealed class FlockClient : IDisposable
     public Task<PostgresVersions> UninstallPostgresAsync(string major, bool deleteData = false, CancellationToken cancellationToken = default) =>
         Send<PostgresVersions>(HttpMethod.Delete, $"/v1/postgres/versions/{Escape(major)}" + (deleteData ? "?delete_data=1" : ""), timeout: TimeSpan.FromMinutes(2), cancellationToken: cancellationToken);
 
-    // Catalog (MySQL, MariaDB, Redis, MongoDB, Meilisearch, Typesense, RustFS)
+    // Catalog (MySQL, MariaDB, Redis, MongoDB, Meilisearch, Typesense, RustFS, Keycloak)
 
     public Task<ServiceCatalog> CatalogAsync(CancellationToken cancellationToken = default) => Get<ServiceCatalog>("/v1/catalog", cancellationToken: cancellationToken);
 

@@ -27,7 +27,7 @@ func newServicesCommand() *cobra.Command {
 
 	cmd := &cobra.Command{
 		Use:   "services",
-		Short: "List, install, update and remove PostgreSQL, MySQL, MariaDB, MongoDB, Valkey, Redis (macOS and Linux), Meilisearch, Typesense and RustFS",
+		Short: "List, install, update and remove PostgreSQL, MySQL, MariaDB, MongoDB, Valkey, Redis (macOS and Linux), Meilisearch, Typesense, RustFS and Keycloak",
 		Long: `Lists the services and their versions. With --json, for scripts: every service with
 whether it is installed and running, its port, and the .env settings that connect a
 Laravel app to it (env).`,

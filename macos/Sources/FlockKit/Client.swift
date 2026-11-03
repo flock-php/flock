@@ -412,7 +412,7 @@ public actor FlockClient {
                          query: deleteData ? [URLQueryItem(name: "delete_data", value: "1")] : [], timeout: Self.postgresChangeTimeout)
     }
 
-    // MARK: Catalog (MySQL, MariaDB, Redis, MongoDB, Meilisearch, Typesense, RustFS)
+    // MARK: Catalog (MySQL, MariaDB, Redis, MongoDB, Meilisearch, Typesense, RustFS, Keycloak)
 
     public func serviceCatalog() async throws -> ServiceCatalog {
         try await decode(ServiceCatalog.self, "GET", "/v1/catalog")

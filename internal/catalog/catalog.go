@@ -1,5 +1,5 @@
 // Package catalog installs and runs the services Flock offers on request besides PostgreSQL:
-// MySQL, MariaDB, MongoDB, Redis, Valkey, Meilisearch, Typesense and RustFS. Their builds come
+// MySQL, MariaDB, MongoDB, Redis, Valkey, Meilisearch, Typesense, RustFS and Keycloak. Their builds come
 // from the binaries manifest of the configured channel. Like PostgreSQL's majors, the lines of a
 // service (MySQL 8.4, 9.7) install side by side, each with its own data; one of them, the active
 // one, runs on the service's port. Installs run as background jobs the apps follow by polling.

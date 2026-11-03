@@ -307,6 +307,37 @@
         }
       ],
       "job": null
+    },
+    {
+      "id": "keycloak",
+      "name": "Keycloak",
+      "category": "Identity",
+      "description": "Single sign-on with OAuth 2.0 and OpenID Connect, with an admin console in the browser. User admin, password admin.",
+      "available": true,
+      "unavailable": "",
+      "estimate": "about 230 MB download",
+      "installed": "",
+      "line": "",
+      "latest": "",
+      "update": false,
+      "yanked": "",
+      "port": 8080,
+      "default_port": 8080,
+      "lines": [
+        {
+          "id": "26.8",
+          "label": "26.8",
+          "latest": "26.8.1",
+          "prerelease": false,
+          "installed": false,
+          "version": "",
+          "active": false,
+          "update": false,
+          "yanked": "",
+          "has_data": false
+        }
+      ],
+      "job": null
     }
   ]
 }

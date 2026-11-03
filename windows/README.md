@@ -57,6 +57,7 @@ SHA-256 against a signed list — nothing is built on the machine:
 | MySQL, MongoDB (`flock services install <id> [line]`) | the official builds | the official zips (Flock drops the debug symbols) |
 | MariaDB | built by Flock | the official zip |
 | Meilisearch, RustFS | the official binaries | the official binaries |
+| Keycloak | the official archive and a Temurin JRE | the official archive and a Temurin JRE |
 | Typesense | the official build | not available (no Windows build) |
 | Node.js | the official builds | the official builds |
 
@@ -120,7 +121,7 @@ its default Git description may not be a version the updater can compare.
 - [ ] `flock debug artisan …` hits a breakpoint; plain `php` does not load Xdebug
 - [ ] `flock services install valkey` downloads Valkey and starts it; `redis-cli ping` → PONG; `flock services install postgres` → `psql -c "select 1"`
 - [ ] Upgrading from a Flock that had Redis: it keeps running from `services\redis\7.2.16` with its data
-- [ ] Settings → Services → All: install MySQL, MariaDB (port suggested as 3307 next to MySQL), MongoDB, Valkey, Meilisearch, RustFS; each starts and its connection works; Typesense and Redis show as not available
+- [ ] Settings → Services → All: install MySQL, MariaDB (port suggested as 3307 next to MySQL), MongoDB, Valkey, Meilisearch, RustFS, Keycloak; each starts and its connection works; Typesense and Redis show as not available
 - [ ] MySQL 8.4 installs next to 9.7 (9.7 keeps running); Switch… runs 8.4 on the same port with its own data; uninstalling the active one hands over to the other; `flock services use mysql 9.7` switches back
 - [ ] Stopping Redis/MySQL/MariaDB/PostgreSQL in Services (or `flock restart`) logs a clean shutdown (redis.log: "Redis is now ready to exit"; mysql.log: "Shutdown complete"; postgres.log: "database system is shut down"), not a kill
 - [ ] Mail: send from tinker → appears in Mail, HTML view, attachments save

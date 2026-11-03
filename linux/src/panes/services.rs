@@ -20,7 +20,7 @@ use crate::links::{self, Link};
 use crate::model::AppModel;
 use crate::paths;
 
-const CATEGORY_ORDER: [&str; 7] = ["Core", "Database", "Cache & Queue", "Search", "Storage", "Mail", "Debugging"];
+const CATEGORY_ORDER: [&str; 8] = ["Core", "Database", "Cache & Queue", "Search", "Storage", "Identity", "Mail", "Debugging"];
 const ACTIVE_INTERVAL: Duration = Duration::from_secs(2);
 const IDLE_INTERVAL: Duration = Duration::from_secs(30);
 

@@ -78,7 +78,7 @@ func TestIntegrationInstallAndRun(t *testing.T) {
 			procs.Ensure(spec)
 			defer procs.StopAll()
 
-			if err := waitListening(port, 90*time.Second); err != nil {
+			if err := waitListening(port, 4*time.Minute); err != nil {
 				log, _ := os.ReadFile(spec.LogFile)
 				t.Fatalf("%v\n%s", err, tail(string(log), 4000))
 			}
@@ -139,6 +139,23 @@ func probeService(id string, port int) error {
 			return err
 		}
 		conn.Close()
+	case "keycloak":
+		// Health is on the management port, the one after the main port. It boots slowly, and
+		// rebuilds itself the first time.
+		health := fmt.Sprintf("http://127.0.0.1:%d/health/ready", port+1)
+		var last error
+		for deadline := time.Now().Add(4 * time.Minute); time.Now().Before(deadline); time.Sleep(time.Second) {
+			resp, err := http.Get(health)
+			if err == nil {
+				resp.Body.Close()
+				if resp.StatusCode == http.StatusOK {
+					return nil
+				}
+				err = fmt.Errorf("GET %s: %s", health, resp.Status)
+			}
+			last = err
+		}
+		return last
 	case "meilisearch", "typesense", "rustfs":
 		path := map[string]string{"meilisearch": "/health", "typesense": "/health", "rustfs": "/health"}[id]
 		var last error

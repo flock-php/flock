@@ -145,7 +145,7 @@ public sealed class ComponentJob : JobState
 
 /// <summary>
 /// GET /v1/catalog — the services Flock installs on request besides PostgreSQL: MySQL, MariaDB,
-/// MongoDB, Valkey, Redis, Meilisearch, Typesense, RustFS. Their lines install side by side, and one
+/// MongoDB, Valkey, Redis, Meilisearch, Typesense, RustFS, Keycloak. Their lines install side by side, and one
 /// of them (the active one) runs on the service's port; installs run as jobs in the daemon.
 /// </summary>
 public sealed class ServiceCatalog

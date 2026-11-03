@@ -60,7 +60,7 @@ func (s *server) addReadTools(srv *mcp.Server) {
 
 	mcp.AddTool(srv, &mcp.Tool{
 		Name: "list_services",
-		Description: "Flock's services (MySQL, MariaDB, PostgreSQL, Redis/Valkey, Meilisearch, Typesense, MongoDB, RustFS, mail, dumps): " +
+		Description: "Flock's services (MySQL, MariaDB, PostgreSQL, Redis/Valkey, Meilisearch, Typesense, MongoDB, RustFS, Keycloak, mail, dumps): " +
 			"whether each is installed and running, its port, the .env settings to connect a Laravel app, and installs in progress.",
 		Annotations: readOnly,
 	}, s.listServices)

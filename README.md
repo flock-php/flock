@@ -34,7 +34,7 @@ The full documentation is at [flockphp.com/docs](https://flockphp.com/docs/quick
 
 - **.test domains with real HTTPS.** Park a folder, or link one project, and every app gets its own `.test` domain, subdomains included. HTTPS works without browser warnings.
 - **A PHP version per project.** PHP 8.1 to 8.5 run side by side, and each project picks its own. Node.js too.
-- **Databases in one click.** PostgreSQL, MySQL, MariaDB, MongoDB, Valkey, Meilisearch and RustFS (plus Redis and Typesense on macOS) run as native processes that start with your computer.
+- **Databases in one click.** PostgreSQL, MySQL, MariaDB, MongoDB, Valkey, Meilisearch, RustFS and Keycloak (plus Redis and Typesense on macOS) run as native processes that start with your computer.
 - **Every email, caught.** Mail your apps send lands in a local inbox, one per app, and never reaches real people.
 - **`dump()` without the mess.** `dump()` and `dd()` output, queries, logs and views show up in a timeline grouped by request, with links to your editor. No code changes needed.
 - **Step debugging, only when you need it.** Xdebug slows every request, so it stays off until you turn it on.

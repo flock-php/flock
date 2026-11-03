@@ -358,7 +358,7 @@ func TestLines(t *testing.T) {
 
 // examples are a version of each service, for the specs.
 var examples = map[string]string{"mysql": "9.7.2", "mariadb": "11.8.9", "mongodb": "8.0.34", "valkey": "9.1.2", "redis": "8.4.7",
-	"meilisearch": "1.55.0", "typesense": "30.2", "rustfs": "1.0.2"}
+	"meilisearch": "1.55.0", "typesense": "30.2", "rustfs": "1.0.2", "keycloak": "26.8.1"}
 
 func TestKinds(t *testing.T) {
 	for _, goos := range []string{"darwin", "windows"} {
@@ -409,6 +409,69 @@ func TestSpecsBindToLocalhost(t *testing.T) {
 				}
 			}
 		}
+	}
+}
+
+func TestKeycloakSpec(t *testing.T) {
+	root := filepath.Join(t.TempDir(), "a b") // stands in for "Application Support"
+	for _, goos := range []string{"darwin", "linux", "windows"} {
+		k := keycloak(goos)
+		if got := k.LineOf("26.8.1"); got != "26.8" {
+			t.Errorf("line of 26.8.1 = %q", got)
+		}
+		p := PathsOf(root, k, "26.8.1")
+		spec, err := k.Spec(p, 4567)
+		if err != nil {
+			t.Fatal(err)
+		}
+		// Java itself, never kc.sh or kc.bat: on Windows, stopping a script would leave Java running.
+		if want := filepath.Join(p.Dir, "jre", "bin", exe(goos, "java")); spec.Path != want {
+			t.Errorf("%s: runs %s, want %s", goos, spec.Path, want)
+		}
+		args := strings.Join(spec.Args, "\n")
+		for _, want := range []string{
+			"start-dev", "--http-host=127.0.0.1", "--http-port=4567",
+			"--http-management-port=4568", // not its default 9000, RustFS's port
+			"--health-enabled=true",
+			"-Dkc.home.dir=" + filepath.ToSlash(p.Dir),
+			"-Dkc.db-url-path=" + filepath.ToSlash(p.Data), // an update removes the version's folder, not the line's data
+			"-Djava.awt.headless=true",
+			"--db-url-properties=;WRITE_DELAY=0", // a killed Keycloak (every stop on Windows) keeps what it committed
+		} {
+			if !strings.Contains(args, want) {
+				t.Errorf("%s: no %q in\n%s", goos, want, args)
+			}
+		}
+		env := strings.Join(spec.Env, "\n")
+		if !strings.Contains(env, "KC_BOOTSTRAP_ADMIN_USERNAME=admin") || !strings.Contains(env, "KC_BOOTSTRAP_ADMIN_PASSWORD=admin") {
+			t.Errorf("%s env: %s", goos, env)
+		}
+		if spec.Dir != p.Data {
+			t.Errorf("%s runs in %s", goos, spec.Dir)
+		}
+	}
+}
+
+func TestKeycloakPrepareNeedsTheJRE(t *testing.T) {
+	dir := t.TempDir()
+	k := keycloak("linux")
+	if err := os.MkdirAll(filepath.Join(dir, "lib"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "lib", "quarkus-run.jar"), nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := k.Prepare(dir); err == nil {
+		t.Error("a package without its JRE was accepted")
+	}
+	if err := os.MkdirAll(filepath.Join(dir, "jre", "bin"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "jre", "bin", "java"), nil, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := k.Prepare(dir); err != nil {
+		t.Error(err)
 	}
 }
 
