@@ -25,6 +25,10 @@ import (
 // TestMain keeps the daemons offline: without the package manifest, the first run doesn't
 // download PHP and Node.js, and versions count as offered.
 func TestMain(m *testing.M) {
+	// Copied into a test's Flock root as node, this binary is a dev server (see installFakeNode).
+	if name := filepath.Base(os.Args[0]); name == "node" || name == "node.exe" {
+		os.Exit(fakeNode())
+	}
 	binaries.Bases = nil
 	os.Exit(m.Run())
 }

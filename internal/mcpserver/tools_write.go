@@ -79,13 +79,14 @@ func (s *server) addWriteTools(srv *mcp.Server) {
 			"- pin (tool, version) / unpin (tool): write the version into the project's .flockrc (committed, so everyone " +
 			"working on the project gets it); pin without a version pins the one the site uses now.\n" +
 			"- add_domain (domain): an extra domain, a subdomain (\"tenant1\" → tenant1.<site>.test) or an alias (\"my-app-2.test\").\n" +
-			"- set_server (server, worker): run PHP through FastCGI (PHP-FPM) or FrankenPHP, optionally in Octane's worker mode.\n" +
-			"- restart: restart a FrankenPHP site's process, e.g. so Octane workers load changed code.",
+			"- set_server (server, worker): run PHP through FastCGI (PHP-FPM) or FrankenPHP, optionally in Octane's worker mode, " +
+			"or serve a Node.js app (node): Flock runs its npm run dev with the site's Node.js.\n" +
+			"- restart: restart a FrankenPHP site's process, e.g. so Octane workers load changed code, or a Node.js site's dev server.",
 		Annotations: additive(false),
 		InputSchema: schema[updateSiteIn](map[string][]any{
 			"action": {"secure", "unsecure", "isolate", "unisolate", "pin", "unpin", "add_domain", "set_server", "restart"},
 			"tool":   {"php", "node"},
-			"server": {"fastcgi", "frankenphp"},
+			"server": {"fastcgi", "frankenphp", "node"},
 			"worker": {"classic", "octane"},
 		}),
 	}, s.updateSite)
@@ -684,7 +685,7 @@ type updateSiteIn struct {
 	Tool    string `json:"tool,omitempty" jsonschema:"isolate, unisolate, pin and unpin: php or node"`
 	Version string `json:"version,omitempty" jsonschema:"isolate and pin: e.g. 8.4 for PHP or 22 for Node.js"`
 	Domain  string `json:"domain,omitempty" jsonschema:"add_domain: a subdomain (tenant1) or an alias (my-app-2.test)"`
-	Server  string `json:"server,omitempty" jsonschema:"set_server: fastcgi or frankenphp"`
+	Server  string `json:"server,omitempty" jsonschema:"set_server: fastcgi, frankenphp, or node (a Node.js app: Flock runs its npm run dev with the site's Node.js)"`
 	Worker  string `json:"worker,omitempty" jsonschema:"set_server with frankenphp: classic (the default) or octane (Laravel Octane's worker mode)"`
 }
 
@@ -744,8 +745,8 @@ func (s *server) updateSite(ctx context.Context, _ *mcp.CallToolRequest, in upda
 		st, err = s.Daemon.AddDomain(ctx, site.Name, in.Domain)
 		msg = fmt.Sprintf("Added %s to %s.", in.Domain, site.Name)
 	case "set_server":
-		if in.Server != config.ServerFastCGI && in.Server != config.ServerFrankenPHP {
-			return nil, siteActionOut{}, errors.New("set_server needs server: fastcgi or frankenphp")
+		if in.Server != config.ServerFastCGI && in.Server != config.ServerFrankenPHP && in.Server != config.ServerNode {
+			return nil, siteActionOut{}, errors.New("set_server needs server: fastcgi, frankenphp or node")
 		}
 		change := api.SiteChange{Server: &in.Server}
 		switch in.Worker {

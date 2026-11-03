@@ -426,9 +426,20 @@ private struct SiteRow: View {
                 if site.server == .frankenphp {
                     Badge(text: site.worker == .octane ? "Octane" : "FrankenPHP", color: .secondary)
                 }
-                Text("PHP \(site.php)")
-                    .font(.caption2.monospacedDigit())
-                    .foregroundStyle(.secondary)
+                if site.server == .node {
+                    // A Node.js app: whether its dev server answers, and on which Node.js.
+                    let running = site.nodeServer?.state == .running
+                    Circle()
+                        .fill(running ? Color.green : site.nodeServer?.state == .starting ? Color.yellow : Color.secondary.opacity(0.5))
+                        .frame(width: 6, height: 6)
+                    Text(running || site.nodeServer?.state == .starting ? "Node.js \(site.nodeServer?.version ?? "")" : "Not running")
+                        .font(.caption2.monospacedDigit())
+                        .foregroundStyle(.secondary)
+                } else {
+                    Text("PHP \(site.php)")
+                        .font(.caption2.monospacedDigit())
+                        .foregroundStyle(.secondary)
+                }
             }
             .padding(.vertical, 3)
             .padding(.horizontal, 6)

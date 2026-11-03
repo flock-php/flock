@@ -246,6 +246,10 @@ func fastCGIName() string {
 }
 
 func printSiteServer(cmd *cobra.Command, site api.SiteStatus) {
+	if ns := site.NodeServer; site.Server == config.ServerNode && ns != nil {
+		cmd.Printf("%s is a Node.js app: Flock runs `npm run %s` (%s) — log: `flock logs %s`\n", site.Name, ns.Script, ns.State, ns.Log)
+		return
+	}
 	if site.Server != config.ServerFrankenPHP || site.FrankenPHP == nil {
 		cmd.Printf("%s is served with %s\n", site.Name, fastCGIName())
 		return

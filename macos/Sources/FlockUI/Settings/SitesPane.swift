@@ -437,8 +437,10 @@ struct SitesPane: View {
                         .disabled(site.url == nil)
                     Button { reveal(site.path) } label: { Image(systemName: "folder") }
                         .help("Show in Finder")
-                    Button { extensionsState.wrappedValue = site } label: { Image(systemName: "puzzlepiece.extension") }
-                        .help("PHP extensions")
+                    if site.server != .node {
+                        Button { extensionsState.wrappedValue = site } label: { Image(systemName: "puzzlepiece.extension") }
+                            .help("PHP extensions")
+                    }
                     pinMenu(site)
                     if !site.parked {
                         Button {
@@ -503,21 +505,28 @@ struct SitesPane: View {
                         .font(.caption).foregroundStyle(.orange)
                         .fixedSize(horizontal: false, vertical: true)
                 }
-                field("Root") {
-                    rootPicker(site)
+                // A Node.js app's dev server serves everything; it has no document root.
+                if site.server != .node {
+                    field("Root") {
+                        rootPicker(site)
+                    }
+                    rootHints(site)
                 }
-                rootHints(site)
             }
 
-            section("Share") {
-                shareFields(site)
+            if site.server != .node {
+                section("Share") {
+                    shareFields(site)
+                }
             }
 
             section("Versions") {
-                field("PHP") {
-                    versionPicker(label: "PHP", current: site.php, source: site.phpSource, pinned: site.phpPinned, file: site.phpFile,
-                                  defaultVersion: store.config?.defaultPHP ?? "", installed: phpVersions) { version in
-                        Task { await store.perform { _ = try await $0.updateSite(site.name, SiteChange(php: version)) } }
+                if site.server != .node {
+                    field("PHP") {
+                        versionPicker(label: "PHP", current: site.php, source: site.phpSource, pinned: site.phpPinned, file: site.phpFile,
+                                      defaultVersion: store.config?.defaultPHP ?? "", installed: phpVersions) { version in
+                            Task { await store.perform { _ = try await $0.updateSite(site.name, SiteChange(php: version)) } }
+                        }
                     }
                 }
                 field("Node.js") {
@@ -527,7 +536,9 @@ struct SitesPane: View {
                     }
                 }
                 hints(site)
-                Text("A version picked here applies on this machine only. To set it for everyone working on the project, pin it (\(Image(systemName: "pin"))): PHP goes into .flockrc, Node.js into .nvmrc.")
+                Text(site.server == .node
+                     ? "A version picked here applies on this machine only, and restarts the dev server. To set it for everyone working on the project, pin it (\(Image(systemName: "pin"))) into .nvmrc."
+                     : "A version picked here applies on this machine only. To set it for everyone working on the project, pin it (\(Image(systemName: "pin"))): PHP goes into .flockrc, Node.js into .nvmrc.")
                     .font(.caption).foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -708,9 +719,14 @@ struct SitesPane: View {
                 Text("PHP-FPM").tag(Status.Server.fastcgi)
                 Text("FrankenPHP").tag(Status.Server.frankenphp)
                     .disabled(!site.supportsFrankenPHP && site.server != .frankenphp)
+                Text("Node.js (npm run dev)").tag(Status.Server.node)
             }
             .labelsHidden()
             .fixedSize()
+        }
+
+        if site.server == .node {
+            nodeServerFields(site)
         }
 
         if site.server == .frankenphp {
@@ -751,11 +767,77 @@ struct SitesPane: View {
             .controlSize(.small)
         }
 
-        Text(site.server == .frankenphp && !site.octaneAvailable
-             ? "FrankenPHP needs PHP 8.2 or newer. Requests that ask for Xdebug still go to PHP-FPM. For worker mode, install Laravel Octane in the project (composer require laravel/octane)."
-             : "FrankenPHP needs PHP 8.2 or newer. Requests that ask for Xdebug still go to PHP-FPM.")
+        if site.server != .node {
+            Text(site.server == .frankenphp && !site.octaneAvailable
+                 ? "FrankenPHP needs PHP 8.2 or newer. Requests that ask for Xdebug still go to PHP-FPM. For worker mode, install Laravel Octane in the project (composer require laravel/octane)."
+                 : "FrankenPHP needs PHP 8.2 or newer. Requests that ask for Xdebug still go to PHP-FPM. A Node.js app (Next.js, Nuxt, Vite): Flock runs its npm run dev.")
+                .font(.caption).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    /// A Node.js site's dev server: whether it runs, on which Node.js and port, and its log and restart.
+    @ViewBuilder
+    private func nodeServerFields(_ site: Status.Site) -> some View {
+        let store = model.settings
+        let ns = site.nodeServer
+        field("Dev server") {
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(spacing: 6) {
+                    Circle()
+                        .fill(nodeStateColor(ns?.state))
+                        .frame(width: 7, height: 7)
+                    Text(nodeStateText(ns))
+                }
+                if let ns, !ns.problem.isEmpty, ns.state == .failed || ns.state == .unavailable {
+                    Text(ns.problem).font(.caption).foregroundStyle(.orange)
+                        .textSelection(.enabled)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+        }
+        HStack(spacing: 8) {
+            Button("Restart") {
+                restarting = site.name
+                Task {
+                    await store.perform { _ = try await $0.restartSite(site.name) }
+                    restarting = nil
+                }
+            }
+            .disabled(ns == nil || ns?.state == .unavailable || restarting == site.name)
+            .help("Restart npm run \(ns?.script ?? "dev")")
+            Button("Show Log") {
+                model.logs.requested = .service(ns?.log ?? "node-\(site.name)")
+                openWindow.activating(WindowID.logs)
+            }
+            if restarting == site.name {
+                ProgressView().controlSize(.mini)
+            }
+        }
+        .controlSize(.small)
+        Text("Flock runs npm run \(ns?.script ?? "dev") -- --port \(ns.map { String($0.port) } ?? "…") in the project with the Node.js under Versions, restarts it when it exits, and serves the site's domains and HTTPS from it, hot reload included. A Node.js version picked or pinned here restarts it.")
             .font(.caption).foregroundStyle(.secondary)
             .fixedSize(horizontal: false, vertical: true)
+    }
+
+    private func nodeStateText(_ ns: Status.SiteNodeServer?) -> String {
+        guard let ns else { return "Starting…" }
+        switch ns.state {
+        case .running: return "Running on Node.js \(ns.version) — port \(ns.port)"
+        case .starting: return "Starting npm run \(ns.script) on Node.js \(ns.version)…"
+        case .failed: return "Not running"
+        case .unavailable: return "Node.js isn't installed"
+        case .unknown: return "Unknown"
+        }
+    }
+
+    private func nodeStateColor(_ state: Status.SiteNodeServer.State?) -> Color {
+        switch state {
+        case .running: .green
+        case .starting: .yellow
+        case .failed, .unavailable: .orange
+        default: .secondary
+        }
     }
 
     /// The FrankenPHP process: running, downloading its build, or why PHP-FPM serves the site.

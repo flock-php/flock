@@ -26,6 +26,9 @@ type Spec struct {
 	Dir        string
 	LogFile    string    // stdout+stderr are appended here
 	StopSignal os.Signal // graceful stop signal; ignored on Windows (see Stop)
+	// Group stops the process's whole group, not only the process: for a launcher such as npm,
+	// whose children (a dev server) would otherwise keep running and keep its port. Unix only.
+	Group bool
 
 	// Stop, when set, asks the process to exit instead of StopSignal, for processes signals can't
 	// reach (Windows). It returns once the request is made; the supervisor then waits for the exit
@@ -210,7 +213,7 @@ func (p *proc) once() error {
 		select {
 		case <-exited:
 		case <-time.After(10 * time.Second):
-			_ = cmd.Process.Kill()
+			kill(cmd, p.spec.Group)
 			<-exited
 		}
 		fmt.Fprintf(log, "[flock] %s stopped\n", p.spec.Name)
@@ -227,7 +230,7 @@ func (p *proc) terminate(cmd *exec.Cmd, log io.Writer) {
 		}
 		fmt.Fprintf(log, "[flock] graceful stop of %s failed: %v\n", p.spec.Name, err)
 	}
-	terminate(cmd, p.spec.StopSignal)
+	terminate(cmd, p.spec.StopSignal, p.spec.Group)
 }
 
 // lastLine returns the last meaningful line the process logged (Flock's own markers skipped),

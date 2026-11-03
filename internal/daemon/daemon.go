@@ -649,6 +649,32 @@ func (d *daemon) reload() error {
 			status.Domains = append(status.Domains, sd)
 		}
 
+		if site.RunsNode() {
+			// A Node.js app: Flock runs its dev server and passes the site's requests to it; PHP
+			// and the document root don't matter. The page for a site that isn't secured still
+			// offers the app's Secure button (Root set: see web.Site.proxied).
+			status.Server = config.ServerNode
+			ns := d.nodeSite(cfg, site, nodeVersion.Version, append([]string{domain}, served...))
+			status.NodeServer = &ns.status
+			if ns.spec != nil {
+				d.procs.Ensure(*ns.spec)
+				keep[ns.spec.Name] = true
+			} else {
+				status.Problem = ns.status.Problem
+			}
+			ws := web.Site{Domain: domain, Aliases: aliases, Root: site.Path, Proxy: ns.upstream}
+			if site.Secured {
+				if ws.CertFile, ws.KeyFile, err = ca.SiteCert(domain); err != nil {
+					return fmt.Errorf("certificate for %s: %w", domain, err)
+				}
+			}
+			status.URL = scheme + "://" + domain + portSuffix(scheme, cfg)
+			webSites = append(webSites, ws)
+			domains = append(append(domains, domain), served...)
+			statuses = append(statuses, status)
+			continue
+		}
+
 		root := project.RootFor(&site)
 		status.Root, status.RootSource, status.RootPinned, status.RootFile, status.RootState = root.Rel, root.Source, root.Pinned, root.File, root.State
 		if root.State != "" {
@@ -1030,14 +1056,16 @@ func (s pgService) Live() bool { return true }
 
 func (s pgService) Reload() error { return s.d.reload() }
 
-// Status implements api.Backend.
+// Status implements api.Backend. What answers at proxies and Node.js sites is probed outside the
+// lock: a dev server that doesn't answer takes a moment to say so.
 func (d *daemon) Status() api.Status {
-	// Probed outside the lock: a dev server that doesn't answer takes a moment to say so.
-	d.mu.Lock()
-	served := d.proxies
-	d.mu.Unlock()
-	proxies := d.probe.live(d.root, served)
+	st := d.status()
+	st.Sites = d.liveNodeServers(st.Sites)
+	st.Proxies = d.probe.live(d.root, st.Proxies)
+	return st
+}
 
+func (d *daemon) status() api.Status {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 
@@ -1046,7 +1074,7 @@ func (d *daemon) Status() api.Status {
 		PID:       os.Getpid(),
 		StartedAt: d.startedAt,
 		Sites:     d.withWorktrees(d.withShares(withBoost(d.liveSites()))),
-		Proxies:   proxies,
+		Proxies:   d.proxies,
 		Processes: d.procs.Status(),
 		Warnings:  d.warnings,
 	}

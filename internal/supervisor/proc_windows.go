@@ -20,7 +20,13 @@ func configure(cmd *exec.Cmd) {
 
 // terminate kills the process: Windows has no portable graceful signal for console-less children
 // (services that can be asked to exit another way set Spec.Stop).
-func terminate(cmd *exec.Cmd, _ os.Signal) {
+func terminate(cmd *exec.Cmd, _ os.Signal, _ bool) {
+	_ = cmd.Process.Kill()
+}
+
+// kill ends a process that didn't stop in time. Its children stay until the daemon exits (the job
+// object, see started).
+func kill(cmd *exec.Cmd, _ bool) {
 	_ = cmd.Process.Kill()
 }
 

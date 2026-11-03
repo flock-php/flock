@@ -200,20 +200,30 @@ func (c *Catalog) Npm(ctx context.Context, refresh bool) (func(nodeVersion strin
 	return p.latestNpmFor, c.npmErr
 }
 
-// RunNpm runs npm in dir with a version's Node and global prefix (as the shims would), writing
-// its output to out.
-func RunNpm(ctx context.Context, root, version, dir string, out io.Writer, args ...string) error {
+// NpmCommand is how to run npm with args with a version's Node and global prefix (as the shims
+// would): the node executable, its arguments (npm-cli.js first) and the environment to add.
+func NpmCommand(root, version string, args ...string) (path string, cmdArgs, env []string, err error) {
 	binDir, err := BinDir(root, version)
 	if err != nil {
-		return err
+		return "", nil, nil, err
 	}
 	_, cli := Npm(root, version)
 	if cli == "" {
-		return fmt.Errorf("Node.js %s has no npm", version)
+		return "", nil, nil, fmt.Errorf("Node.js %s has no npm", version)
 	}
-	cmd := exec.CommandContext(ctx, filepath.Join(binDir, nodeExe()), append([]string{cli}, args...)...)
+	return filepath.Join(binDir, nodeExe()), append([]string{cli}, args...), NpmEnv(root, version, binDir), nil
+}
+
+// RunNpm runs npm in dir with a version's Node and global prefix (as the shims would), writing
+// its output to out.
+func RunNpm(ctx context.Context, root, version, dir string, out io.Writer, args ...string) error {
+	path, cmdArgs, env, err := NpmCommand(root, version, args...)
+	if err != nil {
+		return err
+	}
+	cmd := exec.CommandContext(ctx, path, cmdArgs...)
 	cmd.Dir = dir
-	cmd.Env = append(os.Environ(), NpmEnv(root, version, binDir)...)
+	cmd.Env = append(os.Environ(), env...)
 	cmd.Stdout, cmd.Stderr = out, out
 	return cmd.Run()
 }

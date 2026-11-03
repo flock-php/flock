@@ -164,6 +164,8 @@ type SiteStatus struct {
 	// FrankenPHP is the state of the site's FrankenPHP process, when Server is "frankenphp". Until
 	// it runs, the site is served through FastCGI.
 	FrankenPHP *SiteFrankenPHP `json:"frankenphp,omitempty"`
+	// NodeServer is the state of the site's dev server, when Server is "node".
+	NodeServer *SiteNodeServer `json:"node_server,omitempty"`
 	// Boost is whether the project uses Laravel Boost and has Flock's guideline (see package boost):
 	// "" (no Boost), "missing", "current", "outdated" or "custom".
 	Boost string `json:"boost,omitempty"`
@@ -189,6 +191,26 @@ type SiteFrankenPHP struct {
 	Problem    string  `json:"problem,omitempty"`
 	Log        string  `json:"log"` // name for /v1/logs/services/{name}
 }
+
+// SiteNodeServer is the dev server of a Node.js site (Server "node"): the project's `npm run dev`,
+// which Flock runs with the site's Node.js on Port and serves the site's domains from.
+type SiteNodeServer struct {
+	State   string `json:"state"`             // NodeStarting, NodeRunning, NodeFailed or NodeUnavailable
+	Version string `json:"version,omitempty"` // the Node.js it runs on, e.g. "22.23.4"
+	Script  string `json:"script"`            // the package.json script it runs: "dev"
+	Port    int    `json:"port"`              // loopback port the web server proxies to
+	Problem string `json:"problem,omitempty"`
+	Log     string `json:"log"` // name for /v1/logs/services/{name}
+}
+
+// States of a Node.js site's dev server: started but not answering yet (a dev server compiles
+// first), answering, exited (see its log), or not runnable (its Node.js isn't installed).
+const (
+	NodeStarting    = "starting"
+	NodeRunning     = "running"
+	NodeFailed      = "failed"
+	NodeUnavailable = "unavailable"
+)
 
 // SiteDomain is one of a site's extra domains.
 type SiteDomain struct {

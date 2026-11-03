@@ -119,3 +119,31 @@ func TestSetServerAssignsStablePortsAndValidates(t *testing.T) {
 		t.Error("unknown worker mode accepted")
 	}
 }
+
+func TestNodeSitesGetAPortOfTheirOwn(t *testing.T) {
+	cfg := Default()
+	shop := Site{Name: "shop", Path: "/srv/shop"}
+	if err := cfg.SetServer(&shop, ServerFrankenPHP, ""); err != nil {
+		t.Fatal(err)
+	}
+	cfg.Upsert(shop)
+
+	app := Site{Name: "app", Path: "/srv/app", Parked: true}
+	if err := cfg.SetServer(&app, ServerNode, ""); err != nil || app.Parked || !app.RunsNode() || app.Port != FirstSitePort+1 {
+		t.Fatalf("app: %+v, %v", app, err)
+	}
+	cfg.Upsert(app)
+	if got := cfg.UsedPorts("")[app.Port]; got != "node-app" {
+		t.Errorf("UsedPorts names the app's port %q", got)
+	}
+
+	// Back to PHP and to Node.js again: the same port.
+	port := app.Port
+	if err := cfg.SetServer(&app, ServerFastCGI, ""); err != nil || app.RunsNode() {
+		t.Fatalf("back to FastCGI: %+v, %v", app, err)
+	}
+	cfg.Upsert(app)
+	if err := cfg.SetServer(&app, ServerNode, ""); err != nil || app.Port != port {
+		t.Fatalf("Node.js again: %+v, %v", app, err)
+	}
+}

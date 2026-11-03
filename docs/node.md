@@ -61,3 +61,23 @@ See [Per-project versions](project-versions.md).
 ## Global packages
 
 Packages installed with `npm install -g` belong to their Node line (for example 22) and survive updates within it. The global packages of your default version are on your PATH.
+
+## Node.js apps
+
+A Next.js, Nuxt or Vite app in a project folder can run on Node.js instead of PHP: Flock runs its `npm run dev -- --port <port>` (with `PORT` set too) using the project's Node.js version, restarts it when it exits, and serves the site's domains and HTTPS from it, hot reload included. The site keeps everything else a site has: its domains, its folder and its Node.js version, picked or pinned as above; a new version restarts the dev server.
+
+:::app
+In **Settings → Sites**, select the site and choose **Node.js (npm run dev)** under **Server → Runs on**. The site shows whether its dev server runs and on which Node.js, here and in the Flock panel; **Show Log** shows its output and **Restart** restarts it.
+:::
+
+:::cli
+```bash
+cd ~/Code/softpack
+flock node serve
+# softpack runs `npm run dev` on Node.js 22.23.4 — http://softpack.test, log: `flock logs node-softpack`
+```
+
+`flock node restart` restarts the dev server, and `flock node unserve` serves the site with PHP again.
+:::
+
+The project needs a `dev` script in its `package.json`. Vite only answers the hosts it knows: Flock tells it the site's domains. Share isn't available for a Node.js app yet.

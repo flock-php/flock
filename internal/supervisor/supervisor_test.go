@@ -6,7 +6,9 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 )
@@ -117,4 +119,22 @@ func TestFailingStopFuncFallsBackToTheSignal(t *testing.T) {
 func readFile(path string) string {
 	data, _ := os.ReadFile(path)
 	return string(data)
+}
+
+func TestGroupStopsTheChildrenToo(t *testing.T) {
+	dir := t.TempDir()
+	pidFile := filepath.Join(dir, "child.pid")
+	s := New()
+	// The shell starts a child (as npm starts a dev server) and waits for it.
+	s.Ensure(Spec{Name: "launcher", Path: "/bin/sh", Args: []string{"-c", "sleep 60 & echo $! > " + pidFile + "; wait"}, Group: true})
+	waitFor(t, func() bool { data, _ := os.ReadFile(pidFile); return len(strings.TrimSpace(string(data))) > 0 })
+	data, _ := os.ReadFile(pidFile)
+	child, err := strconv.Atoi(strings.TrimSpace(string(data)))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	s.StopAll()
+
+	waitFor(t, func() bool { return syscall.Kill(child, 0) != nil })
 }
