@@ -5,6 +5,10 @@
 //!
 //! A site's git worktrees are listed under it. A worktree's detail shows its setup and database
 //! instead of settings: it uses its site's.
+//!
+//! Proxies (`flock proxy`) follow the sites in a group of their own; a proxy's detail shows what
+//! answers at its upstream, its HTTPS and its upstream. Site and proxy names never clash (the
+//! daemon refuses it), so one selection covers both.
 
 use std::cell::{Cell, RefCell};
 use std::rc::Rc;
@@ -13,12 +17,13 @@ use adw::prelude::*;
 use base64::Engine;
 use gtk::{gdk, gio, glib};
 
-use super::common::{PaneView, ask_link, group, info_row, report};
+use super::common::{PaneView, ask_link, group, info_row, report, status_dot};
 use super::versions::{MenuItem, badge, button, more_menu};
 use super::worktree_job;
 use super::{Data, Pane};
 use crate::api::{
-    Branches, Client, Config, Error, ExtensionReport, PhpExtension, ShareStatus, SiteChange, SiteStatus, Status, WorktreeStatus,
+    Branches, Client, Config, Error, ExtensionReport, PhpExtension, ProxyStatus, ShareStatus, SiteChange, SiteStatus, Status,
+    WorktreeStatus,
 };
 use crate::links::{self, Link};
 use crate::model::AppModel;
@@ -133,18 +138,23 @@ impl Inner {
             return;
         }
         self.shown.replace(Some(key));
-        let site = self.selected.borrow().as_ref().and_then(|name| self.site(name));
-        match site {
-            Some(site) => self.render_detail(&site),
-            None => {
-                self.stack.set_visible_child_name("list");
-                self.render_list();
-            }
+        let selected = self.selected.borrow().clone();
+        if let Some(site) = selected.as_deref().and_then(|name| self.site(name)) {
+            self.render_detail(&site);
+        } else if let Some(proxy) = selected.as_deref().and_then(|name| self.proxy(name)) {
+            self.render_proxy(&proxy);
+        } else {
+            self.stack.set_visible_child_name("list");
+            self.render_list();
         }
     }
 
     fn site(&self, name: &str) -> Option<SiteStatus> {
         self.status.borrow().as_ref()?.sites.iter().find(|s| s.name == name).cloned()
+    }
+
+    fn proxy(&self, name: &str) -> Option<ProxyStatus> {
+        self.status.borrow().as_ref()?.proxies.iter().find(|p| p.name == name).cloned()
     }
 
     fn open(self: &Rc<Self>, name: &str) {
@@ -200,31 +210,123 @@ impl Inner {
     fn render_list(self: &Rc<Self>) {
         let status = self.status.borrow().clone().unwrap_or_default();
         let sites = status.top_sites();
-        // No sites: only the empty state, centred in the whole pane.
-        if sites.is_empty() {
+        // No sites or proxies: only the empty state, centred in the whole pane.
+        if sites.is_empty() && status.proxies.is_empty() {
             let empty =
                 ui::empty("dev.flock.Flock-sites-symbolic", "No sites", "Add a single site here, or add a project folder in General.");
+            let buttons = gtk::Box::builder().spacing(12).halign(gtk::Align::Center).build();
             let add = self.add_button();
             add.add_css_class("suggested-action");
             add.add_css_class("pill");
-            add.set_halign(gtk::Align::Center);
-            empty.set_child(Some(&add));
+            buttons.append(&add);
+            let add_proxy = self.add_proxy_button();
+            add_proxy.add_css_class("pill");
+            buttons.append(&add_proxy);
+            empty.set_child(Some(&buttons));
             self.list.set_groups(&[empty.upcast()]);
             return;
         }
-        let group = group("", "");
-        let add = self.add_button();
-        add.add_css_class("flat");
-        group.set_header_suffix(Some(&add));
-        for site in sites {
-            let worktrees = status.worktrees_of(&site.name);
-            if worktrees.is_empty() {
-                group.add(&self.site_row(site));
-            } else {
-                group.add(&self.expander(site, &worktrees));
+        let mut groups: Vec<adw::PreferencesGroup> = Vec::new();
+        if !sites.is_empty() {
+            let group = group("", "");
+            for site in sites {
+                let worktrees = status.worktrees_of(&site.name);
+                if worktrees.is_empty() {
+                    group.add(&self.site_row(site));
+                } else {
+                    group.add(&self.expander(site, &worktrees));
+                }
             }
+            groups.push(group);
         }
-        self.list.set_groups(&[group.upcast()]);
+        if !status.proxies.is_empty() {
+            let group = group("Proxies", "");
+            for proxy in &status.proxies {
+                group.add(&self.proxy_row(proxy));
+            }
+            groups.push(group);
+        }
+        // Add Proxy… and Add Site… on the first group.
+        if let Some(first) = groups.first() {
+            let buttons = gtk::Box::builder().spacing(6).valign(gtk::Align::Center).build();
+            let add_proxy = self.add_proxy_button();
+            add_proxy.add_css_class("flat");
+            buttons.append(&add_proxy);
+            let add = self.add_button();
+            add.add_css_class("flat");
+            buttons.append(&add);
+            first.set_header_suffix(Some(&buttons));
+        }
+        self.list.set_groups(&groups.into_iter().map(|g| g.upcast()).collect::<Vec<gtk::Widget>>());
+    }
+
+    /// Add Proxy…: asks for a name and the upstream, then adds the proxy and opens it.
+    fn add_proxy_button(self: &Rc<Self>) -> gtk::Button {
+        let tld = self.status.borrow().as_ref().map(|s| s.dns.tld.clone()).filter(|t| !t.is_empty()).unwrap_or_else(|| "test".into());
+        let add = gtk::Button::builder()
+            .label("Add Proxy…")
+            .tooltip_text(format!("Serve a server of its own, e.g. a Node.js dev server on a port, at a .{tld} domain"))
+            .build();
+        let this = self.clone();
+        add.connect_clicked(move |_| this.add_proxy(&tld));
+        add
+    }
+
+    fn add_proxy(self: &Rc<Self>, tld: &str) {
+        let name = adw::EntryRow::builder().title("Name, e.g. my-app").build();
+        let upstream = adw::EntryRow::builder().title("Port, host:port or URL, e.g. 3000").activates_default(true).build();
+        let list = gtk::ListBox::builder().css_classes(["boxed-list"]).selection_mode(gtk::SelectionMode::None).build();
+        list.append(&name);
+        list.append(&upstream);
+        let dialog = adw::AlertDialog::new(
+            Some("Add a proxy"),
+            Some(&format!(
+                "Flock serves <name>.{tld} from a server of its own, e.g. a Next.js, Nuxt or Vite dev server. A port means 127.0.0.1."
+            )),
+        );
+        dialog.set_extra_child(Some(&list));
+        dialog.add_responses(&[("cancel", "Cancel"), ("add", "Add")]);
+        dialog.set_response_appearance("add", adw::ResponseAppearance::Suggested);
+        dialog.set_default_response(Some("add"));
+        let this = self.clone();
+        dialog.choose(Some(&self.stack), gio::Cancellable::NONE, move |response| {
+            let (name, upstream) = (name.text().trim().to_owned(), upstream.text().trim().to_owned());
+            if response != "add" || name.is_empty() || upstream.is_empty() {
+                return;
+            }
+            // Its detail shows once the daemon added it; the new status renders it.
+            let (pane, banner, n) = (this.clone(), this.banner.clone(), name.clone());
+            this.model.perform(
+                move |c| c.proxy(&name, &upstream, None),
+                move |e| {
+                    if e.is_none() {
+                        pane.selected.replace(Some(n.clone()));
+                        pane.shown.replace(None);
+                        pane.detail.scrolled.vadjustment().set_value(0.0);
+                        pane.stack.set_visible_child_name("detail");
+                    }
+                    report(&banner, e);
+                },
+            );
+        });
+    }
+
+    /// A proxy's row: its name and where it passes requests, a warning when it isn't served,
+    /// whether something answers there and a lock when it is secured.
+    fn proxy_row(self: &Rc<Self>, proxy: &ProxyStatus) -> adw::ActionRow {
+        let row = adw::ActionRow::builder()
+            .title(glib::markup_escape_text(&proxy.name))
+            .subtitle(glib::markup_escape_text(&format!("{} → {}", proxy.domain, proxy.upstream_label())))
+            .activatable(true)
+            .build();
+        row.set_tooltip_text(Some(&proxy.upstream));
+        for widget in proxy_suffixes(proxy) {
+            row.add_suffix(&widget);
+        }
+        row.add_suffix(&gtk::Image::from_icon_name("go-next-symbolic"));
+        let (this, name) = (self.clone(), proxy.name.clone());
+        row.connect_activated(move |_| this.open(&name));
+        row
     }
 
     /// Add Site…: picks a folder and links it.
@@ -1376,6 +1478,114 @@ impl Inner {
         });
     }
 
+    // MARK: a proxy's detail
+
+    /// A proxy: its address and actions, then what answers at its upstream, its HTTPS and upstream.
+    fn render_proxy(self: &Rc<Self>, proxy: &ProxyStatus) {
+        let groups: Vec<gtk::Widget> = vec![self.proxy_header(proxy).upcast(), self.proxy_group(proxy).upcast()];
+        self.detail.set_groups(&groups);
+    }
+
+    fn proxy_header(self: &Rc<Self>, proxy: &ProxyStatus) -> adw::PreferencesGroup {
+        let header = group("", "");
+        let back = adw::ActionRow::builder().title("Sites").activatable(true).build();
+        back.add_prefix(&gtk::Image::from_icon_name("go-previous-symbolic"));
+        let this = self.clone();
+        back.connect_activated(move |_| this.back());
+        header.add(&back);
+
+        let title = adw::ActionRow::builder()
+            .title(glib::markup_escape_text(&proxy.name))
+            .subtitle(glib::markup_escape_text(proxy.url.as_deref().unwrap_or(&proxy.domain)))
+            .subtitle_selectable(true)
+            .build();
+        title.add_suffix(&badge("Proxy", ""));
+        let actions = gtk::Box::builder().spacing(4).valign(gtk::Align::Center).build();
+        let open = gtk::Button::builder()
+            .icon_name("dev.flock.Flock-sites-symbolic")
+            .tooltip_text("Open in the browser")
+            .css_classes(["flat"])
+            .build();
+        open.set_sensitive(proxy.url.is_some());
+        let url = proxy.url.clone().unwrap_or_default();
+        open.connect_clicked(move |b| launch_uri(b, &url));
+        actions.append(&open);
+        let remove = gtk::Button::builder().icon_name("user-trash-symbolic").tooltip_text("Remove proxy").css_classes(["flat"]).build();
+        let (this, p) = (self.clone(), proxy.clone());
+        remove.connect_clicked(move |_| {
+            let name = p.name.clone();
+            this.confirm(
+                &format!("Remove {}?", p.name),
+                &format!("Flock stops serving {}. The server at {} keeps running.", p.domain, p.upstream),
+                "Remove",
+                true,
+                move |c| c.remove_proxy(&name),
+            );
+        });
+        actions.append(&remove);
+        title.add_suffix(&actions);
+        header.add(&title);
+        if let Some(problem) = &proxy.problem {
+            header.add(&adw::ActionRow::builder().title(glib::markup_escape_text(problem)).css_classes(["warning"]).build());
+        }
+        header
+    }
+
+    fn proxy_group(self: &Rc<Self>, proxy: &ProxyStatus) -> adw::PreferencesGroup {
+        let group = group(
+            "Proxy",
+            &format!(
+                "Every request passes to the upstream with its Host header, WebSocket upgrades (hot reload) included. Start the server itself as usual, e.g. with npm run dev: until it runs, {} answers 502 Bad Gateway.",
+                proxy.domain
+            ),
+        );
+        let server = info_row("Server", &proxy.server_text());
+        server.add_prefix(&status_dot(proxy.running));
+        if !proxy.running {
+            server.set_subtitle(&glib::markup_escape_text(&format!("Nothing answers at {} yet.", proxy.upstream_label())));
+        }
+        group.add(&server);
+
+        let https = adw::SwitchRow::builder().title("HTTPS").active(proxy.secured).build();
+        let (this, name) = (self.clone(), proxy.name.clone());
+        https.connect_active_notify(move |row| {
+            let (name, on) = (name.clone(), row.is_active());
+            this.perform(move |c| c.secure_proxy(&name, on));
+        });
+        group.add(&https);
+
+        let upstream = info_row("Upstream", &proxy.upstream);
+        let (this, p) = (self.clone(), proxy.clone());
+        upstream.add_suffix(&button("Change…", false, move || this.change_upstream(&p)));
+        group.add(&upstream);
+        group
+    }
+
+    /// Asks for a proxy's new upstream; its HTTPS stays as it is.
+    fn change_upstream(self: &Rc<Self>, proxy: &ProxyStatus) {
+        let entry = gtk::Entry::builder()
+            .text(proxy.upstream_label())
+            .placeholder_text("Port, host:port or URL")
+            .activates_default(true)
+            .build();
+        let dialog = adw::AlertDialog::new(
+            Some(&format!("Change the upstream of {}", proxy.name)),
+            Some("A port means 127.0.0.1; give a host and port (localhost:5173) or a URL (https://127.0.0.1:8443) for anything else."),
+        );
+        dialog.set_extra_child(Some(&entry));
+        dialog.add_responses(&[("cancel", "Cancel"), ("change", "Change")]);
+        dialog.set_response_appearance("change", adw::ResponseAppearance::Suggested);
+        dialog.set_default_response(Some("change"));
+        let (this, name) = (self.clone(), proxy.name.clone());
+        dialog.choose(Some(&self.stack), gio::Cancellable::NONE, move |response| {
+            let upstream = entry.text().trim().to_owned();
+            if response == "change" && !upstream.is_empty() {
+                let name = name.clone();
+                this.perform(move |c| c.proxy(&name, &upstream, None));
+            }
+        });
+    }
+
     // MARK: PHP extensions
 
     fn show_extensions(self: &Rc<Self>, site: &SiteStatus) {
@@ -1596,6 +1806,28 @@ fn problem(site: &SiteStatus) -> Option<String> {
         .as_ref()
         .filter(|f| site.server == "frankenphp" && (f.state == "failed" || f.state == "unavailable") && !f.problem.is_empty())
         .map(|f| f.problem.clone())
+}
+
+/// A proxy's suffixes in the list: why it isn't served, whether something answers at its
+/// upstream, and its lock.
+fn proxy_suffixes(proxy: &ProxyStatus) -> Vec<gtk::Widget> {
+    let mut widgets: Vec<gtk::Widget> = Vec::new();
+    if let Some(problem) = &proxy.problem {
+        let warning = gtk::Image::from_icon_name("dialog-warning-symbolic");
+        warning.add_css_class("warning");
+        warning.set_tooltip_text(Some(problem));
+        widgets.push(warning.upcast());
+    }
+    let dot = status_dot(proxy.running);
+    dot.set_tooltip_text(Some(&proxy.server_text()));
+    widgets.push(dot.upcast());
+    if proxy.secured {
+        let lock = gtk::Image::from_icon_name("channel-secure-symbolic");
+        lock.add_css_class("dim-label");
+        lock.set_tooltip_text(Some("Served over HTTPS"));
+        widgets.push(lock.upcast());
+    }
+    widgets
 }
 
 /// Why the site isn't served from its root, or a root set here over the project's.

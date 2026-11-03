@@ -262,6 +262,22 @@ impl Client {
         self.request("POST", &format!("/v1/sites/{}/restart", escape(name)), None::<&()>, Duration::from_secs(60))
     }
 
+    /// Serves <name>.test from upstream (a port, host:port or URL), adding the proxy or changing its
+    /// upstream. None for secured keeps the proxy's setting (HTTP for a new one).
+    pub fn proxy(&self, name: &str, upstream: &str, secured: Option<bool>) -> Result<Status, Error> {
+        self.request("POST", "/v1/proxies", Some(&ProxyChange::new(name, upstream, secured)), DEFAULT_TIMEOUT)
+    }
+
+    /// Serves a proxy over HTTPS (on) or plain HTTP.
+    pub fn secure_proxy(&self, name: &str, on: bool) -> Result<Status, Error> {
+        self.request("PATCH", &proxy_path(name), Some(&serde_json::json!({ "secured": on })), DEFAULT_TIMEOUT)
+    }
+
+    /// Stops serving a proxy; the server at its upstream keeps running.
+    pub fn remove_proxy(&self, name: &str) -> Result<Status, Error> {
+        self.request("DELETE", &proxy_path(name), None::<&()>, DEFAULT_TIMEOUT)
+    }
+
     pub fn add_domain(&self, site: &str, domain: &str) -> Result<Status, Error> {
         self.request(
             "POST",
@@ -511,6 +527,25 @@ impl Client {
     }
 }
 
+fn proxy_path(name: &str) -> String {
+    format!("/v1/proxies/{}", escape(name))
+}
+
+/// POST /v1/proxies: secured is left out to keep an existing proxy's setting.
+#[derive(Serialize, Debug, Clone, PartialEq)]
+pub struct ProxyChange {
+    pub name: String,
+    pub upstream: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub secured: Option<bool>,
+}
+
+impl ProxyChange {
+    pub fn new(name: &str, upstream: &str, secured: Option<bool>) -> Self {
+        Self { name: name.to_owned(), upstream: upstream.to_owned(), secured }
+    }
+}
+
 /// POST /v1/settings: only the fields that are set change.
 #[derive(Serialize, Default)]
 pub struct SettingsChange {
@@ -554,6 +589,9 @@ pub struct Status {
     pub xdebug: bool,
     pub xdebug_breakpoints: bool,
     pub sites: Vec<SiteStatus>,
+    /// Names served by a server of their own, e.g. a dev server on a port (`flock proxy`); an
+    /// older daemon sends none.
+    pub proxies: Vec<ProxyStatus>,
     pub processes: Vec<ProcStatus>,
     pub warnings: Vec<String>,
     pub channel: String,
@@ -1151,6 +1189,41 @@ pub struct SiteFrankenPhp {
     pub log: String,
 }
 
+/// A name served by a server of its own rather than by PHP, e.g. a Node.js dev server: every
+/// request, WebSocket upgrades included, passes to upstream with its Host header.
+#[derive(Deserialize, Debug, Clone, PartialEq, Default)]
+#[serde(default)]
+pub struct ProxyStatus {
+    pub name: String,
+    pub domain: String,
+    /// Where requests go, e.g. http://127.0.0.1:3000.
+    pub upstream: String,
+    pub secured: bool,
+    pub url: Option<String>,
+    /// Why it isn't served, e.g. a site of the same name serves its domain.
+    pub problem: Option<String>,
+    /// Something answers at the upstream; server names it when it runs on this machine, e.g.
+    /// "Node.js 22.23.4" for one of Flock's Node.js versions.
+    pub running: bool,
+    pub server: Option<String>,
+}
+
+impl ProxyStatus {
+    /// The upstream without the http:// Flock adds: "127.0.0.1:3000".
+    pub fn upstream_label(&self) -> &str {
+        self.upstream.strip_prefix("http://").unwrap_or(&self.upstream)
+    }
+
+    /// What answers at the upstream: "Node.js 22.23.4", "Running" or "Not running".
+    pub fn server_text(&self) -> String {
+        match (&self.server, self.running) {
+            (_, false) => "Not running".to_owned(),
+            (Some(server), true) if !server.is_empty() => server.clone(),
+            _ => "Running".to_owned(),
+        }
+    }
+}
+
 /// The setup of a git worktree (worktree.Status).
 #[derive(Deserialize, Debug, Clone, PartialEq, Default)]
 #[serde(default)]
@@ -1365,6 +1438,41 @@ mod tests {
         // An older daemon's site.
         assert!(!status.sites[0].is_worktree());
         assert!(status.worktrees_of("old.acme").is_empty());
+    }
+
+    #[test]
+    fn decodes_proxies() {
+        let json = r#"{"proxies":[
+            {"name":"softpack","domain":"softpack.test","upstream":"http://127.0.0.1:3000","secured":true,
+              "url":"https://softpack.test","running":true,"server":"Node.js 22.23.4"},
+            {"name":"blog","domain":"blog.test","upstream":"https://127.0.0.1:8443","secured":false,
+              "problem":"blog.test is served by a site of the same name","running":false}]}"#;
+        let status: Status = serde_json::from_str(json).unwrap();
+        let names: Vec<&str> = status.proxies.iter().map(|p| p.name.as_str()).collect();
+        assert_eq!(names, ["softpack", "blog"]);
+        let softpack = &status.proxies[0];
+        assert!(softpack.secured && softpack.running && softpack.problem.is_none());
+        assert_eq!(softpack.url.as_deref(), Some("https://softpack.test"));
+        assert_eq!(softpack.upstream_label(), "127.0.0.1:3000");
+        assert_eq!(softpack.server_text(), "Node.js 22.23.4");
+        let blog = &status.proxies[1];
+        assert!(blog.url.is_none() && blog.problem.is_some() && !blog.running && blog.server.is_none());
+        assert_eq!(blog.upstream_label(), "https://127.0.0.1:8443");
+        assert_eq!(blog.server_text(), "Not running");
+        let unnamed = ProxyStatus { running: true, ..Default::default() };
+        assert_eq!(unnamed.server_text(), "Running");
+        // An older daemon sends none.
+        assert!(serde_json::from_str::<Status>(r#"{"version":"1.4.0"}"#).unwrap().proxies.is_empty());
+    }
+
+    #[test]
+    fn shapes_the_proxy_requests() {
+        // A new proxy leaves secured out, so the daemon keeps an existing one's setting.
+        let added = serde_json::to_value(ProxyChange::new("softpack", "3000", None)).unwrap();
+        assert_eq!(added, serde_json::json!({ "name": "softpack", "upstream": "3000" }));
+        let secured = serde_json::to_value(ProxyChange::new("softpack", "3001", Some(true))).unwrap();
+        assert_eq!(secured, serde_json::json!({ "name": "softpack", "upstream": "3001", "secured": true }));
+        assert_eq!(proxy_path("soft pack"), "/v1/proxies/soft%20pack");
     }
 
     #[test]
