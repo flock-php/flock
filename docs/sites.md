@@ -68,6 +68,29 @@ flock link shop --php 8.4 --secure
 Remove a link with `flock unlink [name]`.
 :::
 
+## Proxying a port
+
+Apps that aren't PHP, such as a Next.js, Nuxt or Vite dev server, an object store or a dashboard, run a server of their own on a port. A proxy serves that port at a `.test` domain, so the app gets a name, and HTTPS, like a site:
+
+:::cli
+```bash
+flock proxy softpack 3000
+# proxied http://softpack.test → http://127.0.0.1:3000
+```
+
+A port means `127.0.0.1`; give a host and port (`localhost:5173`) or a URL (`https://127.0.0.1:8443`) for anything else. Proxying the name again changes its port.
+
+| Flag | Description |
+| --- | --- |
+| `--secure` | Serve it over HTTPS right away |
+
+`flock secure softpack` and `flock unsecure softpack` work on proxies too, `flock proxies` lists them, and `flock unproxy softpack` removes one.
+:::
+
+Requests pass to the server with their `Host` header, so the app sees `softpack.test`, and WebSocket upgrades pass through too, so hot reload works. Some dev servers only answer the hosts they know: allow the domain in Vite's `server.allowedHosts`, or Next.js's `allowedDevOrigins`. Start the server itself as usual, e.g. with `npm run dev`: until it runs, the domain answers with 502 Bad Gateway.
+
+A proxy's name can't be a site's: Flock refuses it, and a site that comes from a project folder later wins over the proxy.
+
 ## Listing sites
 
 :::app
@@ -79,7 +102,7 @@ Remove a link with `flock unlink [name]`.
 flock sites
 ```
 
-This lists every linked and parked site with its PHP version, URL and path.
+This lists every linked and parked site with its PHP version, URL and path, and every proxy with its URL and upstream.
 :::
 
 ## Document root

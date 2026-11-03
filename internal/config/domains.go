@@ -165,6 +165,9 @@ func (c *Config) NormalizeDomain(s Site, name string) (string, error) {
 			}
 		}
 	}
+	for _, p := range c.Proxies {
+		primary[c.ProxyDomain(p)] = p.Name
+	}
 	if !alias {
 		if owner := ownerOf(name+"."+domain, s.Name, aliases, primary); owner != "" {
 			return "", fmt.Errorf("%s.%s is already served by %s", name, domain, owner)

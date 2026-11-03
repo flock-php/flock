@@ -28,9 +28,12 @@ This page lists the `flock` commands. The other pages show where to find each ac
 | `flock unpark [dir]` | Stop serving a parked directory (alias: `forget`) |
 | `flock link [name] [--php 8.4] [--secure]` | Serve the current directory as `<name>.test` |
 | `flock unlink [name]` | Remove a linked site |
-| `flock sites` | List linked and parked sites |
-| `flock secure [name]` | Serve a site over HTTPS with a trusted certificate |
-| `flock unsecure [name]` | Serve a site over plain HTTP |
+| `flock sites` | List linked and parked sites, and proxies |
+| `flock proxy <name> <port\|host:port\|url> [--secure]` | Serve `<name>.test` from a server of its own, e.g. a Node.js dev server |
+| `flock unproxy <name>` | Stop serving a proxy |
+| `flock proxies` | List proxies |
+| `flock secure [name]` | Serve a site or proxy over HTTPS with a trusted certificate |
+| `flock unsecure [name]` | Serve a site or proxy over plain HTTP |
 | `flock domain add <domain> [site]` | Add a subdomain or alias to a site (`flock domains` works too) |
 | `flock domain remove <domain> [site]` | Remove an extra domain (alias: `rm`) |
 | `flock domain list [site]` | List a site's extra domains (alias: `ls`) |

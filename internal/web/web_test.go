@@ -130,3 +130,28 @@ func TestCaddyfileProxiesFrankenPHPSitesButNotTheirXdebugRequests(t *testing.T) 
 		}
 	}
 }
+
+func TestCaddyfileProxiesNamesToTheirServer(t *testing.T) {
+	cfg := testConfig()
+	cfg.Sites = append(cfg.Sites,
+		Site{Domain: "next.test", Proxy: "http://127.0.0.1:3000"},
+		Site{Domain: "s3.test", Proxy: "http://127.0.0.1:9000", CertFile: "/c/s3.crt", KeyFile: "/c/s3.key"},
+	)
+	cf := Caddyfile(cfg)
+	if _, _, err := caddyconfig.GetAdapter("caddyfile").Adapt([]byte(cf), nil); err != nil {
+		t.Fatalf("%v\n%s", err, cf)
+	}
+
+	for _, want := range []string{
+		"http://next.test:80, http://*.next.test:80, http://*.*.next.test:80, http://*.*.*.next.test:80, http://*.*.*.*.next.test:80 {\n\timport flock_site\n\treverse_proxy \"http://127.0.0.1:3000\"\n}",
+		"https://s3.test:443, https://*.s3.test:443, https://*.*.s3.test:443, https://*.*.*.s3.test:443, https://*.*.*.*.s3.test:443 {\n\timport flock_site\n\ttls {\n\t\tget_certificate flock\n\t}\n\treverse_proxy \"http://127.0.0.1:9000\"\n}",
+		`vars flock_site "next"`,
+	} {
+		if !strings.Contains(cf, want) {
+			t.Errorf("missing %q in:\n%s", want, cf)
+		}
+	}
+	if strings.Contains(cf, `root * ""`) {
+		t.Errorf("a proxy has no document root:\n%s", cf)
+	}
+}

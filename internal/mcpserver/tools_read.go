@@ -54,7 +54,7 @@ func (s *server) addReadTools(srv *mcp.Server) {
 
 	mcp.AddTool(srv, &mcp.Tool{
 		Name:        "list_sites",
-		Description: "Every site Flock serves, with its URL, folder and PHP version.",
+		Description: "Every site Flock serves, with its URL, folder and PHP version, and the proxies (names served by a server of their own).",
 		Annotations: readOnly,
 	}, s.listSites)
 
@@ -260,6 +260,8 @@ type siteSummary struct {
 
 type sitesOut struct {
 	Sites []siteSummary `json:"sites"`
+	// Proxies are names served by a server of their own (see proxy_site).
+	Proxies []api.ProxyStatus `json:"proxies,omitempty"`
 	// Current is the site Flock was started in, if any.
 	Current string `json:"current,omitempty"`
 }
@@ -274,6 +276,7 @@ func (s *server) listSites(ctx context.Context, _ *mcp.CallToolRequest, _ struct
 		info := siteInfoOf(site)
 		out.Sites = append(out.Sites, siteSummary{Name: info.Name, URL: info.URL, Path: info.Path, PHP: info.PHP.Version, Server: info.Server, Problem: info.Problem})
 	}
+	out.Proxies = st.Proxies
 	if current, err := s.site(ctx, ""); err == nil {
 		out.Current = current.Name
 	}

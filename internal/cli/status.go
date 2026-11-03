@@ -2,6 +2,7 @@ package cli
 
 import (
 	"fmt"
+	"io"
 	"runtime"
 	"strings"
 	"text/tabwriter"
@@ -101,7 +102,7 @@ func newStatusCommand() *cobra.Command {
 func newSitesCommand() *cobra.Command {
 	return &cobra.Command{
 		Use:   "sites",
-		Short: "List linked and parked sites",
+		Short: "List linked and parked sites, and proxies",
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			s, err := load()
 			if err != nil {
@@ -127,6 +128,7 @@ func newSitesCommand() *cobra.Command {
 					}
 					fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n", site.Name, version, url, rootColumn(docRootOf(site)), site.Path)
 				}
+				printProxyRows(w, proxyRows(&st, s.cfg))
 				return w.Flush()
 			}
 
@@ -138,8 +140,17 @@ func newSitesCommand() *cobra.Command {
 				}
 				fmt.Fprintf(w, "%s\t%s\t%s://%s\t%s\t%s\n", site.Name, s.cfg.PHPFor(site), scheme, s.cfg.Domain(site), rootColumn(project.RootFor(&site)), site.Path)
 			}
+			printProxyRows(w, proxyRows(nil, s.cfg))
 			return w.Flush()
 		},
+	}
+}
+
+// printProxyRows adds the proxies to `flock sites`: "proxy" where a site has its PHP version, and the
+// upstream where it has its folder.
+func printProxyRows(w io.Writer, rows []proxyRow) {
+	for _, p := range rows {
+		fmt.Fprintf(w, "%s\tproxy\t%s\t-\t%s\n", p.name, p.url, p.upstream)
 	}
 }
 

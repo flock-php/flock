@@ -143,6 +143,13 @@ func (f *fakeDaemon) LinkSite(_ context.Context, dir, name string) (api.Status, 
 	return st, nil
 }
 
+func (f *fakeDaemon) Proxy(_ context.Context, name, upstream string, secured *bool) (api.Status, error) {
+	f.record("proxy", name, upstream, secured)
+	st := f.status
+	st.Proxies = append(st.Proxies, api.ProxyStatus{Name: name, Domain: name + ".test", Upstream: "http://127.0.0.1:" + upstream, URL: "http://" + name + ".test"})
+	return st, nil
+}
+
 func (f *fakeDaemon) UpdateSite(_ context.Context, name string, c api.SiteChange) (api.Status, error) {
 	f.record("update", name, c)
 	return f.status, nil
@@ -275,13 +282,13 @@ func TestToolsAndAnnotations(t *testing.T) {
 			t.Errorf("%s should be a read-only tool", name)
 		}
 	}
-	for _, name := range []string{"service", "install_version", "link_site", "update_site", "set_debugging", "create_database", "postgres_extension",
+	for _, name := range []string{"service", "install_version", "link_site", "proxy_site", "update_site", "set_debugging", "create_database", "postgres_extension",
 		"create_worktree", "setup_worktree"} {
 		if ro, ok := readOnly[name]; !ok || ro {
 			t.Errorf("%s should be a tool that changes things (listed: %v)", name, ok)
 		}
 	}
-	if len(res.Tools) != 23 {
+	if len(res.Tools) != 24 {
 		t.Errorf("got %d tools", len(res.Tools))
 	}
 }
@@ -518,6 +525,28 @@ func TestLinkSiteAndDebugging(t *testing.T) {
 	callTool(t, cs, "set_debugging", map[string]any{"feature": "dumps", "enabled": true}, nil)
 	if len(d.changes) != 1 || !strings.Contains(d.changes[0], `"dumps":true`) || !strings.Contains(d.changes[0], `"xdebug":null`) {
 		t.Fatalf("settings: %q", d.changes)
+	}
+}
+
+func TestProxySite(t *testing.T) {
+	d, opts := fixture(t)
+	cs := connect(t, opts)
+
+	var out proxySiteOut
+	if e := callTool(t, cs, "proxy_site", map[string]any{"name": "softpack", "upstream": "3000"}, &out); e != "" || out.Proxy == nil || out.Proxy.URL != "http://softpack.test" {
+		t.Fatalf("%q %+v", e, out)
+	}
+	if d.changes[0] != `proxy ["softpack","3000",null]` {
+		t.Fatalf("changes: %q", d.changes)
+	}
+	if e := callTool(t, cs, "proxy_site", map[string]any{"name": "softpack"}, nil); !strings.Contains(e, "upstream") {
+		t.Fatalf("a proxy needs an upstream: %q", e)
+	}
+
+	d.status.Proxies = []api.ProxyStatus{{Name: "softpack", URL: "http://softpack.test", Upstream: "http://127.0.0.1:3000"}}
+	var sites sitesOut
+	if e := callTool(t, cs, "list_sites", nil, &sites); e != "" || len(sites.Proxies) != 1 || sites.Proxies[0].Name != "softpack" {
+		t.Fatalf("%q %+v", e, sites)
 	}
 }
 

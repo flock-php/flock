@@ -32,8 +32,9 @@ type Site struct {
 	// there, and with Debugging (the project has breakpoints) every request does.
 	DebugFPM  []string
 	Debugging bool
-	// Proxy is the loopback address of the site's own FrankenPHP ("127.0.0.1:<port>"). When set, requests
-	// go there instead of to FPM; those that ask for Xdebug still go to DebugFPM.
+	// Proxy is the loopback address of the site's own FrankenPHP ("127.0.0.1:<port>"), or the server
+	// of a proxied name (config.Proxy: "http://127.0.0.1:3000", no Root). When set, requests go there
+	// instead of to FPM; those that ask for Xdebug still go to DebugFPM.
 	Proxy string
 	// CertFile and KeyFile (from certs.SiteCert, covering Domain and *.Domain) are set when the site
 	// is secured. Deeper subdomains and aliases get certificates from Config.Issue.
@@ -231,7 +232,10 @@ const xdebugRequest = `{cookie.XDEBUG_SESSION} != "" || {cookie.XDEBUG_TRIGGER} 
 	`{query.XDEBUG_SESSION} != "" || {query.XDEBUG_SESSION_START} != "" || {query.XDEBUG_TRIGGER} != ""`
 
 func app(s Site) string {
-	root := fmt.Sprintf("\troot * %s\n", quote(s.Root))
+	root := ""
+	if s.Root != "" {
+		root = fmt.Sprintf("\troot * %s\n", quote(s.Root))
+	}
 	serve := func(indent string) string { return php(s.FPM, indent) }
 	if s.Proxy != "" {
 		serve = func(indent string) string { return proxy(s.Proxy, indent) }
@@ -246,8 +250,9 @@ func app(s Site) string {
 		xdebugRequest, php(s.DebugFPM, "\t\t"), serve("\t\t"))
 }
 
-// proxy sends every request to a FrankenPHP process, which serves the static files too. The Host
-// header passes unchanged, so the app sees its own domain.
+// proxy sends every request to a FrankenPHP process, which serves the static files too, or to a
+// proxied name's server. The Host header passes unchanged, so the app sees its own domain, and
+// WebSocket upgrades (a dev server's hot reload) pass through.
 func proxy(upstream, indent string) string {
 	return fmt.Sprintf("%sreverse_proxy %s\n", indent, quote(upstream))
 }

@@ -50,12 +50,23 @@ type Status struct {
 	Xdebug             bool                    `json:"xdebug"`           // Xdebug detection; see config.Config.Xdebug
 	XdebugBreakpoints  bool                    `json:"xdebug_breakpoints"`
 	Sites              []SiteStatus            `json:"sites"`
+	Proxies            []ProxyStatus           `json:"proxies,omitempty"` // see config.Proxy
 	Processes          []supervisor.ProcStatus `json:"processes"`
 	Warnings           []string                `json:"warnings,omitempty"`
 	Channel            string                  `json:"channel"` // see ChannelOf; the apps' own updates follow it too
 	// Defaults is set while there is no default PHP or Node.js yet: the first run installs the
 	// newest stable ones and makes them the defaults.
 	Defaults *DefaultsStatus `json:"defaults,omitempty"`
+}
+
+// ProxyStatus is a name served by a server of its own, e.g. a Node.js dev server (see config.Proxy).
+type ProxyStatus struct {
+	Name     string `json:"name"`
+	Domain   string `json:"domain"`
+	Upstream string `json:"upstream"` // e.g. "http://127.0.0.1:3000"
+	Secured  bool   `json:"secured"`
+	URL      string `json:"url,omitempty"`
+	Problem  string `json:"problem,omitempty"` // why it isn't served, e.g. a site serves its domain
 }
 
 // DefaultsStatus is the first run's install of the default PHP and Node.js.

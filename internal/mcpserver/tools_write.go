@@ -64,6 +64,14 @@ func (s *server) addWriteTools(srv *mcp.Server) {
 	}, s.linkSite)
 
 	mcp.AddTool(srv, &mcp.Tool{
+		Name: "proxy_site",
+		Description: "Serve a server of its own, e.g. a Node.js dev server (Next.js, Nuxt, Vite) or an object store, at " +
+			"http(s)://<name>.test: every request, WebSocket upgrades included, passes to the upstream with its Host header. " +
+			"Proxying a name again changes its upstream. Start the server itself as usual (e.g. npm run dev).",
+		Annotations: additive(true),
+	}, s.proxySite)
+
+	mcp.AddTool(srv, &mcp.Tool{
 		Name: "update_site",
 		Description: "Change a site:\n" +
 			"- secure / unsecure: serve it over HTTPS or HTTP.\n" +
@@ -637,6 +645,37 @@ func (s *server) linkSite(ctx context.Context, _ *mcp.CallToolRequest, in linkSi
 		}
 	}
 	return nil, siteActionOut{Message: "Linked " + dir + " as " + name + "."}, nil
+}
+
+type proxySiteIn struct {
+	Name     string `json:"name" jsonschema:"the proxy's name, which makes its domain <name>.test"`
+	Upstream string `json:"upstream" jsonschema:"where requests go: a port on 127.0.0.1 (3000), host:port (localhost:5173) or a URL (https://127.0.0.1:8443)"`
+	Secure   *bool  `json:"secure,omitempty" jsonschema:"serve over HTTPS; left out, a new proxy is served over HTTP and an existing one keeps its setting"`
+}
+
+type proxySiteOut struct {
+	Message string           `json:"message"`
+	Proxy   *api.ProxyStatus `json:"proxy,omitempty"`
+}
+
+func (s *server) proxySite(ctx context.Context, _ *mcp.CallToolRequest, in proxySiteIn) (*mcp.CallToolResult, proxySiteOut, error) {
+	if in.Name == "" || in.Upstream == "" {
+		return nil, proxySiteOut{}, errors.New("give the proxy's name and its upstream, e.g. name softpack and upstream 3000")
+	}
+	st, err := s.Daemon.Proxy(ctx, in.Name, in.Upstream, in.Secure)
+	if err != nil {
+		return nil, proxySiteOut{}, err
+	}
+	name := config.SiteName(in.Name)
+	for _, p := range st.Proxies {
+		if p.Name == name {
+			if p.Problem != "" {
+				return nil, proxySiteOut{Message: "Proxied, but not served: " + p.Problem, Proxy: &p}, nil
+			}
+			return nil, proxySiteOut{Message: fmt.Sprintf("Proxied: %s passes to %s.", p.URL, p.Upstream), Proxy: &p}, nil
+		}
+	}
+	return nil, proxySiteOut{Message: "Proxied " + name + "."}, nil
 }
 
 type updateSiteIn struct {

@@ -227,6 +227,20 @@ func newSecureCommand(on bool) *cobra.Command {
 				return err
 			}
 
+			if len(args) > 0 {
+				if p, ok := s.cfg.FindProxy(args[0]); ok {
+					p.Secured = on
+					if err := s.cfg.UpsertProxy(p); err != nil {
+						return err
+					}
+					if err := s.commit(cmd.Context(), cmd.ErrOrStderr()); err != nil {
+						return err
+					}
+					cmd.Printf("%s → %s\n", p.Name, proxyURL(s.cfg, p))
+					return nil
+				}
+			}
+
 			site, err := siteArg(s, args)
 			if err != nil {
 				return err
