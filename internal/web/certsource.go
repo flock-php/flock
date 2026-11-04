@@ -6,6 +6,7 @@ import (
 	"crypto/x509"
 	"fmt"
 	"net"
+	"slices"
 	"strings"
 	"sync/atomic"
 
@@ -25,12 +26,13 @@ func init() {
 // that name, which is how a.b.app.test, aliases and the HTTPS catch-all get theirs.
 type certSource struct {
 	tld    string
+	listen []string
 	static []*tls.Certificate
 	issue  func(name string) (*tls.Certificate, error)
 }
 
 func newCertSource(cfg Config) (*certSource, error) {
-	s := &certSource{tld: strings.ToLower(cfg.TLD), issue: cfg.Issue}
+	s := &certSource{tld: strings.ToLower(cfg.TLD), listen: cfg.Listen, issue: cfg.Issue}
 	for _, site := range cfg.Sites {
 		if site.CertFile == "" {
 			continue
@@ -54,8 +56,9 @@ func (s *certSource) certificate(hello *tls.ClientHelloInfo) (*tls.Certificate, 
 	switch {
 	case s == nil:
 		return nil, fmt.Errorf("no certificates configured")
-	case hello.Conn != nil && !loopback(hello.Conn.RemoteAddr()):
-		// Remote clients are refused per request anyway; don't issue certificates for them.
+	case hello.Conn != nil && !loopback(hello.Conn.RemoteAddr()) && !s.listens(hello.Conn.LocalAddr()):
+		// Remote clients are refused per request anyway, unless they came in on a Listen address;
+		// don't issue certificates for them.
 		return nil, fmt.Errorf("not a local client")
 	case name == "" || (name != s.tld && !strings.HasSuffix(name, "."+s.tld)):
 		return nil, fmt.Errorf("no certificate for %q: only *.%s is served", name, s.tld)
@@ -78,6 +81,12 @@ func loopback(addr net.Addr) bool {
 		return true // e.g. QUIC: Caddy's listener only accepts what it bound
 	}
 	return tcp.IP.IsLoopback()
+}
+
+// listens reports whether addr is one of the Listen addresses, where other machines are served.
+func (s *certSource) listens(addr net.Addr) bool {
+	tcp, ok := addr.(*net.TCPAddr)
+	return ok && slices.Contains(s.listen, tcp.IP.String())
 }
 
 // certModule is Caddy's `get_certificate flock`.

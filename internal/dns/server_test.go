@@ -2,6 +2,7 @@ package dns
 
 import (
 	"net"
+	"runtime"
 	"testing"
 
 	mdns "github.com/miekg/dns"
@@ -90,6 +91,34 @@ func TestRefusesNamesOutsideTheTLD(t *testing.T) {
 		resp := query(t, srv, "udp", name, mdns.TypeA)
 		if resp.Rcode != mdns.RcodeRefused || len(resp.Answer) != 0 {
 			t.Fatalf("%s: want REFUSED with no answers, got rcode=%d answers=%v", name, resp.Rcode, resp.Answer)
+		}
+	}
+}
+
+// A query reaching one of the further addresses (another machine's way in, e.g. over a tailnet) is
+// answered with that address, one on loopback still with loopback.
+func TestAnswersWithTheAddressTheQueryReached(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("needs a second loopback address (127.0.0.2), which only Linux has without setup")
+	}
+	srv := New("127.0.0.1:0", "test", "127.0.0.2")
+	if err := srv.Start(); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = srv.Shutdown() })
+	_, port, _ := net.SplitHostPort(srv.Addr())
+
+	for _, host := range []string{"127.0.0.1", "127.0.0.2"} {
+		for _, network := range []string{"udp", "tcp"} {
+			msg := new(mdns.Msg)
+			msg.SetQuestion("app.test.", mdns.TypeA)
+			resp, _, err := (&mdns.Client{Net: network}).Exchange(msg, net.JoinHostPort(host, port))
+			if err != nil {
+				t.Fatalf("%s over %s: %v", host, network, err)
+			}
+			if len(resp.Answer) != 1 || resp.Answer[0].(*mdns.A).A.String() != host {
+				t.Fatalf("%s over %s: answered %v", host, network, resp.Answer)
+			}
 		}
 	}
 }

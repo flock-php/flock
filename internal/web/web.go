@@ -83,7 +83,10 @@ type Config struct {
 	HTTPSPort  int
 	// Bind is the listen host. macOS only lets non-root processes bind ports below 1024
 	// on the wildcard address, so it is empty there and non-local clients are rejected per request.
-	Bind     string
+	Bind string
+	// Listen are further addresses of this machine that other machines reach the sites on (e.g. a
+	// tailnet address): the server listens there too, and requests arriving there aren't rejected.
+	Listen   []string
 	Sites    []Site
 	Waiting  []Waiting
 	Rootless []Rootless
@@ -125,11 +128,13 @@ func Caddyfile(cfg Config) string {
 }
 
 (flock_site) {
-	@remote not client_ip 127.0.0.0/8 ::1
+	@remote {
+		not client_ip 127.0.0.0/8 ::1
+%s	}
 	abort @remote
 	encode zstd gzip
 }
-`, cfg.HTTPPort, cfg.HTTPSPort, quote(cfg.StorageDir), quote(cfg.LogFile))
+`, cfg.HTTPPort, cfg.HTTPSPort, quote(cfg.StorageDir), quote(cfg.LogFile), listenExempt(cfg))
 
 	// Every certificate comes from Flock (see certSource): the site's own file, or one issued for the name.
 	const tlsBlock = "\ttls {\n\t\tget_certificate flock\n\t}\n"
@@ -187,6 +192,15 @@ func Caddyfile(cfg Config) string {
 	}
 
 	return b.String()
+}
+
+// listenExempt lets requests that arrived on one of the Listen addresses through, from whichever
+// client reaches them.
+func listenExempt(cfg Config) string {
+	if len(cfg.Listen) == 0 {
+		return ""
+	}
+	return "\t\tnot vars {http.request.local.host} " + strings.Join(cfg.Listen, " ") + "\n"
 }
 
 // rootlessVars sets {http.vars.flock_root_*} for a site without a usable document root: the site's
@@ -330,7 +344,7 @@ func Apply(cfg Config) error {
 		}
 	}
 
-	json = withBind(json, cfg.Bind)
+	json = withBind(json, binds(cfg))
 
 	source, err := newCertSource(cfg)
 	if err != nil {

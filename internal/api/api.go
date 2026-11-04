@@ -35,6 +35,7 @@ type Status struct {
 	DNS         DNSStatus `json:"dns"`
 	HTTPPort    int       `json:"http_port"`
 	HTTPSPort   int       `json:"https_port"`
+	Listen      []string  `json:"listen,omitempty"` // addresses besides 127.0.0.1 the sites and DNS answer other machines on
 	Mail        string    `json:"mail"`
 	Dumps       bool      `json:"dumps"`
 	CaptureOff  []string  `json:"capture_off"`   // event kinds not captured (see config.Config.CaptureOff)
