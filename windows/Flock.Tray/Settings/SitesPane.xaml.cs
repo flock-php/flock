@@ -384,7 +384,7 @@ internal sealed partial class SitesPane : UserControl, ISettingsPane
             Field("HTTPS", https),
             Field("Upstream", Ui.Row(8, upstream, change)),
             Ui.Caption(
-                $"Every request passes to the upstream with its Host header, WebSocket upgrades (hot reload) included. Start the server itself as usual, e.g. with npm run dev: until it runs, {proxy.Domain} answers 502 Bad Gateway.",
+                $"Every request passes to the upstream with its Host header, WebSocket upgrades (hot reload) included. Flock doesn't start the server, so start it as usual. Until it answers, {proxy.Domain} shows a page saying so.",
                 Ui.TertiaryText)));
 
         var card = Ui.Card(panel, new Thickness(20, 16, 16, 20));

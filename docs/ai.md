@@ -67,7 +67,7 @@ These tools change things, so clients ask you first:
 | `service` | Install, start or stop a service |
 | `install_version` | Install a PHP or Node.js version |
 | `link_site` | Serve a project as a new site |
-| `proxy_site` | Serve a server of its own, e.g. a Node.js dev server on a port, at `<name>.test` |
+| `proxy_site` | Proxy `<name>.test` to a local service, e.g. a Node.js dev server on a port |
 | `update_site` | Turn HTTPS on or off, isolate, unisolate, pin or unpin a version, add a domain, switch between FrankenPHP (with or without Octane) and PHP-FPM, or restart it |
 | `set_debugging` | Turn Xdebug or dump capture on or off |
 | `create_database` | Create a database in PostgreSQL, MySQL or MariaDB |

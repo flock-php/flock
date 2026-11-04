@@ -369,7 +369,7 @@ public sealed class PanelProxyRow(Status.Proxy proxy) : ObservableObject
     public string? Problem => current.Problem;
     public bool Running => current.Running;
     public string ServerLabel => current.ServerLabel;
-    public string Tooltip => Running ? $"{Url ?? Domain} → {current.Upstream}" : $"Nothing answers at {current.Upstream} — start the server there, e.g. with npm run dev";
+    public string Tooltip => Running ? $"{Url ?? Domain} → {current.Upstream}" : $"Nothing answers at {current.Upstream}. Start the server there.";
     public string SecurityGlyph => current.Secured ? "\uE72E" : "\uE774";
     public Visibility ProblemVisibility => Problem is not null ? Visibility.Visible : Visibility.Collapsed;
     public Brush SecurityBrush => (Brush)Application.Current.Resources[current.Secured ? "SystemFillColorSuccessBrush" : "TextFillColorSecondaryBrush"];

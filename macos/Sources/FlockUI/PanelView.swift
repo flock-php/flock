@@ -487,7 +487,7 @@ private struct ProxyRow: View {
         }
         .buttonStyle(.plain)
         .disabled(proxy.url == nil)
-        .help(proxy.running ? "\(proxy.url ?? proxy.domain) → \(proxy.upstream)" : "Nothing answers at \(proxy.upstream) — start the server there, e.g. with npm run dev")
+        .help(proxy.running ? "\(proxy.url ?? proxy.domain) → \(proxy.upstream)" : "Nothing answers at \(proxy.upstream). Start the server there.")
         .background(isHovered ? Color.primary.opacity(0.08) : .clear, in: RoundedRectangle(cornerRadius: 5))
         .onHover { isHovered = $0 }
     }

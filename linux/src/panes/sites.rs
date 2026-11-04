@@ -1535,7 +1535,7 @@ impl Inner {
         let group = group(
             "Proxy",
             &format!(
-                "Every request passes to the upstream with its Host header, WebSocket upgrades (hot reload) included. Start the server itself as usual, e.g. with npm run dev: until it runs, {} answers 502 Bad Gateway.",
+                "Every request passes to the upstream with its Host header, WebSocket upgrades (hot reload) included. Flock doesn't start the server, so start it as usual. Until it answers, {} shows a page saying so.",
                 proxy.domain
             ),
         );

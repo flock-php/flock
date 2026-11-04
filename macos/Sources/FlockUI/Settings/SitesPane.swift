@@ -373,7 +373,7 @@ struct SitesPane: View {
                         .controlSize(.small)
                     }
                 }
-                Text("Every request passes to the upstream with its Host header, WebSocket upgrades (hot reload) included. Start the server itself as usual, e.g. with npm run dev: until it runs, \(proxy.domain) answers 502 Bad Gateway.")
+                Text("Every request passes to the upstream with its Host header, WebSocket upgrades (hot reload) included. Flock doesn't start the server, so start it as usual. Until it answers, \(proxy.domain) shows a page saying so.")
                     .font(.caption).foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
