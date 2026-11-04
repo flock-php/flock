@@ -12,6 +12,7 @@ import (
 
 	"flock/internal/api"
 	"flock/internal/config"
+	"flock/internal/frankenphp"
 	"flock/internal/node"
 	"flock/internal/ports"
 	"flock/internal/supervisor"
@@ -42,6 +43,11 @@ func (d *daemon) nodeSite(cfg *config.Config, site config.Site, spec string, hos
 		ns.status.State, ns.status.Problem = state, fmt.Sprintf(format, args...)
 		return ns
 	}
+	port := strconv.Itoa(site.Port)
+	if site.Command != "" {
+		// Known even when the dev server can't run, so the apps edit the command as it was set.
+		ns.status.Command, ns.status.Custom, ns.status.Configured = strings.ReplaceAll(site.Command, "{port}", port), true, site.Command
+	}
 
 	if site.Port == 0 {
 		return fail(api.NodeFailed, "the site has no port for its dev server — switch it to Node.js again")
@@ -60,13 +66,15 @@ func (d *daemon) nodeSite(cfg *config.Config, site config.Site, spec string, hos
 	if other, taken := cfg.UsedPorts("")[site.Port]; taken && other != name {
 		return fail(api.NodeFailed, "port %d is also configured for %s — switch the site to Node.js again for a new port", site.Port, serviceName(other))
 	}
+	// The dev server is the project's own code: it never runs with root's rights.
+	if runningAsRoot() {
+		return fail(api.NodeFailed, "Flock runs as root here, so it doesn't run the project's dev server — run Flock as your own user")
+	}
 
-	port := strconv.Itoa(site.Port)
 	var path string
 	var args, env []string
 	if site.Command != "" {
-		path, args, env, err = d.customCommand(version, site.Path, strings.ReplaceAll(site.Command, "{port}", port))
-		ns.status.Command, ns.status.Custom, ns.status.Configured = strings.ReplaceAll(site.Command, "{port}", port), true, site.Command
+		path, args, env, err = d.customCommand(version, site.Path, ns.status.Command)
 	} else {
 		ns.status.Script = nodeScript
 		npmArgs := []string{"run", nodeScript, "--", "--port", port}
@@ -97,6 +105,8 @@ func (d *daemon) nodeSite(cfg *config.Config, site config.Site, spec string, hos
 		StopSignal: syscall.SIGTERM,
 		Group:      true, // npm's children (the dev server itself) hold the port
 	}
+	// A site switched from FrankenPHP keeps its port: FrankenPHP lets go of it first.
+	d.procs.Stop(frankenphp.ProcessName(site.Name))
 	if !d.procUp(s.Name) && !ports.Free("127.0.0.1", site.Port) {
 		return fail(api.NodeFailed, "%s", ports.Describe(site.Port))
 	}

@@ -11,6 +11,7 @@
 //! daemon refuses it), so one selection covers both.
 
 use std::cell::{Cell, RefCell};
+use std::collections::HashMap;
 use std::rc::Rc;
 
 use adw::prelude::*;
@@ -44,6 +45,8 @@ struct Inner {
     selected: RefCell<Option<String>>,
     /// The FrankenPHP or Node.js site that is restarting.
     restarting: RefCell<Option<String>>,
+    /// Unsaved Command edits per site: a status refresh renders the detail again, and keeps them.
+    command_drafts: RefCell<HashMap<String, String>>,
     shown: RefCell<Option<String>>,
     /// The sites whose worktrees the list shows (prefs.rs).
     expanded: RefCell<Vec<String>>,
@@ -84,6 +87,7 @@ impl SitesPane {
             config: RefCell::default(),
             selected: RefCell::default(),
             restarting: RefCell::default(),
+            command_drafts: RefCell::default(),
             shown: RefCell::default(),
             expanded: RefCell::new(prefs::load().expanded_sites),
             removing: RefCell::default(),
@@ -1039,8 +1043,21 @@ impl Inner {
             .filter(|ns| ns.custom)
             .map(|ns| if ns.configured.is_empty() { ns.command.clone() } else { ns.configured.clone() })
             .unwrap_or_default();
+        let text = self.command_drafts.borrow().get(&site.name).cloned().unwrap_or_else(|| custom.clone());
         let entry =
-            gtk::Entry::builder().placeholder_text("npm run dev").text(custom.as_str()).hexpand(true).valign(gtk::Align::Center).build();
+            gtk::Entry::builder().placeholder_text("npm run dev").text(text.as_str()).hexpand(true).valign(gtk::Align::Center).build();
+        entry.connect_changed({
+            let (this, name, custom) = (self.clone(), site.name.clone(), custom.clone());
+            move |entry| {
+                let text = entry.text().to_string();
+                let mut drafts = this.command_drafts.borrow_mut();
+                if text == custom {
+                    drafts.remove(&name);
+                } else {
+                    drafts.insert(name.clone(), text);
+                }
+            }
+        });
         let row = adw::ActionRow::builder().title("Command").build();
         if let Some(ns) = ns.as_ref().filter(|ns| !ns.command.is_empty()) {
             row.set_subtitle(&glib::markup_escape_text(&format!("Runs {}", ns.command)));
@@ -1051,6 +1068,7 @@ impl Inner {
             let (this, name, entry) = (self.clone(), site.name.clone(), entry.clone());
             move || {
                 let command = entry.text().trim().to_owned();
+                this.command_drafts.borrow_mut().remove(&name);
                 if command != custom {
                     this.change(&name, SiteChange { command: Some(command), ..Default::default() });
                 }

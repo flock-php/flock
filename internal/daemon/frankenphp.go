@@ -67,6 +67,8 @@ func (d *daemon) frankenPHPSite(cfg *config.Config, site config.Site, minor, doc
 	if err != nil {
 		return fail(api.FrankenPHPFailed, "%v", err)
 	}
+	// A site switched from Node.js keeps its port: its dev server lets go of it first.
+	d.procs.Stop(config.NodePortID(site.Name))
 	if !d.procUp(spec.Name) && !ports.Free("127.0.0.1", site.Port) {
 		return fail(api.FrankenPHPFailed, "%s", ports.Describe(site.Port))
 	}

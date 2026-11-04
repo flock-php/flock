@@ -657,20 +657,21 @@ func (d *daemon) reload() error {
 			status.Server = config.ServerNode
 			ns := d.nodeSite(cfg, site, nodeVersion.Version, append([]string{domain}, served...))
 			status.NodeServer = &ns.status
+			ws := web.Site{Domain: domain, Aliases: aliases, Root: site.Path, Proxy: ns.upstream}
 			if ns.spec != nil {
 				d.procs.Ensure(*ns.spec)
 				keep[ns.spec.Name] = true
+				shareables[site.Name] = shareable{devServer: ns.upstream, domain: domain}
 			} else {
-				status.Problem = ns.status.Problem
+				// Whatever else answers on the port (another app, if it's taken) is never served.
+				status.Problem, ws.Down = ns.status.Problem, ns.status.Problem
 			}
-			ws := web.Site{Domain: domain, Aliases: aliases, Root: site.Path, Proxy: ns.upstream}
 			if site.Secured {
 				if ws.CertFile, ws.KeyFile, err = ca.SiteCert(domain); err != nil {
 					return fmt.Errorf("certificate for %s: %w", domain, err)
 				}
 			}
 			status.URL = scheme + "://" + domain + portSuffix(scheme, cfg)
-			shareables[site.Name] = shareable{devServer: ns.upstream, domain: domain}
 			webSites = append(webSites, ws)
 			domains = append(append(domains, domain), served...)
 			statuses = append(statuses, status)

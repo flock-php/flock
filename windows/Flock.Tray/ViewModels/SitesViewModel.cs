@@ -355,7 +355,7 @@ public sealed partial class SiteRowViewModel : ObservableObject
         return previous is null && current is null || previous is not null && current is not null &&
             previous.State == current.State && previous.Version == current.Version && previous.Script == current.Script &&
             previous.Port == current.Port && previous.Problem == current.Problem && previous.Log == current.Log &&
-            previous.Command == current.Command && previous.Custom == current.Custom;
+            previous.Command == current.Command && previous.Custom == current.Custom && previous.Configured == current.Configured;
     }
 
     private static bool ShareEqual(Status.SiteShare? previous, Status.SiteShare? current)

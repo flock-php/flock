@@ -70,7 +70,8 @@ func (d *daemon) buildAssets(cfg *config.Config, site config.Site) func(context.
 	}
 }
 
-func runningAsRoot() bool {
+// runningAsRoot reports whether the daemon runs as root (a variable, so tests can say it does).
+var runningAsRoot = func() bool {
 	return runtime.GOOS != "windows" && os.Geteuid() == 0
 }
 

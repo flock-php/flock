@@ -33,5 +33,10 @@ func kill(cmd *exec.Cmd, group bool) {
 	_ = cmd.Process.Kill()
 }
 
+// groupAlive reports whether a process of cmd's group still runs.
+func groupAlive(cmd *exec.Cmd) bool {
+	return syscall.Kill(-cmd.Process.Pid, 0) == nil
+}
+
 // started is a no-op on unix: children live in their own process group, stopped by terminate.
 func started(*exec.Cmd) {}

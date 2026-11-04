@@ -106,6 +106,10 @@ node_modules/.bin on PATH; {port} in it becomes the port (PORT is set too), e.g.
 			if err != nil {
 				return err
 			}
+			// The daemon restarts FrankenPHP sites too (flock frankenphp restart): not from here.
+			if !site.RunsNode() {
+				return errors.New(site.Name + " isn't served as a Node.js app")
+			}
 			if _, err := s.client().RestartSite(cmd.Context(), site.Name); err != nil {
 				return err
 			}

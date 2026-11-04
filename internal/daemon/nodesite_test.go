@@ -5,6 +5,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/http/httptest"
 	"os"
 	"os/exec"
 	"os/signal"
@@ -148,10 +149,15 @@ func TestNodeSitesSayWhyTheyCantRun(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(pinned, ".nvmrc"), []byte("18\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	root, _ := testRoot(t, func(c *config.Config) {
+	// Another app holds the port of a third.
+	other := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { io.WriteString(w, "another app") }))
+	t.Cleanup(other.Close)
+	taken, _ := strconv.Atoi(other.URL[strings.LastIndex(other.URL, ":")+1:])
+	root, cfg := testRoot(t, func(c *config.Config) {
 		c.Sites = []config.Site{
 			{Name: "noscript", Path: noScript, Server: config.ServerNode, Port: freePort(t)},
-			{Name: "pinned", Path: pinned, Server: config.ServerNode, Port: freePort(t)},
+			{Name: "pinned", Path: pinned, Server: config.ServerNode, Port: freePort(t), Command: "vite --port {port}"},
+			{Name: "taken", Path: nodeProject(t, `"dev":"vite"`), Server: config.ServerNode, Port: taken},
 		}
 	})
 	installFakeNode(t, root)
@@ -160,8 +166,43 @@ func TestNodeSitesSayWhyTheyCantRun(t *testing.T) {
 	if ns := siteStatus(t, client, "noscript").NodeServer; ns.State != api.NodeFailed || !strings.Contains(ns.Problem, `no "dev" script`) {
 		t.Errorf("noscript: %+v", ns)
 	}
-	if ns := siteStatus(t, client, "pinned").NodeServer; ns.State != api.NodeUnavailable || !strings.Contains(ns.Problem, "flock node install 18") {
+	// Its own command is known all the same, so the apps edit it as it was set.
+	if ns := siteStatus(t, client, "pinned").NodeServer; ns.State != api.NodeUnavailable || !strings.Contains(ns.Problem, "flock node install 18") || !ns.Custom || ns.Configured != "vite --port {port}" {
 		t.Errorf("pinned: %+v", ns)
+	}
+	if ns := siteStatus(t, client, "taken").NodeServer; ns.State != api.NodeFailed {
+		t.Errorf("taken: %+v", ns)
+	}
+	// Its names never reach the app that holds the port.
+	req, _ := http.NewRequest(http.MethodGet, "http://127.0.0.1:"+strconv.Itoa(cfg.Ports.HTTP)+"/", nil)
+	req.Host = "taken.test"
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, _ := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusServiceUnavailable || strings.Contains(string(body), "another app") {
+		t.Errorf("taken.test: %d %q", resp.StatusCode, body)
+	}
+}
+
+func TestANodeSiteDoesntRunItsDevServerAsRoot(t *testing.T) {
+	asRoot := runningAsRoot
+	runningAsRoot = func() bool { return true }
+	t.Cleanup(func() { runningAsRoot = asRoot })
+	port := freePort(t)
+	root, _ := testRoot(t, func(c *config.Config) {
+		c.Sites = []config.Site{{Name: "app", Path: nodeProject(t, `"dev":"vite"`), Server: config.ServerNode, Port: port}}
+	})
+	installFakeNode(t, root)
+	client := startDaemon(t, root)
+
+	if ns := siteStatus(t, client, "app").NodeServer; ns.State != api.NodeFailed || !strings.Contains(ns.Problem, "as root") {
+		t.Errorf("app: %+v", ns)
+	}
+	if !portFree(port) {
+		t.Error("a dev server runs")
 	}
 }
 

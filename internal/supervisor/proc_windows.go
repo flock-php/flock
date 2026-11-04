@@ -38,6 +38,10 @@ func kill(cmd *exec.Cmd, group bool) {
 	_ = cmd.Process.Kill()
 }
 
+// groupAlive is false on Windows: kill takes the whole tree at once, and a child that outlives its
+// parent can't be found from it there.
+func groupAlive(*exec.Cmd) bool { return false }
+
 var (
 	jobOnce sync.Once
 	job     windows.Handle

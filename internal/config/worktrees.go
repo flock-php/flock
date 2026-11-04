@@ -156,7 +156,10 @@ func (c *Config) worktreeSites(byName map[string]Site) {
 	sort.Slice(parents, func(i, j int) bool { return parents[i].Name < parents[j].Name })
 
 	var byPath map[string]string // real path → site name, built once a site has worktrees
-	ports := map[int]bool{}      // the dev server ports of Node.js sites' worktrees
+	ports := map[int]bool{}      // taken: Flock's and its services' ports, sites', and worktrees' so far
+	for port := range c.UsedPorts("") {
+		ports[port] = true
+	}
 	for _, parent := range parents {
 		for _, wt := range Worktrees(parent.Path) {
 			if byPath == nil {

@@ -24,6 +24,8 @@ internal sealed partial class SitesPane : UserControl, ISettingsPane
 
     // Sites whose FrankenPHP restart is in flight.
     private readonly HashSet<string> restarting = [];
+    // Unsaved Command edits per site: a status refresh rebuilds the detail pane, and keeps them.
+    private readonly Dictionary<string, string> commandDrafts = [];
     private readonly SitesViewModel viewModel;
     private bool active;
     private CancellationTokenSource? activeLifetime;
@@ -705,12 +707,30 @@ internal sealed partial class SitesPane : UserControl, ISettingsPane
         yield return Field("Dev server", state);
 
         // The site's own command; empty: npm run dev.
-        var command = new TextBox { PlaceholderText = "npm run dev", Text = ns is { Custom: true } ? (ns.Configured.Length > 0 ? ns.Configured : ns.Command) : "", MinWidth = 260, FontFamily = Ui.Mono };
+        var saved = ns is { Custom: true } ? (ns.Configured.Length > 0 ? ns.Configured : ns.Command) : "";
+        var command = new TextBox
+        {
+            PlaceholderText = "npm run dev",
+            Text = commandDrafts.TryGetValue(site.Name, out var draft) ? draft : saved,
+            MinWidth = 260,
+            FontFamily = Ui.Mono,
+        };
         Ui.AutomationName(command, "Command");
-        var saved = command.Text;
+        command.TextChanged += (_, _) =>
+        {
+            if (command.Text == saved)
+            {
+                commandDrafts.Remove(site.Name);
+            }
+            else
+            {
+                commandDrafts[site.Name] = command.Text;
+            }
+        };
         void Save()
         {
             var text = command.Text.Trim();
+            commandDrafts.Remove(site.Name);
             if (text != saved.Trim())
             {
                 Start(site.Name, () => Model.Sites.UpdateAsync(site.Name, new SiteChange(Command: text)));

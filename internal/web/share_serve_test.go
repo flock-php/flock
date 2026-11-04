@@ -177,10 +177,20 @@ func TestServesANodeAppsShareFromItsDevServer(t *testing.T) {
 	if status != 200 || page != want {
 		t.Errorf("got %d %q\nwant %q", status, page, want)
 	}
+	// The app's own requests (a Server Action's POST, say) keep an Origin matching X-Forwarded-Host.
+	if _, page := get("/dashboard", map[string]string{"Origin": "https://quiet-river-lamp.trycloudflare.com"}); !strings.Contains(page, " origin=https://quiet-river-lamp.trycloudflare.com xfh=quiet-river-lamp.trycloudflare.com ") {
+		t.Errorf("an app request's Origin: %q", page)
+	}
+	if _, page := get("/@vite/client", map[string]string{"Origin": "https://quiet-river-lamp.trycloudflare.com"}); !strings.Contains(page, " origin=http://softpack.test ") {
+		t.Errorf("Vite's client script's Origin: %q", page)
+	}
+	if _, page := get("/", map[string]string{"Origin": "https://quiet-river-lamp.trycloudflare.com", "Upgrade": "websocket"}); !strings.Contains(page, " origin=http://softpack.test ") {
+		t.Errorf("a WebSocket upgrade's Origin: %q", page)
+	}
 	if _, page := get("/node_modules/.vite/deps/react.js", nil); !strings.HasPrefix(page, "path=/node_modules/.vite/deps/react.js ") || !strings.Contains(page, "origin= ") {
 		t.Errorf("a dot directory of the dev server's, without an Origin: %q", page)
 	}
-	for _, path := range []string{"/.env", "/.env.local", "/app/.env", "/.git/config"} {
+	for _, path := range []string{"/.env", "/.env.local", "/.envrc", "/.env-production", "/app/.env", "/app/.envrc", "/.git", "/.git/config", "/app/.git", "/app/.git/HEAD", "/.ENV"} {
 		if status, page := get(path, nil); status != http.StatusNotFound || strings.Contains(page, "path=") {
 			t.Errorf("%s: %d %q", path, status, page)
 		}

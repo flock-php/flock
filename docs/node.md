@@ -95,6 +95,6 @@ flock node serve --command ""   # npm run dev again
 ```
 :::
 
-Unless it has a command of its own, the project needs a `dev` script in its `package.json`. Vite only answers the hosts it knows: Flock tells it the site's domains. Each git worktree of the app runs a dev server of its own, at its own address (see [Git worktrees](worktrees.md)).
+Unless it has a command of its own, the project needs a `dev` script in its `package.json`. Vite only answers the hosts it knows: Flock tells it the site's domains. Each git worktree of the app runs a dev server of its own, at its own address (see [Git worktrees](worktrees.md)). When the dev server can't run, for example because another app holds its port, the site's domains say why (with a 503) and never reach that app. Like a project's build scripts, the dev server never runs as root.
 
-[Sharing](sharing.md) a Node.js app shares its dev server: visitors see what you see, its error overlay and source maps included (the env files and the git repository are never served). The dev server gets the site's own name as the host, so Vite and Next.js take the visitors' requests, hot reload included.
+[Sharing](sharing.md) a Node.js app shares its dev server: visitors see what you see, its error overlay and source maps included (env files such as `.env.local` or `.envrc`, and the git repository, are never served, at any depth). The dev server gets the site's own name as the host, so Vite and Next.js take the visitors' requests, hot reload included.
