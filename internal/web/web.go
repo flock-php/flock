@@ -146,13 +146,13 @@ func Caddyfile(cfg Config) string {
 			hosts := hosts(name)
 
 			if s.CertFile != "" {
-				fmt.Fprintf(&b, "\n%s {\n\timport flock_site\n%s%s}\n", addresses("https", hosts, cfg), tlsBlock, app(s))
+				fmt.Fprintf(&b, "\n%s {\n\timport flock_site\n%s%s%s}\n", addresses("https", hosts, cfg), tlsBlock, app(s), upstreamDown(s, cfg))
 				fmt.Fprintf(&b, "\n%s {\n\timport flock_site\n\tredir https://{host}%s{uri} 308\n}\n",
 					addresses("http", hosts, cfg), portSuffix(cfg.HTTPSPort, 443))
 				continue
 			}
 
-			fmt.Fprintf(&b, "\n%s {\n\timport flock_site\n%s}\n", addresses("http", hosts, cfg), app(s))
+			fmt.Fprintf(&b, "\n%s {\n\timport flock_site\n%s%s}\n", addresses("http", hosts, cfg), app(s), upstreamDown(s, cfg))
 			// Over HTTPS, a site that isn't secured names itself, so the page asks to secure it rather than link it.
 			// A proxy says so too: the apps can't secure one yet, so the page offers only the command.
 			vars := fmt.Sprintf("\tvars flock_site %s\n", quote(siteName(s.Domain, cfg.TLD)))
@@ -231,6 +231,20 @@ func pagesDir(cfg Config) string { return filepath.Join(cfg.StorageDir, "pages")
 func unlinked(cfg Config) string {
 	return fmt.Sprintf("\troot * %s\n\trewrite * /unlinked.html\n\theader Cache-Control no-store\n\theader X-Flock-Page unlinked\n\ttemplates\n\tfile_server {\n\t\tstatus 404\n\t}\n",
 		quote(pagesDir(cfg)))
+}
+
+// upstreamDown serves a proxied name's page when its server doesn't answer, e.g. a dev server that
+// isn't started yet: the 502 Caddy itself makes when it can't reach the upstream, never a response
+// of the upstream's own (reverse_proxy passes those through, whatever their status). PHP sites
+// served by FrankenPHP proxy too, but keep Caddy's plain 502.
+func upstreamDown(s Site, cfg Config) string {
+	if !s.proxied() {
+		return ""
+	}
+	return fmt.Sprintf("\thandle_errors 502 {\n\t\tvars {\n\t\t\tflock_down_site %s\n\t\t\tflock_down_upstream %s\n\t\t}\n"+
+		"\t\troot * %s\n\t\trewrite * /unlinked.html\n\t\theader Cache-Control no-store\n\t\theader X-Flock-Page upstream-down\n"+
+		"\t\ttemplates\n\t\tfile_server {\n\t\t\tstatus 502\n\t\t}\n\t}\n",
+		quote(siteName(s.Domain, cfg.TLD)), quote(strings.TrimPrefix(s.Proxy, "http://")), quote(pagesDir(cfg)))
 }
 
 // xdebugRequest matches requests that ask for Xdebug: the cookie the Xdebug browser extensions

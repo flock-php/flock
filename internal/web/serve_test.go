@@ -8,6 +8,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -332,5 +333,124 @@ func TestAnAliasUnderAnotherSiteWinsOverItsSubdomains(t *testing.T) {
 	resp, err := client.Get(plain("tenant1.shop.test"))
 	if err != nil || resp.StatusCode != http.StatusPermanentRedirect {
 		t.Errorf("http redirect: %v %+v", err, resp)
+	}
+}
+
+// TestAProxyWhoseServerIsDownSaysSo runs the embedded Caddy against real upstreams: only a proxy
+// whose server can't be reached gets Flock's page. A response of the upstream's own passes through
+// as it is, whatever its status, and a PHP site served by FrankenPHP keeps Caddy's plain 502.
+func TestAProxyWhoseServerIsDownSaysSo(t *testing.T) {
+	dir, err := os.MkdirTemp("", "flock-web-test-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(dir) })
+	ca, err := certs.Ensure(filepath.Join(dir, "certs"), "test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	certFile, keyFile, err := ca.SiteCert("s3.test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	pool := x509.NewCertPool()
+	caPEM, _ := os.ReadFile(ca.CertPath())
+	pool.AppendCertsFromPEM(caPEM)
+	leaves := certs.NewLeaves()
+
+	// An app that answers 502 (or 500) itself, as a Laravel app can.
+	app := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		status := http.StatusBadGateway
+		if r.URL.Path == "/500" {
+			status = http.StatusInternalServerError
+		}
+		w.WriteHeader(status)
+		_, _ = io.WriteString(w, "the app's own error page")
+	}))
+	t.Cleanup(app.Close)
+	down := fmt.Sprintf("127.0.0.1:%d", freePort(t)) // nothing listens there
+
+	cfg := Config{
+		StorageDir: filepath.Join(dir, "caddy"),
+		LogFile:    filepath.Join(dir, "web.log"),
+		HTTPPort:   freePort(t),
+		HTTPSPort:  freePort(t),
+		Bind:       "127.0.0.1",
+		TLD:        "test",
+		Issue:      func(name string) (*tls.Certificate, error) { return leaves.Get(ca, name) },
+		Sites: []Site{
+			{Domain: "next.test", Proxy: "http://" + down},
+			{Domain: "s3.test", Proxy: "http://" + down, CertFile: certFile, KeyFile: keyFile},
+			{Domain: "app.test", Proxy: app.URL},
+			// A PHP site served by FrankenPHP, which isn't running.
+			{Domain: "franken.test", Root: dir, Proxy: down},
+		},
+	}
+	if err := Apply(cfg); err != nil {
+		t.Fatalf("%v\n%s", err, Caddyfile(cfg))
+	}
+	t.Cleanup(func() { _ = Stop() })
+
+	client := &http.Client{
+		Timeout: 5 * time.Second,
+		Transport: &http.Transport{
+			TLSClientConfig: &tls.Config{RootCAs: pool},
+			DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
+				_, port, _ := net.SplitHostPort(addr)
+				return (&net.Dialer{}).DialContext(ctx, network, "127.0.0.1:"+port)
+			},
+		},
+	}
+	get := func(method, url string) (*http.Response, string) {
+		t.Helper()
+		req, _ := http.NewRequest(method, url, nil)
+		resp, err := client.Do(req)
+		if err != nil {
+			t.Fatalf("%s: %v", url, err)
+		}
+		defer resp.Body.Close()
+		body, _ := io.ReadAll(resp.Body)
+		return resp, string(body)
+	}
+
+	// A proxy whose server is down says so, on its subdomains and over HTTPS when secured, and the
+	// page's HEAD check sees it's still Flock's page.
+	for _, url := range []string{
+		fmt.Sprintf("http://next.test:%d/some/path", cfg.HTTPPort),
+		fmt.Sprintf("http://a.b.next.test:%d/", cfg.HTTPPort),
+		fmt.Sprintf("https://s3.test:%d/bucket", cfg.HTTPSPort),
+	} {
+		resp, body := get(http.MethodGet, url)
+		for _, want := range []string{"Not running", "Nothing answers at " + down + " yet.", "is a proxy to <code>" + down + "</code>",
+			"data-wait", "flock proxy next &lt;port|host:port|url&gt;", ">502<"} {
+			if strings.HasPrefix(url, "https://s3") {
+				want = strings.ReplaceAll(want, "proxy next", "proxy s3")
+			}
+			if resp.StatusCode != http.StatusBadGateway || !strings.Contains(body, want) || strings.Contains(body, "{{") ||
+				resp.Header.Get("X-Flock-Page") != "upstream-down" || resp.Header.Get("Cache-Control") != "no-store" {
+				t.Errorf("%s: want the upstream-down page with %q, got %d %v %q", url, want, resp.StatusCode, resp.Header, body)
+			}
+		}
+		if resp, _ := get(http.MethodHead, url); resp.Header.Get("X-Flock-Page") != "upstream-down" {
+			t.Errorf("HEAD %s: want X-Flock-Page, got %d %v", url, resp.StatusCode, resp.Header)
+		}
+	}
+
+	// The app's own 502 and 500 pass through untouched.
+	for _, path := range []string{"/", "/500"} {
+		resp, body := get(http.MethodGet, fmt.Sprintf("http://app.test:%d%s", cfg.HTTPPort, path))
+		want := http.StatusBadGateway
+		if path == "/500" {
+			want = http.StatusInternalServerError
+		}
+		if resp.StatusCode != want || body != "the app's own error page" || resp.Header.Get("X-Flock-Page") != "" {
+			t.Errorf("app.test%s: want the app's own %d, got %d %v %q", path, want, resp.StatusCode, resp.Header, body)
+		}
+	}
+
+	// A PHP site served by FrankenPHP isn't a proxy: no page.
+	resp, body := get(http.MethodGet, fmt.Sprintf("http://franken.test:%d/", cfg.HTTPPort))
+	if resp.StatusCode != http.StatusBadGateway || strings.Contains(body, "Not running") || resp.Header.Get("X-Flock-Page") != "" {
+		t.Errorf("franken.test: want Caddy's plain 502, got %d %v %q", resp.StatusCode, resp.Header, body)
 	}
 }
