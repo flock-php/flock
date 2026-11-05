@@ -555,11 +555,13 @@ func TestProxySite(t *testing.T) {
 	}
 
 	d.changes = nil
-	if e := callTool(t, cs, "proxy_site", map[string]any{"name": "softpack", "upstream": "3000", "command": "npm run dev", "dir": "/code/softpack"}, nil); e != "" {
+	dir := t.TempDir() // absolute on Windows too
+	if e := callTool(t, cs, "proxy_site", map[string]any{"name": "softpack", "upstream": "3000", "command": "npm run dev", "dir": dir}, nil); e != "" {
 		t.Fatal(e)
 	}
-	if d.changes[0] != `proxy ["softpack","3000",{"command":"npm run dev","dir":"/code/softpack"}]` {
-		t.Fatalf("a command: %q", d.changes)
+	quoted, _ := json.Marshal(dir)
+	if want := `proxy ["softpack","3000",{"command":"npm run dev","dir":` + string(quoted) + `}]`; d.changes[0] != want {
+		t.Fatalf("a command: %q, want %q", d.changes, want)
 	}
 
 	d.changes = nil
