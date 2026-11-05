@@ -181,8 +181,6 @@ func (d *daemon) liveProxyCommands(proxies []api.ProxyStatus) []api.ProxyStatus 
 		c := *ps.Command
 		run, started := d.proxyRuns[ps.Name]
 		switch {
-		case c.Problem != "":
-			c.State = api.ProxyFailed
 		case !started:
 			c.State = api.ProxyStopped
 		case ps.Running:
