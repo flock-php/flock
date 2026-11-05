@@ -98,11 +98,13 @@ func TestAProxyRunsItsCommandWhileItsStarted(t *testing.T) {
 		t.Errorf("the command's log: %q", log)
 	}
 
-	if _, err := client.StopProxy(context.Background(), "softpack"); err != nil {
+	// What Stop answers is up to date: the upstream doesn't answer any more.
+	st, err := client.StopProxy(context.Background(), "softpack")
+	if err != nil {
 		t.Fatal(err)
 	}
-	if p := proxyStatus(t, client, "softpack"); p.Command.State != api.ProxyStopped {
-		t.Errorf("stopped: %+v", p.Command)
+	if p := st.Proxies[0]; p.Command.State != api.ProxyStopped || p.Running {
+		t.Errorf("stopped: %+v %+v", p, p.Command)
 	}
 	if !portFree(port) {
 		t.Errorf("port %d is still taken once stopped", port)

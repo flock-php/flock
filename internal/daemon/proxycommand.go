@@ -45,6 +45,7 @@ func (d *daemon) StartProxy(name string) error {
 		d.mu.Unlock()
 		return nil
 	}
+	defer d.probe.forget(p.Upstream)
 	run := &proxyRun{running: p.StopCommand != ""}
 	if d.proxyRuns == nil {
 		d.proxyRuns = map[string]*proxyRun{}
@@ -74,6 +75,7 @@ func (d *daemon) StopProxy(name string) error {
 	if err != nil {
 		return err
 	}
+	defer d.probe.forget(p.Upstream)
 	d.mu.Lock()
 	delete(d.proxyRuns, name)
 	d.mu.Unlock()

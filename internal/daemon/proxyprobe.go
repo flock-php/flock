@@ -60,6 +60,14 @@ func (p *serverProbe) get(root, upstream string) (bool, string) {
 	return running, server
 }
 
+// forget drops the last probe of upstream, so the next status probes it again: a server Flock
+// just started or stopped.
+func (p *serverProbe) forget(upstream string) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	delete(p.seen, upstream)
+}
+
 // probeUpstream connects to upstream and, when it's on this machine, names the program listening.
 func probeUpstream(root, upstream string) (bool, string) {
 	u, err := url.Parse(upstream)
