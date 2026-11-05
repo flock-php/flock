@@ -161,6 +161,8 @@ public sealed class Status
         /// <summary>Something answers at the upstream; Server names it when it runs on this machine, e.g. "Node.js 22.23.4".</summary>
         public bool Running { get; init; }
         public string? Server { get; init; }
+        /// <summary>The command that starts its server, when it has one.</summary>
+        public ProxyCommand? Command { get; init; }
 
         /// <summary>The upstream without the http:// Flock adds: 127.0.0.1:3000.</summary>
         [JsonIgnore]
@@ -168,7 +170,42 @@ public sealed class Status
 
         /// <summary>What answers at the upstream: the server's name, "Running" or "Not running".</summary>
         [JsonIgnore]
-        public string ServerLabel => Running ? Server is { Length: > 0 } server ? server : "Running" : "Not running";
+        public string ServerLabel => Command?.State switch
+        {
+            ProxyCommandState.Starting => "Starting…",
+            ProxyCommandState.Failed => "Not running",
+            _ => Running ? Server is { Length: > 0 } server ? server : "Running" : "Not running",
+        };
+
+        /// <summary>Flock runs its command (it may not answer yet).</summary>
+        [JsonIgnore]
+        public bool Started => Command?.State is ProxyCommandState.Starting or ProxyCommandState.Running;
+    }
+
+    /// <summary>The command that starts a proxy's server (flock proxy --command), and where it stands.</summary>
+    public sealed class ProxyCommand
+    {
+        public string Command { get; init; } = "";
+        /// <summary>The folder it runs in.</summary>
+        public string Dir { get; init; } = "";
+        /// <summary>Set when Command starts a server in the background: the command that stops it.</summary>
+        public string StopCommand { get; init; } = "";
+        /// <summary>One of ProxyCommandState.</summary>
+        public string State { get; init; } = "";
+        public string Problem { get; init; } = "";
+        /// <summary>Name for /v1/logs/services/{name}.</summary>
+        public string Log { get; init; } = "";
+    }
+
+    public static class ProxyCommandState
+    {
+        /// <summary>Not started; something else may still answer at the upstream.</summary>
+        public const string Stopped = "stopped";
+        /// <summary>Started; the upstream doesn't answer yet.</summary>
+        public const string Starting = "starting";
+        public const string Running = "running";
+        /// <summary>It exited or failed; see Problem.</summary>
+        public const string Failed = "failed";
     }
 
     /// <summary>One of a site's extra domains: a subdomain ("tenant1") or an alias ("my-app-2.test").</summary>

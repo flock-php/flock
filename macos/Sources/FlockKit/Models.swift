@@ -87,8 +87,50 @@ public struct Status: Decodable, Sendable, Equatable {
         /// "Node.js 22.23.4" for one of Flock's Node.js versions.
         public var running: Bool
         public var server: String?
+        /// The command that starts its server, when it has one.
+        public var command: ProxyCommand?
 
         public var id: String { name }
+    }
+
+    /// The command that starts a proxy's server (`flock proxy --command`), and where it stands.
+    public struct ProxyCommand: Decodable, Sendable, Equatable {
+        public var command: String
+        /// The folder it runs in.
+        public var dir: String
+        /// Set when `command` starts a server in the background: the command that stops it.
+        public var stopCommand: String
+        public var state: State
+        public var problem: String
+        /// The name of its service log.
+        public var log: String
+
+        public enum State: String, Decodable, Sendable {
+            /// Not started (something else may still answer at the upstream).
+            case stopped
+            /// Started; the upstream doesn't answer yet.
+            case starting
+            case running
+            /// It exited or failed; see `problem`.
+            case failed
+            case unknown
+
+            public init(from decoder: Decoder) throws {
+                self = State(rawValue: try decoder.singleValueContainer().decode(String.self)) ?? .unknown
+            }
+        }
+
+        enum CodingKeys: String, CodingKey { case command, dir, stopCommand, state, problem, log }
+
+        public init(from decoder: Decoder) throws {
+            let c = try decoder.container(keyedBy: CodingKeys.self)
+            command = try c.decodeIfPresent(String.self, forKey: .command) ?? ""
+            dir = try c.decodeIfPresent(String.self, forKey: .dir) ?? ""
+            stopCommand = try c.decodeIfPresent(String.self, forKey: .stopCommand) ?? ""
+            state = try c.decodeIfPresent(State.self, forKey: .state) ?? .unknown
+            problem = try c.decodeIfPresent(String.self, forKey: .problem) ?? ""
+            log = try c.decodeIfPresent(String.self, forKey: .log) ?? ""
+        }
     }
 
     /// One of a site's extra domains: a subdomain ("tenant1") or an alias ("my-app-2.test").

@@ -265,7 +265,8 @@ public class DecodingTests
     {
         var status = FlockJson.Decode<Status>("""
             {"version":"dev","pid":1,"started_at":"2026-10-13T14:10:01Z",
-             "proxies":[{"name":"softpack","domain":"softpack.test","upstream":"http://127.0.0.1:3000","secured":true,"url":"https://softpack.test","running":true,"server":"Node.js 22.23.4"},
+             "proxies":[{"name":"softpack","domain":"softpack.test","upstream":"http://127.0.0.1:3000","secured":true,"url":"https://softpack.test","running":true,"server":"Node.js 22.23.4",
+                         "command":{"command":"npm run dev","dir":"C:\\Code\\softpack","stop_command":"","state":"running","log":"proxy-softpack"}},
                         {"name":"blog","domain":"blog.test","upstream":"https://127.0.0.1:8443","secured":false,"problem":"blog.test is served by a site of the same name","running":false}]}
             """);
 
@@ -276,7 +277,12 @@ public class DecodingTests
         Assert.True(softpack.Running);
         Assert.Equal("Node.js 22.23.4", softpack.ServerLabel);
         Assert.Equal("127.0.0.1:3000", softpack.UpstreamLabel);
+        Assert.Equal(("npm run dev", @"C:\Code\softpack", "", Status.ProxyCommandState.Running, "proxy-softpack"),
+            (softpack.Command!.Command, softpack.Command.Dir, softpack.Command.StopCommand, softpack.Command.State, softpack.Command.Log));
+        Assert.True(softpack.Started);
         var blog = status.Proxies[1];
+        Assert.Null(blog.Command);
+        Assert.False(blog.Started);
         Assert.Null(blog.Url);
         Assert.NotNull(blog.Problem);
         Assert.False(blog.Running);

@@ -54,6 +54,15 @@ public sealed class SitesService : IAsyncDisposable
     public Task<OperationOutcome> SecureProxyAsync(string name, bool secured, CancellationToken token = default) =>
         MutateAsync(Key(name), name, (_, cancellationToken) => client.SecureProxyAsync(name, secured, cancellationToken), token);
 
+    public Task<OperationOutcome> SetProxyCommandAsync(string name, string command, string dir, string stopCommand, CancellationToken token = default) =>
+        MutateAsync(Key(name), name, (_, cancellationToken) => client.SetProxyCommandAsync(name, command, dir, stopCommand, cancellationToken), token);
+
+    public Task<OperationOutcome> StartProxyAsync(string name, CancellationToken token = default) =>
+        MutateAsync(Key(name), name, (_, cancellationToken) => client.StartProxyAsync(name, cancellationToken), token);
+
+    public Task<OperationOutcome> StopProxyAsync(string name, CancellationToken token = default) =>
+        MutateAsync(Key(name), name, (_, cancellationToken) => client.StopProxyAsync(name, cancellationToken), token);
+
     public Task<OperationOutcome> RemoveProxyAsync(string name, CancellationToken token = default) =>
         MutateAsync(Key(name), name, (_, cancellationToken) => client.RemoveProxyAsync(name, cancellationToken), token);
 

@@ -376,13 +376,18 @@ public class ClientTests : IDisposable
         await client.ProxyAsync("softpack", "3001", secured: true);
         await client.SecureProxyAsync("soft pack", false);
         await client.RemoveProxyAsync("softpack");
+        await client.SetProxyCommandAsync("softpack", "npm run dev", "/code/softpack", "");
+        await client.StartProxyAsync("softpack");
+        await client.StopProxyAsync("softpack");
 
         Assert.Equal(
-            ["POST /v1/proxies", "POST /v1/proxies", "PATCH /v1/proxies/soft%20pack", "DELETE /v1/proxies/softpack"],
+            ["POST /v1/proxies", "POST /v1/proxies", "PATCH /v1/proxies/soft%20pack", "DELETE /v1/proxies/softpack",
+             "PATCH /v1/proxies/softpack", "POST /v1/proxies/softpack/start", "POST /v1/proxies/softpack/stop"],
             handler.Requests.Select(r => $"{r.Method} {r.RequestUri!.PathAndQuery}"));
         // A new proxy leaves secured out, so the daemon keeps an existing one's setting.
         Assert.Equal(
-            ["""{"name":"softpack","upstream":"3000"}""", """{"name":"softpack","upstream":"3001","secured":true}""", """{"secured":false}""", ""],
+            ["""{"name":"softpack","upstream":"3000"}""", """{"name":"softpack","upstream":"3001","secured":true}""", """{"secured":false}""", "",
+             """{"command":"npm run dev","dir":"/code/softpack","stop_command":""}""", "", ""],
             handler.Bodies);
     }
 

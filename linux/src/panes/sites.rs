@@ -1653,17 +1653,45 @@ impl Inner {
     }
 
     fn proxy_group(self: &Rc<Self>, proxy: &ProxyStatus) -> adw::PreferencesGroup {
-        let group = group(
-            "Proxy",
-            &format!(
-                "Every request passes to the upstream with its Host header, WebSocket upgrades (hot reload) included. Flock doesn't start the server, so start it as usual. Until it answers, {} shows a page saying so.",
+        let description = if proxy.command.is_some() {
+            "Every request passes to the upstream with its Host header, WebSocket upgrades (hot reload) included. Flock runs the command when you click Start, with Flock's PHP and Node.js on PATH and PORT set, and keeps it running until you click Stop or quit Flock. A stop command is only for a command that starts a server in the background and exits.".to_owned()
+        } else {
+            format!(
+                "Every request passes to the upstream with its Host header, WebSocket upgrades (hot reload) included. Start the server as usual, or give the proxy a command so Flock starts it. Until it answers, {} shows a page saying so.",
                 proxy.domain
-            ),
-        );
+            )
+        };
+        let group = group("Proxy", &description);
         let server = info_row("Server", &proxy.server_text());
         server.add_prefix(&status_dot(proxy.running));
-        if !proxy.running {
-            server.set_subtitle(&glib::markup_escape_text(&format!("Nothing answers at {} yet.", proxy.upstream_label())));
+        match &proxy.command {
+            Some(command) if command.state == "failed" && !command.problem.is_empty() => {
+                server.set_subtitle(&glib::markup_escape_text(&command.problem));
+                server.set_subtitle_selectable(true);
+            }
+            Some(command) if command.state == "starting" => {
+                server.set_subtitle(&glib::markup_escape_text(&format!("Waiting for {} to answer…", proxy.upstream_label())));
+            }
+            _ if !proxy.running => {
+                server.set_subtitle(&glib::markup_escape_text(&format!("Nothing answers at {} yet.", proxy.upstream_label())));
+            }
+            _ => {}
+        }
+        if let Some(command) = &proxy.command {
+            let started = command.started();
+            let name = proxy.name.clone();
+            let this = self.clone();
+            server.add_suffix(&button(if started { "Stop" } else { "Start" }, !started, move || {
+                let name = name.clone();
+                if started {
+                    this.perform(move |c| c.stop_proxy(&name));
+                } else {
+                    this.perform(move |c| c.start_proxy(&name));
+                }
+            }));
+            let show_log = gtk::Button::builder().label("Show Log").valign(gtk::Align::Center).action_name("app.open").build();
+            show_log.set_action_target_value(Some(&format!("logs/services/{}", command.log).to_variant()));
+            server.add_suffix(&show_log);
         }
         group.add(&server);
 
@@ -1679,7 +1707,95 @@ impl Inner {
         let (this, p) = (self.clone(), proxy.clone());
         upstream.add_suffix(&button("Change…", false, move || this.change_upstream(&p)));
         group.add(&upstream);
+
+        // The command that starts the server, the folder it runs in and the command that stops a
+        // server it starts in the background.
+        let current = proxy.command.clone().unwrap_or_default();
+        let command = info_row("Command", if current.command.is_empty() { "None" } else { current.command.as_str() });
+        let (this, p, c) = (self.clone(), proxy.name.clone(), current.clone());
+        command.add_suffix(&button("Change…", false, move || {
+            let (p, c) = (p.clone(), c.clone());
+            this.ask_proxy_text(
+                &format!("The command that starts {p}"),
+                "Flock runs it through the shell when you click Start, and keeps it running until you click Stop. Leave it empty for none.",
+                "e.g. npm run dev",
+                &c.command,
+                move |this, text| {
+                    let dir = if c.dir.is_empty() { glib::home_dir().to_string_lossy().into_owned() } else { c.dir.clone() };
+                    let (p, stop) = (p.clone(), c.stop_command.clone());
+                    this.perform(move |client| client.set_proxy_command(&p, &text, &dir, &stop));
+                },
+            );
+        }));
+        group.add(&command);
+        if proxy.command.is_some() {
+            let folder = info_row("Folder", &current.dir);
+            let (this, p, c) = (self.clone(), proxy.name.clone(), current.clone());
+            folder.add_suffix(&button("Change…", false, move || {
+                let (p, c) = (p.clone(), c.clone());
+                this.ask_proxy_text(
+                    &format!("The folder {p}'s command runs in"),
+                    "A full path, e.g. ~/Code/softpack.",
+                    "Folder",
+                    &c.dir,
+                    move |this, text| {
+                        if text.is_empty() {
+                            return;
+                        }
+                        let dir = match text.strip_prefix("~/") {
+                            Some(rest) => glib::home_dir().join(rest).to_string_lossy().into_owned(),
+                            None => text,
+                        };
+                        let (p, command, stop) = (p.clone(), c.command.clone(), c.stop_command.clone());
+                        this.perform(move |client| client.set_proxy_command(&p, &command, &dir, &stop));
+                    },
+                );
+            }));
+            group.add(&folder);
+
+            let stop = info_row("Stop command", if current.stop_command.is_empty() { "None" } else { current.stop_command.as_str() });
+            let (this, p, c) = (self.clone(), proxy.name.clone(), current.clone());
+            stop.add_suffix(&button("Change…", false, move || {
+                let (p, c) = (p.clone(), c.clone());
+                this.ask_proxy_text(
+                    &format!("The command that stops {p}"),
+                    "Only for a command that starts a server in the background and exits (docker compose up -d): Stop runs this instead. Leave it empty for none.",
+                    "e.g. docker compose stop",
+                    &c.stop_command,
+                    move |this, text| {
+                        let (p, command, dir) = (p.clone(), c.command.clone(), c.dir.clone());
+                        this.perform(move |client| client.set_proxy_command(&p, &command, &dir, &text));
+                    },
+                );
+            }));
+            group.add(&stop);
+        }
         group
+    }
+
+    /// Asks for one of a proxy's commands (or its folder), then passes what was typed, trimmed and
+    /// changed, to apply.
+    fn ask_proxy_text(
+        self: &Rc<Self>,
+        title: &str,
+        body: &str,
+        placeholder: &str,
+        current: &str,
+        apply: impl Fn(&Rc<Self>, String) + 'static,
+    ) {
+        let entry = gtk::Entry::builder().text(current).placeholder_text(placeholder).activates_default(true).build();
+        let dialog = adw::AlertDialog::new(Some(title), Some(body));
+        dialog.set_extra_child(Some(&entry));
+        dialog.add_responses(&[("cancel", "Cancel"), ("save", "Save")]);
+        dialog.set_response_appearance("save", adw::ResponseAppearance::Suggested);
+        dialog.set_default_response(Some("save"));
+        let (this, current) = (self.clone(), current.to_owned());
+        dialog.choose(Some(&self.stack), gio::Cancellable::NONE, move |response| {
+            let text = entry.text().trim().to_owned();
+            if response == "save" && text != current {
+                apply(&this, text);
+            }
+        });
     }
 
     /// Asks for a proxy's new upstream; its HTTPS stays as it is.
@@ -1942,6 +2058,9 @@ fn proxy_suffixes(proxy: &ProxyStatus) -> Vec<gtk::Widget> {
     }
     let dot = status_dot(proxy.running);
     dot.set_tooltip_text(Some(&proxy.server_text()));
+    if proxy.command.as_ref().is_some_and(|c| c.state == "failed") {
+        dot.add_css_class("warning");
+    }
     widgets.push(dot.upcast());
     if proxy.secured {
         let lock = gtk::Image::from_icon_name("channel-secure-symbolic");

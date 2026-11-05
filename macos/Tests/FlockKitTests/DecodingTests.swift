@@ -57,13 +57,18 @@ private func decode<T: Decodable>(_ type: T.Type, _ json: String) throws -> T {
 @Test func decodesProxies() throws {
     let status = try decode(Status.self, """
     {"version":"dev","pid":1,"started_at":"2026-10-13T14:10:01Z",
-     "proxies":[{"name":"softpack","domain":"softpack.test","upstream":"http://127.0.0.1:3000","secured":true,"url":"https://softpack.test","running":true,"server":"Node.js 22.23.4"},
+     "proxies":[{"name":"softpack","domain":"softpack.test","upstream":"http://127.0.0.1:3000","secured":true,"url":"https://softpack.test","running":true,"server":"Node.js 22.23.4",
+                 "command":{"command":"npm run dev","dir":"/code/softpack","state":"running","log":"proxy-softpack"}},
                 {"name":"blog","domain":"blog.test","upstream":"http://127.0.0.1:3001","secured":false,"problem":"blog.test is served by a site of the same name","running":false}]}
     """)
     #expect(status.proxies.map(\.id) == ["softpack", "blog"])
     #expect(status.proxies[0].secured && status.proxies[0].url == "https://softpack.test" && status.proxies[0].problem == nil)
     #expect(status.proxies[0].running && status.proxies[0].server == "Node.js 22.23.4")
     #expect(status.proxies[1].url == nil && status.proxies[1].problem != nil && !status.proxies[1].running && status.proxies[1].server == nil)
+    let command = try #require(status.proxies[0].command)
+    #expect(command.command == "npm run dev" && command.dir == "/code/softpack" && command.state == .running && command.log == "proxy-softpack")
+    #expect(command.stopCommand.isEmpty && command.problem.isEmpty)
+    #expect(status.proxies[1].command == nil)
 
     // An older daemon sends none.
     #expect(try decode(Status.self, #"{"version":"dev","pid":1,"started_at":"2026-10-13T14:10:01Z"}"#).proxies.isEmpty)

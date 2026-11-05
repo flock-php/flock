@@ -365,10 +365,24 @@ internal sealed partial class SitesPane : UserControl, ISettingsPane
             panel.Children.Add(Warning(problem));
         }
 
-        var server = Ui.Column(2, Ui.Row(6, Ui.StatusDot(proxy.Running), Ui.Text(proxy.ServerLabel, wrap: false)));
-        if (!proxy.Running)
+        var serverRow = Ui.Row(6, Ui.StatusDot(proxy.Running), Ui.Text(proxy.ServerLabel, wrap: false));
+        if (proxy.Command is { } command)
         {
-            server.Children.Add(Ui.Caption($"Nothing answers at {proxy.UpstreamLabel} yet.", Ui.TertiaryText));
+            serverRow.Children.Add(proxy.Started
+                ? Ui.Button("Stop", () => Start(proxy.Name, () => Model.Sites.StopProxyAsync(proxy.Name)))
+                : Ui.Button("Start", () => Start(proxy.Name, () => Model.Sites.StartProxyAsync(proxy.Name))));
+            serverRow.Children.Add(Ui.Button("Show Log", () => App.Current.OpenLog(new LogsViewModel.ServiceSource(command.Log))));
+        }
+        var server = Ui.Column(2, serverRow);
+        if (proxy.Command is { State: Status.ProxyCommandState.Failed, Problem.Length: > 0 } failed)
+        {
+            server.Children.Add(Ui.Caption(failed.Problem, Ui.TertiaryText));
+        }
+        else if (!proxy.Running)
+        {
+            server.Children.Add(Ui.Caption(proxy.Command?.State == Status.ProxyCommandState.Starting
+                ? $"Waiting for {proxy.UpstreamLabel} to answer…"
+                : $"Nothing answers at {proxy.UpstreamLabel} yet.", Ui.TertiaryText));
         }
         var https = new ToggleSwitch { IsOn = proxy.Secured, MinWidth = 0 };
         Ui.AutomationName(https, "HTTPS");
@@ -381,13 +395,29 @@ internal sealed partial class SitesPane : UserControl, ISettingsPane
         var upstream = Ui.MonoText(proxy.Upstream);
         upstream.VerticalAlignment = VerticalAlignment.Center;
         var change = Ui.Button("Change…", () => Start(proxy.Name, () => ChangeUpstreamAsync(proxy)));
-        panel.Children.Add(Section("Proxy",
+        var commandText = Ui.MonoText(proxy.Command?.Command is { Length: > 0 } configured ? configured : "None");
+        commandText.VerticalAlignment = VerticalAlignment.Center;
+        var fields = new List<UIElement>
+        {
             Field("Server", server),
             Field("HTTPS", https),
             Field("Upstream", Ui.Row(8, upstream, change)),
-            Ui.Caption(
-                $"Every request passes to the upstream with its Host header, WebSocket upgrades (hot reload) included. Flock doesn't start the server, so start it as usual. Until it answers, {proxy.Domain} shows a page saying so.",
-                Ui.TertiaryText)));
+            Field("Command", Ui.Row(8, commandText, Ui.Button("Change…", () => Start(proxy.Name, () => ChangeProxyCommandAsync(proxy))))),
+        };
+        if (proxy.Command is { } runs)
+        {
+            var dir = Ui.MonoText(runs.Dir);
+            dir.VerticalAlignment = VerticalAlignment.Center;
+            fields.Add(Field("Folder", Ui.Row(8, dir, Ui.Button("Change…", () => Start(proxy.Name, () => ChangeProxyFolderAsync(proxy, runs))))));
+            var stop = Ui.MonoText(runs.StopCommand is { Length: > 0 } stopCommand ? stopCommand : "None");
+            stop.VerticalAlignment = VerticalAlignment.Center;
+            fields.Add(Field("Stop command", Ui.Row(8, stop, Ui.Button("Change…", () => Start(proxy.Name, () => ChangeProxyStopCommandAsync(proxy, runs))))));
+        }
+        fields.Add(Ui.Caption(proxy.Command is null
+                ? $"Every request passes to the upstream with its Host header, WebSocket upgrades (hot reload) included. Start the server as usual, or give the proxy a command so Flock starts it. Until it answers, {proxy.Domain} shows a page saying so."
+                : "Every request passes to the upstream with its Host header, WebSocket upgrades (hot reload) included. Flock runs the command when you click Start, with Flock's PHP and Node.js on PATH and PORT set, and keeps it running until you click Stop or quit Flock. A stop command is only for a command that starts a server in the background and exits.",
+            Ui.TertiaryText));
+        panel.Children.Add(Section("Proxy", fields.ToArray()));
 
         var card = Ui.Card(panel, new Thickness(20, 16, 16, 20));
         card.VerticalAlignment = VerticalAlignment.Top;
@@ -401,6 +431,35 @@ internal sealed partial class SitesPane : UserControl, ISettingsPane
                 "Port, host:port or URL", "Change", proxy.UpstreamLabel) is { } upstream && upstream != proxy.UpstreamLabel)
         {
             await Model.Sites.ProxyAsync(proxy.Name, upstream);
+        }
+    }
+
+    private async Task ChangeProxyCommandAsync(Status.Proxy proxy)
+    {
+        if (await Window.Ask($"The command that starts {proxy.Name}",
+                "Flock runs it through the shell when you click Start, and keeps it running until you click Stop. Leave it empty for none.",
+                "e.g. npm run dev", "Save", proxy.Command?.Command ?? "") is { } command && command.Trim() != (proxy.Command?.Command ?? ""))
+        {
+            var dir = proxy.Command?.Dir is { Length: > 0 } configured ? configured : Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+            await Model.Sites.SetProxyCommandAsync(proxy.Name, command.Trim(), dir, proxy.Command?.StopCommand ?? "");
+        }
+    }
+
+    private async Task ChangeProxyFolderAsync(Status.Proxy proxy, Status.ProxyCommand command)
+    {
+        if (await Window.Ask($"The folder {proxy.Name}'s command runs in", "A full path, e.g. C:\\Code\\softpack.", "Folder", "Save", command.Dir) is { Length: > 0 } dir && dir.Trim() != command.Dir)
+        {
+            await Model.Sites.SetProxyCommandAsync(proxy.Name, command.Command, dir.Trim(), command.StopCommand);
+        }
+    }
+
+    private async Task ChangeProxyStopCommandAsync(Status.Proxy proxy, Status.ProxyCommand command)
+    {
+        if (await Window.Ask($"The command that stops {proxy.Name}",
+                "Only for a command that starts a server in the background and exits (docker compose up -d): Stop runs this instead. Leave it empty for none.",
+                "e.g. docker compose stop", "Save", command.StopCommand) is { } stop && stop.Trim() != command.StopCommand)
+        {
+            await Model.Sites.SetProxyCommandAsync(proxy.Name, command.Command, command.Dir, stop.Trim());
         }
     }
 

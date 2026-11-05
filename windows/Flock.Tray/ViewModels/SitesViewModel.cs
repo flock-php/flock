@@ -144,7 +144,10 @@ public sealed partial class ProxyRowViewModel(Status.Proxy proxy) : ObservableOb
         OnPropertyChanged(string.Empty);
         return previous.Name != value.Name || previous.Domain != value.Domain || previous.Upstream != value.Upstream
                || previous.Secured != value.Secured || previous.Url != value.Url || previous.Problem != value.Problem
-               || previous.Running != value.Running || previous.Server != value.Server;
+               || previous.Running != value.Running || previous.Server != value.Server
+               || previous.Command?.Command != value.Command?.Command || previous.Command?.Dir != value.Command?.Dir
+               || previous.Command?.StopCommand != value.Command?.StopCommand || previous.Command?.State != value.Command?.State
+               || previous.Command?.Problem != value.Command?.Problem;
     }
 }
 

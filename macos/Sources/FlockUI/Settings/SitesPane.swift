@@ -350,12 +350,21 @@ struct SitesPane: View {
                     VStack(alignment: .leading, spacing: 2) {
                         HStack(spacing: 6) {
                             Circle()
-                                .fill(proxy.running ? Color.green : Color.secondary.opacity(0.5))
+                                .fill(proxyStateColor(proxy))
                                 .frame(width: 7, height: 7)
-                            Text(proxy.running ? proxy.server ?? "Running" : "Not running")
+                            Text(proxyStateText(proxy))
+                            if let command = proxy.command {
+                                proxyStartStop(proxy, command)
+                            }
                         }
-                        if !proxy.running {
-                            Text("Nothing answers at \(upstreamLabel(proxy.upstream)) yet.")
+                        if let command = proxy.command, command.state == .failed, !command.problem.isEmpty {
+                            Text(command.problem).font(.caption).foregroundStyle(.orange)
+                                .textSelection(.enabled)
+                                .fixedSize(horizontal: false, vertical: true)
+                        } else if !proxy.running {
+                            Text(proxy.command?.state == .starting
+                                 ? "Waiting for \(upstreamLabel(proxy.upstream)) to answer…"
+                                 : "Nothing answers at \(upstreamLabel(proxy.upstream)) yet.")
                                 .font(.caption).foregroundStyle(.secondary)
                         }
                     }
@@ -379,10 +388,135 @@ struct SitesPane: View {
                         .controlSize(.small)
                     }
                 }
-                Text("Every request passes to the upstream with its Host header, WebSocket upgrades (hot reload) included. Flock doesn't start the server, so start it as usual. Until it answers, \(proxy.domain) shows a page saying so.")
+                proxyCommandFields(proxy)
+                Text(proxy.command == nil
+                     ? "Every request passes to the upstream with its Host header, WebSocket upgrades (hot reload) included. Start the server as usual, or give the proxy a command so Flock starts it. Until it answers, \(proxy.domain) shows a page saying so."
+                     : "Every request passes to the upstream with its Host header, WebSocket upgrades (hot reload) included. Flock runs the command when you click Start, with Flock's PHP and Node.js on PATH and PORT set, and keeps it running until you click Stop or quit Flock.")
                     .font(.caption).foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
+
+            if let command = proxy.command {
+                ProxyOutput(log: command.log, running: command.state == .starting || command.state == .running) {
+                    model.logs.requested = .service(command.log)
+                    openWindow.activating(WindowID.logs)
+                }
+            }
+        }
+    }
+
+    /// Start or Stop for a proxy with a command.
+    @ViewBuilder
+    private func proxyStartStop(_ proxy: Status.Proxy, _ command: Status.ProxyCommand) -> some View {
+        let started = command.state == .starting || command.state == .running
+        Button(started ? "Stop" : "Start") {
+            restarting = proxy.name
+            Task {
+                await model.settings.perform { [name = proxy.name] client in
+                    _ = started ? try await client.stopProxy(name) : try await client.startProxy(name)
+                }
+                restarting = nil
+            }
+        }
+        .controlSize(.small)
+        .disabled(restarting == proxy.name)
+        .help(started ? (command.stopCommand.isEmpty ? "Stop \(command.command)" : "Run \(command.stopCommand)") : "Run \(command.command) in \(command.dir)")
+        if restarting == proxy.name {
+            ProgressView().controlSize(.mini)
+        }
+    }
+
+    /// A proxy's command, the folder it runs in and its stop command.
+    @ViewBuilder
+    private func proxyCommandFields(_ proxy: Status.Proxy) -> some View {
+        let key = "proxy:" + proxy.name
+        let saved = proxy.command?.command ?? ""
+        field("Command") {
+            HStack(spacing: 6) {
+                TextField("Optional, e.g. npm run dev", text: Binding(
+                    get: { commandDrafts[key] ?? saved },
+                    set: { commandDrafts[key] = $0 }
+                ))
+                .textFieldStyle(.roundedBorder)
+                .font(.callout.monospaced())
+                .onSubmit { saveProxyCommand(proxy) }
+                if let draft = commandDrafts[key], draft != saved {
+                    Button("Save") { saveProxyCommand(proxy) }.controlSize(.small)
+                }
+            }
+        }
+        if let command = proxy.command {
+            field("Folder") {
+                HStack(spacing: 8) {
+                    Text(abbreviatingHome(command.dir)).font(.callout).lineLimit(1).truncationMode(.middle)
+                        .help(command.dir)
+                    Button("Choose…") {
+                        guard let dir = SettingsStore.chooseDirectories(prompt: "Choose", multiple: false, in: URL(fileURLWithPath: command.dir),
+                                                                      message: "The folder \(command.command) runs in").first else { return }
+                        Task { await model.settings.perform { _ = try await $0.setProxyCommand(proxy.name, command: command.command, dir: dir.path, stopCommand: command.stopCommand) } }
+                    }
+                    .controlSize(.small)
+                }
+            }
+            let stopKey = "proxy-stop:" + proxy.name
+            field("Stop command") {
+                HStack(spacing: 6) {
+                    TextField("Only for a server it starts in the background", text: Binding(
+                        get: { commandDrafts[stopKey] ?? command.stopCommand },
+                        set: { commandDrafts[stopKey] = $0 }
+                    ))
+                    .textFieldStyle(.roundedBorder)
+                    .font(.callout.monospaced())
+                    .onSubmit { saveProxyCommand(proxy) }
+                    if let draft = commandDrafts[stopKey], draft != command.stopCommand {
+                        Button("Save") { saveProxyCommand(proxy) }.controlSize(.small)
+                    }
+                }
+            }
+        }
+    }
+
+    /// Saves the Command and Stop command typed for a proxy. A new command runs in the folder of
+    /// the same name in a project folder when there is one, else in the home folder.
+    private func saveProxyCommand(_ proxy: Status.Proxy) {
+        let key = "proxy:" + proxy.name, stopKey = "proxy-stop:" + proxy.name
+        let command = (commandDrafts[key] ?? proxy.command?.command ?? "").trimmingCharacters(in: .whitespaces)
+        let stopCommand = command.isEmpty ? "" : (commandDrafts[stopKey] ?? proxy.command?.stopCommand ?? "").trimmingCharacters(in: .whitespaces)
+        commandDrafts[key] = nil
+        commandDrafts[stopKey] = nil
+        let dir = proxy.command?.dir ?? defaultProxyFolder(proxy.name)
+        Task { await model.settings.perform { _ = try await $0.setProxyCommand(proxy.name, command: command, dir: dir, stopCommand: stopCommand) } }
+    }
+
+    private func defaultProxyFolder(_ name: String) -> String {
+        for parked in model.settings.config?.parked ?? [] {
+            var isDirectory: ObjCBool = false
+            let dir = (parked as NSString).appendingPathComponent(name)
+            if FileManager.default.fileExists(atPath: dir, isDirectory: &isDirectory), isDirectory.boolValue {
+                return dir
+            }
+        }
+        return FileManager.default.homeDirectoryForCurrentUser.path
+    }
+
+    private func abbreviatingHome(_ path: String) -> String {
+        (path as NSString).abbreviatingWithTildeInPath
+    }
+
+    private func proxyStateText(_ proxy: Status.Proxy) -> String {
+        switch proxy.command?.state {
+        case .starting: return "Starting…"
+        case .failed: return "Not running"
+        case .running, .stopped, .unknown, nil:
+            return proxy.running ? proxy.server ?? "Running" : "Not running"
+        }
+    }
+
+    private func proxyStateColor(_ proxy: Status.Proxy) -> Color {
+        switch proxy.command?.state {
+        case .starting: .yellow
+        case .failed: .orange
+        default: proxy.running ? .green : Color.secondary.opacity(0.5)
         }
     }
 
@@ -1217,6 +1351,64 @@ struct SitesPane: View {
 }
 
 /// A change waiting for confirmation: a pin or unpin (it changes files in the project), or a removal.
+/// A proxy command's output, the tail of its log, refreshed while it runs.
+private struct ProxyOutput: View {
+    @Environment(AppModel.self) private var model
+    let log: String
+    let running: Bool
+    let openLog: () -> Void
+    private let textState = State<String>(initialValue: "")
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 8) {
+                Text("Output").font(.headline)
+                Spacer()
+                Button("Clear") {
+                    Task {
+                        try? await model.client.clearServiceLog(log)
+                        textState.wrappedValue = ""
+                    }
+                }
+                .disabled(textState.wrappedValue.isEmpty)
+                Button("Open Log", action: openLog)
+            }
+            .controlSize(.small)
+            ScrollViewReader { scroller in
+                ScrollView {
+                    Group {
+                        if textState.wrappedValue.isEmpty {
+                            Text(running ? "Waiting for output…" : "Start the server to see its output here.")
+                                .foregroundStyle(.secondary)
+                                .frame(maxWidth: .infinity, minHeight: 160)
+                        } else {
+                            Text(textState.wrappedValue)
+                                .font(.caption.monospaced())
+                                .textSelection(.enabled)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                    }
+                    .padding(8)
+                    Color.clear.frame(height: 1).id("end")
+                }
+                .frame(height: 220)
+                .background(Color(nsColor: .textBackgroundColor), in: RoundedRectangle(cornerRadius: 6))
+                .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(.separator))
+                .onChange(of: textState.wrappedValue) { scroller.scrollTo("end", anchor: .bottom) }
+            }
+        }
+        // Polled while it runs, and read once when it doesn't (the last run's output).
+        .task(id: "\(log) \(running)") {
+            repeat {
+                if let text = try? await model.client.serviceLog(log, lines: 300), text != textState.wrappedValue {
+                    textState.wrappedValue = text
+                }
+                try? await Task.sleep(for: .seconds(1))
+            } while running && !Task.isCancelled
+        }
+    }
+}
+
 private struct ConfirmAction: Identifiable, Sendable {
     let title: String
     let button: String

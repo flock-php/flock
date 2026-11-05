@@ -274,6 +274,23 @@ impl Client {
         self.request("PATCH", &proxy_path(name), Some(&serde_json::json!({ "secured": on })), DEFAULT_TIMEOUT)
     }
 
+    /// Sets the command that starts a proxy's server, the folder it runs in and, for a server it
+    /// starts in the background, the command that stops it. An empty command removes them.
+    pub fn set_proxy_command(&self, name: &str, command: &str, dir: &str, stop_command: &str) -> Result<Status, Error> {
+        let body = serde_json::json!({ "command": command, "dir": dir, "stop_command": stop_command });
+        self.request("PATCH", &proxy_path(name), Some(&body), DEFAULT_TIMEOUT)
+    }
+
+    /// Runs a proxy's command.
+    pub fn start_proxy(&self, name: &str) -> Result<Status, Error> {
+        self.request("POST", &format!("{}/start", proxy_path(name)), None::<&()>, Duration::from_secs(60))
+    }
+
+    /// Stops a proxy's command, or runs its stop command.
+    pub fn stop_proxy(&self, name: &str) -> Result<Status, Error> {
+        self.request("POST", &format!("{}/stop", proxy_path(name)), None::<&()>, Duration::from_secs(130))
+    }
+
     /// Stops serving a proxy; the server at its upstream keeps running.
     pub fn remove_proxy(&self, name: &str) -> Result<Status, Error> {
         self.request("DELETE", &proxy_path(name), None::<&()>, DEFAULT_TIMEOUT)
@@ -1291,6 +1308,31 @@ pub struct ProxyStatus {
     /// "Node.js 22.23.4" for one of Flock's Node.js versions.
     pub running: bool,
     pub server: Option<String>,
+    /// The command that starts its server, when it has one.
+    pub command: Option<ProxyCommand>,
+}
+
+/// The command that starts a proxy's server (`flock proxy --command`), and where it stands.
+#[derive(Deserialize, Debug, Clone, PartialEq, Default)]
+#[serde(default)]
+pub struct ProxyCommand {
+    pub command: String,
+    /// The folder it runs in.
+    pub dir: String,
+    /// Set when command starts a server in the background: the command that stops it.
+    pub stop_command: String,
+    /// stopped, starting, running or failed.
+    pub state: String,
+    pub problem: String,
+    /// The name of its service log.
+    pub log: String,
+}
+
+impl ProxyCommand {
+    /// Flock runs it (the upstream may not answer yet).
+    pub fn started(&self) -> bool {
+        self.state == "starting" || self.state == "running"
+    }
 }
 
 impl ProxyStatus {
@@ -1301,6 +1343,11 @@ impl ProxyStatus {
 
     /// What answers at the upstream: "Node.js 22.23.4", "Running" or "Not running".
     pub fn server_text(&self) -> String {
+        match self.command.as_ref().map(|c| c.state.as_str()) {
+            Some("starting") => return "Starting…".to_owned(),
+            Some("failed") => return "Not running".to_owned(),
+            _ => {}
+        }
         match (&self.server, self.running) {
             (_, false) => "Not running".to_owned(),
             (Some(server), true) if !server.is_empty() => server.clone(),
@@ -1588,6 +1635,15 @@ mod tests {
         assert_eq!(blog.server_text(), "Not running");
         let unnamed = ProxyStatus { running: true, ..Default::default() };
         assert_eq!(unnamed.server_text(), "Running");
+        assert!(softpack.command.is_none());
+        let json = r#"{"name":"softpack","running":false,
+            "command":{"command":"npm run dev","dir":"/code/softpack","state":"starting","log":"proxy-softpack"}}"#;
+        let started: ProxyStatus = serde_json::from_str(json).unwrap();
+        let command = started.command.as_ref().unwrap();
+        assert_eq!((command.command.as_str(), command.dir.as_str()), ("npm run dev", "/code/softpack"));
+        assert_eq!(command.log, "proxy-softpack");
+        assert!(command.started() && command.stop_command.is_empty());
+        assert_eq!(started.server_text(), "Starting…");
         // An older daemon sends none.
         assert!(serde_json::from_str::<Status>(r#"{"version":"1.4.0"}"#).unwrap().proxies.is_empty());
     }
