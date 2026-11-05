@@ -29,6 +29,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"runtime"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -317,10 +318,14 @@ func ExtensionPath(root, minor, name string) string {
 // compile most of these in and ship only the larger ones (imagick, mongodb, memcached) shared.
 // Xdebug and pcov aren't here: Xdebug loads only for debugging, pcov only for the CLI.
 var extensions = []string{
-	"bz2", "curl", "exif", "fileinfo", "ftp", "gd", "gettext", "gmp", "intl", "ldap", "mbstring", "mysqli",
+	"bz2", "curl", "exif", "fileinfo", "ftp", "gd", "gettext", "gmp", "imap", "intl", "ldap", "mbstring", "mysqli",
 	"openssl", "pdo_mysql", "pdo_pgsql", "pdo_sqlite", "pgsql", "shmop", "soap", "sockets", "sodium", "sqlite3", "xsl", "zip",
 	"apcu", "igbinary", "redis", "imagick", "mongodb", "memcached",
 }
+
+// ThreadUnsafeExtensions stay out of FrankenPHP, which runs PHP in many threads of one process.
+// Its macOS and Linux builds don't ship them; on Windows it shares the official build's DLLs.
+var ThreadUnsafeExtensions = []string{"imap"}
 
 // ExtensionFile is a shared extension's file in extDir: imagick.so, or php_imagick.dll on Windows.
 func ExtensionFile(extDir, name string) string {
@@ -387,8 +392,8 @@ func IniValue(ini, directive string) (value string, ok bool) {
 }
 
 // ExtensionsIni is the ini that points a build at its ext/ directory and loads the extensions
-// present there (FrankenPHP's builds use the same).
-func ExtensionsIni(extDir string) string {
+// present there, except skip (FrankenPHP's builds use the same, skipping ThreadUnsafeExtensions).
+func ExtensionsIni(extDir string, skip ...string) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "; Managed by Flock — regenerated on install, edit php.ini instead.\nextension_dir = \"%s\"\n", extDir)
 	// opcache is compiled in from PHP 8.5 on, and into the macOS builds from PHP 8.0 on.
@@ -396,7 +401,7 @@ func ExtensionsIni(extDir string) string {
 		b.WriteString("zend_extension = opcache\n")
 	}
 	for _, name := range extensions {
-		if fileExists(ExtensionFile(extDir, name)) {
+		if !slices.Contains(skip, name) && fileExists(ExtensionFile(extDir, name)) {
 			fmt.Fprintf(&b, "extension = %s\n", name)
 		}
 	}

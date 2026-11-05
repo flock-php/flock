@@ -96,6 +96,22 @@ func TestDebugCGIPortsStayClearOfTheWorkers(t *testing.T) {
 	}
 }
 
+func TestExtensionsIniSkipsThreadUnsafeForFrankenPHP(t *testing.T) {
+	extDir := t.TempDir()
+	for _, name := range []string{"imap", "intl"} {
+		if err := os.WriteFile(ExtensionFile(extDir, name), nil, 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	if ini := ExtensionsIni(extDir); !strings.Contains(ini, "extension = imap\n") || !strings.Contains(ini, "extension = intl\n") {
+		t.Errorf("PHP doesn't load imap and intl:\n%s", ini)
+	}
+	if ini := ExtensionsIni(extDir, ThreadUnsafeExtensions...); strings.Contains(ini, "imap") || !strings.Contains(ini, "extension = intl\n") {
+		t.Errorf("FrankenPHP loads imap or misses intl:\n%s", ini)
+	}
+}
+
 func TestDefaultsYieldToPhpIni(t *testing.T) {
 	root := t.TempDir()
 	flockIni := func() string {

@@ -50,9 +50,9 @@ Flock's PHP includes the extensions most Laravel apps need, all of them on, with
 
 ```text
 apcu  bcmath  bz2  calendar  ctype  curl  dom  exif  fileinfo  filter  ftp  gd
-gmp  iconv  igbinary  imagick  intl  ldap  mbstring  memcached  mongodb  mysqli
-opcache  openssl  pcntl  pdo_mysql  pdo_pgsql  pdo_sqlite  pgsql  phar  posix
-readline  redis  session  shmop  simplexml  soap  sockets  sodium  sqlite3
+gmp  iconv  igbinary  imagick  imap  intl  ldap  mbstring  memcached  mongodb
+mysqli  opcache  openssl  pcntl  pdo_mysql  pdo_pgsql  pdo_sqlite  pgsql  phar
+posix  readline  redis  session  shmop  simplexml  soap  sockets  sodium  sqlite3
 tokenizer  xml  xmlreader  xmlwriter  xsl  zip  zlib
 ```
 
@@ -60,6 +60,7 @@ tokenizer  xml  xmlreader  xmlwriter  xsl  zip  zlib
 - **pcov** is on for the command line only (`php`, `composer`, `php artisan test`), so your tests can measure code coverage while web requests stay fast.
 - **Xdebug** loads only for requests that ask for it. See [Xdebug](xdebug.md).
 - On Windows, `memcached`, `pcntl` and `posix` aren't available, and `mongodb` needs PHP 8.1 or newer.
+- **imap** left PHP's core in 8.4; Flock's PHP has it for every version. It isn't thread-safe, so sites on [FrankenPHP](#frankenphp) don't have it. It doesn't support Kerberos (GSSAPI) logins.
 
 ### Which extensions a project needs
 
