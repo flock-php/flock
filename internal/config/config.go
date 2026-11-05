@@ -166,7 +166,8 @@ const FirstSitePort = 21000
 // also the name of its process and log.
 func SitePortID(site string) string { return "frankenphp-" + site }
 
-// ValidCommand checks a Node.js site's dev server command (see Site.Command).
+// ValidCommand checks a command Flock runs: a Node.js site's dev server (see Site.Command) or a
+// proxy's (see Proxy.Command).
 func ValidCommand(command string) error {
 	switch {
 	case strings.ContainsAny(command, "\r\n\x00"):

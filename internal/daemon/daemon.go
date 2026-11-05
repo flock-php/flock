@@ -96,12 +96,14 @@ type daemon struct {
 	// checking is set while a wildcard check runs (see checkWildcard).
 	checking atomic.Bool
 
-	mu       sync.Mutex
-	sites    []api.SiteStatus
-	proxies  []api.ProxyStatus
-	probe    serverProbe // what answers at the proxies' upstreams
-	warnings []string
-	problems map[string]string // why an installed catalog service isn't running, by id
+	mu      sync.Mutex
+	sites   []api.SiteStatus
+	proxies []api.ProxyStatus
+	probe   serverProbe // what answers at the proxies' upstreams
+	// proxyRuns are the proxies started (see StartProxy), by name; never kept across restarts.
+	proxyRuns map[string]*proxyRun
+	warnings  []string
+	problems  map[string]string // why an installed catalog service isn't running, by id
 	// breakpoints finds PhpStorm breakpoints; breakpointSites is what the last reload found, by site path.
 	breakpoints     xdebug.Detector
 	breakpointSites map[string]bool
@@ -281,7 +283,7 @@ func Run(ctx context.Context, cfg Config) error {
 		return err
 	}
 
-	d := &daemon{root: cfg.Root, version: cfg.Version, startedAt: time.Now(), procs: supervisor.New(), leaves: certs.NewLeaves(), restarts: map[string]int{}}
+	d := &daemon{root: cfg.Root, version: cfg.Version, startedAt: time.Now(), procs: supervisor.New(), leaves: certs.NewLeaves(), restarts: map[string]int{}, proxyRuns: map[string]*proxyRun{}}
 	defer d.shutdown()
 
 	d.binaries = binaries.NewCatalog(binaries.DefaultSource(cfg.Root), d.channel)
@@ -769,9 +771,28 @@ func (d *daemon) reload() error {
 		taken[name] = true
 	}
 	var proxies []api.ProxyStatus
+	d.mu.Lock()
+	for name := range d.proxyRuns {
+		if p, ok := cfg.FindProxy(name); !ok || p.Command == "" {
+			delete(d.proxyRuns, name) // removed, or its command was: Retain stops what ran
+		}
+	}
+	d.mu.Unlock()
 	for _, p := range cfg.Proxies {
 		domain := cfg.ProxyDomain(p)
 		status := api.ProxyStatus{Name: p.Name, Domain: domain, Upstream: p.Upstream, Secured: p.Secured}
+		if p.Command != "" {
+			status.Command = &api.ProxyCommand{Command: p.Command, Dir: p.Dir, StopCommand: p.StopCommand, Log: config.ProxyLog(p.Name)}
+			d.mu.Lock()
+			_, started := d.proxyRuns[p.Name]
+			d.mu.Unlock()
+			// A started command in the foreground keeps running, restarted with a new command.
+			if started && p.StopCommand == "" {
+				spec := d.proxySpec(p)
+				d.procs.Ensure(spec)
+				keep[spec.Name] = true
+			}
+		}
 		if taken[domain] {
 			status.Problem = domain + " is served by a site of the same name"
 			proxies = append(proxies, status)
@@ -1069,7 +1090,7 @@ func (s pgService) Reload() error { return s.d.reload() }
 func (d *daemon) Status() api.Status {
 	st := d.status()
 	st.Sites = d.liveNodeServers(st.Sites)
-	st.Proxies = d.probe.live(d.root, st.Proxies)
+	st.Proxies = d.liveProxyCommands(d.probe.live(d.root, st.Proxies))
 	return st
 }
 

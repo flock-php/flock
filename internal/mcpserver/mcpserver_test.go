@@ -143,8 +143,18 @@ func (f *fakeDaemon) LinkSite(_ context.Context, dir, name string) (api.Status, 
 	return st, nil
 }
 
-func (f *fakeDaemon) Proxy(_ context.Context, name, upstream string, secured *bool) (api.Status, error) {
-	f.record("proxy", name, upstream, secured)
+func (f *fakeDaemon) StartProxy(_ context.Context, name string) (api.Status, error) {
+	f.record("start proxy", name)
+	return f.status, nil
+}
+
+func (f *fakeDaemon) StopProxy(_ context.Context, name string) (api.Status, error) {
+	f.record("stop proxy", name)
+	return f.status, nil
+}
+
+func (f *fakeDaemon) Proxy(_ context.Context, name, upstream string, opts api.ProxyOptions) (api.Status, error) {
+	f.record("proxy", name, upstream, opts)
 	st := f.status
 	st.Proxies = append(st.Proxies, api.ProxyStatus{Name: name, Domain: name + ".test", Upstream: "http://127.0.0.1:" + upstream, URL: "http://" + name + ".test"})
 	return st, nil
@@ -282,13 +292,13 @@ func TestToolsAndAnnotations(t *testing.T) {
 			t.Errorf("%s should be a read-only tool", name)
 		}
 	}
-	for _, name := range []string{"service", "install_version", "link_site", "proxy_site", "update_site", "set_debugging", "create_database", "postgres_extension",
+	for _, name := range []string{"service", "install_version", "link_site", "proxy_site", "proxy_server", "update_site", "set_debugging", "create_database", "postgres_extension",
 		"create_worktree", "setup_worktree"} {
 		if ro, ok := readOnly[name]; !ok || ro {
 			t.Errorf("%s should be a tool that changes things (listed: %v)", name, ok)
 		}
 	}
-	if len(res.Tools) != 24 {
+	if len(res.Tools) != 25 {
 		t.Errorf("got %d tools", len(res.Tools))
 	}
 }
@@ -537,11 +547,29 @@ func TestProxySite(t *testing.T) {
 	if e := callTool(t, cs, "proxy_site", map[string]any{"name": "softpack", "upstream": "3000"}, &out); e != "" || out.Proxy == nil || out.Proxy.URL != "http://softpack.test" {
 		t.Fatalf("%q %+v", e, out)
 	}
-	if d.changes[0] != `proxy ["softpack","3000",null]` {
+	if d.changes[0] != `proxy ["softpack","3000",{}]` {
 		t.Fatalf("changes: %q", d.changes)
 	}
 	if e := callTool(t, cs, "proxy_site", map[string]any{"name": "softpack"}, nil); !strings.Contains(e, "upstream") {
 		t.Fatalf("a proxy needs an upstream: %q", e)
+	}
+
+	d.changes = nil
+	if e := callTool(t, cs, "proxy_site", map[string]any{"name": "softpack", "upstream": "3000", "command": "npm run dev", "dir": "/code/softpack"}, nil); e != "" {
+		t.Fatal(e)
+	}
+	if d.changes[0] != `proxy ["softpack","3000",{"command":"npm run dev","dir":"/code/softpack"}]` {
+		t.Fatalf("a command: %q", d.changes)
+	}
+
+	d.changes = nil
+	callTool(t, cs, "proxy_server", map[string]any{"name": "softpack", "action": "start"}, nil)
+	callTool(t, cs, "proxy_server", map[string]any{"name": "softpack", "action": "stop"}, nil)
+	if e := callTool(t, cs, "proxy_server", map[string]any{"name": "softpack", "action": "restart"}, nil); e == "" {
+		t.Fatal("restart isn't an action")
+	}
+	if strings.Join(d.changes, " ") != `start proxy ["softpack"] stop proxy ["softpack"]` {
+		t.Fatalf("start and stop: %q", d.changes)
 	}
 
 	d.status.Proxies = []api.ProxyStatus{{Name: "softpack", URL: "http://softpack.test", Upstream: "http://127.0.0.1:3000"}}

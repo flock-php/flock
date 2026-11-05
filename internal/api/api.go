@@ -71,7 +71,30 @@ type ProxyStatus struct {
 	// machine: "Node.js 22.23.4" (one of Flock's versions), "Node.js", or the program's name.
 	Running bool   `json:"running"`
 	Server  string `json:"server,omitempty"`
+	// Command is set when the proxy has a command that starts its server (config.Proxy.Command).
+	Command *ProxyCommand `json:"command,omitempty"`
 }
+
+// ProxyCommand is the command that starts a proxy's server, and where it stands.
+type ProxyCommand struct {
+	Command     string `json:"command"`
+	Dir         string `json:"dir"`
+	StopCommand string `json:"stop_command,omitempty"` // set when Command starts a server in the background
+	// State is ProxyStopped until the proxy is started, then ProxyStarting until its upstream
+	// answers, ProxyRunning, or ProxyFailed when the command exited or failed (see Problem and Log).
+	State   string `json:"state"`
+	Problem string `json:"problem,omitempty"`
+	Log     string `json:"log"` // the command's output: /v1/logs/services/{name}, `flock logs <name>`
+}
+
+// States of a proxy's command. Stopped is also the state of a server that answers but that Flock
+// didn't start (Running tells).
+const (
+	ProxyStopped  = "stopped"
+	ProxyStarting = "starting"
+	ProxyRunning  = "running"
+	ProxyFailed   = "failed"
+)
 
 // DefaultsStatus is the first run's install of the default PHP and Node.js.
 type DefaultsStatus struct {
@@ -276,6 +299,10 @@ type Backend interface {
 	Binaries() *binaries.Catalog
 	// RestartSite restarts a FrankenPHP site's process, e.g. so Octane's workers load changed code.
 	RestartSite(name string) error
+	// StartProxy runs a proxy's command (config.Proxy.Command); StopProxy stops it, or runs its
+	// stop command when it starts a server in the background.
+	StartProxy(name string) error
+	StopProxy(name string) error
 	// Shares runs the sites' tunnels (nil when unavailable); StartShare starts one after checking
 	// that the site can be shared, with the app's debug mode on for visitors when debug is set.
 	Shares() *share.Manager

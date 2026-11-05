@@ -64,6 +64,9 @@ flock link shop --php 8.4 --secure
 | --- | --- |
 | `--php <version>` | Use this PHP version for the site |
 | `--secure` | Serve it over HTTPS right away |
+| `--command <cmd>` | The command that starts its server (see below) |
+| `--dir <folder>` | The folder the command runs in (the current one by default) |
+| `--stop-command <cmd>` | The command that stops a server the command starts in the background |
 
 Remove a link with `flock unlink [name]`.
 :::
@@ -87,11 +90,38 @@ A port means `127.0.0.1`; give a host and port (`localhost:5173`) or a URL (`htt
 | Flag | Description |
 | --- | --- |
 | `--secure` | Serve it over HTTPS right away |
+| `--command <cmd>` | The command that starts its server (see below) |
+| `--dir <folder>` | The folder the command runs in (the current one by default) |
+| `--stop-command <cmd>` | The command that stops a server the command starts in the background |
 
 `flock secure softpack` and `flock unsecure softpack` work on proxies too, `flock proxies` lists them with what serves them (or `not running`), and `flock unproxy softpack` removes one.
 :::
 
-Requests pass to the server with their `Host` header, so the app sees `softpack.test`, and WebSocket upgrades pass through too, so hot reload works. Some dev servers only answer the hosts they know: allow the domain in Vite's `server.allowedHosts`, or Next.js's `allowedDevOrigins`. Flock doesn't start the server, so start it as usual. Until it answers, the domain shows a page saying so, which switches to the app once it runs.
+Requests pass to the server with their `Host` header, so the app sees `softpack.test`, and WebSocket upgrades pass through too, so hot reload works. Some dev servers only answer the hosts they know: allow the domain in Vite's `server.allowedHosts`, or Next.js's `allowedDevOrigins`. Start the server as usual, or give the proxy a command so Flock starts it (below). Until it answers, the domain shows a page saying so, which switches to the app once it runs.
+
+### Starting the server with Flock
+
+A proxy can have a command that starts its server, such as `npm run dev`, run in a folder of your choice. Flock runs it only when you start the proxy, through the shell, with Flock's PHP and Node.js first on `PATH` (so the project's versions are used) and `PORT` set to the upstream's port. It keeps the command running and restarts it if it exits, until you stop the proxy, and the command's output goes to the proxy's log. When Flock quits, the command stops too.
+
+For a command that starts a server in the background and exits, such as `docker compose up -d`, also give a stop command (`docker compose stop`). Starting runs the command once, and stopping runs the stop command. Running or not, the proxy's state is then whatever answers at the upstream.
+
+:::app
+On macOS, select the proxy in **Settings → Sites** and set its **Command** (and, under it, the folder and an optional stop command). **Start** and **Stop** run it, and **Output** shows what it prints, with **Clear** and **Open Log**.
+:::
+
+:::cli
+```bash
+cd ~/Code/softpack
+flock proxy softpack 3000 --command "npm run dev"   # runs in the current folder, or --dir
+flock proxies start softpack
+# started `npm run dev` in /Users/me/Code/softpack — its output: flock logs proxy-softpack
+flock proxies stop softpack
+
+flock proxy s3 9000 --command "docker compose up -d" --stop-command "docker compose stop"
+```
+
+`--command ""` removes the command and the stop command.
+:::
 
 A proxy's name can't be a linked site's: Flock refuses it. A folder of the same name in a project folder is served by the proxy instead, so `flock proxy softpack 3000` works for `~/Code/softpack`; `flock unproxy softpack` serves the folder again.
 
