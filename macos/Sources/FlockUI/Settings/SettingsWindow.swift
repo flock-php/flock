@@ -9,16 +9,16 @@ enum SettingsPane: String, CaseIterable, Identifiable {
 
     var title: String {
         switch self {
-        case .general: "General"
-        case .sites: "Sites"
+        case .general: String(localized: "General")
+        case .sites: String(localized: "Sites")
         case .php: "PHP"
         case .node: "Node"
-        case .services: "Services"
-        case .mail: "Mail"
-        case .dumps: "Dumps"
-        case .debugger: "Debugger"
-        case .ai: "AI"
-        case .about: "About"
+        case .services: String(localized: "Services")
+        case .mail: String(localized: "Mail")
+        case .dumps: String(localized: "Dumps")
+        case .debugger: String(localized: "Debugger")
+        case .ai: String(localized: "AI")
+        case .about: String(localized: "About")
         }
     }
 
@@ -98,7 +98,7 @@ struct SettingsWindow: View {
             .background(Color(nsColor: .windowBackgroundColor))
         }
         .ignoresSafeArea(.container, edges: .top)
-        .frame(minWidth: 810, minHeight: 480)
+        .frame(minWidth: 830, minHeight: 480)
         .task {
             store.isVisible = true
             await store.refresh()
@@ -108,7 +108,9 @@ struct SettingsWindow: View {
 
     @ViewBuilder
     private var content: some View {
-        if model.status == nil, pane != .about {
+        // About, and General once Flock is set up (its language, updates and login item don't need
+        // the daemon), also show while the daemon isn't running.
+        if model.status == nil, pane != .about, pane != .general || model.needsSetup {
             if model.needsSetup {
                 ContentUnavailableView {
                     Label { Text("Flock isn't set up yet") } icon: { LogoMark(size: 44) }
@@ -121,7 +123,7 @@ struct SettingsWindow: View {
                 ContentUnavailableView {
                     Label { Text("Flock is not running") } icon: { LogoMark(size: 44) }
                 } description: {
-                    Text(model.error ?? "Start the daemon to change its settings.")
+                    Text(model.error ?? String(localized: "Start the daemon to change its settings."))
                 } actions: {
                     Button("Start Flock") { Task { await model.restart() } }
                         .disabled(model.isRestarting)

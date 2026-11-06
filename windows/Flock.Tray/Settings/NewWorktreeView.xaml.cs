@@ -20,7 +20,7 @@ internal sealed partial class NewWorktreeView : UserControl
     {
         this.site = site;
         InitializeComponent();
-        DatabaseBox.Items.Add("Project default");
+        DatabaseBox.Items.Add(Strings.Worktree_ProjectDefault);
         foreach (var item in SitesPane.DatabaseChoices)
         {
             DatabaseBox.Items.Add(item);
@@ -59,12 +59,13 @@ internal sealed partial class NewWorktreeView : UserControl
         values.Clear();
         if (branches.Current.Length == 0)
         {
-            FromBox.Items.Add("The current commit");
+            FromBox.Items.Add(Strings.NewWorktree_CurrentCommit);
             values.Add("");
         }
         foreach (var name in branches.Ordered())
         {
-            FromBox.Items.Add(name == branches.Current ? $"{name} (current)" : name == branches.Default ? $"{name} (default)" : name);
+            FromBox.Items.Add(name == branches.Current ? Localization.Format(Strings.NewWorktree_CurrentBranch, name)
+                : name == branches.Default ? Localization.Format(Strings.NewWorktree_DefaultBranch, name) : name);
             values.Add(name);
         }
         if (branches.Remote.Count > 0)
@@ -91,9 +92,9 @@ internal sealed partial class NewWorktreeView : UserControl
     {
         FromBox.IsEnabled = loaded && !Exists;
         var typed = Branch;
-        var address = typed.Length == 0 ? "its own address" : $"{SiteBranches.Slug(typed)}.{site.Domain}";
-        ExplanationText.Text = Exists
-            ? $"{typed} exists, so the worktree checks it out. Flock creates it next to {site.Name}, sets it up and serves it at {address}."
-            : $"Flock creates the worktree next to {site.Name} on {(typed.Length == 0 ? "a new branch with a name of its own" : $"the new branch {typed}")}, sets it up and serves it at {address}.";
+        var address = $"{SiteBranches.Slug(typed)}.{site.Domain}";
+        ExplanationText.Text = typed.Length == 0 ? Localization.Format(Strings.NewWorktree_ExplainUnnamed, site.Name)
+            : Exists ? Localization.Format(Strings.NewWorktree_ExplainExisting, typed, site.Name, address)
+            : Localization.Format(Strings.NewWorktree_ExplainNew, typed, site.Name, address);
     }
 }

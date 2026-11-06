@@ -131,7 +131,11 @@ struct DumpsOnlyNote: View {
     let versions: [String]
 
     var body: some View {
-        Label("PHP \(ListFormatter.localizedString(byJoining: versions)) only \(versions.count == 1 ? "captures" : "capture") dumps — \(versions.count == 1 ? "its build has" : "their builds have") no agent extension yet, so queries, logs, views and jobs are missing there.",
+        let list = versions.formatted(.list(type: .and).locale(AppLanguage.locale))
+        // The subject is a list, not a count: one version or several.
+        Label(versions.count == 1
+              ? "PHP \(list) only captures dumps — its build has no agent extension yet, so queries, logs, views and jobs are missing there."
+              : "PHP \(list) only capture dumps — their builds have no agent extension yet, so queries, logs, views and jobs are missing there.",
               systemImage: "info.circle")
             .font(.callout)
             .foregroundStyle(.secondary)

@@ -10,4 +10,9 @@
         <UseWPF>false</UseWPF>
         <UseWindowsForms>false</UseWindowsForms>
     </PropertyGroup>
+    <ItemGroup>
+        <!-- Translations: Strings.cs.resx and Strings.es.resx build into satellite assemblies (cs\, es\). -->
+        <EmbeddedResource Update="Strings.resx" Generator="ResXFileCodeGenerator" LastGenOutput="Strings.Designer.cs"/>
+        <Compile Update="Strings.Designer.cs" DesignTime="True" AutoGen="True" DependentUpon="Strings.resx"/>
+    </ItemGroup>
 </Project>

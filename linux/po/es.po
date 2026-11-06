@@ -1,0 +1,2580 @@
+# Spanish translations of the Flock Linux app (linux/src). The English text is the msgid;
+# src/i18n.rs builds this file into the app, and its tests fail when a text of the app is
+# missing here or a translation drops a {placeholder}.
+msgid ""
+msgstr ""
+"Project-Id-Version: flock-app\n"
+"Language: es\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+
+#: src/api.rs
+msgid "Flock is not running"
+msgstr "Flock no está en ejecución"
+
+#: src/api.rs
+msgid "Flock answered with HTTP {status}"
+msgstr "Flock respondió con HTTP {status}"
+
+#: src/api.rs
+msgid "unexpected answer from Flock: {error}"
+msgstr "respuesta inesperada de Flock: {error}"
+
+#: src/api.rs
+msgid "Queries"
+msgstr "Consultas"
+
+#: src/api.rs src/logs.rs src/tray.rs src/window.rs
+msgid "Logs"
+msgstr "Registros"
+
+#: src/api.rs
+msgid "Views"
+msgstr "Vistas"
+
+#: src/api.rs
+msgid "Jobs"
+msgstr "Trabajos"
+
+#: src/api.rs
+msgid "Requests"
+msgstr "Solicitudes"
+
+#: src/api.rs src/panes/services.rs
+msgid "Installing…"
+msgstr "Instalando…"
+
+#: src/api.rs
+msgid "Downloading… {percent}%"
+msgstr "Descargando… {percent} %"
+
+#: src/api.rs
+msgid "Downloading…"
+msgstr "Descargando…"
+
+#: src/api.rs src/model.rs src/panes/services.rs
+msgid "Not running"
+msgstr "No está en ejecución"
+
+#: src/api.rs src/panes/general.rs src/panes/mail.rs src/panes/services.rs
+msgid "Running"
+msgstr "En ejecución"
+
+#: src/api.rs
+msgid "own database"
+msgstr "base de datos propia"
+
+#: src/api.rs
+msgctxt "database"
+msgid "shared"
+msgstr "compartida"
+
+#: src/api.rs
+msgctxt "database"
+msgid "copy"
+msgstr "copia"
+
+#: src/api.rs
+msgctxt "database"
+msgid "fresh"
+msgstr "nueva"
+
+#: src/api.rs src/panes/services.rs
+msgid "Waiting…"
+msgstr "Esperando…"
+
+#: src/api.rs
+msgid "Setup failed"
+msgstr "La preparación falló"
+
+#: src/api.rs src/panes/worktree_job.rs
+msgid "Ready"
+msgstr "Listo"
+
+#: src/api.rs
+msgid "Setting up…"
+msgstr "Preparando…"
+
+#: src/api.rs src/panes/sites.rs
+msgid "The current commit"
+msgstr "El commit actual"
+
+#: src/api.rs
+msgid "{name} (current)"
+msgstr "{name} (actual)"
+
+#: src/api.rs
+msgid "{name} (default)"
+msgstr "{name} (predeterminada)"
+
+#: src/dumps.rs src/tray.rs src/window.rs
+msgid "Dumps"
+msgstr "Dumps"
+
+#: src/dumps.rs
+msgid "Capture dumps, queries, logs, views and jobs"
+msgstr "Capturar dumps, consultas, registros, vistas y trabajos"
+
+#: src/dumps.rs
+msgid "Latest request only"
+msgstr "Solo la última solicitud"
+
+#: src/dumps.rs
+msgid "Capture options and editor"
+msgstr "Opciones de captura y editor"
+
+#: src/dumps.rs src/logs.rs
+msgid "Clear"
+msgstr "Borrar"
+
+#: src/dumps.rs
+msgid "Search dumps, queries, logs"
+msgstr "Buscar en dumps, consultas y registros"
+
+#: src/dumps.rs src/logs.rs src/mail.rs src/window.rs src/panes/php.rs src/panes/services.rs src/panes/sites.rs
+msgid "Dismiss"
+msgstr "Descartar"
+
+#: src/dumps.rs
+msgid "PHP {versions} only captures dumps — its build has no agent extension yet, so queries, logs, views and jobs are missing there."
+msgid_plural "PHP {versions} only capture dumps — their builds have no agent extension yet, so queries, logs, views and jobs are missing there."
+msgstr[0] "PHP {versions} solo captura dumps: su compilación aún no tiene la extensión del agente, así que ahí faltan consultas, registros, vistas y trabajos."
+msgstr[1] "PHP {versions} solo capturan dumps: sus compilaciones aún no tienen la extensión del agente, así que ahí faltan consultas, registros, vistas y trabajos."
+
+#: src/dumps.rs src/panes/dumps.rs
+msgid "Capture"
+msgstr "Capturar"
+
+#: src/dumps.rs
+msgid "Show dump() in the page too"
+msgstr "Mostrar dump() también en la página"
+
+#: src/dumps.rs
+msgid "Open sources in"
+msgstr "Abrir el código fuente en"
+
+#: src/dumps.rs
+msgid "{n} entry"
+msgid_plural "{n} entries"
+msgstr[0] "{n} entrada"
+msgstr[1] "{n} entradas"
+
+#: src/dumps.rs
+msgid "Nothing Captured Yet"
+msgstr "Aún no se ha capturado nada"
+
+#: src/dumps.rs
+msgid "Nothing Matches"
+msgstr "No hay coincidencias"
+
+#: src/dumps.rs
+msgid "dump() and dd() output, queries, logs, views and jobs from your sites and artisan commands appear here."
+msgstr "Aquí aparecen la salida de dump() y dd(), las consultas, los registros, las vistas y los trabajos de tus sitios y comandos de artisan."
+
+#: src/dumps.rs
+msgid "Capture is off — turn it on with the record button to collect dumps, queries, logs, views and jobs here."
+msgstr "La captura está desactivada: actívala con el botón de grabar para reunir aquí dumps, consultas, registros, vistas y trabajos."
+
+#: src/dumps.rs
+msgid "Clear everything captured?"
+msgstr "¿Borrar todo lo capturado?"
+
+#: src/dumps.rs
+msgid "Every captured dump, query, log, view and job is deleted, from all requests and commands."
+msgstr "Se eliminan todos los dumps, consultas, registros, vistas y trabajos capturados de todas las solicitudes y comandos."
+
+#: src/dumps.rs src/logs.rs src/mail.rs src/setup.rs src/panes/common.rs src/panes/general.rs src/panes/php.rs src/panes/services.rs src/panes/sites.rs src/panes/versions.rs
+msgid "Cancel"
+msgstr "Cancelar"
+
+#: src/installation.rs
+msgid "Flock is not installed for this user ({path} is missing) — run `flk install` once."
+msgstr "Flock no está instalado para este usuario (falta {path}): ejecuta `flk install` una vez."
+
+#: src/installation.rs
+msgid "Flock isn't installed: install the flockphp package first."
+msgstr "Flock no está instalado: primero instala el paquete flockphp."
+
+#: src/links.rs
+msgid "The link may be meant for a newer Flock. Update Flock, then try again."
+msgstr "Puede que el enlace sea para una versión más reciente de Flock. Actualiza Flock y vuelve a intentarlo."
+
+#: src/links.rs
+msgid "There's no build of it for this computer, or the link is meant for a newer Flock."
+msgstr "No hay una compilación para este equipo, o el enlace es para una versión más reciente de Flock."
+
+#: src/links.rs
+msgid "Install {name} {version}?"
+msgstr "¿Instalar {name} {version}?"
+
+#: src/links.rs
+msgid "A link asked Flock to install {name} {version}. {purpose}"
+msgstr "Un enlace le pidió a Flock instalar {name} {version}. {purpose}"
+
+#: src/links.rs
+msgid "{name} is already installed"
+msgstr "{name} ya está instalado"
+
+#: src/links.rs
+msgid "You'll find it in Settings → {pane}."
+msgstr "Lo encontrarás en Configuración → {pane}."
+
+#: src/links.rs
+msgid "{name} is already being installed"
+msgstr "{name} ya se está instalando"
+
+#: src/links.rs
+msgid "Settings → {pane} shows how far it is."
+msgstr "Configuración → {pane} muestra cuánto le falta."
+
+#: src/links.rs
+msgid "Flock doesn't offer {name}"
+msgstr "Flock no ofrece {name}"
+
+#: src/links.rs
+msgid "Flock doesn't offer {name} {version}"
+msgstr "Flock no ofrece {name} {version}"
+
+#: src/links.rs
+msgid "Flock can't run it on this platform."
+msgstr "Flock no puede ejecutarlo en esta plataforma."
+
+#: src/links.rs
+msgid "{name} isn't available on this computer"
+msgstr "{name} no está disponible en este equipo"
+
+#: src/links.rs src/window.rs src/panes/services.rs
+msgid "Services"
+msgstr "Servicios"
+
+#: src/links.rs
+msgid "It runs on 127.0.0.1 for your sites."
+msgstr "Se ejecuta en 127.0.0.1 para tus sitios."
+
+#: src/links.rs
+msgid "Sites that use it are served as soon as it's installed."
+msgstr "Los sitios que lo usan se sirven en cuanto se instala."
+
+#: src/links.rs
+msgid "Projects that use it get node, npm and npx as soon as it's installed."
+msgstr "Los proyectos que lo usan obtienen node, npm y npx en cuanto se instala."
+
+#: src/links.rs
+msgid "Flock has no site called {site}"
+msgstr "Flock no tiene ningún sitio llamado {site}"
+
+#: src/links.rs
+msgid "Add the site in Settings → Sites first."
+msgstr "Primero añade el sitio en Configuración → Sitios."
+
+#: src/links.rs
+msgid "{site} is already secured"
+msgstr "{site} ya está protegido"
+
+#: src/links.rs
+msgid "It's served at https://{domain}."
+msgstr "Se sirve en https://{domain}."
+
+#: src/links.rs
+msgid "Serve {site} over HTTPS?"
+msgstr "¿Servir {site} por HTTPS?"
+
+#: src/links.rs
+msgid "A link asked Flock to secure {domain}. It gets a certificate this computer already trusts."
+msgstr "Un enlace le pidió a Flock proteger {domain}. Recibirá un certificado en el que este equipo ya confía."
+
+#: src/logs.rs
+msgid "All levels"
+msgstr "Todos los niveles"
+
+#: src/logs.rs
+msgid "Error and above"
+msgstr "Error y superiores"
+
+#: src/logs.rs
+msgid "Warning and above"
+msgstr "Warning y superiores"
+
+#: src/logs.rs
+msgid "Info and above"
+msgstr "Info y superiores"
+
+#: src/logs.rs
+msgid "Show only entries of this level and above (site logs)"
+msgstr "Mostrar solo las entradas de este nivel o superior (registros de sitios)"
+
+#: src/logs.rs
+msgid "Reload the log every 2 seconds"
+msgstr "Recargar el registro cada 2 segundos"
+
+#: src/logs.rs src/mail.rs
+msgid "Refresh"
+msgstr "Actualizar"
+
+#: src/logs.rs
+msgid "Clear the site's log"
+msgstr "Borrar el registro del sitio"
+
+#: src/logs.rs
+msgid "Search logs"
+msgstr "Buscar en los registros"
+
+#: src/logs.rs src/panes/services.rs
+msgid "Log"
+msgstr "Registro"
+
+#: src/logs.rs
+msgid "Laravel log"
+msgstr "Registro de Laravel"
+
+#: src/logs.rs
+msgid "Service log"
+msgstr "Registro del servicio"
+
+#: src/logs.rs
+msgid "Pick a Log"
+msgstr "Elige un registro"
+
+#: src/logs.rs
+msgid "(empty)"
+msgstr "(vacío)"
+
+#: src/logs.rs
+msgid "No Log Entries"
+msgstr "No hay entradas en el registro"
+
+#: src/logs.rs
+msgid "storage/logs of {site} is empty."
+msgstr "storage/logs de {site} está vacío."
+
+#: src/logs.rs
+msgid "No Results"
+msgstr "Sin resultados"
+
+#: src/logs.rs
+msgid "No entry matches the search or level."
+msgstr "Ninguna entrada coincide con la búsqueda o el nivel."
+
+#: src/logs.rs
+msgid "Clear the log of {site}?"
+msgstr "¿Borrar el registro de {site}?"
+
+#: src/logs.rs
+msgid "Deletes the Laravel log files in storage/logs of {site}. This can't be undone."
+msgstr "Elimina los archivos de registro de Laravel en storage/logs de {site}. No se puede deshacer."
+
+#: src/logs.rs
+msgid "Details"
+msgstr "Detalles"
+
+#: src/mail.rs
+msgid "Delete All"
+msgstr "Eliminar todo"
+
+#: src/mail.rs src/tray.rs src/window.rs src/panes/services.rs
+msgid "Mail"
+msgstr "Correo"
+
+#: src/mail.rs
+msgid "Message"
+msgstr "Mensaje"
+
+#: src/mail.rs
+msgid "No Mail"
+msgstr "No hay correo"
+
+#: src/mail.rs
+msgid "No Message Selected"
+msgstr "Ningún mensaje seleccionado"
+
+#: src/mail.rs
+msgid "Catch Your App's Mail"
+msgstr "Captura el correo de tu app"
+
+#: src/mail.rs
+msgid "Add these lines to your project's .env. MAIL_USERNAME picks the inbox, so every project gets its own."
+msgstr "Añade estas líneas al .env de tu proyecto. MAIL_USERNAME elige la bandeja, así cada proyecto tiene la suya."
+
+#: src/mail.rs
+msgid "Could Not Load Message"
+msgstr "No se pudo cargar el mensaje"
+
+#: src/mail.rs
+msgid "(no subject)"
+msgstr "(sin asunto)"
+
+#: src/mail.rs
+msgid "From"
+msgstr "De"
+
+#: src/mail.rs
+msgid "To"
+msgstr "Para"
+
+#: src/mail.rs
+msgid "Cc"
+msgstr "CC"
+
+#: src/mail.rs
+msgid "Date"
+msgstr "Fecha"
+
+#: src/mail.rs
+msgid "Inbox"
+msgstr "Bandeja"
+
+#: src/mail.rs
+msgid "Save…"
+msgstr "Guardar…"
+
+#: src/mail.rs
+msgid "No HTML Part"
+msgstr "Sin parte HTML"
+
+#: src/mail.rs
+msgid "(no text part)"
+msgstr "(sin parte de texto)"
+
+#: src/mail.rs
+msgid "Text"
+msgstr "Texto"
+
+#: src/mail.rs
+msgid "Raw"
+msgstr "Original"
+
+#: src/mail.rs
+msgid "Headers"
+msgstr "Encabezados"
+
+#: src/mail.rs
+msgid "Could Not Load the Raw Message"
+msgstr "No se pudo cargar el mensaje original"
+
+#: src/mail.rs
+msgid "Delete all caught mail?"
+msgstr "¿Eliminar todo el correo capturado?"
+
+#: src/model.rs
+msgid "Not set up"
+msgstr "Sin configurar"
+
+#: src/model.rs
+msgid "Needs attention · {version}"
+msgstr "Requiere atención · {version}"
+
+#: src/model.rs
+msgid "Running · {version}"
+msgstr "En ejecución · {version}"
+
+#: src/notifier.rs
+msgid "Setting up {worktree} failed"
+msgstr "La preparación de {worktree} falló"
+
+#: src/notifier.rs
+msgid "see its log"
+msgstr "consulta su registro"
+
+#: src/prefs.rs
+msgid "Don't link"
+msgstr "No enlazar"
+
+#: src/setup.rs
+msgid "Open Flock when I log in"
+msgstr "Abrir Flock al iniciar sesión"
+
+#: src/setup.rs
+msgid "Back"
+msgstr "Atrás"
+
+#: src/setup.rs
+msgid "Runs in the background"
+msgstr "Se ejecuta en segundo plano"
+
+#: src/setup.rs
+msgid "The Flock daemon serves your sites and services, and starts with your computer."
+msgstr "El demonio de Flock sirve tus sitios y servicios, y se inicia con el equipo."
+
+#: src/setup.rs
+msgid "php, composer and node in your terminal"
+msgstr "php, composer y node en tu terminal"
+
+#: src/setup.rs
+msgid "Flock's versions come first on your PATH. Open a new terminal after setup."
+msgstr "Las versiones de Flock van primero en tu PATH. Abre una terminal nueva después de la configuración."
+
+#: src/setup.rs
+msgid "*.test sites with trusted HTTPS"
+msgstr "Sitios *.test con HTTPS de confianza"
+
+#: src/setup.rs
+msgid "Linux asks for your password once: to start the background service, resolve *.test through Flock and trust Flock's certificate in the system and your browsers."
+msgstr "Linux te pide la contraseña una vez: para iniciar el servicio en segundo plano, resolver *.test a través de Flock y confiar en el certificado de Flock en el sistema y en tus navegadores."
+
+#: src/setup.rs
+msgid "Set Up Flock"
+msgstr "Configurar Flock"
+
+#: src/setup.rs
+msgid "Welcome to Flock"
+msgstr "Te damos la bienvenida a Flock"
+
+#: src/setup.rs
+msgid "Flock runs your Laravel sites, PHP, mail and databases on this computer. Setting it up takes a moment:"
+msgstr "Flock ejecuta tus sitios Laravel, PHP, el correo y las bases de datos en este equipo. Configurarlo lleva un momento:"
+
+#: src/setup.rs
+msgid "Checking Flock's ports…"
+msgstr "Comprobando los puertos de Flock…"
+
+#: src/setup.rs
+msgid "Quit {app}"
+msgstr "Cierra {app}"
+
+#: src/setup.rs
+msgid "port {port} ({service})"
+msgstr "el puerto {port} ({service})"
+
+#: src/setup.rs
+msgid "{program} uses {ports}."
+msgstr "{program} usa {ports}."
+
+#: src/setup.rs
+msgid "Check Again"
+msgstr "Volver a comprobar"
+
+#: src/setup.rs
+msgid "Stop other web servers first"
+msgstr "Detén primero otros servidores web"
+
+#: src/setup.rs
+msgid "Flock needs these ports and *.{tld} for itself, but other programs use them. Running both would leave neither working."
+msgstr "Flock necesita estos puertos y *.{tld} para sí, pero otros programas los usan. Si funcionaran ambos, ninguno funcionaría."
+
+#: src/setup.rs
+msgid "Setting up Flock…"
+msgstr "Configurando Flock…"
+
+#: src/setup.rs
+msgid "Linux asks for your password in a moment."
+msgstr "Linux te pedirá la contraseña en un momento."
+
+#: src/setup.rs
+msgid "Could not change the startup setting: {error}."
+msgstr "No se pudo cambiar el ajuste de inicio: {error}."
+
+#: src/setup.rs
+msgid "The password prompt was cancelled. Flock runs, but *.test sites won't resolve and HTTPS isn't trusted until you allow it."
+msgstr "Se canceló la solicitud de contraseña. Flock funciona, pero los sitios *.test no se resolverán y HTTPS no será de confianza hasta que lo permitas."
+
+#: src/setup.rs
+msgid "Something went wrong. The output below says what; you can try again."
+msgstr "Algo salió mal. La salida de abajo dice qué; puedes volver a intentarlo."
+
+#: src/setup.rs src/panes/sites.rs
+msgid "Try Again"
+msgstr "Reintentar"
+
+#: src/setup.rs
+msgid "Setup didn't finish"
+msgstr "La configuración no terminó"
+
+#: src/setup.rs
+msgid "Next steps"
+msgstr "Próximos pasos"
+
+#: src/setup.rs
+msgid "Open Settings"
+msgstr "Abrir Configuración"
+
+#: src/setup.rs
+msgid "Done"
+msgstr "Listo"
+
+#: src/setup.rs
+msgid "Flock is ready"
+msgstr "Flock está listo"
+
+#: src/setup.rs
+msgid "{name} couldn't be installed"
+msgstr "No se pudo instalar {name}"
+
+#: src/setup.rs
+msgid "{error}Try again in Settings → {pane}."
+msgstr "{error}Vuelve a intentarlo en Configuración → {pane}."
+
+#: src/setup.rs
+msgid "Installing {names}…"
+msgstr "Instalando {names}…"
+
+#: src/setup.rs
+msgid "Flock makes it the default for your sites and terminal."
+msgid_plural "Flock makes them the default for your sites and terminal."
+msgstr[0] "Flock lo convierte en el predeterminado de tus sitios y tu terminal."
+msgstr[1] "Flock los convierte en los predeterminados de tus sitios y tu terminal."
+
+#: src/setup.rs
+msgid "Waiting to install {names}"
+msgstr "Esperando para instalar {names}"
+
+#: src/setup.rs
+msgid "As soon as Flock can download it."
+msgid_plural "As soon as Flock can download them."
+msgstr[0] "En cuanto Flock pueda descargarlo."
+msgstr[1] "En cuanto Flock pueda descargarlos."
+
+#: src/setup.rs
+msgid "{names} are installed"
+msgstr "{names} están instalados"
+
+#: src/setup.rs
+msgid "They're the defaults for your sites and terminal."
+msgstr "Son los predeterminados de tus sitios y tu terminal."
+
+#: src/setup.rs
+msgid "Flock won't open at login"
+msgstr "Flock no se abrirá al iniciar sesión"
+
+#: src/setup.rs
+msgid "{problem} Settings → General has it too."
+msgstr "{problem} También está en Configuración → General."
+
+#: src/setup.rs
+msgid "Open a new terminal"
+msgstr "Abre una terminal nueva"
+
+#: src/setup.rs
+msgid "Terminals that were already open still have the old PATH."
+msgstr "Las terminales que ya estaban abiertas siguen con el PATH anterior."
+
+#: src/setup.rs
+msgid "Link a project"
+msgstr "Vincula un proyecto"
+
+#: src/setup.rs
+msgid "In a Laravel project, run `flock link`: the site is then at http://<folder>.test. `flock secure` adds HTTPS."
+msgstr "En un proyecto de Laravel, ejecuta `flock link`: el sitio estará en http://<folder>.test. `flock secure` añade HTTPS."
+
+#: src/setup.rs
+msgid "Also delete my sites' settings and databases"
+msgstr "Eliminar también los ajustes y bases de datos de mis sitios"
+
+#: src/setup.rs
+msgid "Uninstall Flock?"
+msgstr "¿Desinstalar Flock?"
+
+#: src/setup.rs
+msgid "Flock stops and is removed from your PATH, together with its PHP and Node.js versions, certificates, logs and caches. Linux asks for your password to remove the *.test DNS setup and Flock's trusted certificate.\n\nYour sites' settings and databases stay in {folder}, so reinstalling picks up where you left off — unless you also delete them."
+msgstr "Flock se detiene y se quita de tu PATH, junto con sus versiones de PHP y Node.js, certificados, registros y cachés. Linux te pide la contraseña para quitar la configuración DNS de *.test y el certificado de confianza de Flock.\n\nLos ajustes y las bases de datos de tus sitios se quedan en {folder}, así que al reinstalar seguirás donde lo dejaste, a menos que también los elimines."
+
+#: src/setup.rs src/panes/node.rs src/panes/php.rs src/panes/services.rs
+msgid "Uninstall"
+msgstr "Desinstalar"
+
+#: src/setup.rs
+msgid "Uninstalling Flock…"
+msgstr "Desinstalando Flock…"
+
+#: src/setup.rs
+msgid "Uninstall Flock"
+msgstr "Desinstalar Flock"
+
+#: src/setup.rs
+msgid "Flock was uninstalled. Remove the app with your package manager (sudo apt remove flockphp, or sudo dnf remove flockphp). Open a new terminal: Flock is no longer on its PATH."
+msgstr "Flock se desinstaló. Quita la app con tu gestor de paquetes (sudo apt remove flockphp o sudo dnf remove flockphp). Abre una terminal nueva: Flock ya no está en su PATH."
+
+#: src/setup.rs
+msgid "The password prompt was cancelled, so the DNS setup and the certificate are still in place."
+msgstr "Se canceló la solicitud de contraseña, así que la configuración DNS y el certificado siguen en su sitio."
+
+#: src/setup.rs
+msgid "Uninstalling didn't finish. The output below says what; you can try again."
+msgstr "La desinstalación no terminó. La salida de abajo dice qué; puedes volver a intentarlo."
+
+#: src/setup.rs
+msgid "{first} and {second}"
+msgstr "{first} y {second}"
+
+#: src/timeline.rs
+msgid "context"
+msgstr "contexto"
+
+#: src/timeline.rs
+msgid "queue {name}"
+msgstr "cola {name}"
+
+#: src/tray.rs
+msgid "No sites yet"
+msgstr "Aún no hay sitios"
+
+#: src/tray.rs
+msgid "Manage Sites…"
+msgstr "Administrar sitios…"
+
+#: src/tray.rs src/window.rs src/panes/sites.rs
+msgid "Sites"
+msgstr "Sitios"
+
+#: src/tray.rs
+msgid "Set Up Flock…"
+msgstr "Configurar Flock…"
+
+#: src/tray.rs
+msgid "Open Flock"
+msgstr "Abrir Flock"
+
+#: src/tray.rs
+msgid "Capture Dumps"
+msgstr "Capturar dumps"
+
+#: src/tray.rs
+msgid "Settings…"
+msgstr "Configuración…"
+
+#: src/tray.rs src/panes/general.rs
+msgid "Restart Flock"
+msgstr "Reiniciar Flock"
+
+#: src/tray.rs src/window.rs
+msgid "Start Flock"
+msgstr "Iniciar Flock"
+
+#: src/tray.rs src/window.rs
+msgid "Quit Flock"
+msgstr "Salir de Flock"
+
+#: src/ui.rs
+msgid "just now"
+msgstr "ahora mismo"
+
+#: src/ui.rs
+msgid "a minute ago"
+msgid_plural "{n} minutes ago"
+msgstr[0] "hace un minuto"
+msgstr[1] "hace {n} minutos"
+
+#: src/ui.rs
+msgid "an hour ago"
+msgid_plural "{n} hours ago"
+msgstr[0] "hace una hora"
+msgstr[1] "hace {n} horas"
+
+#: src/ui.rs
+msgid "%e %b"
+msgstr "%e/%-m"
+
+#: src/ui.rs
+msgid "%e %b %Y, %H:%M:%S"
+msgstr "%e/%-m/%Y, %H:%M:%S"
+
+#: src/window.rs
+msgid "General"
+msgstr "General"
+
+#: src/window.rs
+msgid "Debugger"
+msgstr "Depurador"
+
+#: src/window.rs
+msgid "AI"
+msgstr "IA"
+
+#: src/window.rs
+msgid "About"
+msgstr "Acerca de"
+
+#: src/window.rs
+msgid "Flock Is Not Running"
+msgstr "Flock no está en ejecución"
+
+#: src/window.rs
+msgid "Start the daemon to change its settings."
+msgstr "Inicia el demonio para cambiar su configuración."
+
+#: src/panes/about.rs
+msgid "App {version}"
+msgstr "App {version}"
+
+#: src/panes/about.rs
+msgid "Data Folder"
+msgstr "Carpeta de datos"
+
+#: src/panes/about.rs
+msgid "Flock Docs"
+msgstr "Documentación de Flock"
+
+#: src/panes/about.rs
+msgid "License"
+msgstr "Licencia"
+
+#: src/panes/about.rs
+msgid "Found a bug? Report an issue"
+msgstr "¿Encontraste un error? Infórmalo"
+
+#: src/panes/about.rs
+msgid "Uninstall Flock…"
+msgstr "Desinstalar Flock…"
+
+#: src/panes/about.rs
+msgid "Stops Flock and removes it from this computer. Your sites, databases and settings are kept."
+msgstr "Detiene Flock y lo quita de este equipo. Tus sitios, bases de datos y ajustes se conservan."
+
+#: src/panes/about.rs
+msgid "Copyright © Guava s.r.o. Licensed under the AGPL-3.0."
+msgstr "Copyright © Guava s.r.o. Con licencia AGPL-3.0."
+
+#: src/panes/about.rs
+msgid "A native local development environment for Laravel."
+msgstr "Un entorno de desarrollo local nativo para Laravel."
+
+#: src/panes/about.rs
+msgid "not running"
+msgstr "no está en ejecución"
+
+#: src/panes/about.rs
+msgid "Daemon {version}"
+msgstr "Demonio {version}"
+
+#: src/panes/ai.rs
+msgid "Let AI agents like Claude Code and Cursor work with Flock: your sites' URLs and PHP versions, logs, dumps and mail, and installing versions and services."
+msgstr "Deja que agentes de IA como Claude Code y Cursor trabajen con Flock: las URL y versiones de PHP de tus sitios, registros, dumps y correo, y la instalación de versiones y servicios."
+
+#: src/panes/ai.rs
+msgid "AI clients"
+msgstr "Clientes de IA"
+
+#: src/panes/ai.rs
+msgid "Added once, Flock works in every project. Restart the client, or reload its MCP servers, after adding Flock."
+msgstr "Se añade una vez y Flock funciona en todos los proyectos. Después de añadir Flock, reinicia el cliente o recarga sus servidores MCP."
+
+#: src/panes/ai.rs src/panes/services.rs src/panes/sites.rs
+msgid "Loading…"
+msgstr "Cargando…"
+
+#: src/panes/ai.rs
+msgid "Other clients"
+msgstr "Otros clientes"
+
+#: src/panes/ai.rs
+msgid "Add this to the client's MCP settings."
+msgstr "Añade esto a la configuración MCP del cliente."
+
+#: src/panes/ai.rs
+msgid "Flock is added"
+msgstr "Flock está añadido"
+
+#: src/panes/ai.rs src/panes/services.rs
+msgid "Installed"
+msgstr "Instalado"
+
+#: src/panes/ai.rs src/panes/node.rs src/panes/php.rs src/panes/services.rs
+msgid "Not installed"
+msgstr "No instalado"
+
+#: src/panes/ai.rs src/panes/general.rs src/panes/sites.rs
+msgid "Remove"
+msgstr "Quitar"
+
+#: src/panes/ai.rs src/panes/sites.rs
+msgid "Add"
+msgstr "Añadir"
+
+#: src/panes/common.rs
+msgid "OK"
+msgstr "Aceptar"
+
+#: src/panes/debugger.rs
+msgid "Step through requests and commands with Xdebug."
+msgstr "Depura paso a paso solicitudes y comandos con Xdebug."
+
+#: src/panes/debugger.rs
+msgid "Xdebug loads only for requests that ask for it, so everything else stays fast. While a project has breakpoints in PhpStorm, every request to its site is debugged."
+msgstr "Xdebug solo se carga en las solicitudes que lo piden, así que todo lo demás sigue siendo rápido. Mientras un proyecto tenga puntos de interrupción en PhpStorm, se depura cada solicitud a su sitio."
+
+#: src/panes/debugger.rs
+msgid "Detect Xdebug requests"
+msgstr "Detectar solicitudes de Xdebug"
+
+#: src/panes/debugger.rs
+msgid "Detect PhpStorm breakpoints"
+msgstr "Detectar puntos de interrupción de PhpStorm"
+
+#: src/panes/debugger.rs
+msgid "Debugging now"
+msgstr "Depurando ahora"
+
+#: src/panes/debugger.rs
+msgid "Connect your IDE"
+msgstr "Conecta tu IDE"
+
+#: src/panes/debugger.rs
+msgid "Client port"
+msgstr "Puerto del cliente"
+
+#: src/panes/debugger.rs src/panes/sites.rs
+msgid "Mode"
+msgstr "Modo"
+
+#: src/panes/debugger.rs
+msgid "Start a session"
+msgstr "Inicia una sesión"
+
+#: src/panes/debugger.rs
+msgid "Set a breakpoint in PhpStorm and listen for debug connections, use the Xdebug browser extension, or add ?XDEBUG_TRIGGER=1 to the URL. On the command line, run `flock debug artisan …`."
+msgstr "Pon un punto de interrupción en PhpStorm y escucha conexiones de depuración, usa la extensión de Xdebug para el navegador o añade ?XDEBUG_TRIGGER=1 a la URL. En la línea de comandos, ejecuta `flock debug artisan …`."
+
+#: src/panes/debugger.rs
+msgid "Availability"
+msgstr "Disponibilidad"
+
+#: src/panes/debugger.rs
+msgid "Available"
+msgstr "Disponible"
+
+#: src/panes/debugger.rs
+msgid "Not in this build"
+msgstr "No está en esta compilación"
+
+#: src/panes/dumps.rs
+msgid "Send dump() and dd() output, queries, logs, views and jobs to Flock instead of the page or terminal — no changes to your projects."
+msgstr "Envía la salida de dump() y dd(), las consultas, los registros, las vistas y los trabajos a Flock en lugar de a la página o la terminal, sin cambiar tus proyectos."
+
+#: src/panes/dumps.rs
+msgid "Turn it off to see dumps in the page again."
+msgstr "Desactívalo para volver a ver los dumps en la página."
+
+#: src/panes/dumps.rs
+msgid "{n} dump"
+msgid_plural "{n} dumps"
+msgstr[0] "{n} dump"
+msgstr[1] "{n} dumps"
+
+#: src/panes/dumps.rs
+msgid "{n} event"
+msgid_plural "{n} events"
+msgstr[0] "{n} evento"
+msgstr[1] "{n} eventos"
+
+#: src/panes/dumps.rs
+msgid "Captured"
+msgstr "Capturado"
+
+#: src/panes/dumps.rs
+msgid "Open Dumps"
+msgstr "Abrir dumps"
+
+#: src/panes/dumps.rs
+msgid "dd() always shows in the page too, as it ends the request."
+msgstr "dd() siempre se muestra también en la página, ya que termina la solicitud."
+
+#: src/panes/dumps.rs
+msgid "PHP {versions} only captures dumps: its build has no agent extension yet."
+msgid_plural "PHP {versions} only capture dumps: their builds have no agent extension yet."
+msgstr[0] "PHP {versions} solo captura dumps: su compilación aún no tiene la extensión del agente."
+msgstr[1] "PHP {versions} solo capturan dumps: sus compilaciones aún no tienen la extensión del agente."
+
+#: src/panes/dumps.rs
+msgid "While capturing"
+msgstr "Durante la captura"
+
+#: src/panes/dumps.rs
+msgid "Show dump() output in the page too"
+msgstr "Mostrar también la salida de dump() en la página"
+
+#: src/panes/dumps.rs
+msgid "Sources"
+msgstr "Código fuente"
+
+#: src/panes/dumps.rs
+msgid "Open files in"
+msgstr "Abrir archivos en"
+
+#: src/panes/general.rs
+msgid "The Flock daemon runs your sites, PHP and services in the background."
+msgstr "El demonio de Flock ejecuta tus sitios, PHP y servicios en segundo plano."
+
+#: src/panes/general.rs
+msgid "Daemon"
+msgstr "Demonio"
+
+#: src/panes/general.rs src/panes/mail.rs
+msgid "Status"
+msgstr "Estado"
+
+#: src/panes/general.rs
+msgid "Needs attention"
+msgstr "Requiere atención"
+
+#: src/panes/general.rs
+msgid "down"
+msgstr "caído"
+
+#: src/panes/general.rs
+msgid "Version"
+msgstr "Versión"
+
+#: src/panes/general.rs
+msgid "Process"
+msgstr "Proceso"
+
+#: src/panes/general.rs
+msgid "pid {pid}"
+msgstr "PID {pid}"
+
+#: src/panes/general.rs
+msgid "Restart Daemon"
+msgstr "Reiniciar el demonio"
+
+#: src/panes/general.rs
+msgid "Restarting…"
+msgstr "Reiniciando…"
+
+#: src/panes/general.rs
+msgid "Sites use ports {http} (HTTP) and {https} (HTTPS), set in config.json, so their addresses include the port."
+msgstr "Los sitios usan los puertos {http} (HTTP) y {https} (HTTPS), definidos en config.json, así que sus direcciones incluyen el puerto."
+
+#: src/panes/general.rs
+msgid "Network"
+msgstr "Red"
+
+#: src/panes/general.rs
+msgid "Domain"
+msgstr "Dominio"
+
+#: src/panes/general.rs
+msgid "Data"
+msgstr "Datos"
+
+#: src/panes/general.rs src/panes/sites.rs
+msgid "Folder"
+msgstr "Carpeta"
+
+#: src/panes/general.rs src/panes/services.rs src/panes/sites.rs
+msgid "Open"
+msgstr "Abrir"
+
+#: src/panes/general.rs
+msgid "Startup"
+msgstr "Inicio"
+
+#: src/panes/general.rs
+msgid "Open Flock at login"
+msgstr "Abrir Flock al iniciar sesión"
+
+#: src/panes/general.rs
+msgid "Shows the Flock icon in the tray when you log in. The daemon itself always starts with your computer."
+msgstr "Muestra el icono de Flock en la bandeja al iniciar sesión. El demonio siempre se inicia con el equipo."
+
+#: src/panes/general.rs
+msgid "Could not change the startup setting: {error}"
+msgstr "No se pudo cambiar el ajuste de inicio: {error}"
+
+#: src/panes/general.rs
+msgid "Updates"
+msgstr "Actualizaciones"
+
+#: src/panes/general.rs
+msgid "New versions come from the AUR package {package}: update it with your AUR helper, e.g. `yay -Syu`."
+msgstr "Las versiones nuevas llegan desde el paquete de AUR {package}: actualízalo con tu asistente de AUR, p. ej. `yay -Syu`."
+
+#: src/panes/general.rs
+msgid "New versions come with your system's updates. `flock update` installs one right away."
+msgstr "Las versiones nuevas llegan con las actualizaciones del sistema. `flock update` instala una al momento."
+
+#: src/panes/general.rs
+msgid "Check for Updates…"
+msgstr "Buscar actualizaciones…"
+
+#: src/panes/general.rs
+msgid "Opens {name}"
+msgstr "Abre {name}"
+
+#: src/panes/general.rs
+msgid "Could not open {program}: {error}"
+msgstr "No se pudo abrir {program}: {error}"
+
+#: src/panes/general.rs
+msgid "Beta versions"
+msgstr "Versiones beta"
+
+#: src/panes/general.rs
+msgid "Get new versions of Flock, PHP and services earlier, including pre-releases. They may not work yet."
+msgstr "Recibe antes las versiones nuevas de Flock, PHP y los servicios, incluidas las preliminares. Puede que aún no funcionen."
+
+#: src/panes/general.rs
+msgid "Experimental channel: packages that aren’t released yet are offered. `flock channel stable` switches back."
+msgstr "Canal experimental: se ofrecen paquetes que aún no se han publicado. `flock channel stable` vuelve al canal estable."
+
+#: src/panes/general.rs
+msgid "Project folders"
+msgstr "Carpetas de proyectos"
+
+#: src/panes/general.rs
+msgid "Every folder inside a project folder is served as <folder>.{tld} — the same as `flock park`."
+msgstr "Cada carpeta dentro de una carpeta de proyectos se sirve como <folder>.{tld}, igual que con `flock park`."
+
+#: src/panes/general.rs
+msgid "Add Project Folders"
+msgstr "Añadir carpetas de proyectos"
+
+#: src/panes/general.rs
+msgid "No project folders"
+msgstr "No hay carpetas de proyectos"
+
+#: src/panes/general.rs
+msgid "Software Updater"
+msgstr "Actualizador de software"
+
+#: src/panes/general.rs
+msgid "Language"
+msgstr "Idioma"
+
+#: src/panes/general.rs
+msgid "System default"
+msgstr "Predeterminado del sistema"
+
+#: src/panes/general.rs
+msgid "Flock uses the new language after it restarts."
+msgstr "Flock usará el nuevo idioma después de reiniciarse."
+
+#: src/panes/general.rs
+msgid "Remove {name} from project folders?"
+msgstr "¿Quitar {name} de las carpetas de proyectos?"
+
+#: src/panes/general.rs
+msgid "The sites in {path} are no longer served. The folder and its projects are not touched."
+msgstr "Los sitios de {path} dejan de servirse. La carpeta y sus proyectos no se tocan."
+
+#: src/panes/general.rs
+msgid "Every name, any subdomain included, is resolved by Flock's DNS server through systemd-resolved."
+msgstr "Cada nombre, incluido cualquier subdominio, lo resuelve el servidor DNS de Flock a través de systemd-resolved."
+
+#: src/panes/general.rs
+msgid "Flock's DNS server isn't running"
+msgstr "El servidor DNS de Flock no está en ejecución"
+
+#: src/panes/general.rs src/panes/services.rs
+msgid "*.{tld} doesn't resolve: {problem}. Linux has no hosts-file fallback, so sites don't open until it does; `flock install` sets it up again."
+msgstr "*.{tld} no se resuelve: {problem}. Linux no tiene el archivo hosts como respaldo, así que los sitios no abren hasta que se resuelva; `flock install` lo vuelve a configurar."
+
+#: src/panes/mail.rs
+msgid "Flock catches every email your apps send — nothing leaves your computer."
+msgstr "Flock captura cada correo que envían tus apps: nada sale de tu equipo."
+
+#: src/panes/mail.rs
+msgid "SMTP server"
+msgstr "Servidor SMTP"
+
+#: src/panes/mail.rs
+msgid "Host"
+msgstr "Host"
+
+#: src/panes/mail.rs src/panes/services.rs
+msgid "Port"
+msgstr "Puerto"
+
+#: src/panes/mail.rs src/panes/services.rs
+msgid "Stopped"
+msgstr "Detenido"
+
+#: src/panes/mail.rs src/panes/services.rs
+msgid "Environment Variables"
+msgstr "Variables de entorno"
+
+#: src/panes/mail.rs
+msgid "MAIL_USERNAME picks the inbox, so every project gets its own."
+msgstr "MAIL_USERNAME elige la bandeja, así cada proyecto tiene la suya."
+
+#: src/panes/mail.rs
+msgid "Caught emails"
+msgstr "Correos capturados"
+
+#: src/panes/mail.rs
+msgid "Open Mail"
+msgstr "Abrir Correo"
+
+#: src/panes/node.rs
+msgid "node, npm and npx follow the project's .nvmrc / .node-version, then the site's version, then the default."
+msgstr "node, npm y npx siguen el .nvmrc / .node-version del proyecto, después la versión del sitio y, por último, la predeterminada."
+
+#: src/panes/node.rs src/panes/php.rs src/panes/services.rs
+msgid "Install"
+msgstr "Instalar"
+
+#: src/panes/node.rs
+msgid "Downloading Node.js {version}…"
+msgstr "Descargando Node.js {version}…"
+
+#: src/panes/node.rs
+msgid "Loading Node.js versions…"
+msgstr "Cargando versiones de Node.js…"
+
+#: src/panes/node.rs
+msgid "Couldn't check for updates: {error}"
+msgstr "No se pudieron buscar actualizaciones: {error}"
+
+#: src/panes/node.rs
+msgid "Official Node.js builds, the newest release of each major. A project that pins a version in .nvmrc gets that major offered when you run node, npm or npx there. Global packages (npm install -g) belong to a Node line and survive its updates; those of the default version are on your PATH."
+msgstr "Compilaciones oficiales de Node.js, la versión más reciente de cada versión mayor. Un proyecto que fija una versión en .nvmrc recibe esa versión mayor cuando ejecutas node, npm o npx en él. Los paquetes globales (npm install -g) pertenecen a una línea de Node y sobreviven a sus actualizaciones; los de la versión predeterminada están en tu PATH."
+
+#: src/panes/node.rs src/panes/services.rs src/panes/sites.rs
+msgid "Versions"
+msgstr "Versiones"
+
+#: src/panes/node.rs
+msgid "No Node.js versions to show yet."
+msgstr "Aún no hay versiones de Node.js que mostrar."
+
+#: src/panes/node.rs src/panes/php.rs src/panes/services.rs
+msgid "Check now"
+msgstr "Comprobar ahora"
+
+#: src/panes/node.rs src/panes/php.rs
+msgid "Checking…"
+msgstr "Comprobando…"
+
+#: src/panes/node.rs src/panes/php.rs src/panes/sites.rs
+msgid "Default"
+msgstr "Predeterminada"
+
+#: src/panes/node.rs src/panes/php.rs
+msgid "Update available"
+msgstr "Actualización disponible"
+
+#: src/panes/node.rs src/panes/php.rs
+msgid "Up to date"
+msgstr "Actualizado"
+
+#: src/panes/node.rs
+msgid " (npm {version} available)"
+msgstr " (npm {version} disponible)"
+
+#: src/panes/node.rs src/panes/php.rs src/panes/services.rs
+msgid "Update to {version}"
+msgstr "Actualizar a {version}"
+
+#: src/panes/node.rs
+msgid "Downloads Node.js {new}, then removes {old}. Global packages stay."
+msgstr "Descarga Node.js {new} y después quita {old}. Los paquetes globales se conservan."
+
+#: src/panes/node.rs
+msgid "Update npm"
+msgstr "Actualizar npm"
+
+#: src/panes/node.rs
+msgid "Updating npm to {version}…"
+msgstr "Actualizando npm a {version}…"
+
+#: src/panes/node.rs src/panes/php.rs
+msgid "Make Default"
+msgstr "Usar como predeterminada"
+
+#: src/panes/node.rs src/panes/php.rs src/panes/services.rs
+msgid "Uninstall…"
+msgstr "Desinstalar…"
+
+#: src/panes/node.rs
+msgid "Uninstall Node {version}?"
+msgstr "¿Desinstalar Node {version}?"
+
+#: src/panes/node.rs
+msgid "Its global npm packages are removed too. Projects and sites that use Node {version} fall back to the default version until you install it again."
+msgstr "También se quitan sus paquetes globales de npm. Los proyectos y sitios que usan Node {version} vuelven a la versión predeterminada hasta que lo instales de nuevo."
+
+#: src/panes/node.rs src/panes/services.rs
+msgid "Uninstalling…"
+msgstr "Desinstalando…"
+
+#: src/panes/node.rs
+msgid "Making Node {version} the default…"
+msgstr "Configurando Node {version} como predeterminada…"
+
+#: src/panes/php.rs
+msgid "Every installed version runs its own PHP-FPM pool. Sites use the default unless pinned to a version."
+msgstr "Cada versión instalada ejecuta su propio pool de PHP-FPM. Los sitios usan la predeterminada salvo que tengan una versión fijada."
+
+#: src/panes/php.rs
+msgid "Loading PHP versions…"
+msgstr "Cargando versiones de PHP…"
+
+#: src/panes/php.rs src/panes/services.rs
+msgid "Pre-release"
+msgstr "Preliminar"
+
+#: src/panes/php.rs
+msgid "PHP {version} isn’t released yet — it may not work. Offered on the beta channel."
+msgstr "PHP {version} aún no se ha publicado: puede que no funcione. Se ofrece en el canal beta."
+
+#: src/panes/php.rs
+msgid "A new build is available"
+msgstr "Hay una compilación nueva disponible"
+
+#: src/panes/php.rs
+msgid "Downloads PHP {version} ({size} MB)"
+msgstr "Descarga PHP {version} ({size} MB)"
+
+#: src/panes/php.rs src/panes/services.rs src/panes/sites.rs
+msgid "Show Log"
+msgstr "Mostrar registro"
+
+#: src/panes/php.rs src/panes/services.rs
+msgid "Retry"
+msgstr "Reintentar"
+
+#: src/panes/php.rs src/panes/services.rs src/panes/sites.rs
+msgid "Update"
+msgstr "Actualizar"
+
+#: src/panes/php.rs
+msgid "Open php.ini"
+msgstr "Abrir php.ini"
+
+#: src/panes/php.rs
+msgid "Show Last Install Log"
+msgstr "Mostrar el último registro de instalación"
+
+#: src/panes/php.rs
+msgid "Uninstall PHP {version}?"
+msgstr "¿Desinstalar PHP {version}?"
+
+#: src/panes/php.rs
+msgid "Its php.ini is removed too. Sites pinned to PHP {version} stop working until you pick another version."
+msgstr "También se quita su php.ini. Los sitios fijados a PHP {version} dejan de funcionar hasta que elijas otra versión."
+
+#: src/panes/php.rs
+msgid "PHP {version} install log"
+msgstr "Registro de instalación de PHP {version}"
+
+#: src/panes/php.rs
+msgid "Not installed · downloads by itself when a site uses it"
+msgstr "No instalado · se descarga solo cuando un sitio lo usa"
+
+#: src/panes/php.rs
+msgid "Update to PHP {version}"
+msgstr "Actualizar a PHP {version}"
+
+#: src/panes/php.rs
+msgid "Uninstall FrankenPHP for PHP {version}?"
+msgstr "¿Desinstalar FrankenPHP para PHP {version}?"
+
+#: src/panes/php.rs
+msgid "Sites that run on FrankenPHP with this version are served by PHP-FPM until it has downloaded again by itself."
+msgstr "Los sitios que funcionan con FrankenPHP en esta versión los sirve PHP-FPM hasta que se vuelva a descargar solo."
+
+#: src/panes/services.rs
+msgid "Core"
+msgstr "Básicos"
+
+#: src/panes/services.rs
+msgctxt "category"
+msgid "Database"
+msgstr "Bases de datos"
+
+#: src/panes/services.rs
+msgid "Cache & Queue"
+msgstr "Caché y colas"
+
+#: src/panes/services.rs
+msgid "Search"
+msgstr "Búsqueda"
+
+#: src/panes/services.rs
+msgid "Storage"
+msgstr "Almacenamiento"
+
+#: src/panes/services.rs
+msgid "Debugging"
+msgstr "Depuración"
+
+#: src/panes/services.rs
+msgid "Databases, caches, search and the tools around your sites. Everything listens on 127.0.0.1 only."
+msgstr "Bases de datos, cachés, búsqueda y las herramientas alrededor de tus sitios. Todo escucha solo en 127.0.0.1."
+
+#: src/panes/services.rs
+msgid "All"
+msgstr "Todos"
+
+#: src/panes/services.rs
+msgid "More Services ({count})…"
+msgstr "Más servicios ({count})…"
+
+#: src/panes/services.rs
+msgid "Every service Flock offers: MySQL, Redis, Meilisearch and more"
+msgstr "Todos los servicios que ofrece Flock: MySQL, Redis, Meilisearch y más"
+
+#: src/panes/services.rs
+msgid "Not available on Linux"
+msgstr "No disponible en Linux"
+
+#: src/panes/services.rs
+msgid "Port {port}"
+msgstr "Puerto {port}"
+
+#: src/panes/services.rs
+msgctxt "noun"
+msgid "Update"
+msgstr "Actualización"
+
+#: src/panes/services.rs
+msgid "Install failed"
+msgstr "La instalación falló"
+
+#: src/panes/services.rs src/panes/sites.rs
+msgid "Stop"
+msgstr "Detener"
+
+#: src/panes/services.rs
+msgid "Start"
+msgstr "Iniciar"
+
+#: src/panes/services.rs
+msgid "Stop {service}?"
+msgstr "¿Detener {service}?"
+
+#: src/panes/services.rs
+msgid "Your sites can't use {service} until you start it again; it stays stopped after restarts."
+msgstr "Tus sitios no pueden usar {service} hasta que lo vuelvas a iniciar; sigue detenido tras los reinicios."
+
+#: src/panes/services.rs
+msgid "Flock can't run this service here."
+msgstr "Flock no puede ejecutar este servicio aquí."
+
+#: src/panes/services.rs
+msgid "Not available"
+msgstr "No disponible"
+
+#: src/panes/services.rs
+msgid "Caddy serves every site over HTTPS (https://app.{tld}) with certificates from Flock's local certificate authority, which `flock install` trusts."
+msgstr "Caddy sirve cada sitio por HTTPS (https://app.{tld}) con certificados de la autoridad de certificación local de Flock, en la que `flock install` confía."
+
+#: src/panes/services.rs
+msgid "Sites don't open while the web server is down. Its log may tell why; `flock restart` starts it again."
+msgstr "Los sitios no abren mientras el servidor web esté caído. Su registro puede indicar el motivo; `flock restart` lo vuelve a iniciar."
+
+#: src/panes/services.rs
+msgid "systemd-resolved sends every name under .{tld} here (set up by `flock install`), so any subdomain of a site works (tenant1.app.{tld}, a.b.app.{tld}) without adding it."
+msgstr "systemd-resolved envía aquí cada nombre bajo .{tld} (configurado por `flock install`), así que cualquier subdominio de un sitio funciona (tenant1.app.{tld}, a.b.app.{tld}) sin añadirlo."
+
+#: src/panes/services.rs
+msgid "the DNS server isn't running"
+msgstr "el servidor DNS no está en ejecución"
+
+#: src/panes/services.rs src/panes/sites.rs
+msgid "Change…"
+msgstr "Cambiar…"
+
+#: src/panes/services.rs
+msgid "{port} · set by `flock install`"
+msgstr "{port} · definido por `flock install`"
+
+#: src/panes/services.rs
+msgid "Connection"
+msgstr "Conexión"
+
+#: src/panes/services.rs
+msgid "{service} Port"
+msgstr "Puerto de {service}"
+
+#: src/panes/services.rs
+msgid "A port between 1024 and 65535 that no other program uses."
+msgstr "Un puerto entre 1024 y 65535 que no use ningún otro programa."
+
+#: src/panes/services.rs
+msgid "Change Port"
+msgstr "Cambiar puerto"
+
+#: src/panes/services.rs
+msgid "This Flock daemon doesn't know this service. Update Flock, then try again."
+msgstr "Este demonio de Flock no conoce este servicio. Actualiza Flock y vuelve a intentarlo."
+
+#: src/panes/services.rs
+msgid "Not offered"
+msgstr "No se ofrece"
+
+#: src/panes/services.rs
+msgid "Installed versions stay side by side. One runs at a time; each keeps its own data, and updates within a version keep it."
+msgstr "Las versiones instaladas conviven. Se ejecuta una a la vez; cada una conserva sus propios datos, y las actualizaciones dentro de una versión los mantienen."
+
+#: src/panes/services.rs
+msgid "Updates keep your data."
+msgstr "Las actualizaciones conservan tus datos."
+
+#: src/panes/services.rs
+msgid "Couldn't check for new releases: {error}"
+msgstr "No se pudieron buscar nuevas versiones: {error}"
+
+#: src/panes/services.rs
+msgid "Installing {name}…"
+msgstr "Instalando {name}…"
+
+#: src/panes/services.rs
+msgid "Downloading {name}…"
+msgstr "Descargando {name}…"
+
+#: src/panes/services.rs
+msgid "Installing {name} failed"
+msgstr "La instalación de {name} falló"
+
+#: src/panes/services.rs
+msgid "Active"
+msgstr "Activa"
+
+#: src/panes/services.rs
+msgid "{old} → {new} available"
+msgstr "{old} → {new} disponible"
+
+#: src/panes/services.rs
+msgid "Not installed · its data is kept · {version}"
+msgstr "No instalado · sus datos se conservan · {version}"
+
+#: src/panes/services.rs
+msgid "Not installed · {version}"
+msgstr "No instalado · {version}"
+
+#: src/panes/services.rs src/panes/versions.rs
+msgid "Withdrawn: {reason}"
+msgstr "Retirada: {reason}"
+
+#: src/panes/services.rs
+msgid "Switch…"
+msgstr "Cambiar…"
+
+#: src/panes/services.rs
+msgid "Reinstall {version}"
+msgstr "Reinstalar {version}"
+
+#: src/panes/services.rs
+msgid "Show Last Log"
+msgstr "Mostrar el último registro"
+
+#: src/panes/services.rs
+msgid "{name} {version} uses its own data."
+msgstr "{name} {version} usa sus propios datos."
+
+#: src/panes/services.rs
+msgid "{name} {version} starts with empty data."
+msgstr "{name} {version} empieza sin datos."
+
+#: src/panes/services.rs
+msgid "{name} {version} stops; its data stays but isn't used until you switch back. {then}"
+msgstr "{name} {version} se detiene; sus datos se conservan, pero no se usan hasta que vuelvas a cambiar. {then}"
+
+#: src/panes/services.rs
+msgid "Switch to {name} {version}?"
+msgstr "¿Cambiar a {name} {version}?"
+
+#: src/panes/services.rs src/panes/sites.rs
+msgid "Switch"
+msgstr "Cambiar"
+
+#: src/panes/services.rs
+msgid "{name} {version} stops and {name} {next} becomes the active version."
+msgstr "{name} {version} se detiene y {name} {next} pasa a ser la versión activa."
+
+#: src/panes/services.rs
+msgid "{name} {version} stops; your sites can't use {name} until you install a version again."
+msgstr "{name} {version} se detiene; tus sitios no pueden usar {name} hasta que vuelvas a instalar una versión."
+
+#: src/panes/services.rs
+msgid "Keep its data to pick up where you left off when you install it again."
+msgstr "Conserva sus datos para seguir donde lo dejaste cuando lo vuelvas a instalar."
+
+#: src/panes/services.rs
+msgid "It holds no data."
+msgstr "No contiene datos."
+
+#: src/panes/services.rs
+msgid "Uninstall {name} {version}?"
+msgstr "¿Desinstalar {name} {version}?"
+
+#: src/panes/services.rs
+msgid "Uninstall, Keep Data"
+msgstr "Desinstalar y conservar datos"
+
+#: src/panes/services.rs
+msgid "Uninstall and Delete Data"
+msgstr "Desinstalar y eliminar datos"
+
+#: src/panes/services.rs
+msgid "{name} install log"
+msgstr "Registro de instalación de {name}"
+
+#: src/panes/services.rs
+msgid "Installed versions stay side by side. One runs at a time; each keeps its own databases, and updates within a version keep them."
+msgstr "Las versiones instaladas conviven. Se ejecuta una a la vez; cada una conserva sus propias bases de datos, y las actualizaciones dentro de una versión las mantienen."
+
+#: src/panes/services.rs
+msgid "Installing PostgreSQL {version}…"
+msgstr "Instalando PostgreSQL {version}…"
+
+#: src/panes/services.rs
+msgid "Updating PostgreSQL {version}…"
+msgstr "Actualizando PostgreSQL {version}…"
+
+#: src/panes/services.rs
+msgid "Switching to PostgreSQL {version}…"
+msgstr "Cambiando a PostgreSQL {version}…"
+
+#: src/panes/services.rs
+msgid "Uninstalling PostgreSQL {version}…"
+msgstr "Desinstalando PostgreSQL {version}…"
+
+#: src/panes/services.rs
+msgid "Not installed · {size} of databases kept"
+msgstr "No instalado · se conservan {size} de bases de datos"
+
+#: src/panes/services.rs
+msgid "Extensions of PostgreSQL {version}: PostGIS, pgRouting, pgvector, TimescaleDB and your own"
+msgstr "Extensiones de PostgreSQL {version}: PostGIS, pgRouting, pgvector, TimescaleDB y las tuyas"
+
+#: src/panes/services.rs
+msgid "Also install the extensions of PostgreSQL {version}?"
+msgstr "¿Instalar también las extensiones de PostgreSQL {version}?"
+
+#: src/panes/services.rs
+msgid "{extensions} for PostgreSQL {version}, where they're available for it. You can change this later under Extensions…."
+msgstr "{extensions} para PostgreSQL {version}, donde estén disponibles. Puedes cambiarlo más tarde en Extensiones…."
+
+#: src/panes/services.rs
+msgid "PostgreSQL Only"
+msgstr "Solo PostgreSQL"
+
+#: src/panes/services.rs
+msgid "Install with Extensions"
+msgstr "Instalar con extensiones"
+
+#: src/panes/services.rs
+msgid "After installing one, run CREATE EXTENSION in each database that uses it."
+msgstr "Después de instalar una, ejecuta CREATE EXTENSION en cada base de datos que la use."
+
+#: src/panes/services.rs
+msgid "Your own extensions"
+msgstr "Tus propias extensiones"
+
+#: src/panes/services.rs
+msgid "PostgreSQL {version} Extensions"
+msgstr "Extensiones de PostgreSQL {version}"
+
+#: src/panes/services.rs
+msgid "PostgreSQL {version} uses its own databases."
+msgstr "PostgreSQL {version} usa sus propias bases de datos."
+
+#: src/panes/services.rs
+msgid "PostgreSQL {version} starts with a new, empty set of databases."
+msgstr "PostgreSQL {version} empieza con un conjunto nuevo y vacío de bases de datos."
+
+#: src/panes/services.rs
+msgid "PostgreSQL {version} stops; its databases stay but aren't available until you switch back. {then}"
+msgstr "PostgreSQL {version} se detiene; sus bases de datos se conservan, pero no están disponibles hasta que vuelvas a cambiar. {then}"
+
+#: src/panes/services.rs
+msgid "Switch to PostgreSQL {version}?"
+msgstr "¿Cambiar a PostgreSQL {version}?"
+
+#: src/panes/services.rs
+msgid "Removes the PostgreSQL {version} server."
+msgstr "Quita el servidor PostgreSQL {version}."
+
+#: src/panes/services.rs
+msgid "PostgreSQL {version} stops and Flock switches to PostgreSQL {next} with its own databases."
+msgstr "PostgreSQL {version} se detiene y Flock cambia a PostgreSQL {next} con sus propias bases de datos."
+
+#: src/panes/services.rs
+msgid "PostgreSQL {version} stops, and your sites can't use PostgreSQL until you install a version again."
+msgstr "PostgreSQL {version} se detiene, y tus sitios no pueden usar PostgreSQL hasta que vuelvas a instalar una versión."
+
+#: src/panes/services.rs
+msgid "Uninstall PostgreSQL {version}?"
+msgstr "¿Desinstalar PostgreSQL {version}?"
+
+#: src/panes/services.rs
+msgid "Uninstall, Keep Databases"
+msgstr "Desinstalar y conservar las bases de datos"
+
+#: src/panes/services.rs
+msgid "Uninstall and Delete Databases ({size})"
+msgstr "Desinstalar y eliminar las bases de datos ({size})"
+
+#: src/panes/services.rs
+msgid "Yours"
+msgstr "Tuya"
+
+#: src/panes/services.rs
+msgid "Extensions folder"
+msgstr "Carpeta de extensiones"
+
+#: src/panes/services.rs
+msgid "Put a library in lib/ and its .control and .sql files in extension/. Flock keeps them across updates of PostgreSQL {version}."
+msgstr "Pon la biblioteca en lib/ y sus archivos .control y .sql en extension/. Flock los conserva en las actualizaciones de PostgreSQL {version}."
+
+#: src/panes/services.rs
+msgid "Not available for PostgreSQL {version}"
+msgstr "No disponible para PostgreSQL {version}"
+
+#: src/panes/services.rs
+msgid "No longer updated for PostgreSQL {version}"
+msgstr "Ya no se actualiza para PostgreSQL {version}"
+
+#: src/panes/services.rs
+msgid "PostgreSQL {version} restarts to load it"
+msgstr "PostgreSQL {version} se reinicia para cargarla"
+
+#: src/panes/services.rs
+msgid "License: {license}"
+msgstr "Licencia: {license}"
+
+#: src/panes/services.rs
+msgid "Updating…"
+msgstr "Actualizando…"
+
+#: src/panes/services.rs
+msgid "Uninstall {name}"
+msgstr "Desinstalar {name}"
+
+#: src/panes/sites.rs
+msgid "The site's"
+msgstr "La del sitio"
+
+#: src/panes/sites.rs
+msgid "A copy of the site's"
+msgstr "Una copia de la del sitio"
+
+#: src/panes/sites.rs
+msgid "A new, empty one"
+msgstr "Una nueva y vacía"
+
+#: src/panes/sites.rs
+msgid "Sites you added one by one, plus every folder inside your project folders."
+msgstr "Los sitios que añadiste uno a uno, más cada carpeta dentro de tus carpetas de proyectos."
+
+#: src/panes/sites.rs
+msgid "Secure"
+msgstr "Proteger"
+
+#: src/panes/sites.rs
+msgid "No sites"
+msgstr "No hay sitios"
+
+#: src/panes/sites.rs
+msgid "Add a single site here, or add a project folder in General."
+msgstr "Añade aquí un sitio o añade una carpeta de proyectos en General."
+
+#: src/panes/sites.rs
+msgid "Proxies"
+msgstr "Proxies"
+
+#: src/panes/sites.rs
+msgid "Add Proxy…"
+msgstr "Añadir proxy…"
+
+#: src/panes/sites.rs
+msgid "Serve a server of its own, e.g. a Node.js dev server on a port, at a .{tld} domain"
+msgstr "Servir un servidor propio, p. ej. un servidor de desarrollo de Node.js en un puerto, en un dominio .{tld}"
+
+#: src/panes/sites.rs
+msgid "Name, e.g. my-app"
+msgstr "Nombre, p. ej. my-app"
+
+#: src/panes/sites.rs
+msgid "Port, host:port or URL, e.g. 3000"
+msgstr "Puerto, host:puerto o URL, p. ej. 3000"
+
+#: src/panes/sites.rs
+msgid "Add a proxy"
+msgstr "Añadir un proxy"
+
+#: src/panes/sites.rs
+msgid "Flock serves <name>.{tld} from a server of its own, e.g. a Next.js, Nuxt or Vite dev server. A port means 127.0.0.1."
+msgstr "Flock sirve <name>.{tld} desde un servidor propio, p. ej. un servidor de desarrollo de Next.js, Nuxt o Vite. Un puerto solo significa 127.0.0.1."
+
+#: src/panes/sites.rs
+msgid "Add Site…"
+msgstr "Añadir sitio…"
+
+#: src/panes/sites.rs
+msgid "Add Site"
+msgstr "Añadir sitio"
+
+#: src/panes/sites.rs
+msgid "{n} worktree"
+msgid_plural "{n} worktrees"
+msgstr[0] "{n} worktree"
+msgstr[1] "{n} worktrees"
+
+#: src/panes/sites.rs
+msgid "Open {site}"
+msgstr "Abrir {site}"
+
+#: src/panes/sites.rs
+msgid "Project folder"
+msgstr "Carpeta del proyecto"
+
+#: src/panes/sites.rs
+msgid "Open in the browser"
+msgstr "Abrir en el navegador"
+
+#: src/panes/sites.rs
+msgid "Open the project folder"
+msgstr "Abrir la carpeta del proyecto"
+
+#: src/panes/sites.rs
+msgid "PHP extensions"
+msgstr "Extensiones de PHP"
+
+#: src/panes/sites.rs
+msgid "Remove site"
+msgstr "Quitar sitio"
+
+#: src/panes/sites.rs
+msgid "Remove {name}?"
+msgstr "¿Quitar {name}?"
+
+#: src/panes/sites.rs
+msgid "Flock stops serving {domain}. The project in {path} is not touched."
+msgstr "Flock deja de servir {domain}. El proyecto de {path} no se toca."
+
+#: src/panes/sites.rs
+msgid "Site"
+msgstr "Sitio"
+
+#: src/panes/sites.rs
+msgid "The document root is the folder Flock serves the site from. One picked here applies on this machine only; pin it to write it into .flockrc for everyone."
+msgstr "La raíz de documentos es la carpeta desde la que Flock sirve el sitio. La que elijas aquí solo se aplica en este equipo; fíjala para escribirla en .flockrc para todos."
+
+#: src/panes/sites.rs
+msgid "{domain} (alias)"
+msgstr "{domain} (alias)"
+
+#: src/panes/sites.rs
+msgid "Remove {domain}"
+msgstr "Quitar {domain}"
+
+#: src/panes/sites.rs
+msgid "{domain} is no longer served by {site}."
+msgstr "{site} deja de servir {domain}."
+
+#: src/panes/sites.rs
+msgid "Add Domain…"
+msgstr "Añadir dominio…"
+
+#: src/panes/sites.rs
+msgid "Extra domains: subdomains and aliases"
+msgstr "Dominios adicionales: subdominios y alias"
+
+#: src/panes/sites.rs
+msgid "Subdomains only work when you add them here: {problem}."
+msgstr "Los subdominios solo funcionan si los añades aquí: {problem}."
+
+#: src/panes/sites.rs
+msgid "Use .flockrc"
+msgstr "Usar .flockrc"
+
+#: src/panes/sites.rs
+msgid "Every subdomain up to {n} level below the site already works. Add a full name like {site}-2.{tld} for an alias, or a subdomain (tenant1, a.b) so it is listed here and also resolves on Windows machines without wildcard DNS."
+msgid_plural "Every subdomain up to {n} levels below the site already works. Add a full name like {site}-2.{tld} for an alias, or a subdomain (tenant1, a.b) so it is listed here and also resolves on Windows machines without wildcard DNS."
+msgstr[0] "Cualquier subdominio hasta {n} nivel por debajo del sitio ya funciona. Añade un nombre completo como {site}-2.{tld} para un alias, o un subdominio (tenant1, a.b) para que aparezca aquí y también se resuelva en equipos Windows sin DNS comodín."
+msgstr[1] "Cualquier subdominio hasta {n} niveles por debajo del sitio ya funciona. Añade un nombre completo como {site}-2.{tld} para un alias, o un subdominio (tenant1, a.b) para que aparezca aquí y también se resuelva en equipos Windows sin DNS comodín."
+
+#: src/panes/sites.rs
+msgid "Wildcard subdomains don't work here ({problem}), so add each subdomain you use (tenant1, a.b). A full name adds an alias."
+msgstr "Los subdominios comodín no funcionan aquí ({problem}), así que añade cada subdominio que uses (tenant1, a.b). Un nombre completo añade un alias."
+
+#: src/panes/sites.rs
+msgid "tenant1, a.b or {site}-2.{tld}"
+msgstr "tenant1, a.b o {site}-2.{tld}"
+
+#: src/panes/sites.rs
+msgid "Add a domain to {site}"
+msgstr "Añadir un dominio a {site}"
+
+#: src/panes/sites.rs
+msgid "Use .flockrc ({root})"
+msgstr "Usar .flockrc ({root})"
+
+#: src/panes/sites.rs
+msgid "Automatic (none found)"
+msgstr "Automática (no se encontró ninguna)"
+
+#: src/panes/sites.rs
+msgid "Automatic ({root})"
+msgstr "Automática ({root})"
+
+#: src/panes/sites.rs
+msgid "Automatic"
+msgstr "Automática"
+
+#: src/panes/sites.rs
+msgid "Choose Folder…"
+msgstr "Elegir carpeta…"
+
+#: src/panes/sites.rs
+msgid "Document root"
+msgstr "Raíz de documentos"
+
+#: src/panes/sites.rs
+msgid "Choose the folder with the app's index.php in {site}"
+msgstr "Elige la carpeta con el index.php de la app en {site}"
+
+#: src/panes/sites.rs
+msgid "Choose"
+msgstr "Elegir"
+
+#: src/panes/sites.rs
+msgid "{folder} isn't in {project}. The document root must be a folder in the project."
+msgstr "{folder} no está en {project}. La raíz de documentos debe ser una carpeta del proyecto."
+
+#: src/panes/sites.rs
+msgid "Share"
+msgstr "Compartir"
+
+#: src/panes/sites.rs
+msgid "Show the site at a temporary public address to preview work in progress, never for production. Visitors don't get debug pages, dumps or the dev tools."
+msgstr "Muestra el sitio en una dirección pública temporal para enseñar trabajo en curso, nunca para producción. Los visitantes no ven páginas de depuración, dumps ni las herramientas de desarrollo."
+
+#: src/panes/sites.rs
+msgid "Share…"
+msgstr "Compartir…"
+
+#: src/panes/sites.rs
+msgid "Sharing failed."
+msgstr "No se pudo compartir."
+
+#: src/panes/sites.rs
+msgid "Building assets…"
+msgstr "Compilando recursos…"
+
+#: src/panes/sites.rs
+msgid "Starting the tunnel…"
+msgstr "Iniciando el túnel…"
+
+#: src/panes/sites.rs src/panes/versions.rs
+msgid "Copy"
+msgstr "Copiar"
+
+#: src/panes/sites.rs
+msgid "QR code of {url}"
+msgstr "Código QR de {url}"
+
+#: src/panes/sites.rs
+msgid "Ends at {time}"
+msgstr "Termina a las {time}"
+
+#: src/panes/sites.rs
+msgid "Only for: {emails}"
+msgstr "Solo para: {emails}"
+
+#: src/panes/sites.rs
+msgid "Debug mode is on: visitors see stack traces"
+msgstr "El modo de depuración está activado: los visitantes ven las trazas de la pila"
+
+#: src/panes/sites.rs
+msgid "Rebuilding…"
+msgstr "Recompilando…"
+
+#: src/panes/sites.rs
+msgid "Rebuild Assets"
+msgstr "Recompilar recursos"
+
+#: src/panes/sites.rs
+msgid "Runs npm run build again, so visitors see your latest changes when they reload"
+msgstr "Vuelve a ejecutar npm run build para que los visitantes vean tus últimos cambios al recargar"
+
+#: src/panes/sites.rs
+msgid "Stop Sharing"
+msgstr "Dejar de compartir"
+
+#: src/panes/sites.rs
+msgid "Only these people (optional)"
+msgstr "Solo estas personas (opcional)"
+
+#: src/panes/sites.rs
+msgid "Show error details to visitors"
+msgstr "Mostrar los detalles de los errores a los visitantes"
+
+#: src/panes/sites.rs
+msgid "Turns the app's debug mode on for this share, so visitors see stack traces. Only for people you trust."
+msgstr "Activa el modo de depuración de la app para este enlace, así los visitantes ven las trazas de la pila. Solo para personas de confianza."
+
+#: src/panes/sites.rs
+msgid "Share {site}"
+msgstr "Compartir {site}"
+
+#: src/panes/sites.rs
+msgid "Anyone with the link can open the site unless you list email addresses — Cloudflare then emails them a code. The link stops working after 8 hours or when you stop sharing."
+msgstr "Cualquiera con el enlace puede abrir el sitio, salvo que indiques direcciones de correo: Cloudflare les envía entonces un código. El enlace deja de funcionar a las 8 horas o cuando dejas de compartir."
+
+#: src/panes/sites.rs
+msgid "A version picked here applies on this machine only. To set it for everyone working on the project, pin it: PHP goes into .flockrc, Node.js into .nvmrc."
+msgstr "La versión que elijas aquí solo se aplica en este equipo. Para definirla para todos los que trabajan en el proyecto, fíjala: PHP va a .flockrc y Node.js a .nvmrc."
+
+#: src/panes/sites.rs
+msgid "PHP {version} is isolated here; the project pins {pinned} in {file}."
+msgstr "PHP {version} está aislado aquí; el proyecto fija {pinned} en {file}."
+
+#: src/panes/sites.rs
+msgid "Use {file}"
+msgstr "Usar {file}"
+
+#: src/panes/sites.rs
+msgid "Node {version} is isolated here; the project pins {pinned} in {file}."
+msgstr "Node {version} está aislado aquí; el proyecto fija {pinned} en {file}."
+
+#: src/panes/sites.rs
+msgid ".flockrc's Node {pinned} wins over {other}."
+msgstr "El Node {pinned} de .flockrc tiene prioridad sobre {other}."
+
+#: src/panes/sites.rs
+msgid "FrankenPHP needs PHP 8.2 or newer. Requests that ask for Xdebug still go to PHP-FPM. For worker mode, install Laravel Octane in the project (composer require laravel/octane)."
+msgstr "FrankenPHP necesita PHP 8.2 o posterior. Las solicitudes que piden Xdebug siguen yendo a PHP-FPM. Para el modo worker, instala Laravel Octane en el proyecto (composer require laravel/octane)."
+
+#: src/panes/sites.rs
+msgid "FrankenPHP needs PHP 8.2 or newer. Requests that ask for Xdebug still go to PHP-FPM."
+msgstr "FrankenPHP necesita PHP 8.2 o posterior. Las solicitudes que piden Xdebug siguen yendo a PHP-FPM."
+
+#: src/panes/sites.rs
+msgid "Server"
+msgstr "Servidor"
+
+#: src/panes/sites.rs
+msgid "Runs on"
+msgstr "Se ejecuta con"
+
+#: src/panes/sites.rs
+msgid "Classic"
+msgstr "Clásico"
+
+#: src/panes/sites.rs
+msgid "Running FrankenPHP {version} with PHP {php}"
+msgstr "FrankenPHP {version} en ejecución con PHP {php}"
+
+#: src/panes/sites.rs
+msgid " · worker mode"
+msgstr " · modo worker"
+
+#: src/panes/sites.rs
+msgid "Downloading FrankenPHP for PHP {version}…"
+msgstr "Descargando FrankenPHP para PHP {version}…"
+
+#: src/panes/sites.rs
+msgid "{percent}%"
+msgstr "{percent} %"
+
+#: src/panes/sites.rs
+msgid "PHP-FPM serves the site until it's ready."
+msgstr "PHP-FPM sirve el sitio hasta que esté listo."
+
+#: src/panes/sites.rs
+msgid "PHP-FPM serves the site meanwhile."
+msgstr "Mientras tanto, PHP-FPM sirve el sitio."
+
+#: src/panes/sites.rs
+msgid "Restart"
+msgstr "Reiniciar"
+
+#: src/panes/sites.rs
+msgid "Restart FrankenPHP, e.g. so Octane's workers load changed code"
+msgstr "Reiniciar FrankenPHP, p. ej. para que los workers de Octane carguen el código modificado"
+
+#: src/panes/sites.rs
+msgid "The project uses Laravel Boost. Adding Flock to its guidelines tells AI agents that Flock serves the app and picks its PHP version."
+msgstr "El proyecto usa Laravel Boost. Añadir Flock a sus directrices indica a los agentes de IA que Flock sirve la app y elige su versión de PHP."
+
+#: src/panes/sites.rs
+msgid "Flock's guideline in the project's Boost guidelines is outdated."
+msgstr "La directriz de Flock en las directrices de Boost del proyecto está desactualizada."
+
+#: src/panes/sites.rs
+msgid "Add Flock to its guidelines…"
+msgstr "Añadir Flock a sus directrices…"
+
+#: src/panes/sites.rs
+msgid "Update it…"
+msgstr "Actualizarla…"
+
+#: src/panes/sites.rs
+msgid "Add Flock to {site}'s Boost guidelines?"
+msgstr "¿Añadir Flock a las directrices de Boost de {site}?"
+
+#: src/panes/sites.rs
+msgid "Update Flock's guideline in {site}?"
+msgstr "¿Actualizar la directriz de Flock en {site}?"
+
+#: src/panes/sites.rs
+msgid "Writes .ai/guidelines/flock.md in {path} and runs php artisan boost:update, so AI agents know Flock serves the app and picks its PHP version. Commit it with the rest of .ai/guidelines. This changes files in your project."
+msgstr "Escribe .ai/guidelines/flock.md en {path} y ejecuta php artisan boost:update, para que los agentes de IA sepan que Flock sirve la app y elige su versión de PHP. Haz commit junto con el resto de .ai/guidelines. Esto cambia archivos de tu proyecto."
+
+#: src/panes/sites.rs
+msgid "Pin"
+msgstr "Fijar"
+
+#: src/panes/sites.rs
+msgid "Pin PHP {version} to Project…"
+msgstr "Fijar PHP {version} en el proyecto…"
+
+#: src/panes/sites.rs
+msgid "Pin PHP {version} to {site}?"
+msgstr "¿Fijar PHP {version} en {site}?"
+
+#: src/panes/sites.rs
+msgid "Writes php={version} to .flockrc in {path}. Commit it, and everyone using Flock on this project gets PHP {version}. This changes a file in your project."
+msgstr "Escribe php={version} en .flockrc en {path}. Haz commit y todos los que usen Flock en este proyecto tendrán PHP {version}. Esto cambia un archivo de tu proyecto."
+
+#: src/panes/sites.rs
+msgid "Pin Node {version} to Project…"
+msgstr "Fijar Node {version} en el proyecto…"
+
+#: src/panes/sites.rs
+msgid "Pin Node {version} to {site}?"
+msgstr "¿Fijar Node {version} en {site}?"
+
+#: src/panes/sites.rs
+msgid "Writes {version} to {file} in {path}. Commit it, and Flock, nvm and other Node tools use Node {version} for this project. This changes a file in your project."
+msgstr "Escribe {version} en {file} en {path}. Haz commit y Flock, nvm y otras herramientas de Node usarán Node {version} en este proyecto. Esto cambia un archivo de tu proyecto."
+
+#: src/panes/sites.rs
+msgid "Pin Document Root ({root}) to Project…"
+msgstr "Fijar la raíz de documentos ({root}) en el proyecto…"
+
+#: src/panes/sites.rs
+msgid "Pin the document root {root} to {site}?"
+msgstr "¿Fijar la raíz de documentos {root} en {site}?"
+
+#: src/panes/sites.rs
+msgid "Writes root={value} to .flockrc in {path}. Commit it, and everyone using Flock on this project serves it from {root}. This changes a file in your project."
+msgstr "Escribe root={value} en .flockrc en {path}. Haz commit y todos los que usen Flock en este proyecto lo servirán desde {root}. Esto cambia un archivo de tu proyecto."
+
+#: src/panes/sites.rs
+msgid "Unpin"
+msgstr "Dejar de fijar"
+
+#: src/panes/sites.rs
+msgid "Unpin PHP ({file})…"
+msgstr "Dejar de fijar PHP ({file})…"
+
+#: src/panes/sites.rs
+msgid "Unpin PHP from {site}?"
+msgstr "¿Dejar de fijar PHP en {site}?"
+
+#: src/panes/sites.rs
+msgid "Removes the PHP version from {file}. The site then uses Flock's default PHP. This changes files in your project."
+msgstr "Quita la versión de PHP de {file}. El sitio usará entonces el PHP predeterminado de Flock. Esto cambia archivos de tu proyecto."
+
+#: src/panes/sites.rs
+msgid "Unpin Node ({file})…"
+msgstr "Dejar de fijar Node ({file})…"
+
+#: src/panes/sites.rs
+msgid "Unpin Node from {site}?"
+msgstr "¿Dejar de fijar Node en {site}?"
+
+#: src/panes/sites.rs
+msgid "Removes the Node.js version from .flockrc and deletes .nvmrc / .node-version in {path}. The site then uses Flock's default Node.js. This changes files in your project."
+msgstr "Quita la versión de Node.js de .flockrc y elimina .nvmrc / .node-version en {path}. El sitio usará entonces el Node.js predeterminado de Flock. Esto cambia archivos de tu proyecto."
+
+#: src/panes/sites.rs
+msgid "Unpin Document Root (.flockrc)…"
+msgstr "Dejar de fijar la raíz de documentos (.flockrc)…"
+
+#: src/panes/sites.rs
+msgid "Unpin the document root from {site}?"
+msgstr "¿Dejar de fijar la raíz de documentos en {site}?"
+
+#: src/panes/sites.rs
+msgid "Removes root= from .flockrc in {path}. Flock then finds the document root itself. This changes files in your project."
+msgstr "Quita root= de .flockrc en {path}. Flock buscará entonces la raíz de documentos por sí mismo. Esto cambia archivos de tu proyecto."
+
+#: src/panes/sites.rs
+msgid "Pin versions and the document root to the project"
+msgstr "Fijar versiones y la raíz de documentos en el proyecto"
+
+#: src/panes/sites.rs
+msgid "Worktrees"
+msgstr "Worktrees"
+
+#: src/panes/sites.rs
+msgid "Each git worktree of {site} is served at <branch>.{domain}, with its own dependencies and .env."
+msgstr "Cada worktree de git de {site} se sirve en <branch>.{domain}, con sus propias dependencias y .env."
+
+#: src/panes/sites.rs
+msgid "New Worktree…"
+msgstr "Nuevo worktree…"
+
+#: src/panes/sites.rs
+msgid "No worktrees"
+msgstr "No hay worktrees"
+
+#: src/panes/sites.rs
+msgid "Create one here, with git or with your agent app."
+msgstr "Crea uno aquí, con git o con tu app de agentes."
+
+#: src/panes/sites.rs
+msgid "a name like brave-otter"
+msgstr "un nombre como brave-otter"
+
+#: src/panes/sites.rs
+msgid "Branch"
+msgstr "Rama"
+
+#: src/panes/sites.rs
+msgid "Start from"
+msgstr "Partir de"
+
+#: src/panes/sites.rs
+msgid "Database"
+msgstr "Base de datos"
+
+#: src/panes/sites.rs
+msgid "Project default"
+msgstr "Predeterminada del proyecto"
+
+#: src/panes/sites.rs
+msgid "New Worktree of {site}"
+msgstr "Nuevo worktree de {site}"
+
+#: src/panes/sites.rs
+msgid "Create"
+msgstr "Crear"
+
+#: src/panes/sites.rs
+msgid "Couldn't remove {name}"
+msgstr "No se pudo quitar {name}"
+
+#: src/panes/sites.rs
+msgid "Remove Anyway"
+msgstr "Quitar de todos modos"
+
+#: src/panes/sites.rs
+msgid "Worktree"
+msgstr "Worktree"
+
+#: src/panes/sites.rs
+msgid "Remove worktree"
+msgstr "Quitar worktree"
+
+#: src/panes/sites.rs
+msgid "None (detached HEAD)"
+msgstr "Ninguna (HEAD separado)"
+
+#: src/panes/sites.rs
+msgid "Open the folder"
+msgstr "Abrir la carpeta"
+
+#: src/panes/sites.rs
+msgid "URL"
+msgstr "URL"
+
+#: src/panes/sites.rs
+msgid "The branch pins it in {file}"
+msgstr "La rama lo fija en {file}"
+
+#: src/panes/sites.rs
+msgid "Uses {site}'s settings"
+msgstr "Usa la configuración de {site}"
+
+#: src/panes/sites.rs
+msgid "Change its PHP and Node.js versions, HTTPS and document root on the site."
+msgstr "Cambia sus versiones de PHP y Node.js, HTTPS y la raíz de documentos en el sitio."
+
+#: src/panes/sites.rs
+msgid "A database of its own gets the branch's migrations run on it."
+msgstr "En una base de datos propia se ejecutan las migraciones de la rama."
+
+#: src/panes/sites.rs
+msgid "Drop {database}?"
+msgstr "¿Eliminar {database}?"
+
+#: src/panes/sites.rs
+msgid "Its database {database} is dropped."
+msgstr "Se elimina su base de datos {database}."
+
+#: src/panes/sites.rs
+msgid "Use {site}'s database?"
+msgstr "¿Usar la base de datos de {site}?"
+
+#: src/panes/sites.rs
+msgid "{worktree} then uses {site}'s database."
+msgstr "{worktree} usará entonces la base de datos de {site}."
+
+#: src/panes/sites.rs
+msgid "Flock copies {site}'s database and runs the branch's migrations on it."
+msgstr "Flock copia la base de datos de {site} y ejecuta en ella las migraciones de la rama."
+
+#: src/panes/sites.rs
+msgid "Give {worktree} a copy of the database?"
+msgstr "¿Dar a {worktree} una copia de la base de datos?"
+
+#: src/panes/sites.rs
+msgid "Give {worktree} a fresh database?"
+msgstr "¿Dar a {worktree} una base de datos nueva?"
+
+#: src/panes/sites.rs
+msgid "Flock creates an empty database and runs the migrations."
+msgstr "Flock crea una base de datos vacía y ejecuta las migraciones."
+
+#: src/panes/sites.rs
+msgid "Switching {worktree}'s Database"
+msgstr "Cambiando la base de datos de {worktree}"
+
+#: src/panes/sites.rs
+msgid "Setup"
+msgstr "Preparación"
+
+#: src/panes/sites.rs
+msgid "Flock hasn't set this worktree up"
+msgstr "Flock no ha preparado este worktree"
+
+#: src/panes/sites.rs
+msgid "Setting it up copies dependencies and .env, installs and runs the project's hooks."
+msgstr "Prepararlo copia las dependencias y el .env, las instala y ejecuta los hooks del proyecto."
+
+#: src/panes/sites.rs
+msgid "Set Up"
+msgstr "Preparar"
+
+#: src/panes/sites.rs src/panes/worktree_job.rs
+msgid "Run Setup Again"
+msgstr "Volver a preparar"
+
+#: src/panes/sites.rs
+msgid "Setting Up {worktree}"
+msgstr "Preparando {worktree}"
+
+#: src/panes/sites.rs
+msgid "Flock runs its before_delete hook and deletes {path} and its database {database}."
+msgstr "Flock ejecuta su hook before_delete y elimina {path} y su base de datos {database}."
+
+#: src/panes/sites.rs
+msgid "Flock runs its before_delete hook and deletes {path}."
+msgstr "Flock ejecuta su hook before_delete y elimina {path}."
+
+#: src/panes/sites.rs
+msgid "The branch {branch} stays."
+msgstr "La rama {branch} se conserva."
+
+#: src/panes/sites.rs
+msgid "Proxy"
+msgstr "Proxy"
+
+#: src/panes/sites.rs
+msgid "Remove proxy"
+msgstr "Quitar proxy"
+
+#: src/panes/sites.rs
+msgid "Flock stops serving {domain}. The server at {upstream} keeps running."
+msgstr "Flock deja de servir {domain}. El servidor en {upstream} sigue en ejecución."
+
+#: src/panes/sites.rs
+msgid "Every request passes to the upstream with its Host header, WebSocket upgrades (hot reload) included. Flock doesn't start the server, so start it as usual. Until it answers, {domain} shows a page saying so."
+msgstr "Cada solicitud pasa al upstream con su cabecera Host, incluidas las actualizaciones a WebSocket (recarga en caliente). Flock no inicia el servidor, así que inícialo como siempre. Hasta que responda, {domain} muestra una página que lo indica."
+
+#: src/panes/sites.rs
+msgid "Nothing answers at {upstream} yet."
+msgstr "Aún no responde nada en {upstream}."
+
+#: src/panes/sites.rs
+msgid "Upstream"
+msgstr "Upstream"
+
+#: src/panes/sites.rs
+msgid "Port, host:port or URL"
+msgstr "Puerto, host:puerto o URL"
+
+#: src/panes/sites.rs
+msgid "Change the upstream of {proxy}"
+msgstr "Cambiar el upstream de {proxy}"
+
+#: src/panes/sites.rs
+msgid "A port means 127.0.0.1; give a host and port (localhost:5173) or a URL (https://127.0.0.1:8443) for anything else."
+msgstr "Un puerto solo significa 127.0.0.1; para cualquier otra cosa, indica un host y un puerto (localhost:5173) o una URL (https://127.0.0.1:8443)."
+
+#: src/panes/sites.rs
+msgid "Change"
+msgstr "Cambiar"
+
+#: src/panes/sites.rs
+msgid "Requiring an extension in composer.json makes composer install refuse a server without it, instead of the app failing there."
+msgstr "Exigir una extensión en composer.json hace que composer install rechace un servidor que no la tenga, en lugar de que la app falle allí."
+
+#: src/panes/sites.rs
+msgid "PHP extensions of {site}"
+msgstr "Extensiones de PHP de {site}"
+
+#: src/panes/sites.rs
+msgid "The project requires no PHP extensions."
+msgstr "El proyecto no requiere extensiones de PHP."
+
+#: src/panes/sites.rs
+msgid "PHP {version} · Laravel app"
+msgstr "PHP {version} · app de Laravel"
+
+#: src/panes/sites.rs
+msgid "Required by {packages}"
+msgstr "Requerida por {packages}"
+
+#: src/panes/sites.rs
+msgid "Not required, but used: {hint}"
+msgstr "No es obligatoria, pero se usa: {hint}"
+
+#: src/panes/sites.rs
+msgid " — Flock's PHP {version} doesn't include it"
+msgstr " — el PHP {version} de Flock no la incluye"
+
+#: src/panes/sites.rs
+msgid "Add to composer.json"
+msgstr "Añadir a composer.json"
+
+#: src/panes/sites.rs
+msgid "Require ext-{name} in composer.json?"
+msgstr "¿Exigir ext-{name} en composer.json?"
+
+#: src/panes/sites.rs
+msgid "Runs composer require ext-{name}:* in {path}, which changes composer.json and composer.lock. Commit them with the project."
+msgstr "Ejecuta composer require ext-{name}:* en {path}, lo que cambia composer.json y composer.lock. Haz commit de ambos con el proyecto."
+
+#: src/panes/sites.rs
+msgid "Require"
+msgstr "Exigir"
+
+#: src/panes/sites.rs
+msgid "Adding…"
+msgstr "Añadiendo…"
+
+#: src/panes/sites.rs
+msgid "Shared"
+msgstr "Compartido"
+
+#: src/panes/sites.rs
+msgid "Served over HTTPS"
+msgstr "Servido por HTTPS"
+
+#: src/panes/sites.rs
+msgid "Its own database: {database}"
+msgstr "Base de datos propia: {database}"
+
+#: src/panes/sites.rs
+msgid "The setup failed."
+msgstr "La preparación falló."
+
+#: src/panes/sites.rs
+msgid "Flock creates the worktree next to {site} on a new branch with a name of its own, sets it up and serves it at its own address."
+msgstr "Flock crea el worktree junto a {site} en una rama nueva con nombre propio, lo prepara y lo sirve en su propia dirección."
+
+#: src/panes/sites.rs
+msgid "{branch} exists, so the worktree checks it out. Flock creates it next to {site}, sets it up and serves it at {address}."
+msgstr "{branch} existe, así que el worktree la usa. Flock lo crea junto a {site}, lo prepara y lo sirve en {address}."
+
+#: src/panes/sites.rs
+msgid "Flock creates the worktree next to {site} on the new branch {branch}, sets it up and serves it at {address}."
+msgstr "Flock crea el worktree junto a {site} en la rama nueva {branch}, lo prepara y lo sirve en {address}."
+
+#: src/panes/sites.rs
+msgid "No public/, www/, web/ or webroot/ with an index.php was found, so Flock shows a page instead of the site. Choose the folder with the app's index.php."
+msgstr "No se encontró public/, www/, web/ ni webroot/ con un index.php, así que Flock muestra una página en lugar del sitio. Elige la carpeta con el index.php de la app."
+
+#: src/panes/sites.rs
+msgid "Choose the folder with the app's index.php, or create {root}."
+msgstr "Elige la carpeta con el index.php de la app o crea {root}."
+
+#: src/panes/sites.rs
+msgid "{root} has no index.php or index.html, so Flock shows a page instead of the site until it does."
+msgstr "{root} no tiene index.php ni index.html, así que Flock muestra una página en lugar del sitio hasta que los tenga."
+
+#: src/panes/sites.rs
+msgid "{root} is set here; the project sets {pinned} in .flockrc."
+msgstr "{root} está definida aquí; el proyecto define {pinned} en .flockrc."
+
+#: src/panes/sites.rs
+msgid "Use {file} ({tool} {version})"
+msgstr "Usar {file} ({tool} {version})"
+
+#: src/panes/sites.rs
+msgid "Default ({tool} {version})"
+msgstr "Predeterminada ({tool} {version})"
+
+#: src/panes/sites.rs
+msgid "{tool} {version} is set for this site on this machine (isolated)."
+msgstr "{tool} {version} está definido para este sitio en este equipo (aislado)."
+
+#: src/panes/sites.rs
+msgid "The project pins {tool} {version} in {file}."
+msgstr "El proyecto fija {tool} {version} en {file}."
+
+#: src/panes/sites.rs
+msgid "The site follows Flock's default {tool} version."
+msgstr "El sitio sigue la versión predeterminada de {tool} en Flock."
+
+#: src/panes/versions.rs
+msgid "The download failed."
+msgstr "La descarga falló."
+
+#: src/panes/versions.rs
+msgid "Withdrawn: {reason} — update to replace it"
+msgstr "Retirada: {reason}; actualiza para reemplazarla"
+
+#: src/panes/versions.rs
+msgid "More"
+msgstr "Más"
+
+#: src/panes/versions.rs
+msgid "Not checked yet"
+msgstr "Aún no se ha comprobado"
+
+#: src/panes/versions.rs
+msgid "Checked just now"
+msgstr "Comprobado ahora mismo"
+
+#: src/panes/versions.rs
+msgid "Checked a minute ago"
+msgid_plural "Checked {n} minutes ago"
+msgstr[0] "Comprobado hace un minuto"
+msgstr[1] "Comprobado hace {n} minutos"
+
+#: src/panes/versions.rs
+msgid "Checked an hour ago"
+msgid_plural "Checked {n} hours ago"
+msgstr[0] "Comprobado hace una hora"
+msgstr[1] "Comprobado hace {n} horas"
+
+#: src/panes/versions.rs
+msgid "Checked {n} day ago"
+msgid_plural "Checked {n} days ago"
+msgstr[0] "Comprobado hace {n} día"
+msgstr[1] "Comprobado hace {n} días"
+
+#: src/panes/versions.rs
+msgid "No install log yet."
+msgstr "Aún no hay registro de instalación."
+
+#: src/panes/worktree_job.rs
+msgid "see the log"
+msgstr "consulta el registro"
+
+#: src/panes/worktree_job.rs
+msgid "Setup failed: {error}"
+msgstr "La preparación falló: {error}"
+
+#: src/panes/worktree_job.rs
+msgid "Starting…"
+msgstr "Iniciando…"
+
+#: src/panes/worktree_job.rs
+msgid "Ready at {url}"
+msgstr "Listo en {url}"
+
+#: src/panes/worktree_job.rs
+msgid "Hide"
+msgstr "Ocultar"
+
+#: src/panes/worktree_job.rs
+msgid "The setup goes on; Flock tells you if it fails"
+msgstr "La preparación continúa; Flock te avisará si falla"
+
+#: src/panes/worktree_job.rs
+msgid "Open in Browser"
+msgstr "Abrir en el navegador"
+
+#: src/panes/worktree_job.rs
+msgid "Close"
+msgstr "Cerrar"

@@ -43,7 +43,7 @@ struct DetailHeader: View {
 
 /// A section title inside a detail, with optional trailing content.
 struct DetailSectionTitle<Trailing: View>: View {
-    let title: String
+    let title: LocalizedStringKey
     @ViewBuilder var trailing: Trailing
 
     var body: some View {
@@ -56,7 +56,7 @@ struct DetailSectionTitle<Trailing: View>: View {
 }
 
 extension DetailSectionTitle where Trailing == EmptyView {
-    init(_ title: String) {
+    init(_ title: LocalizedStringKey) {
         self.title = title
         trailing = EmptyView()
     }
@@ -64,8 +64,8 @@ extension DetailSectionTitle where Trailing == EmptyView {
 
 /// A button's label that, while busy, shows a spinner and what the button is doing ("Checking…").
 struct BusyLabel: View {
-    let title: String
-    let busyTitle: String
+    let title: LocalizedStringKey
+    let busyTitle: LocalizedStringKey
     let isBusy: Bool
 
     var body: some View {
@@ -99,7 +99,7 @@ struct CheckForUpdatesLine: View {
             } else {
                 Text("Not checked yet")
             }
-            Text("·")
+            Text(verbatim: "·")
             if checkingState.wrappedValue {
                 ProgressView().controlSize(.mini)
                 Text("Checking…")
@@ -121,12 +121,12 @@ struct CheckForUpdatesLine: View {
 
 enum Formats {
     static func bytes(_ count: Int64) -> String {
-        ByteCountFormatter.string(fromByteCount: count, countStyle: .file)
+        count.formatted(.byteCount(style: .file).locale(AppLanguage.locale))
     }
 
     /// "Nov 2030".
     static func monthYear(_ date: Date) -> String {
-        date.formatted(.dateTime.month(.abbreviated).year().locale(Locale.current))
+        date.formatted(.dateTime.month(.abbreviated).year().locale(AppLanguage.locale))
     }
 
     /// "4:05" or "1:02:03".
@@ -204,7 +204,7 @@ struct ComponentJobFailure: View {
                 VStack(alignment: .leading, spacing: 3) {
                     Text(job.action == .update ? "Couldn't update \(name)" : "Couldn't install \(name)")
                         .font(.callout.weight(.semibold))
-                    Text(job.error.isEmpty ? "The install stopped with an error. The log has the details." : job.error)
+                    Text(job.error.isEmpty ? String(localized: "The install stopped with an error. The log has the details.") : job.error)
                         .font(.caption).foregroundStyle(.secondary)
                         .textSelection(.enabled)
                         .lineLimit(4)
@@ -285,7 +285,7 @@ struct JobLogSheet: View {
 
             ScrollViewReader { proxy in
                 ScrollView {
-                    Text(text.isEmpty ? "No log yet." : text)
+                    Text(text.isEmpty ? String(localized: "No log yet.") : text)
                         .font(.system(.caption, design: .monospaced))
                         .foregroundStyle(text.isEmpty ? .secondary : .primary)
                         .textSelection(.enabled)

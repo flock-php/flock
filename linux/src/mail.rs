@@ -8,6 +8,7 @@ use adw::prelude::*;
 use gtk::{gio, glib};
 
 use crate::api::{Client, MailDetail, MailSummary};
+use crate::i18n::tr;
 use crate::model::AppModel;
 use crate::ui;
 
@@ -34,28 +35,28 @@ impl MailWindow {
         let list = gtk::ListBox::builder().css_classes(["navigation-sidebar"]).build();
         let sidebar_view = adw::ToolbarView::new();
         let sidebar_header = adw::HeaderBar::new();
-        let refresh = gtk::Button::builder().icon_name("view-refresh-symbolic").tooltip_text("Refresh").build();
-        let clear = gtk::Button::builder().icon_name("user-trash-symbolic").tooltip_text("Delete All").build();
+        let refresh = gtk::Button::builder().icon_name("view-refresh-symbolic").tooltip_text(tr!("Refresh")).build();
+        let clear = gtk::Button::builder().icon_name("user-trash-symbolic").tooltip_text(tr!("Delete All")).build();
         sidebar_header.pack_start(&refresh);
         sidebar_header.pack_end(&clear);
         sidebar_view.add_top_bar(&sidebar_header);
         sidebar_view.set_content(Some(&gtk::ScrolledWindow::builder().child(&list).vexpand(true).build()));
-        let sidebar = adw::NavigationPage::new(&sidebar_view, "Mail");
+        let sidebar = adw::NavigationPage::new(&sidebar_view, tr!("Mail"));
 
         let detail = adw::Bin::new();
-        let banner = adw::Banner::builder().button_label("Dismiss").use_markup(false).build();
+        let banner = adw::Banner::builder().button_label(tr!("Dismiss")).use_markup(false).build();
         let body = gtk::Box::new(gtk::Orientation::Vertical, 0);
         body.append(&banner);
         body.append(&detail);
         let content_view = adw::ToolbarView::new();
         content_view.add_top_bar(&adw::HeaderBar::builder().show_title(false).build());
         content_view.set_content(Some(&body));
-        let content = adw::NavigationPage::new(&content_view, "Message");
+        let content = adw::NavigationPage::new(&content_view, tr!("Message"));
 
         let split = adw::NavigationSplitView::builder().sidebar(&sidebar).content(&content).min_sidebar_width(300.0).build();
         let window = adw::Window::builder()
             .application(app)
-            .title("Mail")
+            .title(tr!("Mail"))
             .default_width(1100)
             .default_height(720)
             .content(&split)
@@ -174,14 +175,14 @@ impl MailWindow {
     fn show_empty(&self) {
         let env = self.env.borrow().clone();
         if env.is_empty() || !self.messages.borrow().is_empty() {
-            let (title, text) = if self.messages.borrow().is_empty() { ("No Mail", "") } else { ("No Message Selected", "") };
+            let (title, text) = if self.messages.borrow().is_empty() { (tr!("No Mail"), "") } else { (tr!("No Message Selected"), "") };
             self.detail.set_child(Some(&ui::empty("mail-unread-symbolic", title, text)));
             return;
         }
         let page = ui::empty(
             "mail-unread-symbolic",
-            "Catch Your App's Mail",
-            "Add these lines to your project's .env. MAIL_USERNAME picks the inbox, so every project gets its own.",
+            tr!("Catch Your App's Mail"),
+            tr!("Add these lines to your project's .env. MAIL_USERNAME picks the inbox, so every project gets its own."),
         );
         let code = gtk::Label::builder().label(&env).selectable(true).xalign(0.0).css_classes(["monospace", "card"]).build();
         code.set_margin_top(6);
@@ -199,7 +200,7 @@ impl MailWindow {
             match gio::spawn_blocking(move || Client.mail_detail(&i)).await.expect("mail request") {
                 Ok(detail) if this.selected.borrow().as_deref() == Some(id.as_str()) => this.show_detail(&detail),
                 Ok(_) => {}
-                Err(e) => this.detail.set_child(Some(&ui::empty("dialog-warning-symbolic", "Could Not Load Message", &e.to_string()))),
+                Err(e) => this.detail.set_child(Some(&ui::empty("dialog-warning-symbolic", tr!("Could Not Load Message"), &e.to_string()))),
             }
         });
     }
@@ -213,16 +214,16 @@ impl MailWindow {
             .margin_start(16)
             .margin_end(16)
             .build();
-        let subject = if detail.subject.is_empty() { "(no subject)" } else { &detail.subject };
+        let subject = if detail.subject.is_empty() { tr!("(no subject)") } else { &detail.subject };
         header.append(&gtk::Label::builder().label(subject).xalign(0.0).wrap(true).selectable(true).css_classes(["title-3"]).build());
         let fields = gtk::Grid::builder().column_spacing(10).row_spacing(2).build();
-        let mut rows = vec![("From", detail.from.clone()), ("To", detail.to.clone().unwrap_or_default().join(", "))];
+        let mut rows = vec![(tr!("From"), detail.from.clone()), (tr!("To"), detail.to.clone().unwrap_or_default().join(", "))];
         let cc = detail.cc.clone().unwrap_or_default();
         if !cc.is_empty() {
-            rows.push(("Cc", cc.join(", ")));
+            rows.push((tr!("Cc"), cc.join(", ")));
         }
-        rows.push(("Date", ui::date_time(&detail.date)));
-        rows.push(("Inbox", detail.inbox.clone()));
+        rows.push((tr!("Date"), ui::date_time(&detail.date)));
+        rows.push((tr!("Inbox"), detail.inbox.clone()));
         for (i, (name, value)) in rows.iter().enumerate() {
             fields.attach(&gtk::Label::builder().label(*name).xalign(0.0).css_classes(["dim-label"]).build(), 0, i as i32, 1, 1);
             fields.attach(&gtk::Label::builder().label(value).xalign(0.0).selectable(true).wrap(true).build(), 1, i as i32, 1, 1);
@@ -235,7 +236,7 @@ impl MailWindow {
                 let label = format!("{} ({})", attachment.filename, glib::format_size(attachment.size));
                 let button = gtk::Button::builder()
                     .child(&adw::ButtonContent::builder().icon_name("mail-attachment-symbolic").label(&label).build())
-                    .tooltip_text("Save…")
+                    .tooltip_text(tr!("Save…"))
                     .build();
                 let id = detail.id.clone();
                 button.connect_clicked(move |b| save_attachment(b, &id, attachment.index, &attachment.filename));
@@ -248,14 +249,18 @@ impl MailWindow {
         let switcher = gtk::StackSwitcher::builder().stack(&stack).halign(gtk::Align::Start).build();
         header.append(&switcher);
         let html: gtk::Widget = if detail.html.is_empty() {
-            ui::empty("text-html-symbolic", "No HTML Part", "").upcast()
+            ui::empty("text-html-symbolic", tr!("No HTML Part"), "").upcast()
         } else {
             ui::html_view(&detail.html, false).upcast()
         };
         stack.add_titled(&html, Some("html"), "HTML");
-        stack.add_titled(&ui::monospace(if detail.text.is_empty() { "(no text part)" } else { &detail.text }), Some("text"), "Text");
+        stack.add_titled(
+            &ui::monospace(if detail.text.is_empty() { tr!("(no text part)") } else { &detail.text }),
+            Some("text"),
+            tr!("Text"),
+        );
         let raw = adw::Bin::new();
-        stack.add_titled(&raw, Some("raw"), "Raw");
+        stack.add_titled(&raw, Some("raw"), tr!("Raw"));
         let headers = gtk::ListBox::builder()
             .css_classes(["boxed-list"])
             .selection_mode(gtk::SelectionMode::None)
@@ -273,7 +278,7 @@ impl MailWindow {
                     .build(),
             );
         }
-        stack.add_titled(&gtk::ScrolledWindow::builder().child(&headers).vexpand(true).build(), Some("headers"), "Headers");
+        stack.add_titled(&gtk::ScrolledWindow::builder().child(&headers).vexpand(true).build(), Some("headers"), tr!("Headers"));
         if detail.html.is_empty() {
             stack.set_visible_child_name("text");
         }
@@ -285,9 +290,11 @@ impl MailWindow {
                 glib::spawn_future_local(async move {
                     match gio::spawn_blocking(move || Client.mail_raw(&id)).await.expect("mail request") {
                         Ok(text) => raw.set_child(Some(&ui::monospace(&text))),
-                        Err(e) => {
-                            raw.set_child(Some(&ui::empty("dialog-warning-symbolic", "Could Not Load the Raw Message", &e.to_string())))
-                        }
+                        Err(e) => raw.set_child(Some(&ui::empty(
+                            "dialog-warning-symbolic",
+                            tr!("Could Not Load the Raw Message"),
+                            &e.to_string(),
+                        ))),
                     }
                 });
             }
@@ -301,8 +308,8 @@ impl MailWindow {
     }
 
     fn confirm_clear(self: &Rc<Self>) {
-        let dialog = adw::AlertDialog::new(Some("Delete all caught mail?"), None);
-        dialog.add_responses(&[("cancel", "Cancel"), ("delete", "Delete All")]);
+        let dialog = adw::AlertDialog::new(Some(tr!("Delete all caught mail?")), None);
+        dialog.add_responses(&[("cancel", tr!("Cancel")), ("delete", tr!("Delete All"))]);
         dialog.set_response_appearance("delete", adw::ResponseAppearance::Destructive);
         let this = self.clone();
         dialog.choose(Some(&self.window), gio::Cancellable::NONE, move |response| {
@@ -333,7 +340,7 @@ fn message_row(message: &MailSummary) -> gtk::ListBoxRow {
     );
     top.append(&gtk::Label::builder().label(ui::relative_time(&message.date)).css_classes(["caption", "dim-label"]).build());
     column.append(&top);
-    let subject = if message.subject.is_empty() { "(no subject)" } else { &message.subject };
+    let subject = if message.subject.is_empty() { tr!("(no subject)") } else { &message.subject };
     column.append(&gtk::Label::builder().label(subject).xalign(0.0).ellipsize(gtk::pango::EllipsizeMode::End).build());
     let bottom = gtk::Box::builder().spacing(6).build();
     bottom.append(&gtk::Label::builder().label(&message.inbox).css_classes(["caption", "badge", "accent"]).build());

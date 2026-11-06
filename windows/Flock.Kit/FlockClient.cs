@@ -7,11 +7,11 @@ namespace Flock.Kit;
 public class FlockException(string message, Exception? innerException = null) : Exception(message, innerException);
 
 /// <summary>Nothing answers on the daemon's API.</summary>
-public sealed class FlockNotRunningException(Exception? innerException = null) : FlockException("Flock is not running", innerException);
+public sealed class FlockNotRunningException(Exception? innerException = null) : FlockException(Strings.Client_NotRunning, innerException);
 
 /// <summary>The daemon answered with an error.</summary>
 public sealed class FlockServerException(int status, string message, Exception? innerException = null)
-    : FlockException(message.Length == 0 ? $"Flock answered with HTTP {status}" : message, innerException)
+    : FlockException(message.Length == 0 ? Localization.Format(Strings.Client_HttpStatus, status) : message, innerException)
 {
     public int StatusCode { get; } = status;
 }
@@ -19,7 +19,7 @@ public sealed class FlockServerException(int status, string message, Exception? 
 
 /// <summary>The daemon may have applied a write before the connection failed.</summary>
 public sealed class FlockRequestOutcomeUnknownException(Exception innerException)
-    : FlockException("The connection failed. The change may have completed; refresh its state before retrying.", innerException);
+    : FlockException(Strings.Client_OutcomeUnknown, innerException);
 
 /// <summary>Talks to the daemon's local HTTP API (the loopback listener described by api.json).</summary>
 public sealed class FlockClient : IDisposable
@@ -429,11 +429,11 @@ public sealed class FlockClient : IDisposable
         }
         try
         {
-            return JsonSerializer.Deserialize<T>(data, FlockJson.Options) ?? throw new FlockException($"empty answer from {path}");
+            return JsonSerializer.Deserialize<T>(data, FlockJson.Options) ?? throw new FlockException(Localization.Format(Strings.Client_EmptyAnswer, path));
         }
         catch (JsonException e)
         {
-            throw new FlockException($"Unexpected answer from {path}: {e.Message}", e);
+            throw new FlockException(Localization.Format(Strings.Client_UnexpectedAnswer, path, e.Message), e);
         }
     }
 
@@ -525,7 +525,7 @@ public sealed class FlockClient : IDisposable
 
     private static Exception TimeoutFailure(HttpMethod method, string path, Exception cause) =>
         method == HttpMethod.Get
-            ? new FlockException($"Flock did not answer {method} {path} in time", cause)
+            ? new FlockException(Localization.Format(Strings.Client_Timeout, method, path), cause)
             : new FlockRequestOutcomeUnknownException(cause);
 
     private static Exception TerminalTransportFailure(HttpMethod method, Exception cause) =>

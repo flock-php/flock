@@ -168,7 +168,7 @@ public sealed class Status
 
         /// <summary>What answers at the upstream: the server's name, "Running" or "Not running".</summary>
         [JsonIgnore]
-        public string ServerLabel => Running ? Server is { Length: > 0 } server ? server : "Running" : "Not running";
+        public string ServerLabel => Running ? Server is { Length: > 0 } server ? server : Strings.Proxy_Running : Strings.Proxy_NotRunning;
     }
 
     /// <summary>One of a site's extra domains: a subdomain ("tenant1") or an alias ("my-app-2.test").</summary>
@@ -633,11 +633,11 @@ public static class EventKind
 
     public static string Name(string kind) => kind switch
     {
-        Query => "Queries",
-        Log => "Logs",
-        View => "Views",
-        Job => "Jobs",
-        Request => "Requests",
+        Query => Strings.EventKind_Queries,
+        Log => Strings.EventKind_Logs,
+        View => Strings.EventKind_Views,
+        Job => Strings.EventKind_Jobs,
+        Request => Strings.EventKind_Requests,
         _ => kind,
     };
 }

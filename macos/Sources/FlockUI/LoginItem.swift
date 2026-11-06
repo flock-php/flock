@@ -1,3 +1,4 @@
+import Foundation
 import ServiceManagement
 
 /// Flock's menu bar app as a login item: the setup's checkbox and Settings → General.
@@ -14,10 +15,10 @@ enum LoginItem {
                 try SMAppService.mainApp.unregister()
             }
         } catch {
-            return "Could not change the login item: \(error.localizedDescription)"
+            return String(localized: "Could not change the login item: \(error.localizedDescription)")
         }
         return SMAppService.mainApp.status == .requiresApproval
-            ? "Allow Flock in System Settings → General → Login Items."
+            ? String(localized: "Allow Flock in System Settings → General → Login Items.")
             : nil
     }
 }

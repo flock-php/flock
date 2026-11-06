@@ -1,0 +1,2594 @@
+# Czech translations of the Flock Linux app (linux/src). The English text is the msgid;
+# src/i18n.rs builds this file into the app, and its tests fail when a text of the app is
+# missing here or a translation drops a {placeholder}.
+msgid ""
+msgstr ""
+"Project-Id-Version: flock-app\n"
+"Language: cs\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=3; plural=(n==1) ? 0 : (n>=2 && n<=4) ? 1 : 2;\n"
+
+#: src/api.rs
+msgid "Flock is not running"
+msgstr "Flock neběží"
+
+#: src/api.rs
+msgid "Flock answered with HTTP {status}"
+msgstr "Flock odpověděl s HTTP {status}"
+
+#: src/api.rs
+msgid "unexpected answer from Flock: {error}"
+msgstr "neočekávaná odpověď od Flocku: {error}"
+
+#: src/api.rs
+msgid "Queries"
+msgstr "Dotazy"
+
+#: src/api.rs src/logs.rs src/tray.rs src/window.rs
+msgid "Logs"
+msgstr "Logy"
+
+#: src/api.rs
+msgid "Views"
+msgstr "Pohledy"
+
+#: src/api.rs
+msgid "Jobs"
+msgstr "Úlohy"
+
+#: src/api.rs
+msgid "Requests"
+msgstr "Požadavky"
+
+#: src/api.rs src/panes/services.rs
+msgid "Installing…"
+msgstr "Instaluje se…"
+
+#: src/api.rs
+msgid "Downloading… {percent}%"
+msgstr "Stahuje se… {percent} %"
+
+#: src/api.rs
+msgid "Downloading…"
+msgstr "Stahuje se…"
+
+#: src/api.rs src/model.rs src/panes/services.rs
+msgid "Not running"
+msgstr "Neběží"
+
+#: src/api.rs src/panes/general.rs src/panes/mail.rs src/panes/services.rs
+msgid "Running"
+msgstr "Běží"
+
+#: src/api.rs
+msgid "own database"
+msgstr "vlastní databáze"
+
+#: src/api.rs
+msgctxt "database"
+msgid "shared"
+msgstr "sdílená"
+
+#: src/api.rs
+msgctxt "database"
+msgid "copy"
+msgstr "kopie"
+
+#: src/api.rs
+msgctxt "database"
+msgid "fresh"
+msgstr "nová"
+
+#: src/api.rs src/panes/services.rs
+msgid "Waiting…"
+msgstr "Čeká se…"
+
+#: src/api.rs
+msgid "Setup failed"
+msgstr "Příprava selhala"
+
+#: src/api.rs src/panes/worktree_job.rs
+msgid "Ready"
+msgstr "Připraveno"
+
+#: src/api.rs
+msgid "Setting up…"
+msgstr "Připravuje se…"
+
+#: src/api.rs src/panes/sites.rs
+msgid "The current commit"
+msgstr "Aktuální commit"
+
+#: src/api.rs
+msgid "{name} (current)"
+msgstr "{name} (aktuální)"
+
+#: src/api.rs
+msgid "{name} (default)"
+msgstr "{name} (výchozí)"
+
+#: src/dumps.rs src/tray.rs src/window.rs
+msgid "Dumps"
+msgstr "Dumpy"
+
+#: src/dumps.rs
+msgid "Capture dumps, queries, logs, views and jobs"
+msgstr "Zachytávat dumpy, dotazy, logy, pohledy a úlohy"
+
+#: src/dumps.rs
+msgid "Latest request only"
+msgstr "Jen poslední požadavek"
+
+#: src/dumps.rs
+msgid "Capture options and editor"
+msgstr "Možnosti zachytávání a editor"
+
+#: src/dumps.rs src/logs.rs
+msgid "Clear"
+msgstr "Vymazat"
+
+#: src/dumps.rs
+msgid "Search dumps, queries, logs"
+msgstr "Hledat v dumpech, dotazech a lozích"
+
+#: src/dumps.rs src/logs.rs src/mail.rs src/window.rs src/panes/php.rs src/panes/services.rs src/panes/sites.rs
+msgid "Dismiss"
+msgstr "Skrýt"
+
+#: src/dumps.rs
+msgid "PHP {versions} only captures dumps — its build has no agent extension yet, so queries, logs, views and jobs are missing there."
+msgid_plural "PHP {versions} only capture dumps — their builds have no agent extension yet, so queries, logs, views and jobs are missing there."
+msgstr[0] "PHP {versions} zachytává jen dumpy — jeho sestavení zatím nemá rozšíření agenta, takže tam chybí dotazy, logy, pohledy a úlohy."
+msgstr[1] "PHP {versions} zachytávají jen dumpy — jejich sestavení zatím nemají rozšíření agenta, takže tam chybí dotazy, logy, pohledy a úlohy."
+msgstr[2] "PHP {versions} zachytávají jen dumpy — jejich sestavení zatím nemají rozšíření agenta, takže tam chybí dotazy, logy, pohledy a úlohy."
+
+#: src/dumps.rs src/panes/dumps.rs
+msgid "Capture"
+msgstr "Zachytávat"
+
+#: src/dumps.rs
+msgid "Show dump() in the page too"
+msgstr "Zobrazovat dump() i na stránce"
+
+#: src/dumps.rs
+msgid "Open sources in"
+msgstr "Otevírat zdrojové soubory v"
+
+#: src/dumps.rs
+msgid "{n} entry"
+msgid_plural "{n} entries"
+msgstr[0] "{n} záznam"
+msgstr[1] "{n} záznamy"
+msgstr[2] "{n} záznamů"
+
+#: src/dumps.rs
+msgid "Nothing Captured Yet"
+msgstr "Zatím nic nezachyceno"
+
+#: src/dumps.rs
+msgid "Nothing Matches"
+msgstr "Nic neodpovídá"
+
+#: src/dumps.rs
+msgid "dump() and dd() output, queries, logs, views and jobs from your sites and artisan commands appear here."
+msgstr "Zde se objeví výstup dump() a dd(), dotazy, logy, pohledy a úlohy z vašich webů a příkazů artisan."
+
+#: src/dumps.rs
+msgid "Capture is off — turn it on with the record button to collect dumps, queries, logs, views and jobs here."
+msgstr "Zachytávání je vypnuté — zapněte ho tlačítkem nahrávání a sbírejte zde dumpy, dotazy, logy, pohledy a úlohy."
+
+#: src/dumps.rs
+msgid "Clear everything captured?"
+msgstr "Vymazat vše zachycené?"
+
+#: src/dumps.rs
+msgid "Every captured dump, query, log, view and job is deleted, from all requests and commands."
+msgstr "Smažou se všechny zachycené dumpy, dotazy, logy, pohledy a úlohy ze všech požadavků a příkazů."
+
+#: src/dumps.rs src/logs.rs src/mail.rs src/setup.rs src/panes/common.rs src/panes/general.rs src/panes/php.rs src/panes/services.rs src/panes/sites.rs src/panes/versions.rs
+msgid "Cancel"
+msgstr "Zrušit"
+
+#: src/installation.rs
+msgid "Flock is not installed for this user ({path} is missing) — run `flk install` once."
+msgstr "Flock není pro tohoto uživatele nainstalovaný (chybí {path}) — spusťte jednou `flk install`."
+
+#: src/installation.rs
+msgid "Flock isn't installed: install the flockphp package first."
+msgstr "Flock není nainstalovaný: nejdřív nainstalujte balíček flockphp."
+
+#: src/links.rs
+msgid "The link may be meant for a newer Flock. Update Flock, then try again."
+msgstr "Odkaz je možná určený pro novější Flock. Aktualizujte Flock a zkuste to znovu."
+
+#: src/links.rs
+msgid "There's no build of it for this computer, or the link is meant for a newer Flock."
+msgstr "Pro tento počítač neexistuje jeho sestavení, nebo je odkaz určený pro novější Flock."
+
+#: src/links.rs
+msgid "Install {name} {version}?"
+msgstr "Nainstalovat {name} {version}?"
+
+#: src/links.rs
+msgid "A link asked Flock to install {name} {version}. {purpose}"
+msgstr "Odkaz žádá Flock o instalaci {name} {version}. {purpose}"
+
+#: src/links.rs
+msgid "{name} is already installed"
+msgstr "{name} už je nainstalované"
+
+#: src/links.rs
+msgid "You'll find it in Settings → {pane}."
+msgstr "Najdete ho v Nastavení → {pane}."
+
+#: src/links.rs
+msgid "{name} is already being installed"
+msgstr "{name} se už instaluje"
+
+#: src/links.rs
+msgid "Settings → {pane} shows how far it is."
+msgstr "Jak daleko je, ukazuje Nastavení → {pane}."
+
+#: src/links.rs
+msgid "Flock doesn't offer {name}"
+msgstr "Flock nenabízí {name}"
+
+#: src/links.rs
+msgid "Flock doesn't offer {name} {version}"
+msgstr "Flock nenabízí {name} {version}"
+
+#: src/links.rs
+msgid "Flock can't run it on this platform."
+msgstr "Flock ho na této platformě nedokáže spustit."
+
+#: src/links.rs
+msgid "{name} isn't available on this computer"
+msgstr "{name} není na tomto počítači dostupné"
+
+#: src/links.rs src/window.rs src/panes/services.rs
+msgid "Services"
+msgstr "Služby"
+
+#: src/links.rs
+msgid "It runs on 127.0.0.1 for your sites."
+msgstr "Běží na 127.0.0.1 pro vaše weby."
+
+#: src/links.rs
+msgid "Sites that use it are served as soon as it's installed."
+msgstr "Weby, které ho používají, se začnou obsluhovat, jakmile se nainstaluje."
+
+#: src/links.rs
+msgid "Projects that use it get node, npm and npx as soon as it's installed."
+msgstr "Projekty, které ho používají, dostanou node, npm a npx, jakmile se nainstaluje."
+
+#: src/links.rs
+msgid "Flock has no site called {site}"
+msgstr "Flock nemá žádný web s názvem {site}"
+
+#: src/links.rs
+msgid "Add the site in Settings → Sites first."
+msgstr "Nejdřív web přidejte v Nastavení → Weby."
+
+#: src/links.rs
+msgid "{site} is already secured"
+msgstr "{site} už je zabezpečený"
+
+#: src/links.rs
+msgid "It's served at https://{domain}."
+msgstr "Obsluhuje se na https://{domain}."
+
+#: src/links.rs
+msgid "Serve {site} over HTTPS?"
+msgstr "Obsluhovat {site} přes HTTPS?"
+
+#: src/links.rs
+msgid "A link asked Flock to secure {domain}. It gets a certificate this computer already trusts."
+msgstr "Odkaz žádá Flock o zabezpečení {domain}. Dostane certifikát, kterému tento počítač už důvěřuje."
+
+#: src/logs.rs
+msgid "All levels"
+msgstr "Všechny úrovně"
+
+#: src/logs.rs
+msgid "Error and above"
+msgstr "Error a vyšší"
+
+#: src/logs.rs
+msgid "Warning and above"
+msgstr "Warning a vyšší"
+
+#: src/logs.rs
+msgid "Info and above"
+msgstr "Info a vyšší"
+
+#: src/logs.rs
+msgid "Show only entries of this level and above (site logs)"
+msgstr "Zobrazit jen záznamy této a vyšší úrovně (logy webů)"
+
+#: src/logs.rs
+msgid "Reload the log every 2 seconds"
+msgstr "Načítat log znovu každé 2 sekundy"
+
+#: src/logs.rs src/mail.rs
+msgid "Refresh"
+msgstr "Obnovit"
+
+#: src/logs.rs
+msgid "Clear the site's log"
+msgstr "Vymazat log webu"
+
+#: src/logs.rs
+msgid "Search logs"
+msgstr "Hledat v lozích"
+
+#: src/logs.rs src/panes/services.rs
+msgid "Log"
+msgstr "Log"
+
+#: src/logs.rs
+msgid "Laravel log"
+msgstr "Log Laravelu"
+
+#: src/logs.rs
+msgid "Service log"
+msgstr "Log služby"
+
+#: src/logs.rs
+msgid "Pick a Log"
+msgstr "Vyberte log"
+
+#: src/logs.rs
+msgid "(empty)"
+msgstr "(prázdné)"
+
+#: src/logs.rs
+msgid "No Log Entries"
+msgstr "Žádné záznamy v logu"
+
+#: src/logs.rs
+msgid "storage/logs of {site} is empty."
+msgstr "storage/logs webu {site} je prázdné."
+
+#: src/logs.rs
+msgid "No Results"
+msgstr "Žádné výsledky"
+
+#: src/logs.rs
+msgid "No entry matches the search or level."
+msgstr "Hledání ani úrovni neodpovídá žádný záznam."
+
+#: src/logs.rs
+msgid "Clear the log of {site}?"
+msgstr "Vymazat log webu {site}?"
+
+#: src/logs.rs
+msgid "Deletes the Laravel log files in storage/logs of {site}. This can't be undone."
+msgstr "Smaže soubory logu Laravelu ve storage/logs webu {site}. Tuto akci nelze vrátit."
+
+#: src/logs.rs
+msgid "Details"
+msgstr "Podrobnosti"
+
+#: src/mail.rs
+msgid "Delete All"
+msgstr "Smazat vše"
+
+#: src/mail.rs src/tray.rs src/window.rs src/panes/services.rs
+msgid "Mail"
+msgstr "Pošta"
+
+#: src/mail.rs
+msgid "Message"
+msgstr "Zpráva"
+
+#: src/mail.rs
+msgid "No Mail"
+msgstr "Žádná pošta"
+
+#: src/mail.rs
+msgid "No Message Selected"
+msgstr "Není vybraná žádná zpráva"
+
+#: src/mail.rs
+msgid "Catch Your App's Mail"
+msgstr "Zachytávejte poštu své aplikace"
+
+#: src/mail.rs
+msgid "Add these lines to your project's .env. MAIL_USERNAME picks the inbox, so every project gets its own."
+msgstr "Přidejte tyto řádky do .env svého projektu. MAIL_USERNAME určuje schránku, takže každý projekt má svou vlastní."
+
+#: src/mail.rs
+msgid "Could Not Load Message"
+msgstr "Zprávu nelze načíst"
+
+#: src/mail.rs
+msgid "(no subject)"
+msgstr "(bez předmětu)"
+
+#: src/mail.rs
+msgid "From"
+msgstr "Od"
+
+#: src/mail.rs
+msgid "To"
+msgstr "Komu"
+
+#: src/mail.rs
+msgid "Cc"
+msgstr "Kopie"
+
+#: src/mail.rs
+msgid "Date"
+msgstr "Datum"
+
+#: src/mail.rs
+msgid "Inbox"
+msgstr "Schránka"
+
+#: src/mail.rs
+msgid "Save…"
+msgstr "Uložit…"
+
+#: src/mail.rs
+msgid "No HTML Part"
+msgstr "Žádná část HTML"
+
+#: src/mail.rs
+msgid "(no text part)"
+msgstr "(žádná textová část)"
+
+#: src/mail.rs
+msgid "Text"
+msgstr "Text"
+
+#: src/mail.rs
+msgid "Raw"
+msgstr "Zdroj"
+
+#: src/mail.rs
+msgid "Headers"
+msgstr "Hlavičky"
+
+#: src/mail.rs
+msgid "Could Not Load the Raw Message"
+msgstr "Zdroj zprávy nelze načíst"
+
+#: src/mail.rs
+msgid "Delete all caught mail?"
+msgstr "Smazat veškerou zachycenou poštu?"
+
+#: src/model.rs
+msgid "Not set up"
+msgstr "Nenastaveno"
+
+#: src/model.rs
+msgid "Needs attention · {version}"
+msgstr "Vyžaduje pozornost · {version}"
+
+#: src/model.rs
+msgid "Running · {version}"
+msgstr "Běží · {version}"
+
+#: src/notifier.rs
+msgid "Setting up {worktree} failed"
+msgstr "Příprava {worktree} selhala"
+
+#: src/notifier.rs
+msgid "see its log"
+msgstr "viz jeho log"
+
+#: src/prefs.rs
+msgid "Don't link"
+msgstr "Neodkazovat"
+
+#: src/setup.rs
+msgid "Open Flock when I log in"
+msgstr "Otevřít Flock po přihlášení"
+
+#: src/setup.rs
+msgid "Back"
+msgstr "Zpět"
+
+#: src/setup.rs
+msgid "Runs in the background"
+msgstr "Běží na pozadí"
+
+#: src/setup.rs
+msgid "The Flock daemon serves your sites and services, and starts with your computer."
+msgstr "Démon Flocku obsluhuje vaše weby a služby a spouští se spolu s počítačem."
+
+#: src/setup.rs
+msgid "php, composer and node in your terminal"
+msgstr "php, composer a node ve vašem terminálu"
+
+#: src/setup.rs
+msgid "Flock's versions come first on your PATH. Open a new terminal after setup."
+msgstr "Verze Flocku jsou ve vaší proměnné PATH na prvním místě. Po nastavení otevřete nový terminál."
+
+#: src/setup.rs
+msgid "*.test sites with trusted HTTPS"
+msgstr "Weby *.test s důvěryhodným HTTPS"
+
+#: src/setup.rs
+msgid "Linux asks for your password once: to start the background service, resolve *.test through Flock and trust Flock's certificate in the system and your browsers."
+msgstr "Linux se jednou zeptá na heslo: aby spustil službu na pozadí, překládal *.test přes Flock a důvěřoval certifikátu Flocku v systému i ve vašich prohlížečích."
+
+#: src/setup.rs
+msgid "Set Up Flock"
+msgstr "Nastavit Flock"
+
+#: src/setup.rs
+msgid "Welcome to Flock"
+msgstr "Vítá vás Flock"
+
+#: src/setup.rs
+msgid "Flock runs your Laravel sites, PHP, mail and databases on this computer. Setting it up takes a moment:"
+msgstr "Flock na tomto počítači provozuje vaše weby v Laravelu, PHP, poštu a databáze. Nastavení chvíli potrvá:"
+
+#: src/setup.rs
+msgid "Checking Flock's ports…"
+msgstr "Kontrolují se porty Flocku…"
+
+#: src/setup.rs
+msgid "Quit {app}"
+msgstr "Ukončete {app}"
+
+#: src/setup.rs
+msgid "port {port} ({service})"
+msgstr "port {port} ({service})"
+
+#: src/setup.rs
+msgid "{program} uses {ports}."
+msgstr "{program} používá {ports}."
+
+#: src/setup.rs
+msgid "Check Again"
+msgstr "Zkontrolovat znovu"
+
+#: src/setup.rs
+msgid "Stop other web servers first"
+msgstr "Nejdřív zastavte jiné webové servery"
+
+#: src/setup.rs
+msgid "Flock needs these ports and *.{tld} for itself, but other programs use them. Running both would leave neither working."
+msgstr "Flock potřebuje tyto porty a *.{tld} pro sebe, ale používají je jiné programy. Kdyby běžely oba, nefungoval by ani jeden."
+
+#: src/setup.rs
+msgid "Setting up Flock…"
+msgstr "Nastavuje se Flock…"
+
+#: src/setup.rs
+msgid "Linux asks for your password in a moment."
+msgstr "Linux se za chvíli zeptá na heslo."
+
+#: src/setup.rs
+msgid "Could not change the startup setting: {error}."
+msgstr "Nastavení spouštění nelze změnit: {error}."
+
+#: src/setup.rs
+msgid "The password prompt was cancelled. Flock runs, but *.test sites won't resolve and HTTPS isn't trusted until you allow it."
+msgstr "Dotaz na heslo byl zrušen. Flock běží, ale weby *.test se nebudou překládat a HTTPS nebude důvěryhodné, dokud to nepovolíte."
+
+#: src/setup.rs
+msgid "Something went wrong. The output below says what; you can try again."
+msgstr "Něco se pokazilo. Co přesně, uvádí výstup níže; můžete to zkusit znovu."
+
+#: src/setup.rs src/panes/sites.rs
+msgid "Try Again"
+msgstr "Zkusit znovu"
+
+#: src/setup.rs
+msgid "Setup didn't finish"
+msgstr "Nastavení se nedokončilo"
+
+#: src/setup.rs
+msgid "Next steps"
+msgstr "Další kroky"
+
+#: src/setup.rs
+msgid "Open Settings"
+msgstr "Otevřít nastavení"
+
+#: src/setup.rs
+msgid "Done"
+msgstr "Hotovo"
+
+#: src/setup.rs
+msgid "Flock is ready"
+msgstr "Flock je připravený"
+
+#: src/setup.rs
+msgid "{name} couldn't be installed"
+msgstr "{name} se nepodařilo nainstalovat"
+
+#: src/setup.rs
+msgid "{error}Try again in Settings → {pane}."
+msgstr "{error}Zkuste to znovu v Nastavení → {pane}."
+
+#: src/setup.rs
+msgid "Installing {names}…"
+msgstr "Instaluje se {names}…"
+
+#: src/setup.rs
+msgid "Flock makes it the default for your sites and terminal."
+msgid_plural "Flock makes them the default for your sites and terminal."
+msgstr[0] "Flock ho nastaví jako výchozí pro vaše weby a terminál."
+msgstr[1] "Flock je nastaví jako výchozí pro vaše weby a terminál."
+msgstr[2] "Flock je nastaví jako výchozí pro vaše weby a terminál."
+
+#: src/setup.rs
+msgid "Waiting to install {names}"
+msgstr "Čeká se na instalaci {names}"
+
+#: src/setup.rs
+msgid "As soon as Flock can download it."
+msgid_plural "As soon as Flock can download them."
+msgstr[0] "Jakmile ho Flock bude moct stáhnout."
+msgstr[1] "Jakmile je Flock bude moct stáhnout."
+msgstr[2] "Jakmile je Flock bude moct stáhnout."
+
+#: src/setup.rs
+msgid "{names} are installed"
+msgstr "{names} jsou nainstalované"
+
+#: src/setup.rs
+msgid "They're the defaults for your sites and terminal."
+msgstr "Jsou výchozí pro vaše weby a terminál."
+
+#: src/setup.rs
+msgid "Flock won't open at login"
+msgstr "Flock se po přihlášení neotevře"
+
+#: src/setup.rs
+msgid "{problem} Settings → General has it too."
+msgstr "{problem} Najdete to také v Nastavení → Obecné."
+
+#: src/setup.rs
+msgid "Open a new terminal"
+msgstr "Otevřete nový terminál"
+
+#: src/setup.rs
+msgid "Terminals that were already open still have the old PATH."
+msgstr "Terminály, které už byly otevřené, mají stále starou PATH."
+
+#: src/setup.rs
+msgid "Link a project"
+msgstr "Propojte projekt"
+
+#: src/setup.rs
+msgid "In a Laravel project, run `flock link`: the site is then at http://<folder>.test. `flock secure` adds HTTPS."
+msgstr "V projektu v Laravelu spusťte `flock link`: web pak najdete na http://<folder>.test. `flock secure` přidá HTTPS."
+
+#: src/setup.rs
+msgid "Also delete my sites' settings and databases"
+msgstr "Smazat také nastavení a databáze mých webů"
+
+#: src/setup.rs
+msgid "Uninstall Flock?"
+msgstr "Odinstalovat Flock?"
+
+#: src/setup.rs
+msgid "Flock stops and is removed from your PATH, together with its PHP and Node.js versions, certificates, logs and caches. Linux asks for your password to remove the *.test DNS setup and Flock's trusted certificate.\n\nYour sites' settings and databases stay in {folder}, so reinstalling picks up where you left off — unless you also delete them."
+msgstr "Flock se zastaví a odebere se z vaší PATH spolu se svými verzemi PHP a Node.js, certifikáty, logy a mezipamětí. Linux se zeptá na heslo, aby odebral nastavení DNS pro *.test a důvěryhodný certifikát Flocku.\n\nNastavení a databáze vašich webů zůstanou ve složce {folder}, takže po opětovné instalaci budete pokračovat tam, kde jste skončili — pokud je také nesmažete."
+
+#: src/setup.rs src/panes/node.rs src/panes/php.rs src/panes/services.rs
+msgid "Uninstall"
+msgstr "Odinstalovat"
+
+#: src/setup.rs
+msgid "Uninstalling Flock…"
+msgstr "Odinstalovává se Flock…"
+
+#: src/setup.rs
+msgid "Uninstall Flock"
+msgstr "Odinstalovat Flock"
+
+#: src/setup.rs
+msgid "Flock was uninstalled. Remove the app with your package manager (sudo apt remove flockphp, or sudo dnf remove flockphp). Open a new terminal: Flock is no longer on its PATH."
+msgstr "Flock byl odinstalován. Aplikaci odeberte správcem balíčků (sudo apt remove flockphp nebo sudo dnf remove flockphp). Otevřete nový terminál: Flock už není v jeho PATH."
+
+#: src/setup.rs
+msgid "The password prompt was cancelled, so the DNS setup and the certificate are still in place."
+msgstr "Dotaz na heslo byl zrušen, takže nastavení DNS a certifikát zůstávají na místě."
+
+#: src/setup.rs
+msgid "Uninstalling didn't finish. The output below says what; you can try again."
+msgstr "Odinstalace se nedokončila. Co přesně se stalo, uvádí výstup níže; můžete to zkusit znovu."
+
+#: src/setup.rs
+msgid "{first} and {second}"
+msgstr "{first} a {second}"
+
+#: src/timeline.rs
+msgid "context"
+msgstr "kontext"
+
+#: src/timeline.rs
+msgid "queue {name}"
+msgstr "fronta {name}"
+
+#: src/tray.rs
+msgid "No sites yet"
+msgstr "Zatím žádné weby"
+
+#: src/tray.rs
+msgid "Manage Sites…"
+msgstr "Spravovat weby…"
+
+#: src/tray.rs src/window.rs src/panes/sites.rs
+msgid "Sites"
+msgstr "Weby"
+
+#: src/tray.rs
+msgid "Set Up Flock…"
+msgstr "Nastavit Flock…"
+
+#: src/tray.rs
+msgid "Open Flock"
+msgstr "Otevřít Flock"
+
+#: src/tray.rs
+msgid "Capture Dumps"
+msgstr "Zachytávat dumpy"
+
+#: src/tray.rs
+msgid "Settings…"
+msgstr "Nastavení…"
+
+#: src/tray.rs src/panes/general.rs
+msgid "Restart Flock"
+msgstr "Restartovat Flock"
+
+#: src/tray.rs src/window.rs
+msgid "Start Flock"
+msgstr "Spustit Flock"
+
+#: src/tray.rs src/window.rs
+msgid "Quit Flock"
+msgstr "Ukončit Flock"
+
+#: src/ui.rs
+msgid "just now"
+msgstr "právě teď"
+
+#: src/ui.rs
+msgid "a minute ago"
+msgid_plural "{n} minutes ago"
+msgstr[0] "před minutou"
+msgstr[1] "před {n} minutami"
+msgstr[2] "před {n} minutami"
+
+#: src/ui.rs
+msgid "an hour ago"
+msgid_plural "{n} hours ago"
+msgstr[0] "před hodinou"
+msgstr[1] "před {n} hodinami"
+msgstr[2] "před {n} hodinami"
+
+#: src/ui.rs
+msgid "%e %b"
+msgstr "%e. %-m."
+
+#: src/ui.rs
+msgid "%e %b %Y, %H:%M:%S"
+msgstr "%e. %-m. %Y, %H:%M:%S"
+
+#: src/window.rs
+msgid "General"
+msgstr "Obecné"
+
+#: src/window.rs
+msgid "Debugger"
+msgstr "Debugger"
+
+#: src/window.rs
+msgid "AI"
+msgstr "AI"
+
+#: src/window.rs
+msgid "About"
+msgstr "O aplikaci"
+
+#: src/window.rs
+msgid "Flock Is Not Running"
+msgstr "Flock neběží"
+
+#: src/window.rs
+msgid "Start the daemon to change its settings."
+msgstr "Spusťte démona, abyste mohli měnit jeho nastavení."
+
+#: src/panes/about.rs
+msgid "App {version}"
+msgstr "Aplikace {version}"
+
+#: src/panes/about.rs
+msgid "Data Folder"
+msgstr "Složka s daty"
+
+#: src/panes/about.rs
+msgid "Flock Docs"
+msgstr "Dokumentace Flocku"
+
+#: src/panes/about.rs
+msgid "License"
+msgstr "Licence"
+
+#: src/panes/about.rs
+msgid "Found a bug? Report an issue"
+msgstr "Našli jste chybu? Nahlaste ji"
+
+#: src/panes/about.rs
+msgid "Uninstall Flock…"
+msgstr "Odinstalovat Flock…"
+
+#: src/panes/about.rs
+msgid "Stops Flock and removes it from this computer. Your sites, databases and settings are kept."
+msgstr "Zastaví Flock a odebere ho z tohoto počítače. Vaše weby, databáze a nastavení zůstanou zachované."
+
+#: src/panes/about.rs
+msgid "Copyright © Guava s.r.o. Licensed under the AGPL-3.0."
+msgstr "Copyright © Guava s.r.o. Licencováno pod AGPL-3.0."
+
+#: src/panes/about.rs
+msgid "A native local development environment for Laravel."
+msgstr "Nativní lokální vývojové prostředí pro Laravel."
+
+#: src/panes/about.rs
+msgid "not running"
+msgstr "neběží"
+
+#: src/panes/about.rs
+msgid "Daemon {version}"
+msgstr "Démon {version}"
+
+#: src/panes/ai.rs
+msgid "Let AI agents like Claude Code and Cursor work with Flock: your sites' URLs and PHP versions, logs, dumps and mail, and installing versions and services."
+msgstr "Umožněte AI agentům jako Claude Code a Cursor pracovat s Flockem: s URL a verzemi PHP vašich webů, logy, dumpy a poštou a s instalací verzí a služeb."
+
+#: src/panes/ai.rs
+msgid "AI clients"
+msgstr "AI klienti"
+
+#: src/panes/ai.rs
+msgid "Added once, Flock works in every project. Restart the client, or reload its MCP servers, after adding Flock."
+msgstr "Stačí přidat jednou a Flock funguje v každém projektu. Po přidání Flocku klienta restartujte nebo znovu načtěte jeho MCP servery."
+
+#: src/panes/ai.rs src/panes/services.rs src/panes/sites.rs
+msgid "Loading…"
+msgstr "Načítá se…"
+
+#: src/panes/ai.rs
+msgid "Other clients"
+msgstr "Další klienti"
+
+#: src/panes/ai.rs
+msgid "Add this to the client's MCP settings."
+msgstr "Přidejte toto do nastavení MCP klienta."
+
+#: src/panes/ai.rs
+msgid "Flock is added"
+msgstr "Flock je přidaný"
+
+#: src/panes/ai.rs src/panes/services.rs
+msgid "Installed"
+msgstr "Nainstalováno"
+
+#: src/panes/ai.rs src/panes/node.rs src/panes/php.rs src/panes/services.rs
+msgid "Not installed"
+msgstr "Nenainstalováno"
+
+#: src/panes/ai.rs src/panes/general.rs src/panes/sites.rs
+msgid "Remove"
+msgstr "Odebrat"
+
+#: src/panes/ai.rs src/panes/sites.rs
+msgid "Add"
+msgstr "Přidat"
+
+#: src/panes/common.rs
+msgid "OK"
+msgstr "OK"
+
+#: src/panes/debugger.rs
+msgid "Step through requests and commands with Xdebug."
+msgstr "Krokujte požadavky a příkazy pomocí Xdebugu."
+
+#: src/panes/debugger.rs
+msgid "Xdebug loads only for requests that ask for it, so everything else stays fast. While a project has breakpoints in PhpStorm, every request to its site is debugged."
+msgstr "Xdebug se načítá jen pro požadavky, které o něj žádají, takže vše ostatní zůstává rychlé. Dokud má projekt v PhpStormu breakpointy, ladí se každý požadavek na jeho web."
+
+#: src/panes/debugger.rs
+msgid "Detect Xdebug requests"
+msgstr "Rozpoznávat požadavky Xdebugu"
+
+#: src/panes/debugger.rs
+msgid "Detect PhpStorm breakpoints"
+msgstr "Rozpoznávat breakpointy PhpStormu"
+
+#: src/panes/debugger.rs
+msgid "Debugging now"
+msgstr "Právě se ladí"
+
+#: src/panes/debugger.rs
+msgid "Connect your IDE"
+msgstr "Připojte své IDE"
+
+#: src/panes/debugger.rs
+msgid "Client port"
+msgstr "Port klienta"
+
+#: src/panes/debugger.rs src/panes/sites.rs
+msgid "Mode"
+msgstr "Režim"
+
+#: src/panes/debugger.rs
+msgid "Start a session"
+msgstr "Spusťte relaci"
+
+#: src/panes/debugger.rs
+msgid "Set a breakpoint in PhpStorm and listen for debug connections, use the Xdebug browser extension, or add ?XDEBUG_TRIGGER=1 to the URL. On the command line, run `flock debug artisan …`."
+msgstr "Nastavte breakpoint v PhpStormu a naslouchejte ladicím připojením, použijte rozšíření prohlížeče Xdebug nebo přidejte ?XDEBUG_TRIGGER=1 do URL. Na příkazové řádce spusťte `flock debug artisan …`."
+
+#: src/panes/debugger.rs
+msgid "Availability"
+msgstr "Dostupnost"
+
+#: src/panes/debugger.rs
+msgid "Available"
+msgstr "Dostupné"
+
+#: src/panes/debugger.rs
+msgid "Not in this build"
+msgstr "Není v tomto sestavení"
+
+#: src/panes/dumps.rs
+msgid "Send dump() and dd() output, queries, logs, views and jobs to Flock instead of the page or terminal — no changes to your projects."
+msgstr "Posílejte výstup dump() a dd(), dotazy, logy, pohledy a úlohy do Flocku místo na stránku nebo do terminálu — bez úprav vašich projektů."
+
+#: src/panes/dumps.rs
+msgid "Turn it off to see dumps in the page again."
+msgstr "Vypněte ho, abyste dumpy znovu viděli na stránce."
+
+#: src/panes/dumps.rs
+msgid "{n} dump"
+msgid_plural "{n} dumps"
+msgstr[0] "{n} dump"
+msgstr[1] "{n} dumpy"
+msgstr[2] "{n} dumpů"
+
+#: src/panes/dumps.rs
+msgid "{n} event"
+msgid_plural "{n} events"
+msgstr[0] "{n} událost"
+msgstr[1] "{n} události"
+msgstr[2] "{n} událostí"
+
+#: src/panes/dumps.rs
+msgid "Captured"
+msgstr "Zachyceno"
+
+#: src/panes/dumps.rs
+msgid "Open Dumps"
+msgstr "Otevřít dumpy"
+
+#: src/panes/dumps.rs
+msgid "dd() always shows in the page too, as it ends the request."
+msgstr "dd() se vždy zobrazí i na stránce, protože ukončí požadavek."
+
+#: src/panes/dumps.rs
+msgid "PHP {versions} only captures dumps: its build has no agent extension yet."
+msgid_plural "PHP {versions} only capture dumps: their builds have no agent extension yet."
+msgstr[0] "PHP {versions} zachytává jen dumpy: jeho sestavení zatím nemá rozšíření agenta."
+msgstr[1] "PHP {versions} zachytávají jen dumpy: jejich sestavení zatím nemají rozšíření agenta."
+msgstr[2] "PHP {versions} zachytávají jen dumpy: jejich sestavení zatím nemají rozšíření agenta."
+
+#: src/panes/dumps.rs
+msgid "While capturing"
+msgstr "Při zachytávání"
+
+#: src/panes/dumps.rs
+msgid "Show dump() output in the page too"
+msgstr "Zobrazovat výstup dump() i na stránce"
+
+#: src/panes/dumps.rs
+msgid "Sources"
+msgstr "Zdrojové soubory"
+
+#: src/panes/dumps.rs
+msgid "Open files in"
+msgstr "Otevírat soubory v"
+
+#: src/panes/general.rs
+msgid "The Flock daemon runs your sites, PHP and services in the background."
+msgstr "Démon Flocku provozuje vaše weby, PHP a služby na pozadí."
+
+#: src/panes/general.rs
+msgid "Daemon"
+msgstr "Démon"
+
+#: src/panes/general.rs src/panes/mail.rs
+msgid "Status"
+msgstr "Stav"
+
+#: src/panes/general.rs
+msgid "Needs attention"
+msgstr "Vyžaduje pozornost"
+
+#: src/panes/general.rs
+msgid "down"
+msgstr "nefunguje"
+
+#: src/panes/general.rs
+msgid "Version"
+msgstr "Verze"
+
+#: src/panes/general.rs
+msgid "Process"
+msgstr "Proces"
+
+#: src/panes/general.rs
+msgid "pid {pid}"
+msgstr "PID {pid}"
+
+#: src/panes/general.rs
+msgid "Restart Daemon"
+msgstr "Restartovat démona"
+
+#: src/panes/general.rs
+msgid "Restarting…"
+msgstr "Restartuje se…"
+
+#: src/panes/general.rs
+msgid "Sites use ports {http} (HTTP) and {https} (HTTPS), set in config.json, so their addresses include the port."
+msgstr "Weby používají porty {http} (HTTP) a {https} (HTTPS) nastavené v config.json, takže jejich adresy obsahují port."
+
+#: src/panes/general.rs
+msgid "Network"
+msgstr "Síť"
+
+#: src/panes/general.rs
+msgid "Domain"
+msgstr "Doména"
+
+#: src/panes/general.rs
+msgid "Data"
+msgstr "Data"
+
+#: src/panes/general.rs src/panes/sites.rs
+msgid "Folder"
+msgstr "Složka"
+
+#: src/panes/general.rs src/panes/services.rs src/panes/sites.rs
+msgid "Open"
+msgstr "Otevřít"
+
+#: src/panes/general.rs
+msgid "Startup"
+msgstr "Spouštění"
+
+#: src/panes/general.rs
+msgid "Open Flock at login"
+msgstr "Otevírat Flock po přihlášení"
+
+#: src/panes/general.rs
+msgid "Shows the Flock icon in the tray when you log in. The daemon itself always starts with your computer."
+msgstr "Po přihlášení zobrazí ikonu Flocku v oznamovací oblasti. Samotný démon se spouští vždy spolu s počítačem."
+
+#: src/panes/general.rs
+msgid "Could not change the startup setting: {error}"
+msgstr "Nastavení spouštění nelze změnit: {error}"
+
+#: src/panes/general.rs
+msgid "Updates"
+msgstr "Aktualizace"
+
+#: src/panes/general.rs
+msgid "New versions come from the AUR package {package}: update it with your AUR helper, e.g. `yay -Syu`."
+msgstr "Nové verze přicházejí z balíčku AUR {package}: aktualizujte ho svým pomocníkem pro AUR, např. `yay -Syu`."
+
+#: src/panes/general.rs
+msgid "New versions come with your system's updates. `flock update` installs one right away."
+msgstr "Nové verze přicházejí s aktualizacemi systému. `flock update` jednu nainstaluje hned."
+
+#: src/panes/general.rs
+msgid "Check for Updates…"
+msgstr "Vyhledat aktualizace…"
+
+#: src/panes/general.rs
+msgid "Opens {name}"
+msgstr "Otevře {name}"
+
+#: src/panes/general.rs
+msgid "Could not open {program}: {error}"
+msgstr "{program} nelze otevřít: {error}"
+
+#: src/panes/general.rs
+msgid "Beta versions"
+msgstr "Beta verze"
+
+#: src/panes/general.rs
+msgid "Get new versions of Flock, PHP and services earlier, including pre-releases. They may not work yet."
+msgstr "Získávejte nové verze Flocku, PHP a služeb dříve, včetně předběžných verzí. Nemusí ještě fungovat."
+
+#: src/panes/general.rs
+msgid "Experimental channel: packages that aren’t released yet are offered. `flock channel stable` switches back."
+msgstr "Experimentální kanál: nabízejí se i balíčky, které ještě nebyly vydány. `flock channel stable` vás vrátí zpět."
+
+#: src/panes/general.rs
+msgid "Project folders"
+msgstr "Složky projektů"
+
+#: src/panes/general.rs
+msgid "Every folder inside a project folder is served as <folder>.{tld} — the same as `flock park`."
+msgstr "Každá složka uvnitř složky projektů se obsluhuje jako <folder>.{tld} — stejně jako u `flock park`."
+
+#: src/panes/general.rs
+msgid "Add Project Folders"
+msgstr "Přidat složky projektů"
+
+#: src/panes/general.rs
+msgid "No project folders"
+msgstr "Žádné složky projektů"
+
+#: src/panes/general.rs
+msgid "Software Updater"
+msgstr "Aktualizace softwaru"
+
+#: src/panes/general.rs
+msgid "Language"
+msgstr "Jazyk"
+
+#: src/panes/general.rs
+msgid "System default"
+msgstr "Podle systému"
+
+#: src/panes/general.rs
+msgid "Flock uses the new language after it restarts."
+msgstr "Flock použije nový jazyk po restartu."
+
+#: src/panes/general.rs
+msgid "Remove {name} from project folders?"
+msgstr "Odebrat {name} ze složek projektů?"
+
+#: src/panes/general.rs
+msgid "The sites in {path} are no longer served. The folder and its projects are not touched."
+msgstr "Weby ve složce {path} se přestanou obsluhovat. Složka ani její projekty se nezmění."
+
+#: src/panes/general.rs
+msgid "Every name, any subdomain included, is resolved by Flock's DNS server through systemd-resolved."
+msgstr "Každý název včetně libovolné subdomény překládá DNS server Flocku přes systemd-resolved."
+
+#: src/panes/general.rs
+msgid "Flock's DNS server isn't running"
+msgstr "DNS server Flocku neběží"
+
+#: src/panes/general.rs src/panes/services.rs
+msgid "*.{tld} doesn't resolve: {problem}. Linux has no hosts-file fallback, so sites don't open until it does; `flock install` sets it up again."
+msgstr "*.{tld} se nepřekládá: {problem}. Linux nemá záložní soubor hosts, takže weby se neotevřou, dokud se to nespraví; `flock install` to znovu nastaví."
+
+#: src/panes/mail.rs
+msgid "Flock catches every email your apps send — nothing leaves your computer."
+msgstr "Flock zachytí každý e-mail, který vaše aplikace odešlou — nic neopustí váš počítač."
+
+#: src/panes/mail.rs
+msgid "SMTP server"
+msgstr "Server SMTP"
+
+#: src/panes/mail.rs
+msgid "Host"
+msgstr "Hostitel"
+
+#: src/panes/mail.rs src/panes/services.rs
+msgid "Port"
+msgstr "Port"
+
+#: src/panes/mail.rs src/panes/services.rs
+msgid "Stopped"
+msgstr "Zastaveno"
+
+#: src/panes/mail.rs src/panes/services.rs
+msgid "Environment Variables"
+msgstr "Proměnné prostředí"
+
+#: src/panes/mail.rs
+msgid "MAIL_USERNAME picks the inbox, so every project gets its own."
+msgstr "MAIL_USERNAME určuje schránku, takže každý projekt má svou vlastní."
+
+#: src/panes/mail.rs
+msgid "Caught emails"
+msgstr "Zachycené e-maily"
+
+#: src/panes/mail.rs
+msgid "Open Mail"
+msgstr "Otevřít poštu"
+
+#: src/panes/node.rs
+msgid "node, npm and npx follow the project's .nvmrc / .node-version, then the site's version, then the default."
+msgstr "node, npm a npx se řídí souborem .nvmrc / .node-version projektu, pak verzí webu a nakonec výchozí verzí."
+
+#: src/panes/node.rs src/panes/php.rs src/panes/services.rs
+msgid "Install"
+msgstr "Nainstalovat"
+
+#: src/panes/node.rs
+msgid "Downloading Node.js {version}…"
+msgstr "Stahuje se Node.js {version}…"
+
+#: src/panes/node.rs
+msgid "Loading Node.js versions…"
+msgstr "Načítají se verze Node.js…"
+
+#: src/panes/node.rs
+msgid "Couldn't check for updates: {error}"
+msgstr "Aktualizace nelze zkontrolovat: {error}"
+
+#: src/panes/node.rs
+msgid "Official Node.js builds, the newest release of each major. A project that pins a version in .nvmrc gets that major offered when you run node, npm or npx there. Global packages (npm install -g) belong to a Node line and survive its updates; those of the default version are on your PATH."
+msgstr "Oficiální sestavení Node.js, nejnovější vydání každé hlavní verze. Projekt, který má verzi v .nvmrc, dostane tuto hlavní verzi nabídnutou, když v něm spustíte node, npm nebo npx. Globální balíčky (npm install -g) patří k řadě Node a přežijí její aktualizace; ty z výchozí verze jsou ve vaší PATH."
+
+#: src/panes/node.rs src/panes/services.rs src/panes/sites.rs
+msgid "Versions"
+msgstr "Verze"
+
+#: src/panes/node.rs
+msgid "No Node.js versions to show yet."
+msgstr "Zatím nejsou k dispozici žádné verze Node.js."
+
+#: src/panes/node.rs src/panes/php.rs src/panes/services.rs
+msgid "Check now"
+msgstr "Zkontrolovat"
+
+#: src/panes/node.rs src/panes/php.rs
+msgid "Checking…"
+msgstr "Kontroluje se…"
+
+#: src/panes/node.rs src/panes/php.rs src/panes/sites.rs
+msgid "Default"
+msgstr "Výchozí"
+
+#: src/panes/node.rs src/panes/php.rs
+msgid "Update available"
+msgstr "Je dostupná aktualizace"
+
+#: src/panes/node.rs src/panes/php.rs
+msgid "Up to date"
+msgstr "Aktuální"
+
+#: src/panes/node.rs
+msgid " (npm {version} available)"
+msgstr " (dostupné npm {version})"
+
+#: src/panes/node.rs src/panes/php.rs src/panes/services.rs
+msgid "Update to {version}"
+msgstr "Aktualizovat na {version}"
+
+#: src/panes/node.rs
+msgid "Downloads Node.js {new}, then removes {old}. Global packages stay."
+msgstr "Stáhne Node.js {new} a pak odebere {old}. Globální balíčky zůstanou."
+
+#: src/panes/node.rs
+msgid "Update npm"
+msgstr "Aktualizovat npm"
+
+#: src/panes/node.rs
+msgid "Updating npm to {version}…"
+msgstr "Aktualizuje se npm na {version}…"
+
+#: src/panes/node.rs src/panes/php.rs
+msgid "Make Default"
+msgstr "Nastavit jako výchozí"
+
+#: src/panes/node.rs src/panes/php.rs src/panes/services.rs
+msgid "Uninstall…"
+msgstr "Odinstalovat…"
+
+#: src/panes/node.rs
+msgid "Uninstall Node {version}?"
+msgstr "Odinstalovat Node {version}?"
+
+#: src/panes/node.rs
+msgid "Its global npm packages are removed too. Projects and sites that use Node {version} fall back to the default version until you install it again."
+msgstr "Odeberou se i jeho globální balíčky npm. Projekty a weby, které používají Node {version}, budou používat výchozí verzi, dokud ho znovu nenainstalujete."
+
+#: src/panes/node.rs src/panes/services.rs
+msgid "Uninstalling…"
+msgstr "Odinstalovává se…"
+
+#: src/panes/node.rs
+msgid "Making Node {version} the default…"
+msgstr "Node {version} se nastavuje jako výchozí…"
+
+#: src/panes/php.rs
+msgid "Every installed version runs its own PHP-FPM pool. Sites use the default unless pinned to a version."
+msgstr "Každá nainstalovaná verze má vlastní pool PHP-FPM. Weby používají výchozí verzi, pokud nemají připnutou jinou."
+
+#: src/panes/php.rs
+msgid "Loading PHP versions…"
+msgstr "Načítají se verze PHP…"
+
+#: src/panes/php.rs src/panes/services.rs
+msgid "Pre-release"
+msgstr "Předběžná verze"
+
+#: src/panes/php.rs
+msgid "PHP {version} isn’t released yet — it may not work. Offered on the beta channel."
+msgstr "PHP {version} ještě nebylo vydáno — nemusí fungovat. Nabízí se v beta kanálu."
+
+#: src/panes/php.rs
+msgid "A new build is available"
+msgstr "Je dostupné nové sestavení"
+
+#: src/panes/php.rs
+msgid "Downloads PHP {version} ({size} MB)"
+msgstr "Stáhne PHP {version} ({size} MB)"
+
+#: src/panes/php.rs src/panes/services.rs src/panes/sites.rs
+msgid "Show Log"
+msgstr "Zobrazit log"
+
+#: src/panes/php.rs src/panes/services.rs
+msgid "Retry"
+msgstr "Zkusit znovu"
+
+#: src/panes/php.rs src/panes/services.rs src/panes/sites.rs
+msgid "Update"
+msgstr "Aktualizovat"
+
+#: src/panes/php.rs
+msgid "Open php.ini"
+msgstr "Otevřít php.ini"
+
+#: src/panes/php.rs
+msgid "Show Last Install Log"
+msgstr "Zobrazit poslední log instalace"
+
+#: src/panes/php.rs
+msgid "Uninstall PHP {version}?"
+msgstr "Odinstalovat PHP {version}?"
+
+#: src/panes/php.rs
+msgid "Its php.ini is removed too. Sites pinned to PHP {version} stop working until you pick another version."
+msgstr "Odebere se i jeho php.ini. Weby připnuté k PHP {version} přestanou fungovat, dokud nevyberete jinou verzi."
+
+#: src/panes/php.rs
+msgid "PHP {version} install log"
+msgstr "Log instalace PHP {version}"
+
+#: src/panes/php.rs
+msgid "Not installed · downloads by itself when a site uses it"
+msgstr "Nenainstalováno · stáhne se samo, jakmile ho web použije"
+
+#: src/panes/php.rs
+msgid "Update to PHP {version}"
+msgstr "Aktualizovat na PHP {version}"
+
+#: src/panes/php.rs
+msgid "Uninstall FrankenPHP for PHP {version}?"
+msgstr "Odinstalovat FrankenPHP pro PHP {version}?"
+
+#: src/panes/php.rs
+msgid "Sites that run on FrankenPHP with this version are served by PHP-FPM until it has downloaded again by itself."
+msgstr "Weby, které běží na FrankenPHP s touto verzí, bude obsluhovat PHP-FPM, dokud se FrankenPHP samo znovu nestáhne."
+
+#: src/panes/services.rs
+msgid "Core"
+msgstr "Základní"
+
+#: src/panes/services.rs
+msgctxt "category"
+msgid "Database"
+msgstr "Databáze"
+
+#: src/panes/services.rs
+msgid "Cache & Queue"
+msgstr "Mezipaměť a fronty"
+
+#: src/panes/services.rs
+msgid "Search"
+msgstr "Vyhledávání"
+
+#: src/panes/services.rs
+msgid "Storage"
+msgstr "Úložiště"
+
+#: src/panes/services.rs
+msgid "Debugging"
+msgstr "Ladění"
+
+#: src/panes/services.rs
+msgid "Databases, caches, search and the tools around your sites. Everything listens on 127.0.0.1 only."
+msgstr "Databáze, mezipaměti, vyhledávání a nástroje kolem vašich webů. Vše naslouchá jen na 127.0.0.1."
+
+#: src/panes/services.rs
+msgid "All"
+msgstr "Vše"
+
+#: src/panes/services.rs
+msgid "More Services ({count})…"
+msgstr "Další služby ({count})…"
+
+#: src/panes/services.rs
+msgid "Every service Flock offers: MySQL, Redis, Meilisearch and more"
+msgstr "Všechny služby, které Flock nabízí: MySQL, Redis, Meilisearch a další"
+
+#: src/panes/services.rs
+msgid "Not available on Linux"
+msgstr "Na Linuxu není dostupné"
+
+#: src/panes/services.rs
+msgid "Port {port}"
+msgstr "Port {port}"
+
+#: src/panes/services.rs
+msgctxt "noun"
+msgid "Update"
+msgstr "Aktualizace"
+
+#: src/panes/services.rs
+msgid "Install failed"
+msgstr "Instalace selhala"
+
+#: src/panes/services.rs src/panes/sites.rs
+msgid "Stop"
+msgstr "Zastavit"
+
+#: src/panes/services.rs
+msgid "Start"
+msgstr "Spustit"
+
+#: src/panes/services.rs
+msgid "Stop {service}?"
+msgstr "Zastavit {service}?"
+
+#: src/panes/services.rs
+msgid "Your sites can't use {service} until you start it again; it stays stopped after restarts."
+msgstr "Vaše weby nebudou moct {service} používat, dokud ho znovu nespustíte; zůstane zastavené i po restartech."
+
+#: src/panes/services.rs
+msgid "Flock can't run this service here."
+msgstr "Flock tuto službu nemůže spustit zde."
+
+#: src/panes/services.rs
+msgid "Not available"
+msgstr "Nedostupné"
+
+#: src/panes/services.rs
+msgid "Caddy serves every site over HTTPS (https://app.{tld}) with certificates from Flock's local certificate authority, which `flock install` trusts."
+msgstr "Caddy obsluhuje každý web přes HTTPS (https://app.{tld}) s certifikáty od místní certifikační autority Flocku, které `flock install` nastaví jako důvěryhodnou."
+
+#: src/panes/services.rs
+msgid "Sites don't open while the web server is down. Its log may tell why; `flock restart` starts it again."
+msgstr "Dokud webový server nefunguje, weby se neotevřou. Jeho log možná řekne proč; `flock restart` ho znovu spustí."
+
+#: src/panes/services.rs
+msgid "systemd-resolved sends every name under .{tld} here (set up by `flock install`), so any subdomain of a site works (tenant1.app.{tld}, a.b.app.{tld}) without adding it."
+msgstr "systemd-resolved sem posílá každý název pod .{tld} (nastaveno pomocí `flock install`), takže funguje libovolná subdoména webu (tenant1.app.{tld}, a.b.app.{tld}), aniž byste ji přidávali."
+
+#: src/panes/services.rs
+msgid "the DNS server isn't running"
+msgstr "DNS server neběží"
+
+#: src/panes/services.rs src/panes/sites.rs
+msgid "Change…"
+msgstr "Změnit…"
+
+#: src/panes/services.rs
+msgid "{port} · set by `flock install`"
+msgstr "{port} · nastavil `flock install`"
+
+#: src/panes/services.rs
+msgid "Connection"
+msgstr "Připojení"
+
+#: src/panes/services.rs
+msgid "{service} Port"
+msgstr "Port služby {service}"
+
+#: src/panes/services.rs
+msgid "A port between 1024 and 65535 that no other program uses."
+msgstr "Port mezi 1024 a 65535, který nepoužívá žádný jiný program."
+
+#: src/panes/services.rs
+msgid "Change Port"
+msgstr "Změnit port"
+
+#: src/panes/services.rs
+msgid "This Flock daemon doesn't know this service. Update Flock, then try again."
+msgstr "Tento démon Flocku tuto službu nezná. Aktualizujte Flock a zkuste to znovu."
+
+#: src/panes/services.rs
+msgid "Not offered"
+msgstr "Nenabízí se"
+
+#: src/panes/services.rs
+msgid "Installed versions stay side by side. One runs at a time; each keeps its own data, and updates within a version keep it."
+msgstr "Nainstalované verze zůstávají vedle sebe. Běží vždy jedna; každá má svá vlastní data a aktualizace v rámci verze je zachovají."
+
+#: src/panes/services.rs
+msgid "Updates keep your data."
+msgstr "Aktualizace zachovají vaše data."
+
+#: src/panes/services.rs
+msgid "Couldn't check for new releases: {error}"
+msgstr "Nová vydání nelze zkontrolovat: {error}"
+
+#: src/panes/services.rs
+msgid "Installing {name}…"
+msgstr "Instaluje se {name}…"
+
+#: src/panes/services.rs
+msgid "Downloading {name}…"
+msgstr "Stahuje se {name}…"
+
+#: src/panes/services.rs
+msgid "Installing {name} failed"
+msgstr "Instalace {name} selhala"
+
+#: src/panes/services.rs
+msgid "Active"
+msgstr "Aktivní"
+
+#: src/panes/services.rs
+msgid "{old} → {new} available"
+msgstr "{old} → dostupná {new}"
+
+#: src/panes/services.rs
+msgid "Not installed · its data is kept · {version}"
+msgstr "Nenainstalováno · data zůstala zachovaná · {version}"
+
+#: src/panes/services.rs
+msgid "Not installed · {version}"
+msgstr "Nenainstalováno · {version}"
+
+#: src/panes/services.rs src/panes/versions.rs
+msgid "Withdrawn: {reason}"
+msgstr "Staženo: {reason}"
+
+#: src/panes/services.rs
+msgid "Switch…"
+msgstr "Přepnout…"
+
+#: src/panes/services.rs
+msgid "Reinstall {version}"
+msgstr "Přeinstalovat {version}"
+
+#: src/panes/services.rs
+msgid "Show Last Log"
+msgstr "Zobrazit poslední log"
+
+#: src/panes/services.rs
+msgid "{name} {version} uses its own data."
+msgstr "{name} {version} používá svá vlastní data."
+
+#: src/panes/services.rs
+msgid "{name} {version} starts with empty data."
+msgstr "{name} {version} začne s prázdnými daty."
+
+#: src/panes/services.rs
+msgid "{name} {version} stops; its data stays but isn't used until you switch back. {then}"
+msgstr "{name} {version} se zastaví; jeho data zůstanou, ale nepoužijí se, dokud se nepřepnete zpět. {then}"
+
+#: src/panes/services.rs
+msgid "Switch to {name} {version}?"
+msgstr "Přepnout na {name} {version}?"
+
+#: src/panes/services.rs src/panes/sites.rs
+msgid "Switch"
+msgstr "Přepnout"
+
+#: src/panes/services.rs
+msgid "{name} {version} stops and {name} {next} becomes the active version."
+msgstr "{name} {version} se zastaví a aktivní verzí se stane {name} {next}."
+
+#: src/panes/services.rs
+msgid "{name} {version} stops; your sites can't use {name} until you install a version again."
+msgstr "{name} {version} se zastaví; vaše weby nebudou moct {name} používat, dokud znovu nenainstalujete některou verzi."
+
+#: src/panes/services.rs
+msgid "Keep its data to pick up where you left off when you install it again."
+msgstr "Ponechte jeho data, abyste po opětovné instalaci mohli pokračovat tam, kde jste skončili."
+
+#: src/panes/services.rs
+msgid "It holds no data."
+msgstr "Neobsahuje žádná data."
+
+#: src/panes/services.rs
+msgid "Uninstall {name} {version}?"
+msgstr "Odinstalovat {name} {version}?"
+
+#: src/panes/services.rs
+msgid "Uninstall, Keep Data"
+msgstr "Odinstalovat, ponechat data"
+
+#: src/panes/services.rs
+msgid "Uninstall and Delete Data"
+msgstr "Odinstalovat a smazat data"
+
+#: src/panes/services.rs
+msgid "{name} install log"
+msgstr "Log instalace {name}"
+
+#: src/panes/services.rs
+msgid "Installed versions stay side by side. One runs at a time; each keeps its own databases, and updates within a version keep them."
+msgstr "Nainstalované verze zůstávají vedle sebe. Běží vždy jedna; každá má své vlastní databáze a aktualizace v rámci verze je zachovají."
+
+#: src/panes/services.rs
+msgid "Installing PostgreSQL {version}…"
+msgstr "Instaluje se PostgreSQL {version}…"
+
+#: src/panes/services.rs
+msgid "Updating PostgreSQL {version}…"
+msgstr "Aktualizuje se PostgreSQL {version}…"
+
+#: src/panes/services.rs
+msgid "Switching to PostgreSQL {version}…"
+msgstr "Přepíná se na PostgreSQL {version}…"
+
+#: src/panes/services.rs
+msgid "Uninstalling PostgreSQL {version}…"
+msgstr "Odinstalovává se PostgreSQL {version}…"
+
+#: src/panes/services.rs
+msgid "Not installed · {size} of databases kept"
+msgstr "Nenainstalováno · zachováno {size} databází"
+
+#: src/panes/services.rs
+msgid "Extensions of PostgreSQL {version}: PostGIS, pgRouting, pgvector, TimescaleDB and your own"
+msgstr "Rozšíření PostgreSQL {version}: PostGIS, pgRouting, pgvector, TimescaleDB a vaše vlastní"
+
+#: src/panes/services.rs
+msgid "Also install the extensions of PostgreSQL {version}?"
+msgstr "Nainstalovat i rozšíření z PostgreSQL {version}?"
+
+#: src/panes/services.rs
+msgid "{extensions} for PostgreSQL {version}, where they're available for it. You can change this later under Extensions…."
+msgstr "{extensions} pro PostgreSQL {version}, pokud jsou pro něj dostupná. Později to můžete změnit v části Rozšíření…."
+
+#: src/panes/services.rs
+msgid "PostgreSQL Only"
+msgstr "Jen PostgreSQL"
+
+#: src/panes/services.rs
+msgid "Install with Extensions"
+msgstr "Nainstalovat s rozšířeními"
+
+#: src/panes/services.rs
+msgid "After installing one, run CREATE EXTENSION in each database that uses it."
+msgstr "Po instalaci spusťte CREATE EXTENSION v každé databázi, která rozšíření používá."
+
+#: src/panes/services.rs
+msgid "Your own extensions"
+msgstr "Vaše vlastní rozšíření"
+
+#: src/panes/services.rs
+msgid "PostgreSQL {version} Extensions"
+msgstr "Rozšíření PostgreSQL {version}"
+
+#: src/panes/services.rs
+msgid "PostgreSQL {version} uses its own databases."
+msgstr "PostgreSQL {version} používá své vlastní databáze."
+
+#: src/panes/services.rs
+msgid "PostgreSQL {version} starts with a new, empty set of databases."
+msgstr "PostgreSQL {version} začne s novou, prázdnou sadou databází."
+
+#: src/panes/services.rs
+msgid "PostgreSQL {version} stops; its databases stay but aren't available until you switch back. {then}"
+msgstr "PostgreSQL {version} se zastaví; jeho databáze zůstanou, ale nebudou dostupné, dokud se nepřepnete zpět. {then}"
+
+#: src/panes/services.rs
+msgid "Switch to PostgreSQL {version}?"
+msgstr "Přepnout na PostgreSQL {version}?"
+
+#: src/panes/services.rs
+msgid "Removes the PostgreSQL {version} server."
+msgstr "Odebere server PostgreSQL {version}."
+
+#: src/panes/services.rs
+msgid "PostgreSQL {version} stops and Flock switches to PostgreSQL {next} with its own databases."
+msgstr "PostgreSQL {version} se zastaví a Flock se přepne na PostgreSQL {next} s jeho vlastními databázemi."
+
+#: src/panes/services.rs
+msgid "PostgreSQL {version} stops, and your sites can't use PostgreSQL until you install a version again."
+msgstr "PostgreSQL {version} se zastaví a vaše weby nebudou moct PostgreSQL používat, dokud znovu nenainstalujete některou verzi."
+
+#: src/panes/services.rs
+msgid "Uninstall PostgreSQL {version}?"
+msgstr "Odinstalovat PostgreSQL {version}?"
+
+#: src/panes/services.rs
+msgid "Uninstall, Keep Databases"
+msgstr "Odinstalovat, ponechat databáze"
+
+#: src/panes/services.rs
+msgid "Uninstall and Delete Databases ({size})"
+msgstr "Odinstalovat a smazat databáze ({size})"
+
+#: src/panes/services.rs
+msgid "Yours"
+msgstr "Vaše"
+
+#: src/panes/services.rs
+msgid "Extensions folder"
+msgstr "Složka rozšíření"
+
+#: src/panes/services.rs
+msgid "Put a library in lib/ and its .control and .sql files in extension/. Flock keeps them across updates of PostgreSQL {version}."
+msgstr "Knihovnu vložte do lib/ a její soubory .control a .sql do extension/. Flock je zachová i při aktualizacích PostgreSQL {version}."
+
+#: src/panes/services.rs
+msgid "Not available for PostgreSQL {version}"
+msgstr "Pro PostgreSQL {version} není dostupné"
+
+#: src/panes/services.rs
+msgid "No longer updated for PostgreSQL {version}"
+msgstr "Pro PostgreSQL {version} se už neaktualizuje"
+
+#: src/panes/services.rs
+msgid "PostgreSQL {version} restarts to load it"
+msgstr "PostgreSQL {version} se kvůli načtení restartuje"
+
+#: src/panes/services.rs
+msgid "License: {license}"
+msgstr "Licence: {license}"
+
+#: src/panes/services.rs
+msgid "Updating…"
+msgstr "Aktualizuje se…"
+
+#: src/panes/services.rs
+msgid "Uninstall {name}"
+msgstr "Odinstalovat {name}"
+
+#: src/panes/sites.rs
+msgid "The site's"
+msgstr "Databáze webu"
+
+#: src/panes/sites.rs
+msgid "A copy of the site's"
+msgstr "Kopie databáze webu"
+
+#: src/panes/sites.rs
+msgid "A new, empty one"
+msgstr "Nová, prázdná"
+
+#: src/panes/sites.rs
+msgid "Sites you added one by one, plus every folder inside your project folders."
+msgstr "Weby přidané jednotlivě a každá složka uvnitř vašich složek projektů."
+
+#: src/panes/sites.rs
+msgid "Secure"
+msgstr "Zabezpečit"
+
+#: src/panes/sites.rs
+msgid "No sites"
+msgstr "Žádné weby"
+
+#: src/panes/sites.rs
+msgid "Add a single site here, or add a project folder in General."
+msgstr "Přidejte sem jednotlivý web nebo přidejte složku projektů v části Obecné."
+
+#: src/panes/sites.rs
+msgid "Proxies"
+msgstr "Proxy"
+
+#: src/panes/sites.rs
+msgid "Add Proxy…"
+msgstr "Přidat proxy…"
+
+#: src/panes/sites.rs
+msgid "Serve a server of its own, e.g. a Node.js dev server on a port, at a .{tld} domain"
+msgstr "Obsluhovat vlastní server, např. vývojový server Node.js na portu, na doméně .{tld}"
+
+#: src/panes/sites.rs
+msgid "Name, e.g. my-app"
+msgstr "Název, např. my-app"
+
+#: src/panes/sites.rs
+msgid "Port, host:port or URL, e.g. 3000"
+msgstr "Port, host:port nebo URL, např. 3000"
+
+#: src/panes/sites.rs
+msgid "Add a proxy"
+msgstr "Přidat proxy"
+
+#: src/panes/sites.rs
+msgid "Flock serves <name>.{tld} from a server of its own, e.g. a Next.js, Nuxt or Vite dev server. A port means 127.0.0.1."
+msgstr "Flock obsluhuje <name>.{tld} z vlastního serveru, např. vývojového serveru Next.js, Nuxt nebo Vite. Samotný port znamená 127.0.0.1."
+
+#: src/panes/sites.rs
+msgid "Add Site…"
+msgstr "Přidat web…"
+
+#: src/panes/sites.rs
+msgid "Add Site"
+msgstr "Přidat web"
+
+#: src/panes/sites.rs
+msgid "{n} worktree"
+msgid_plural "{n} worktrees"
+msgstr[0] "{n} worktree"
+msgstr[1] "{n} worktrees"
+msgstr[2] "{n} worktrees"
+
+#: src/panes/sites.rs
+msgid "Open {site}"
+msgstr "Otevřít {site}"
+
+#: src/panes/sites.rs
+msgid "Project folder"
+msgstr "Složka projektu"
+
+#: src/panes/sites.rs
+msgid "Open in the browser"
+msgstr "Otevřít v prohlížeči"
+
+#: src/panes/sites.rs
+msgid "Open the project folder"
+msgstr "Otevřít složku projektu"
+
+#: src/panes/sites.rs
+msgid "PHP extensions"
+msgstr "Rozšíření PHP"
+
+#: src/panes/sites.rs
+msgid "Remove site"
+msgstr "Odebrat web"
+
+#: src/panes/sites.rs
+msgid "Remove {name}?"
+msgstr "Odebrat {name}?"
+
+#: src/panes/sites.rs
+msgid "Flock stops serving {domain}. The project in {path} is not touched."
+msgstr "Flock přestane obsluhovat {domain}. Projekt ve složce {path} se nezmění."
+
+#: src/panes/sites.rs
+msgid "Site"
+msgstr "Web"
+
+#: src/panes/sites.rs
+msgid "The document root is the folder Flock serves the site from. One picked here applies on this machine only; pin it to write it into .flockrc for everyone."
+msgstr "Kořen dokumentů je složka, ze které Flock web obsluhuje. Zde vybraný platí jen na tomto počítači; připněte ho, aby se zapsal do .flockrc pro všechny."
+
+#: src/panes/sites.rs
+msgid "{domain} (alias)"
+msgstr "{domain} (alias)"
+
+#: src/panes/sites.rs
+msgid "Remove {domain}"
+msgstr "Odebrat {domain}"
+
+#: src/panes/sites.rs
+msgid "{domain} is no longer served by {site}."
+msgstr "Web {site} už nebude obsluhovat {domain}."
+
+#: src/panes/sites.rs
+msgid "Add Domain…"
+msgstr "Přidat doménu…"
+
+#: src/panes/sites.rs
+msgid "Extra domains: subdomains and aliases"
+msgstr "Další domény: subdomény a aliasy"
+
+#: src/panes/sites.rs
+msgid "Subdomains only work when you add them here: {problem}."
+msgstr "Subdomény fungují, jen když je přidáte zde: {problem}."
+
+#: src/panes/sites.rs
+msgid "Use .flockrc"
+msgstr "Použít .flockrc"
+
+#: src/panes/sites.rs
+msgid "Every subdomain up to {n} level below the site already works. Add a full name like {site}-2.{tld} for an alias, or a subdomain (tenant1, a.b) so it is listed here and also resolves on Windows machines without wildcard DNS."
+msgid_plural "Every subdomain up to {n} levels below the site already works. Add a full name like {site}-2.{tld} for an alias, or a subdomain (tenant1, a.b) so it is listed here and also resolves on Windows machines without wildcard DNS."
+msgstr[0] "Každá subdoména až {n} úroveň pod webem už funguje. Pro alias přidejte celý název jako {site}-2.{tld}, nebo subdoménu (tenant1, a.b), aby byla uvedená zde a překládala se i na počítačích s Windows bez wildcard DNS."
+msgstr[1] "Každá subdoména až {n} úrovně pod webem už funguje. Pro alias přidejte celý název jako {site}-2.{tld}, nebo subdoménu (tenant1, a.b), aby byla uvedená zde a překládala se i na počítačích s Windows bez wildcard DNS."
+msgstr[2] "Každá subdoména až {n} úrovní pod webem už funguje. Pro alias přidejte celý název jako {site}-2.{tld}, nebo subdoménu (tenant1, a.b), aby byla uvedená zde a překládala se i na počítačích s Windows bez wildcard DNS."
+
+#: src/panes/sites.rs
+msgid "Wildcard subdomains don't work here ({problem}), so add each subdomain you use (tenant1, a.b). A full name adds an alias."
+msgstr "Wildcard subdomény tu nefungují ({problem}), takže přidejte každou subdoménu, kterou používáte (tenant1, a.b). Celý název přidá alias."
+
+#: src/panes/sites.rs
+msgid "tenant1, a.b or {site}-2.{tld}"
+msgstr "tenant1, a.b nebo {site}-2.{tld}"
+
+#: src/panes/sites.rs
+msgid "Add a domain to {site}"
+msgstr "Přidat doménu k webu {site}"
+
+#: src/panes/sites.rs
+msgid "Use .flockrc ({root})"
+msgstr "Použít .flockrc ({root})"
+
+#: src/panes/sites.rs
+msgid "Automatic (none found)"
+msgstr "Automaticky (nic nenalezeno)"
+
+#: src/panes/sites.rs
+msgid "Automatic ({root})"
+msgstr "Automaticky ({root})"
+
+#: src/panes/sites.rs
+msgid "Automatic"
+msgstr "Automaticky"
+
+#: src/panes/sites.rs
+msgid "Choose Folder…"
+msgstr "Vybrat složku…"
+
+#: src/panes/sites.rs
+msgid "Document root"
+msgstr "Kořen dokumentů"
+
+#: src/panes/sites.rs
+msgid "Choose the folder with the app's index.php in {site}"
+msgstr "Vyberte složku s index.php aplikace ve webu {site}"
+
+#: src/panes/sites.rs
+msgid "Choose"
+msgstr "Vybrat"
+
+#: src/panes/sites.rs
+msgid "{folder} isn't in {project}. The document root must be a folder in the project."
+msgstr "{folder} není ve složce {project}. Kořen dokumentů musí být složka v projektu."
+
+#: src/panes/sites.rs
+msgid "Share"
+msgstr "Sdílet"
+
+#: src/panes/sites.rs
+msgid "Show the site at a temporary public address to preview work in progress, never for production. Visitors don't get debug pages, dumps or the dev tools."
+msgstr "Zobrazte web na dočasné veřejné adrese a ukažte rozpracovanou práci, nikdy ne pro produkci. Návštěvníci neuvidí ladicí stránky, dumpy ani vývojářské nástroje."
+
+#: src/panes/sites.rs
+msgid "Share…"
+msgstr "Sdílet…"
+
+#: src/panes/sites.rs
+msgid "Sharing failed."
+msgstr "Sdílení selhalo."
+
+#: src/panes/sites.rs
+msgid "Building assets…"
+msgstr "Sestavují se assety…"
+
+#: src/panes/sites.rs
+msgid "Starting the tunnel…"
+msgstr "Spouští se tunel…"
+
+#: src/panes/sites.rs src/panes/versions.rs
+msgid "Copy"
+msgstr "Kopírovat"
+
+#: src/panes/sites.rs
+msgid "QR code of {url}"
+msgstr "QR kód pro {url}"
+
+#: src/panes/sites.rs
+msgid "Ends at {time}"
+msgstr "Skončí v {time}"
+
+#: src/panes/sites.rs
+msgid "Only for: {emails}"
+msgstr "Jen pro: {emails}"
+
+#: src/panes/sites.rs
+msgid "Debug mode is on: visitors see stack traces"
+msgstr "Režim ladění je zapnutý: návštěvníci vidí výpisy zásobníku"
+
+#: src/panes/sites.rs
+msgid "Rebuilding…"
+msgstr "Znovu se sestavuje…"
+
+#: src/panes/sites.rs
+msgid "Rebuild Assets"
+msgstr "Znovu sestavit assety"
+
+#: src/panes/sites.rs
+msgid "Runs npm run build again, so visitors see your latest changes when they reload"
+msgstr "Znovu spustí npm run build, aby návštěvníci po načtení stránky viděli vaše nejnovější změny"
+
+#: src/panes/sites.rs
+msgid "Stop Sharing"
+msgstr "Ukončit sdílení"
+
+#: src/panes/sites.rs
+msgid "Only these people (optional)"
+msgstr "Jen tito lidé (volitelné)"
+
+#: src/panes/sites.rs
+msgid "Show error details to visitors"
+msgstr "Zobrazovat návštěvníkům podrobnosti chyb"
+
+#: src/panes/sites.rs
+msgid "Turns the app's debug mode on for this share, so visitors see stack traces. Only for people you trust."
+msgstr "Zapne pro toto sdílení režim ladění aplikace, takže návštěvníci uvidí výpisy zásobníku. Jen pro lidi, kterým důvěřujete."
+
+#: src/panes/sites.rs
+msgid "Share {site}"
+msgstr "Sdílet {site}"
+
+#: src/panes/sites.rs
+msgid "Anyone with the link can open the site unless you list email addresses — Cloudflare then emails them a code. The link stops working after 8 hours or when you stop sharing."
+msgstr "Web může otevřít kdokoli s odkazem, pokud neuvedete e-mailové adresy — Cloudflare jim pak pošle kód e-mailem. Odkaz přestane fungovat po 8 hodinách nebo když sdílení ukončíte."
+
+#: src/panes/sites.rs
+msgid "A version picked here applies on this machine only. To set it for everyone working on the project, pin it: PHP goes into .flockrc, Node.js into .nvmrc."
+msgstr "Zde vybraná verze platí jen na tomto počítači. Chcete-li ji nastavit všem, kdo na projektu pracují, připněte ji: PHP se zapíše do .flockrc, Node.js do .nvmrc."
+
+#: src/panes/sites.rs
+msgid "PHP {version} is isolated here; the project pins {pinned} in {file}."
+msgstr "PHP {version} je zde izolované; projekt připíná {pinned} v {file}."
+
+#: src/panes/sites.rs
+msgid "Use {file}"
+msgstr "Použít {file}"
+
+#: src/panes/sites.rs
+msgid "Node {version} is isolated here; the project pins {pinned} in {file}."
+msgstr "Node {version} je zde izolované; projekt připíná {pinned} v {file}."
+
+#: src/panes/sites.rs
+msgid ".flockrc's Node {pinned} wins over {other}."
+msgstr "Node {pinned} z .flockrc má přednost před {other}."
+
+#: src/panes/sites.rs
+msgid "FrankenPHP needs PHP 8.2 or newer. Requests that ask for Xdebug still go to PHP-FPM. For worker mode, install Laravel Octane in the project (composer require laravel/octane)."
+msgstr "FrankenPHP potřebuje PHP 8.2 nebo novější. Požadavky, které žádají o Xdebug, dál jdou do PHP-FPM. Pro režim workerů nainstalujte do projektu Laravel Octane (composer require laravel/octane)."
+
+#: src/panes/sites.rs
+msgid "FrankenPHP needs PHP 8.2 or newer. Requests that ask for Xdebug still go to PHP-FPM."
+msgstr "FrankenPHP potřebuje PHP 8.2 nebo novější. Požadavky, které žádají o Xdebug, dál jdou do PHP-FPM."
+
+#: src/panes/sites.rs
+msgid "Server"
+msgstr "Server"
+
+#: src/panes/sites.rs
+msgid "Runs on"
+msgstr "Běží na"
+
+#: src/panes/sites.rs
+msgid "Classic"
+msgstr "Klasický"
+
+#: src/panes/sites.rs
+msgid "Running FrankenPHP {version} with PHP {php}"
+msgstr "Běží FrankenPHP {version} s PHP {php}"
+
+#: src/panes/sites.rs
+msgid " · worker mode"
+msgstr " · režim workerů"
+
+#: src/panes/sites.rs
+msgid "Downloading FrankenPHP for PHP {version}…"
+msgstr "Stahuje se FrankenPHP pro PHP {version}…"
+
+#: src/panes/sites.rs
+msgid "{percent}%"
+msgstr "{percent} %"
+
+#: src/panes/sites.rs
+msgid "PHP-FPM serves the site until it's ready."
+msgstr "Dokud nebude připravené, web obsluhuje PHP-FPM."
+
+#: src/panes/sites.rs
+msgid "PHP-FPM serves the site meanwhile."
+msgstr "Web mezitím obsluhuje PHP-FPM."
+
+#: src/panes/sites.rs
+msgid "Restart"
+msgstr "Restartovat"
+
+#: src/panes/sites.rs
+msgid "Restart FrankenPHP, e.g. so Octane's workers load changed code"
+msgstr "Restartovat FrankenPHP, např. aby workery Octane načetly změněný kód"
+
+#: src/panes/sites.rs
+msgid "The project uses Laravel Boost. Adding Flock to its guidelines tells AI agents that Flock serves the app and picks its PHP version."
+msgstr "Projekt používá Laravel Boost. Přidáním Flocku do jeho pokynů se AI agenti dozvědí, že aplikaci obsluhuje Flock a vybírá její verzi PHP."
+
+#: src/panes/sites.rs
+msgid "Flock's guideline in the project's Boost guidelines is outdated."
+msgstr "Pokyn Flocku v pokynech Boost projektu je zastaralý."
+
+#: src/panes/sites.rs
+msgid "Add Flock to its guidelines…"
+msgstr "Přidat Flock do pokynů…"
+
+#: src/panes/sites.rs
+msgid "Update it…"
+msgstr "Aktualizovat…"
+
+#: src/panes/sites.rs
+msgid "Add Flock to {site}'s Boost guidelines?"
+msgstr "Přidat Flock do pokynů Boost webu {site}?"
+
+#: src/panes/sites.rs
+msgid "Update Flock's guideline in {site}?"
+msgstr "Aktualizovat pokyn Flocku ve webu {site}?"
+
+#: src/panes/sites.rs
+msgid "Writes .ai/guidelines/flock.md in {path} and runs php artisan boost:update, so AI agents know Flock serves the app and picks its PHP version. Commit it with the rest of .ai/guidelines. This changes files in your project."
+msgstr "Zapíše .ai/guidelines/flock.md do {path} a spustí php artisan boost:update, aby AI agenti věděli, že aplikaci obsluhuje Flock a vybírá její verzi PHP. Commitněte ho se zbytkem .ai/guidelines. Tím se změní soubory ve vašem projektu."
+
+#: src/panes/sites.rs
+msgid "Pin"
+msgstr "Připnout"
+
+#: src/panes/sites.rs
+msgid "Pin PHP {version} to Project…"
+msgstr "Připnout PHP {version} k projektu…"
+
+#: src/panes/sites.rs
+msgid "Pin PHP {version} to {site}?"
+msgstr "Připnout PHP {version} k webu {site}?"
+
+#: src/panes/sites.rs
+msgid "Writes php={version} to .flockrc in {path}. Commit it, and everyone using Flock on this project gets PHP {version}. This changes a file in your project."
+msgstr "Zapíše php={version} do .flockrc ve složce {path}. Commitněte ho a každý, kdo na tomto projektu používá Flock, dostane PHP {version}. Tím se změní soubor ve vašem projektu."
+
+#: src/panes/sites.rs
+msgid "Pin Node {version} to Project…"
+msgstr "Připnout Node {version} k projektu…"
+
+#: src/panes/sites.rs
+msgid "Pin Node {version} to {site}?"
+msgstr "Připnout Node {version} k webu {site}?"
+
+#: src/panes/sites.rs
+msgid "Writes {version} to {file} in {path}. Commit it, and Flock, nvm and other Node tools use Node {version} for this project. This changes a file in your project."
+msgstr "Zapíše {version} do {file} ve složce {path}. Commitněte ho a Flock, nvm i další nástroje pro Node použijí pro tento projekt Node {version}. Tím se změní soubor ve vašem projektu."
+
+#: src/panes/sites.rs
+msgid "Pin Document Root ({root}) to Project…"
+msgstr "Připnout kořen dokumentů ({root}) k projektu…"
+
+#: src/panes/sites.rs
+msgid "Pin the document root {root} to {site}?"
+msgstr "Připnout kořen dokumentů {root} k webu {site}?"
+
+#: src/panes/sites.rs
+msgid "Writes root={value} to .flockrc in {path}. Commit it, and everyone using Flock on this project serves it from {root}. This changes a file in your project."
+msgstr "Zapíše root={value} do .flockrc ve složce {path}. Commitněte ho a každý, kdo na tomto projektu používá Flock, ho bude obsluhovat z {root}. Tím se změní soubor ve vašem projektu."
+
+#: src/panes/sites.rs
+msgid "Unpin"
+msgstr "Odepnout"
+
+#: src/panes/sites.rs
+msgid "Unpin PHP ({file})…"
+msgstr "Odepnout PHP ({file})…"
+
+#: src/panes/sites.rs
+msgid "Unpin PHP from {site}?"
+msgstr "Odepnout PHP od webu {site}?"
+
+#: src/panes/sites.rs
+msgid "Removes the PHP version from {file}. The site then uses Flock's default PHP. This changes files in your project."
+msgstr "Odebere verzi PHP z {file}. Web pak použije výchozí PHP Flocku. Tím se změní soubory ve vašem projektu."
+
+#: src/panes/sites.rs
+msgid "Unpin Node ({file})…"
+msgstr "Odepnout Node ({file})…"
+
+#: src/panes/sites.rs
+msgid "Unpin Node from {site}?"
+msgstr "Odepnout Node od webu {site}?"
+
+#: src/panes/sites.rs
+msgid "Removes the Node.js version from .flockrc and deletes .nvmrc / .node-version in {path}. The site then uses Flock's default Node.js. This changes files in your project."
+msgstr "Odebere verzi Node.js z .flockrc a smaže .nvmrc / .node-version ve složce {path}. Web pak použije výchozí Node.js Flocku. Tím se změní soubory ve vašem projektu."
+
+#: src/panes/sites.rs
+msgid "Unpin Document Root (.flockrc)…"
+msgstr "Odepnout kořen dokumentů (.flockrc)…"
+
+#: src/panes/sites.rs
+msgid "Unpin the document root from {site}?"
+msgstr "Odepnout kořen dokumentů od webu {site}?"
+
+#: src/panes/sites.rs
+msgid "Removes root= from .flockrc in {path}. Flock then finds the document root itself. This changes files in your project."
+msgstr "Odebere root= z .flockrc ve složce {path}. Flock pak kořen dokumentů najde sám. Tím se změní soubory ve vašem projektu."
+
+#: src/panes/sites.rs
+msgid "Pin versions and the document root to the project"
+msgstr "Připnout verze a kořen dokumentů k projektu"
+
+#: src/panes/sites.rs
+msgid "Worktrees"
+msgstr "Worktrees"
+
+#: src/panes/sites.rs
+msgid "Each git worktree of {site} is served at <branch>.{domain}, with its own dependencies and .env."
+msgstr "Každý git worktree webu {site} se obsluhuje na <branch>.{domain} s vlastními závislostmi a .env."
+
+#: src/panes/sites.rs
+msgid "New Worktree…"
+msgstr "Nový worktree…"
+
+#: src/panes/sites.rs
+msgid "No worktrees"
+msgstr "Žádné worktrees"
+
+#: src/panes/sites.rs
+msgid "Create one here, with git or with your agent app."
+msgstr "Vytvořte ho zde, pomocí gitu nebo ve své aplikaci s agentem."
+
+#: src/panes/sites.rs
+msgid "a name like brave-otter"
+msgstr "název jako brave-otter"
+
+#: src/panes/sites.rs
+msgid "Branch"
+msgstr "Větev"
+
+#: src/panes/sites.rs
+msgid "Start from"
+msgstr "Začít od"
+
+#: src/panes/sites.rs
+msgid "Database"
+msgstr "Databáze"
+
+#: src/panes/sites.rs
+msgid "Project default"
+msgstr "Výchozí pro projekt"
+
+#: src/panes/sites.rs
+msgid "New Worktree of {site}"
+msgstr "Nový worktree webu {site}"
+
+#: src/panes/sites.rs
+msgid "Create"
+msgstr "Vytvořit"
+
+#: src/panes/sites.rs
+msgid "Couldn't remove {name}"
+msgstr "{name} nelze odebrat"
+
+#: src/panes/sites.rs
+msgid "Remove Anyway"
+msgstr "Přesto odebrat"
+
+#: src/panes/sites.rs
+msgid "Worktree"
+msgstr "Worktree"
+
+#: src/panes/sites.rs
+msgid "Remove worktree"
+msgstr "Odebrat worktree"
+
+#: src/panes/sites.rs
+msgid "None (detached HEAD)"
+msgstr "Žádná (odpojený HEAD)"
+
+#: src/panes/sites.rs
+msgid "Open the folder"
+msgstr "Otevřít složku"
+
+#: src/panes/sites.rs
+msgid "URL"
+msgstr "URL"
+
+#: src/panes/sites.rs
+msgid "The branch pins it in {file}"
+msgstr "Větev ho připíná v {file}"
+
+#: src/panes/sites.rs
+msgid "Uses {site}'s settings"
+msgstr "Používá nastavení webu {site}"
+
+#: src/panes/sites.rs
+msgid "Change its PHP and Node.js versions, HTTPS and document root on the site."
+msgstr "Verze PHP a Node.js, HTTPS a kořen dokumentů změníte u webu."
+
+#: src/panes/sites.rs
+msgid "A database of its own gets the branch's migrations run on it."
+msgstr "Ve vlastní databázi se spustí migrace větve."
+
+#: src/panes/sites.rs
+msgid "Drop {database}?"
+msgstr "Odstranit {database}?"
+
+#: src/panes/sites.rs
+msgid "Its database {database} is dropped."
+msgstr "Jeho databáze {database} se odstraní."
+
+#: src/panes/sites.rs
+msgid "Use {site}'s database?"
+msgstr "Použít databázi webu {site}?"
+
+#: src/panes/sites.rs
+msgid "{worktree} then uses {site}'s database."
+msgstr "{worktree} pak bude používat databázi webu {site}."
+
+#: src/panes/sites.rs
+msgid "Flock copies {site}'s database and runs the branch's migrations on it."
+msgstr "Flock zkopíruje databázi webu {site} a spustí v ní migrace větve."
+
+#: src/panes/sites.rs
+msgid "Give {worktree} a copy of the database?"
+msgstr "Dát worktree {worktree} kopii databáze?"
+
+#: src/panes/sites.rs
+msgid "Give {worktree} a fresh database?"
+msgstr "Dát worktree {worktree} novou databázi?"
+
+#: src/panes/sites.rs
+msgid "Flock creates an empty database and runs the migrations."
+msgstr "Flock vytvoří prázdnou databázi a spustí migrace."
+
+#: src/panes/sites.rs
+msgid "Switching {worktree}'s Database"
+msgstr "Přepíná se databáze worktree {worktree}"
+
+#: src/panes/sites.rs
+msgid "Setup"
+msgstr "Příprava"
+
+#: src/panes/sites.rs
+msgid "Flock hasn't set this worktree up"
+msgstr "Flock tento worktree nepřipravil"
+
+#: src/panes/sites.rs
+msgid "Setting it up copies dependencies and .env, installs and runs the project's hooks."
+msgstr "Příprava zkopíruje závislosti a .env, nainstaluje je a spustí hooky projektu."
+
+#: src/panes/sites.rs
+msgid "Set Up"
+msgstr "Připravit"
+
+#: src/panes/sites.rs src/panes/worktree_job.rs
+msgid "Run Setup Again"
+msgstr "Spustit přípravu znovu"
+
+#: src/panes/sites.rs
+msgid "Setting Up {worktree}"
+msgstr "Příprava {worktree}"
+
+#: src/panes/sites.rs
+msgid "Flock runs its before_delete hook and deletes {path} and its database {database}."
+msgstr "Flock spustí jeho hook before_delete a smaže {path} i jeho databázi {database}."
+
+#: src/panes/sites.rs
+msgid "Flock runs its before_delete hook and deletes {path}."
+msgstr "Flock spustí jeho hook before_delete a smaže {path}."
+
+#: src/panes/sites.rs
+msgid "The branch {branch} stays."
+msgstr "Větev {branch} zůstane."
+
+#: src/panes/sites.rs
+msgid "Proxy"
+msgstr "Proxy"
+
+#: src/panes/sites.rs
+msgid "Remove proxy"
+msgstr "Odebrat proxy"
+
+#: src/panes/sites.rs
+msgid "Flock stops serving {domain}. The server at {upstream} keeps running."
+msgstr "Flock přestane obsluhovat {domain}. Server na {upstream} poběží dál."
+
+#: src/panes/sites.rs
+msgid "Every request passes to the upstream with its Host header, WebSocket upgrades (hot reload) included. Flock doesn't start the server, so start it as usual. Until it answers, {domain} shows a page saying so."
+msgstr "Každý požadavek se předá upstreamu i s hlavičkou Host, včetně upgradů na WebSocket (hot reload). Flock server nespouští, takže ho spusťte jako obvykle. Dokud neodpoví, {domain} zobrazuje stránku, která to oznamuje."
+
+#: src/panes/sites.rs
+msgid "Nothing answers at {upstream} yet."
+msgstr "Na {upstream} zatím nic neodpovídá."
+
+#: src/panes/sites.rs
+msgid "Upstream"
+msgstr "Upstream"
+
+#: src/panes/sites.rs
+msgid "Port, host:port or URL"
+msgstr "Port, host:port nebo URL"
+
+#: src/panes/sites.rs
+msgid "Change the upstream of {proxy}"
+msgstr "Změnit upstream proxy {proxy}"
+
+#: src/panes/sites.rs
+msgid "A port means 127.0.0.1; give a host and port (localhost:5173) or a URL (https://127.0.0.1:8443) for anything else."
+msgstr "Samotný port znamená 127.0.0.1; pro cokoli jiného zadejte hostitele a port (localhost:5173) nebo URL (https://127.0.0.1:8443)."
+
+#: src/panes/sites.rs
+msgid "Change"
+msgstr "Změnit"
+
+#: src/panes/sites.rs
+msgid "Requiring an extension in composer.json makes composer install refuse a server without it, instead of the app failing there."
+msgstr "Když rozšíření vyžadujete v composer.json, composer install odmítne server, který ho nemá, místo aby tam aplikace selhala."
+
+#: src/panes/sites.rs
+msgid "PHP extensions of {site}"
+msgstr "Rozšíření PHP webu {site}"
+
+#: src/panes/sites.rs
+msgid "The project requires no PHP extensions."
+msgstr "Projekt nevyžaduje žádná rozšíření PHP."
+
+#: src/panes/sites.rs
+msgid "PHP {version} · Laravel app"
+msgstr "PHP {version} · aplikace v Laravelu"
+
+#: src/panes/sites.rs
+msgid "Required by {packages}"
+msgstr "Vyžadováno balíčky: {packages}"
+
+#: src/panes/sites.rs
+msgid "Not required, but used: {hint}"
+msgstr "Nevyžaduje se, ale používá se: {hint}"
+
+#: src/panes/sites.rs
+msgid " — Flock's PHP {version} doesn't include it"
+msgstr " — PHP {version} od Flocku ho neobsahuje"
+
+#: src/panes/sites.rs
+msgid "Add to composer.json"
+msgstr "Přidat do composer.json"
+
+#: src/panes/sites.rs
+msgid "Require ext-{name} in composer.json?"
+msgstr "Vyžadovat ext-{name} v composer.json?"
+
+#: src/panes/sites.rs
+msgid "Runs composer require ext-{name}:* in {path}, which changes composer.json and composer.lock. Commit them with the project."
+msgstr "Spustí composer require ext-{name}:* ve složce {path}, což změní composer.json a composer.lock. Commitněte je s projektem."
+
+#: src/panes/sites.rs
+msgid "Require"
+msgstr "Vyžadovat"
+
+#: src/panes/sites.rs
+msgid "Adding…"
+msgstr "Přidává se…"
+
+#: src/panes/sites.rs
+msgid "Shared"
+msgstr "Sdíleno"
+
+#: src/panes/sites.rs
+msgid "Served over HTTPS"
+msgstr "Obsluhováno přes HTTPS"
+
+#: src/panes/sites.rs
+msgid "Its own database: {database}"
+msgstr "Vlastní databáze: {database}"
+
+#: src/panes/sites.rs
+msgid "The setup failed."
+msgstr "Příprava selhala."
+
+#: src/panes/sites.rs
+msgid "Flock creates the worktree next to {site} on a new branch with a name of its own, sets it up and serves it at its own address."
+msgstr "Flock vytvoří worktree vedle webu {site} na nové větvi s vlastním názvem, připraví ho a bude ho obsluhovat na jeho vlastní adrese."
+
+#: src/panes/sites.rs
+msgid "{branch} exists, so the worktree checks it out. Flock creates it next to {site}, sets it up and serves it at {address}."
+msgstr "{branch} existuje, takže ji worktree použije. Flock ho vytvoří vedle webu {site}, připraví ho a bude ho obsluhovat na {address}."
+
+#: src/panes/sites.rs
+msgid "Flock creates the worktree next to {site} on the new branch {branch}, sets it up and serves it at {address}."
+msgstr "Flock vytvoří worktree vedle webu {site} na nové větvi {branch}, připraví ho a bude ho obsluhovat na {address}."
+
+#: src/panes/sites.rs
+msgid "No public/, www/, web/ or webroot/ with an index.php was found, so Flock shows a page instead of the site. Choose the folder with the app's index.php."
+msgstr "Nebyla nalezena složka public/, www/, web/ ani webroot/ s index.php, takže Flock místo webu zobrazuje stránku s upozorněním. Vyberte složku s index.php aplikace."
+
+#: src/panes/sites.rs
+msgid "Choose the folder with the app's index.php, or create {root}."
+msgstr "Vyberte složku s index.php aplikace, nebo vytvořte {root}."
+
+#: src/panes/sites.rs
+msgid "{root} has no index.php or index.html, so Flock shows a page instead of the site until it does."
+msgstr "{root} neobsahuje index.php ani index.html, takže Flock místo webu zobrazuje stránku s upozorněním, dokud to tak bude."
+
+#: src/panes/sites.rs
+msgid "{root} is set here; the project sets {pinned} in .flockrc."
+msgstr "{root} je nastavené zde; projekt nastavuje {pinned} v .flockrc."
+
+#: src/panes/sites.rs
+msgid "Use {file} ({tool} {version})"
+msgstr "Použít {file} ({tool} {version})"
+
+#: src/panes/sites.rs
+msgid "Default ({tool} {version})"
+msgstr "Výchozí ({tool} {version})"
+
+#: src/panes/sites.rs
+msgid "{tool} {version} is set for this site on this machine (isolated)."
+msgstr "{tool} {version} je pro tento web nastavené na tomto počítači (izolovaně)."
+
+#: src/panes/sites.rs
+msgid "The project pins {tool} {version} in {file}."
+msgstr "Projekt připíná {tool} {version} v {file}."
+
+#: src/panes/sites.rs
+msgid "The site follows Flock's default {tool} version."
+msgstr "Web se řídí výchozí verzí {tool} ve Flocku."
+
+#: src/panes/versions.rs
+msgid "The download failed."
+msgstr "Stahování selhalo."
+
+#: src/panes/versions.rs
+msgid "Withdrawn: {reason} — update to replace it"
+msgstr "Staženo: {reason} — aktualizací ho nahradíte"
+
+#: src/panes/versions.rs
+msgid "More"
+msgstr "Další"
+
+#: src/panes/versions.rs
+msgid "Not checked yet"
+msgstr "Zatím nezkontrolováno"
+
+#: src/panes/versions.rs
+msgid "Checked just now"
+msgstr "Zkontrolováno právě teď"
+
+#: src/panes/versions.rs
+msgid "Checked a minute ago"
+msgid_plural "Checked {n} minutes ago"
+msgstr[0] "Zkontrolováno před minutou"
+msgstr[1] "Zkontrolováno před {n} minutami"
+msgstr[2] "Zkontrolováno před {n} minutami"
+
+#: src/panes/versions.rs
+msgid "Checked an hour ago"
+msgid_plural "Checked {n} hours ago"
+msgstr[0] "Zkontrolováno před hodinou"
+msgstr[1] "Zkontrolováno před {n} hodinami"
+msgstr[2] "Zkontrolováno před {n} hodinami"
+
+#: src/panes/versions.rs
+msgid "Checked {n} day ago"
+msgid_plural "Checked {n} days ago"
+msgstr[0] "Zkontrolováno před {n} dnem"
+msgstr[1] "Zkontrolováno před {n} dny"
+msgstr[2] "Zkontrolováno před {n} dny"
+
+#: src/panes/versions.rs
+msgid "No install log yet."
+msgstr "Zatím žádný log instalace."
+
+#: src/panes/worktree_job.rs
+msgid "see the log"
+msgstr "viz log"
+
+#: src/panes/worktree_job.rs
+msgid "Setup failed: {error}"
+msgstr "Příprava selhala: {error}"
+
+#: src/panes/worktree_job.rs
+msgid "Starting…"
+msgstr "Spouští se…"
+
+#: src/panes/worktree_job.rs
+msgid "Ready at {url}"
+msgstr "Připraveno na {url}"
+
+#: src/panes/worktree_job.rs
+msgid "Hide"
+msgstr "Skrýt"
+
+#: src/panes/worktree_job.rs
+msgid "The setup goes on; Flock tells you if it fails"
+msgstr "Příprava pokračuje; pokud selže, Flock vám dá vědět"
+
+#: src/panes/worktree_job.rs
+msgid "Open in Browser"
+msgstr "Otevřít v prohlížeči"
+
+#: src/panes/worktree_job.rs
+msgid "Close"
+msgstr "Zavřít"

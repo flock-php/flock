@@ -63,7 +63,7 @@ struct DumpsPane: View {
                     Toggle("Capture", isOn: Binding(get: { capturing }, set: { on in Task { await model.setDumps(on, from: .settings) } }))
                     LabeledContent("Captured") {
                         HStack {
-                            Text("\(model.status?.dumpCount ?? 0) dumps, \(model.status?.eventCount ?? 0) events")
+                            Text(verbatim: "\(Self.dumps(model.status?.dumpCount ?? 0)), \(Self.events(model.status?.eventCount ?? 0))")
                             Button("Open Dumps") { openWindow.activating(WindowID.dumps) }
                         }
                     }
@@ -81,9 +81,13 @@ struct DumpsPane: View {
                 } header: {
                     Text("While capturing")
                 } footer: {
+                    let list = unsupported.formatted(.list(type: .and).locale(AppLanguage.locale))
+                    // The subject is a list, not a count: one version or several.
                     Text(unsupported.isEmpty
                         ? "dd() always shows in the page too, as it ends the request."
-                        : "dd() always shows in the page too, as it ends the request. PHP \(ListFormatter.localizedString(byJoining: unsupported)) only \(unsupported.count == 1 ? "captures" : "capture") dumps: \(unsupported.count == 1 ? "its build has" : "their builds have") no agent extension yet.")
+                        : unsupported.count == 1
+                        ? "dd() always shows in the page too, as it ends the request. PHP \(list) only captures dumps: its build has no agent extension yet."
+                        : "dd() always shows in the page too, as it ends the request. PHP \(list) only capture dumps: their builds have no agent extension yet.")
                         .font(.caption).foregroundStyle(.secondary)
                 }
                 .disabled(!capturing)
@@ -96,6 +100,17 @@ struct DumpsPane: View {
             .formStyle(.grouped)
             .scrollContentBackground(.hidden)
         }
+    }
+}
+
+extension DumpsPane {
+    // One apart in code as well: builds without the compiled catalog (swift run) have no plural rules.
+    static func dumps(_ count: Int) -> String {
+        count == 1 ? String(localized: "1 dump") : String(localized: "\(count) dumps")
+    }
+
+    static func events(_ count: Int) -> String {
+        count == 1 ? String(localized: "1 event") : String(localized: "\(count) events")
     }
 }
 
@@ -173,7 +188,7 @@ struct AboutPane: View {
                 }
                 GridRow {
                     Text("Daemon").foregroundStyle(.secondary)
-                    Text(model.status?.version ?? "not running")
+                    Text(model.status?.version ?? String(localized: "not running"))
                 }
             }
             .font(.callout)
@@ -307,7 +322,7 @@ private struct UninstallSheet: View {
 
     private var log: some View {
         ScrollView([.vertical, .horizontal]) {
-            Text(output.isEmpty ? " " : output)
+            Text(verbatim: output.isEmpty ? " " : output)
                 .font(.system(.caption, design: .monospaced))
                 .textSelection(.enabled)
                 .frame(maxWidth: .infinity, alignment: .leading)

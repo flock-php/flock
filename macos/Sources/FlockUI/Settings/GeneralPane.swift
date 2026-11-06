@@ -42,13 +42,15 @@ struct GeneralPane: View {
                         LabeledContent("Version", value: status.version)
                         LabeledContent("Process", value: "pid \(status.pid)")
                     }
-                    LabeledContent("") {
+                    LabeledContent {
                         Button {
                             Task { await model.restart() }
                         } label: {
                             BusyLabel(title: "Restart Daemon", busyTitle: "Restarting…", isBusy: model.isRestarting)
                         }
                         .disabled(model.isRestarting)
+                    } label: {
+                        Text(verbatim: "")
                     }
                 }
 
@@ -88,6 +90,10 @@ struct GeneralPane: View {
                 }
 
                 Section {
+                    LanguagePicker()
+                }
+
+                Section {
                     appUpdates
                     if let config = store.config {
                         Toggle(isOn: Binding(
@@ -122,7 +128,7 @@ struct GeneralPane: View {
                         }
                         HStack(spacing: 0) {
                             Button {
-                                for url in SettingsStore.chooseDirectories(prompt: "Add", multiple: true) {
+                                for url in SettingsStore.chooseDirectories(prompt: String(localized: "Add"), multiple: true) {
                                     Task { await store.perform { _ = try await $0.park(url.path) } }
                                 }
                             } label: { Image(systemName: "plus").frame(width: 22, height: 18) }
@@ -166,7 +172,7 @@ struct GeneralPane: View {
             HStack(spacing: 8) {
                 Text(updateState(updater)).foregroundStyle(.secondary)
                 if updater.isEnabled {
-                    Button(updater.availableVersion.map { "Update to \($0)" } ?? "Check for Updates") {
+                    Button(updater.availableVersion.map { String(localized: "Update to \($0)") } ?? String(localized: "Check for Updates")) {
                         updater.checkForUpdates()
                     }
                     .disabled(updater.isChecking)
@@ -180,15 +186,15 @@ struct GeneralPane: View {
 
     private func updateState(_ updater: Updater) -> String {
         if !updater.isEnabled {
-            return "Updates are off in development builds"
+            return String(localized: "Updates are off in development builds")
         }
         if updater.isChecking {
-            return "Checking…"
+            return String(localized: "Checking…")
         }
         if let version = updater.availableVersion {
-            return "\(version) is available"
+            return String(localized: "\(version) is available")
         }
-        return updater.upToDate ? "Up to date" : ""
+        return updater.upToDate ? String(localized: "Up to date") : ""
     }
 
     /// How names under the TLD resolve: Flock's DNS server through /etc/resolver, which has no
@@ -196,10 +202,10 @@ struct GeneralPane: View {
     private func domainExplanation(_ tld: String) -> String {
         guard let dns = model.status?.dns else { return "" }
         if dns.wildcard {
-            return "Every name, any subdomain included, is resolved by Flock's DNS server (/etc/resolver/\(tld))."
+            return String(localized: "Every name, any subdomain included, is resolved by Flock's DNS server (/etc/resolver/\(tld)).")
         }
-        let problem = dns.wildcardProblem.isEmpty ? "Flock's DNS server isn't running" : dns.wildcardProblem
-        return "*.\(tld) doesn't resolve: \(problem). macOS has no hosts-file fallback, so sites don't open until it does; `flock install` sets /etc/resolver/\(tld) up again."
+        let problem = dns.wildcardProblem.isEmpty ? String(localized: "Flock's DNS server isn't running") : dns.wildcardProblem
+        return String(localized: "*.\(tld) doesn't resolve: \(problem). macOS has no hosts-file fallback, so sites don't open until it does; `flock install` sets /etc/resolver/\(tld) up again.")
     }
 
     private func setLaunchAtLogin(_ on: Bool) {

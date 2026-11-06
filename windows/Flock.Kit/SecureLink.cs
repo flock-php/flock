@@ -57,13 +57,13 @@ public sealed record SecureLink(string Site)
 public sealed record SecureLinkResolution(string Title, string Message, string? Site = null)
 {
     public static SecureLinkResolution Secure(Status.Site site) => new(
-        $"Serve {site.Name} over HTTPS?",
-        $"A link asked Flock to secure {site.Domain}. It gets a certificate this computer already trusts.",
+        Localization.Format(Strings.SecureLink_SecureTitle, site.Name),
+        Localization.Format(Strings.SecureLink_SecureMessage, site.Domain),
         site.Name);
 
     public static SecureLinkResolution AlreadySecured(Status.Site site) =>
-        new($"{site.Name} is already secured", $"It's served at https://{site.Domain}.");
+        new(Localization.Format(Strings.SecureLink_AlreadySecuredTitle, site.Name), Localization.Format(Strings.SecureLink_AlreadySecuredMessage, site.Domain));
 
     public static SecureLinkResolution Unknown(string name) =>
-        new($"Flock has no site called {name}", "Add the site in Settings → Sites first.");
+        new(Localization.Format(Strings.SecureLink_UnknownTitle, name), Strings.SecureLink_UnknownMessage);
 }

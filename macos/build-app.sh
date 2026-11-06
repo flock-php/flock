@@ -54,6 +54,9 @@ install_name_tool -add_rpath @executable_path/../Frameworks "$APP/Contents/MacOS
 # The app icon and the menu bar's logomark, rendered by design/icongen.
 cp Resources/AppIcon.icns Resources/MenuBar*.png Resources/LogoMark*.png "$APP/Contents/Resources/"
 cp ../LICENSE ../NOTICE ../THIRD_PARTY_NOTICES "$APP/Contents/Resources/"
+# The windows' texts in Czech and Spanish (and English plurals): <lang>.lproj next to the icon,
+# where Bundle.main finds them.
+xcrun xcstringstool compile Resources/Localizable.xcstrings --output-directory "$APP/Contents/Resources"
 
 # The CLI, built like `make build`; `flock install` copies it to the data dir.
 (cd .. && CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build -ldflags "-s -w -X flock/internal/cli.Version=$VERSION" \
@@ -65,6 +68,9 @@ cat > "$APP/Contents/Info.plist" <<PLIST
 <plist version="1.0">
 <dict>
 	<key>CFBundleIdentifier</key><string>dev.flock.bar</string>
+	<key>CFBundleDevelopmentRegion</key><string>en</string>
+	<!-- Settings → General can pick one of them over the system's languages (AppLanguage.swift). -->
+	<key>CFBundleLocalizations</key><array><string>en</string><string>cs</string><string>es</string></array>
 	<key>CFBundleName</key><string>Flock</string>
 	<key>CFBundleDisplayName</key><string>Flock</string>
 	<key>CFBundleExecutable</key><string>FlockBar</string>

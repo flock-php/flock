@@ -1,3 +1,4 @@
+using System.Globalization;
 using Flock.Kit;
 using Flock.Tray.Infrastructure;
 using Flock.Tray.ViewModels;
@@ -47,8 +48,8 @@ internal sealed partial class SitesPane : UserControl, ISettingsPane
     {
     }
 
-    public string Title => "Sites";
-    public string Subtitle => "Sites you added one by one, plus every folder inside your project folders.";
+    public string Title => Strings.Pane_Sites;
+    public string Subtitle => Strings.Sites_Subtitle;
     public UIElement Root => this;
     public bool ScrollsItself => true;
 
@@ -184,7 +185,7 @@ internal sealed partial class SitesPane : UserControl, ISettingsPane
             await Ui.Inform(Window.XamlRoot, resolution.Title, resolution.Message);
             return;
         }
-        if (await Window.Confirm(resolution.Title, resolution.Message, "Secure"))
+        if (await Window.Confirm(resolution.Title, resolution.Message, Strings.Sites_Secure))
         {
             await Model.Sites.UpdateAsync(resolution.Site, new SiteChange(Secured: true), hidden);
         }
@@ -200,7 +201,8 @@ internal sealed partial class SitesPane : UserControl, ISettingsPane
 
     private async Task RemoveSiteAsync(Status.Site site)
     {
-        if (await Window.Confirm($"Remove {site.Name}?", $"{site.Domain} stops being served. The project's files stay where they are.", "Remove", true))
+        if (await Window.Confirm(Localization.Format(Strings.Common_RemoveQuestion, site.Name), Localization.Format(Strings.Sites_RemoveSiteDetails, site.Domain),
+                Strings.Common_Remove, true))
         {
             await Model.Sites.UnlinkAsync(site.Name);
         }
@@ -300,16 +302,16 @@ internal sealed partial class SitesPane : UserControl, ISettingsPane
     private async Task AddProxyAsync()
     {
         var tld = Model.Status?.Dns.Tld is { Length: > 0 } t ? t : "test";
-        var name = new TextBox { Header = "Name", PlaceholderText = "my-app" };
-        var upstream = new TextBox { Header = "Upstream", PlaceholderText = "Port, host:port or URL, e.g. 3000" };
+        var name = new TextBox { Header = Strings.Sites_ProxyName, PlaceholderText = "my-app" };
+        var upstream = new TextBox { Header = Strings.Sites_Upstream, PlaceholderText = Strings.Sites_UpstreamPlaceholderExample };
         var dialog = new ContentDialog
         {
-            Title = "Add a proxy",
+            Title = Strings.Sites_AddProxyTitle,
             Content = Ui.Column(12,
-                Ui.Text($"Flock serves <name>.{tld} from a server of its own, e.g. a Next.js, Nuxt or Vite dev server. A port means 127.0.0.1."),
+                Ui.Text(Localization.Format(Strings.Sites_AddProxyDetails, tld)),
                 name, upstream),
-            PrimaryButtonText = "Add",
-            CloseButtonText = "Cancel",
+            PrimaryButtonText = Strings.Common_Add,
+            CloseButtonText = Strings.Common_Cancel,
             DefaultButton = ContentDialogButton.Primary,
             XamlRoot = Window.XamlRoot
         };
@@ -334,14 +336,14 @@ internal sealed partial class SitesPane : UserControl, ISettingsPane
     {
         var panel = new StackPanel { Spacing = 20 };
 
-        var heading = Ui.Column(2, Ui.Row(8, Ui.Text(proxy.Name, "SubtitleTextBlockStyle", wrap: false), Ui.Badge("Proxy", Ui.Tone.Neutral)));
+        var heading = Ui.Column(2, Ui.Row(8, Ui.Text(proxy.Name, "SubtitleTextBlockStyle", wrap: false), Ui.Badge(Strings.Sites_Proxy, Ui.Tone.Neutral)));
         if (proxy.Url is { } proxyUrl)
         {
             var link = Ui.Link(proxyUrl, () => Model.Open(proxyUrl));
             link.Padding = new Thickness(0);
             heading.Children.Add(link);
         }
-        var open = Ui.IconButton(Ui.GlyphOpen, $"Open {proxy.Url ?? proxy.Domain}", () =>
+        var open = Ui.IconButton(Ui.GlyphOpen, Localization.Format(Strings.Common_OpenTarget, proxy.Url ?? proxy.Domain), () =>
         {
             if (proxy.Url is { } url)
             {
@@ -349,7 +351,7 @@ internal sealed partial class SitesPane : UserControl, ISettingsPane
             }
         });
         open.IsEnabled = proxy.Url is not null;
-        var actions = Ui.Row(0, open, Ui.IconButton(Ui.GlyphDelete, "Remove proxy", () => Start(proxy.Name, () => RemoveProxyAsync(proxy))));
+        var actions = Ui.Row(0, open, Ui.IconButton(Ui.GlyphDelete, Strings.Sites_RemoveProxy, () => Start(proxy.Name, () => RemoveProxyAsync(proxy))));
         actions.VerticalAlignment = VerticalAlignment.Top;
         var header = new Grid { ColumnSpacing = 8 };
         header.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
@@ -366,7 +368,7 @@ internal sealed partial class SitesPane : UserControl, ISettingsPane
         var server = Ui.Column(2, Ui.Row(6, Ui.StatusDot(proxy.Running), Ui.Text(proxy.ServerLabel, wrap: false)));
         if (!proxy.Running)
         {
-            server.Children.Add(Ui.Caption($"Nothing answers at {proxy.UpstreamLabel} yet.", Ui.TertiaryText));
+            server.Children.Add(Ui.Caption(Localization.Format(Strings.Sites_NothingAnswersYet, proxy.UpstreamLabel), Ui.TertiaryText));
         }
         var https = new ToggleSwitch { IsOn = proxy.Secured, MinWidth = 0 };
         Ui.AutomationName(https, "HTTPS");
@@ -378,14 +380,12 @@ internal sealed partial class SitesPane : UserControl, ISettingsPane
         };
         var upstream = Ui.MonoText(proxy.Upstream);
         upstream.VerticalAlignment = VerticalAlignment.Center;
-        var change = Ui.Button("Change…", () => Start(proxy.Name, () => ChangeUpstreamAsync(proxy)));
-        panel.Children.Add(Section("Proxy",
-            Field("Server", server),
+        var change = Ui.Button(Strings.Sites_Change, () => Start(proxy.Name, () => ChangeUpstreamAsync(proxy)));
+        panel.Children.Add(Section(Strings.Sites_Proxy,
+            Field(Strings.Sites_Server, server),
             Field("HTTPS", https),
-            Field("Upstream", Ui.Row(8, upstream, change)),
-            Ui.Caption(
-                $"Every request passes to the upstream with its Host header, WebSocket upgrades (hot reload) included. Flock doesn't start the server, so start it as usual. Until it answers, {proxy.Domain} shows a page saying so.",
-                Ui.TertiaryText)));
+            Field(Strings.Sites_Upstream, Ui.Row(8, upstream, change)),
+            Ui.Caption(Localization.Format(Strings.Sites_ProxyFootnote, proxy.Domain), Ui.TertiaryText)));
 
         var card = Ui.Card(panel, new Thickness(20, 16, 16, 20));
         card.VerticalAlignment = VerticalAlignment.Top;
@@ -394,9 +394,8 @@ internal sealed partial class SitesPane : UserControl, ISettingsPane
 
     private async Task ChangeUpstreamAsync(Status.Proxy proxy)
     {
-        if (await Window.Ask($"Change the upstream of {proxy.Name}",
-                "A port means 127.0.0.1; give a host and port (localhost:5173) or a URL (https://127.0.0.1:8443) for anything else.",
-                "Port, host:port or URL", "Change", proxy.UpstreamLabel) is { } upstream && upstream != proxy.UpstreamLabel)
+        if (await Window.Ask(Localization.Format(Strings.Sites_ChangeUpstreamTitle, proxy.Name), Strings.Sites_ChangeUpstreamDetails,
+                Strings.Sites_UpstreamPlaceholder, Strings.Sites_ChangeAction, proxy.UpstreamLabel) is { } upstream && upstream != proxy.UpstreamLabel)
         {
             await Model.Sites.ProxyAsync(proxy.Name, upstream);
         }
@@ -404,7 +403,8 @@ internal sealed partial class SitesPane : UserControl, ISettingsPane
 
     private async Task RemoveProxyAsync(Status.Proxy proxy)
     {
-        if (await Window.Confirm($"Remove {proxy.Name}?", $"Flock stops serving {proxy.Domain}. The server at {proxy.Upstream} keeps running.", "Remove", true))
+        if (await Window.Confirm(Localization.Format(Strings.Common_RemoveQuestion, proxy.Name),
+                Localization.Format(Strings.Sites_RemoveProxyDetails, proxy.Domain, proxy.Upstream), Strings.Common_Remove, true))
         {
             await Model.Sites.RemoveProxyAsync(proxy.Name);
         }
@@ -423,7 +423,7 @@ internal sealed partial class SitesPane : UserControl, ISettingsPane
         var name = Ui.Row(8, Ui.Text(site.Name, "SubtitleTextBlockStyle", wrap: false));
         if (site.Parked)
         {
-            name.Children.Add(Ui.Badge("Project folder", Ui.Tone.Neutral));
+            name.Children.Add(Ui.Badge(Strings.Sites_ProjectFolderBadge, Ui.Tone.Neutral));
         }
         var heading = Ui.Column(2, name);
         if (site.Url is { } siteUrl)
@@ -436,13 +436,13 @@ internal sealed partial class SitesPane : UserControl, ISettingsPane
         ToolTipService.SetToolTip(path, site.Path);
         heading.Children.Add(path);
 
-        var open = Ui.IconButton(Ui.GlyphOpen, $"Open {site.Url ?? site.Domain}", () => Model.Open(site));
+        var open = Ui.IconButton(Ui.GlyphOpen, Localization.Format(Strings.Common_OpenTarget, site.Url ?? site.Domain), () => Model.Open(site));
         open.IsEnabled = site.Url is not null;
-        var actions = Ui.Row(0, open, Ui.IconButton(Ui.GlyphFolder, "Show in Explorer", () => Model.Reveal(site.Path)),
-            Ui.IconButton(Ui.GlyphPuzzle, "PHP extensions", () => Start("extensions:" + site.Name, () => ShowExtensions(site))), More(site));
+        var actions = Ui.Row(0, open, Ui.IconButton(Ui.GlyphFolder, Strings.Common_ShowInExplorer, () => Model.Reveal(site.Path)),
+            Ui.IconButton(Ui.GlyphPuzzle, Strings.Sites_PhpExtensions, () => Start("extensions:" + site.Name, () => ShowExtensions(site))), More(site));
         if (!site.Parked)
         {
-            actions.Children.Add(Ui.IconButton(Ui.GlyphDelete, "Remove site", () => Start(site.Name, () => RemoveSiteAsync(site))));
+            actions.Children.Add(Ui.IconButton(Ui.GlyphDelete, Strings.Sites_RemoveSite, () => Start(site.Name, () => RemoveSiteAsync(site))));
         }
         actions.VerticalAlignment = VerticalAlignment.Top;
         var header = new Grid { ColumnSpacing = 8 };
@@ -471,7 +471,7 @@ internal sealed partial class SitesPane : UserControl, ISettingsPane
                 : domain.Url is { Length: > 0 } url ? DomainLink(domain, url)
                 : Ui.Text(domain.Host, wrap: false);
             var target = domain;
-            var remove = Ui.IconButton(Ui.GlyphRemove, $"Remove {domain.Host}", () => Start(site.Name, () => RemoveDomain(site, target)));
+            var remove = Ui.IconButton(Ui.GlyphRemove, Localization.Format(Strings.Common_RemoveTarget, domain.Host), () => Start(site.Name, () => RemoveDomain(site, target)));
             remove.Padding = new Thickness(4);
             var domainRow = new Grid { ColumnSpacing = 4 };
             domainRow.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
@@ -481,21 +481,21 @@ internal sealed partial class SitesPane : UserControl, ISettingsPane
             domainRow.Children.Add(remove);
             domains.Children.Add(domainRow);
         }
-        var addDomain = Ui.Link("Add Domain…", () => Start(site.Name, () => AddDomain(site)));
+        var addDomain = Ui.Link(Strings.Sites_AddDomain, () => Start(site.Name, () => AddDomain(site)));
         addDomain.Padding = new Thickness(0);
         domains.Children.Add(addDomain);
-        var siteSection = Section("Site", Field("HTTPS", https), Field("Domains", domains));
+        var siteSection = Section(Strings.Sites_Site, Field("HTTPS", https), Field(Strings.Sites_Domains, domains));
         if (Model.Status?.Dns is { Wildcard: false, WildcardProblem.Length: > 0 } dns)
         {
-            siteSection.Children.Add(Ui.Caption($"Subdomains only work when you add them here: {dns.WildcardProblem}.", Ui.Caution));
+            siteSection.Children.Add(Ui.Caption(Localization.Format(Strings.Sites_SubdomainsOnlyHere, dns.WildcardProblem), Ui.Caution));
         }
-        siteSection.Children.Add(Field("Root", RootPicker(site)));
+        siteSection.Children.Add(Field(Strings.Sites_Root, RootPicker(site)));
         foreach (var hint in RootHints(site))
         {
             siteSection.Children.Add(hint);
         }
         siteSection.Children.Add(Ui.Caption(
-            "The folder Flock serves the site from. One picked here applies on this machine only; pin it (…) to write it into .flockrc for everyone.", Ui.TertiaryText));
+            Strings.Sites_RootFootnote, Ui.TertiaryText));
         panel.Children.Add(siteSection);
         panel.Children.Add(Share(site));
 
@@ -506,13 +506,13 @@ internal sealed partial class SitesPane : UserControl, ISettingsPane
         var nodePicker = Picker("Node", node, site.NodeSource, Major(site.NodePinned), site.NodeFile, config?.DefaultNode ?? "",
             config?.NodeMajors ?? [],
             version => new SiteChange(Node: version), site.Name, value => row?.SetDraftNode(value));
-        var versions = Section("Versions", Field("PHP", phpPicker), Field("Node.js", nodePicker));
+        var versions = Section(Strings.Versions_Versions, Field("PHP", phpPicker), Field("Node.js", nodePicker));
         foreach (var hint in Hints(site))
         {
             versions.Children.Add(hint);
         }
         versions.Children.Add(Ui.Caption(
-            "A version picked here applies on this machine only. To set it for everyone working on the project, pin it (…): PHP goes into .flockrc, Node.js into .nvmrc.",
+            Strings.Sites_VersionsFootnote,
             Ui.TertiaryText));
         panel.Children.Add(versions);
 
@@ -601,14 +601,14 @@ internal sealed partial class SitesPane : UserControl, ISettingsPane
             var change = server.SelectedIndex == 1 ? Status.SiteServer.FrankenPhp : Status.SiteServer.FastCgi;
             Start(site.Name, () => UpdateSiteAsync(site.Name, new SiteChange(Server: change), () => row?.SetDraftServer(change)), false);
         };
-        Ui.AutomationName(server, "Server");
+        Ui.AutomationName(server, Strings.Sites_Server);
 
-        var section = Section("Server", Field("Runs on", server));
+        var section = Section(Strings.Sites_Server, Field(Strings.Sites_RunsOn, server));
         if (franken)
         {
             var octane = (row?.Worker ?? site.Worker) == Status.SiteServer.Octane;
             var mode = new ComboBox { MinWidth = 150 };
-            mode.Items.Add(new ComboBoxItem { Content = "Classic" });
+            mode.Items.Add(new ComboBoxItem { Content = Strings.Sites_Classic });
             mode.Items.Add(new ComboBoxItem { Content = "Laravel Octane", IsEnabled = octane || site.OctaneAvailable });
             mode.SelectedIndex = octane ? 1 : 0;
             mode.SelectionChanged += (_, _) =>
@@ -620,11 +620,11 @@ internal sealed partial class SitesPane : UserControl, ISettingsPane
                 var worker = mode.SelectedIndex == 1 ? Status.SiteServer.Octane : "";
                 Start(site.Name, () => UpdateSiteAsync(site.Name, new SiteChange(Worker: worker), () => row?.SetDraftWorker(worker)), false);
             };
-            Ui.AutomationName(mode, "Mode");
-            section.Children.Add(Field("Mode", mode));
+            Ui.AutomationName(mode, Strings.Debugger_Mode);
+            section.Children.Add(Field(Strings.Debugger_Mode, mode));
             if (!site.OctaneAvailable)
             {
-                ToolTipService.SetToolTip(mode, "Install Laravel Octane in the project (composer require laravel/octane) to use worker mode.");
+                ToolTipService.SetToolTip(mode, Strings.Sites_OctaneTooltip);
             }
 
             if (site.FrankenPhp is { } state)
@@ -634,11 +634,11 @@ internal sealed partial class SitesPane : UserControl, ISettingsPane
                     section.Children.Add(line);
                 }
             }
-            var restart = Ui.Button("Restart", () => Start(site.Name, () => Restart(site.Name)),
-                tooltip: "Restart FrankenPHP, e.g. so Octane's workers load changed code");
+            var restart = Ui.Button(Strings.Panel_Restart, () => Start(site.Name, () => Restart(site.Name)),
+                tooltip: Strings.Sites_RestartFrankenPhpTooltip);
             restart.IsEnabled = site.FrankenPhp is { IsRunning: true } && !restarting.Contains(site.Name);
             var log = site.FrankenPhp is { Log.Length: > 0 } f ? f.Log : $"frankenphp-{site.Name}";
-            var buttons = Ui.Row(8, restart, Ui.Button("Show Log", () => App.Current.OpenLog(new LogsViewModel.ServiceSource(log))));
+            var buttons = Ui.Row(8, restart, Ui.Button(Strings.Sites_ShowLog, () => App.Current.OpenLog(new LogsViewModel.ServiceSource(log))));
             if (restarting.Contains(site.Name))
             {
                 buttons.Children.Insert(0, new ProgressRing { Width = 16, Height = 16 });
@@ -646,8 +646,8 @@ internal sealed partial class SitesPane : UserControl, ISettingsPane
             section.Children.Add(buttons);
         }
         section.Children.Add(Ui.Caption(franken && !site.OctaneAvailable
-            ? "FrankenPHP needs PHP 8.2 or newer. Requests that ask for Xdebug still go to PHP-CGI. For worker mode, install Laravel Octane in the project (composer require laravel/octane)."
-            : "FrankenPHP needs PHP 8.2 or newer. Requests that ask for Xdebug still go to PHP-CGI.", Ui.TertiaryText));
+            ? Strings.Sites_FrankenPhpFootnoteOctane
+            : Strings.Sites_FrankenPhpFootnote, Ui.TertiaryText));
         return section;
     }
 
@@ -656,13 +656,14 @@ internal sealed partial class SitesPane : UserControl, ISettingsPane
     {
         if (state.IsRunning)
         {
-            var text = $"Running FrankenPHP {state.Version} with PHP {state.PhpVersion}" + (site.Worker == Status.SiteServer.Octane ? " · worker mode" : "");
+            var text = Localization.Format(site.Worker == Status.SiteServer.Octane ? Strings.Sites_FrankenPhpRunningWorker : Strings.Sites_FrankenPhpRunning,
+                state.Version, state.PhpVersion);
             yield return Ui.Row(6, Ui.StatusDot(true), Ui.Caption(text, wrap: false));
         }
         else if (state.IsInstalling)
         {
-            var percent = state.HasProgress ? $" {Math.Round(state.Progress * 100)}%" : "";
-            yield return Ui.Caption($"Downloading FrankenPHP for PHP {site.Php}…{percent}", wrap: false);
+            var downloading = Localization.Format(Strings.Sites_DownloadingFrankenPhp, site.Php);
+            yield return Ui.Caption(state.HasProgress ? $"{downloading} {state.Progress.ToString("P0", CultureInfo.CurrentCulture)}" : downloading, wrap: false);
             yield return new ProgressBar
             {
                 Minimum = 0,
@@ -672,7 +673,7 @@ internal sealed partial class SitesPane : UserControl, ISettingsPane
                 HorizontalAlignment = HorizontalAlignment.Left,
                 Width = 320
             };
-            yield return Ui.Caption("PHP-CGI serves the site until it's ready.");
+            yield return Ui.Caption(Strings.Sites_PhpCgiUntilReady);
         }
         else
         {
@@ -680,7 +681,7 @@ internal sealed partial class SitesPane : UserControl, ISettingsPane
             {
                 yield return Warning(state.Problem);
             }
-            yield return Ui.Caption("PHP-CGI serves the site meanwhile.");
+            yield return Ui.Caption(Strings.Sites_PhpCgiMeanwhile);
         }
     }
 
@@ -718,9 +719,9 @@ internal sealed partial class SitesPane : UserControl, ISettingsPane
         List<string> installed, Func<string, SiteChange> change, string siteName, Func<string, Action?>? draft = null)
     {
         // No default yet while the first run installs it.
-        var follow = pinned.Length > 0 ? $"Use {Path.GetFileName(file)} ({label} {pinned})"
-            : defaultVersion.Length > 0 ? $"Default ({label} {defaultVersion})"
-            : "Default";
+        var follow = pinned.Length > 0 ? Localization.Format(Strings.Sites_UseFileVersion, Path.GetFileName(file), $"{label} {pinned}")
+            : defaultVersion.Length > 0 ? Localization.Format(Strings.Sites_DefaultVersion, $"{label} {defaultVersion}")
+            : Strings.Sites_Default;
         var versions = installed.ToList();
         if (source == Status.VersionSource.Isolated && current.Length > 0 && !versions.Contains(current))
         {
@@ -745,9 +746,9 @@ internal sealed partial class SitesPane : UserControl, ISettingsPane
         };
         ToolTipService.SetToolTip(picker, source switch
         {
-            Status.VersionSource.Isolated => $"{label} {current} is set for this site on this machine (isolated).",
-            Status.VersionSource.Project => $"The project pins {label} {pinned} in {Path.GetFileName(file)}.",
-            _ => $"The site follows Flock's default {label} version."
+            Status.VersionSource.Isolated => Localization.Format(Strings.Sites_VersionIsolated, $"{label} {current}"),
+            Status.VersionSource.Project => Localization.Format(Strings.Sites_VersionPinned, $"{label} {pinned}", Path.GetFileName(file)),
+            _ => Localization.Format(Strings.Sites_VersionDefault, label)
         });
         return picker;
     }
@@ -759,10 +760,10 @@ internal sealed partial class SitesPane : UserControl, ISettingsPane
     /// </summary>
     private ComboBox RootPicker(Status.Site site)
     {
-        var follow = site.RootPinnedHere ? $"Use .flockrc ({RootLabel(site.RootPinned)})"
-            : site.RootSource != Status.VersionSource.Default ? "Automatic"
-            : site.RootState == Status.DocumentRootState.NotFound ? "Automatic (none found)"
-            : $"Automatic ({RootLabel(site.Root)})";
+        var follow = site.RootPinnedHere ? Localization.Format(Strings.Sites_UseFileVersion, ".flockrc", RootLabel(site.RootPinned))
+            : site.RootSource != Status.VersionSource.Default ? Strings.Sites_RootAutomatic
+            : site.RootState == Status.DocumentRootState.NotFound ? Strings.Sites_RootAutomaticNone
+            : Localization.Format(Strings.Sites_RootAutomaticFound, RootLabel(site.Root));
         var folders = site.RootSuggestions.ToList();
         if (site.RootSource == Status.VersionSource.Isolated && !folders.Contains(site.Root))
         {
@@ -775,7 +776,7 @@ internal sealed partial class SitesPane : UserControl, ISettingsPane
         {
             picker.Items.Add(RootLabel(folder));
         }
-        picker.Items.Add("Choose Folder…");
+        picker.Items.Add(Strings.Sites_ChooseFolder);
         picker.SelectedIndex = site.RootSource == Status.VersionSource.Isolated ? folders.IndexOf(site.Root) + 1 : 0;
         var selected = picker.SelectedIndex;
         picker.SelectionChanged += (_, _) =>
@@ -793,12 +794,12 @@ internal sealed partial class SitesPane : UserControl, ISettingsPane
             var root = picker.SelectedIndex == 0 ? "" : folders[picker.SelectedIndex - 1];
             Start(site.Name, () => Model.Sites.UpdateAsync(site.Name, new SiteChange(Root: root)));
         };
-        Ui.AutomationName(picker, "Document root");
+        Ui.AutomationName(picker, Strings.Sites_DocumentRoot);
         ToolTipService.SetToolTip(picker, site.RootSource switch
         {
-            Status.VersionSource.Isolated => $"{RootLabel(site.Root)} is set for this site on this machine.",
-            Status.VersionSource.Project => $"The project sets {RootLabel(site.Root)} in .flockrc.",
-            _ => "Flock serves the first of public\\, www\\, web\\ and webroot\\ with an index.php, else the project folder."
+            Status.VersionSource.Isolated => Localization.Format(Strings.Sites_RootIsolated, RootLabel(site.Root)),
+            Status.VersionSource.Project => Localization.Format(Strings.Sites_RootPinned, RootLabel(site.Root)),
+            _ => Strings.Sites_RootDefault
         });
         return picker;
     }
@@ -812,8 +813,8 @@ internal sealed partial class SitesPane : UserControl, ISettingsPane
         }
         if (site.RootFor(folder) is not { } root)
         {
-            await Ui.Inform(Window.XamlRoot, "Choose a folder in the project",
-                $"{folder} isn't in {site.Path}. The document root must be a folder in the project.");
+            await Ui.Inform(Window.XamlRoot, Strings.Sites_ChooseFolderInProject,
+                Localization.Format(Strings.Sites_ChooseFolderInProjectDetails, folder, site.Path));
             return;
         }
         await Model.Sites.UpdateAsync(site.Name, new SiteChange(Root: root));
@@ -825,28 +826,28 @@ internal sealed partial class SitesPane : UserControl, ISettingsPane
         if (site.RootState == Status.DocumentRootState.NotFound)
         {
             yield return Hint(
-                "No public\\, www\\, web\\ or webroot\\ with an index.php was found, so Flock shows a page instead of the site. Choose the folder with the app's index.php.",
+                Strings.Sites_RootNotFound,
                 null, null);
         }
         else if (site.RootState == Status.DocumentRootState.Missing)
         {
-            yield return Hint($"Choose the folder with the app's index.php, or create {site.Root}.", null, null);
+            yield return Hint(Localization.Format(Strings.Sites_RootMissing, site.Root), null, null);
         }
         else if (site.RootState == Status.DocumentRootState.Empty)
         {
-            yield return Ui.Caption($"{RootLabel(site.Root)} has no index.php or index.html, so Flock shows a page instead of the site until it does.", Ui.TertiaryText);
+            yield return Ui.Caption(Localization.Format(Strings.Sites_RootNoIndex, RootLabel(site.Root)), Ui.TertiaryText);
         }
         else if (site.RootSource == Status.VersionSource.Isolated && site.RootPinnedHere)
         {
-            yield return Hint($"{RootLabel(site.Root)} is set here; the project sets {RootLabel(site.RootPinned)} in .flockrc.",
-                "Use .flockrc", () => Start(site.Name, () => Model.Sites.UpdateAsync(site.Name, new SiteChange(Root: ""))));
+            yield return Hint(Localization.Format(Strings.Sites_RootShadowed, RootLabel(site.Root), RootLabel(site.RootPinned)),
+                Localization.Format(Strings.Sites_UseFile, ".flockrc"), () => Start(site.Name, () => Model.Sites.UpdateAsync(site.Name, new SiteChange(Root: ""))));
         }
     }
 
     /// <summary>"src/www", or "Project folder" for ".".</summary>
     private static string RootLabel(string root)
     {
-        return root == "." ? "Project folder" : root;
+        return root == "." ? Strings.Sites_ProjectFolderBadge : root;
     }
 
     /// <summary>Notes when versions disagree: an isolation over the project's pin, .flockrc over .nvmrc.</summary>
@@ -854,17 +855,17 @@ internal sealed partial class SitesPane : UserControl, ISettingsPane
     {
         if (site.PhpSource == Status.VersionSource.Isolated && site.PhpPinned.Length > 0 && site.PhpPinned != site.Php)
         {
-            yield return Hint($"PHP {site.Php} is isolated here; the project pins {site.PhpPinned} in {Path.GetFileName(site.PhpFile)}.",
-                $"Use {Path.GetFileName(site.PhpFile)}", () => Start(site.Name, () => Model.Sites.UpdateAsync(site.Name, new SiteChange(Php: ""))));
+            yield return Hint(Localization.Format(Strings.Sites_VersionShadowed, $"PHP {site.Php}", site.PhpPinned, Path.GetFileName(site.PhpFile)),
+                Localization.Format(Strings.Sites_UseFile, Path.GetFileName(site.PhpFile)), () => Start(site.Name, () => Model.Sites.UpdateAsync(site.Name, new SiteChange(Php: ""))));
         }
         if (site.NodeSource == Status.VersionSource.Isolated && site.NodePinned.Length > 0 && Major(site.NodePinned) != Major(site.Node ?? ""))
         {
-            yield return Hint($"Node {site.Node} is isolated here; the project pins {site.NodePinned} in {Path.GetFileName(site.NodeFile)}.",
-                $"Use {Path.GetFileName(site.NodeFile)}", () => Start(site.Name, () => Model.Sites.UpdateAsync(site.Name, new SiteChange(Node: ""))));
+            yield return Hint(Localization.Format(Strings.Sites_VersionShadowed, $"Node {site.Node}", site.NodePinned, Path.GetFileName(site.NodeFile)),
+                Localization.Format(Strings.Sites_UseFile, Path.GetFileName(site.NodeFile)), () => Start(site.Name, () => Model.Sites.UpdateAsync(site.Name, new SiteChange(Node: ""))));
         }
         if (site.NodeShadowed.Length > 0)
         {
-            yield return Hint($".flockrc's Node {site.NodePinned} wins over {site.NodeShadowed}.", null, null);
+            yield return Hint(Localization.Format(Strings.Sites_NodeWins, site.NodePinned, site.NodeShadowed), null, null);
         }
     }
 
@@ -876,20 +877,19 @@ internal sealed partial class SitesPane : UserControl, ISettingsPane
             return null;
         }
         var missing = site.Boost == Status.BoostState.Missing;
-        var link = Ui.Link(missing ? "Add Flock to its guidelines…" : "Update it…", () => Start(site.Name, () => AddBoostGuideline(site, missing)));
+        var link = Ui.Link(missing ? Strings.Sites_BoostAdd : Strings.Sites_BoostUpdate, () => Start(site.Name, () => AddBoostGuideline(site, missing)));
         link.Padding = new Thickness(0);
         return Ui.Column(2, Ui.Caption(missing
-            ? "The project uses Laravel Boost. Adding Flock to its guidelines tells AI agents that Flock serves the app and picks its PHP version."
-            : "Flock's guideline in the project's Boost guidelines is outdated."), link);
+            ? Strings.Sites_BoostMissing
+            : Strings.Sites_BoostOutdated), link);
     }
 
     private async Task AddBoostGuideline(Status.Site site, bool missing)
     {
-        var title = missing ? $"Add Flock to {site.Name}'s Boost guidelines?" : $"Update Flock's guideline in {site.Name}?";
+        var title = Localization.Format(missing ? Strings.Sites_BoostAddQuestion : Strings.Sites_BoostUpdateQuestion, site.Name);
         var details =
-            $"Writes .ai\\guidelines\\flock.md in {site.Path} and runs php artisan boost:update, so AI agents know Flock serves the app and picks its PHP version. " +
-            "Commit it with the rest of .ai\\guidelines. This changes files in your project.";
-        if (await Window.Confirm(title, details, missing ? "Add" : "Update"))
+            Localization.Format(Strings.Sites_BoostDetails, site.Path);
+        if (await Window.Confirm(title, details, missing ? Strings.Common_Add : Strings.Common_Update))
         {
             await Model.Sites.AddBoostGuidelineAsync(site.Name);
         }
@@ -897,9 +897,9 @@ internal sealed partial class SitesPane : UserControl, ISettingsPane
 
     private HyperlinkButton DomainLink(Status.SiteDomain domain, string url)
     {
-        var link = Ui.Link(domain.Alias ? $"{domain.Host} (alias)" : domain.Host, () => Model.Open(url));
+        var link = Ui.Link(domain.Alias ? Localization.Format(Strings.Sites_Alias, domain.Host) : domain.Host, () => Model.Open(url));
         link.Padding = new Thickness(0);
-        ToolTipService.SetToolTip(link, $"Open {url}");
+        ToolTipService.SetToolTip(link, Localization.Format(Strings.Common_OpenTarget, url));
         return link;
     }
 
@@ -914,10 +914,10 @@ internal sealed partial class SitesPane : UserControl, ISettingsPane
         var scroller = new ScrollViewer { Content = list, Width = 560, Height = 320 };
         var dialog = new ContentDialog
         {
-            Title = $"PHP extensions of {site.Name}",
+            Title = Localization.Format(Strings.Sites_ExtensionsTitle, site.Name),
             Content = Ui.Column(10, scroller,
-                Ui.Caption("Requiring an extension in composer.json makes composer install refuse a server without it, instead of the app failing there.")),
-            CloseButtonText = "Done",
+                Ui.Caption(Strings.Sites_ExtensionsFootnote)),
+            CloseButtonText = Strings.Common_Done,
             DefaultButton = ContentDialogButton.Close,
             XamlRoot = Window.XamlRoot
         };
@@ -938,22 +938,23 @@ internal sealed partial class SitesPane : UserControl, ISettingsPane
             {
                 if (error is null)
                 {
-                    list.Children.Add(Ui.Row(10, new ProgressRing { Width = 16, Height = 16 }, Ui.Caption("Loading…")));
+                    list.Children.Add(Ui.Row(10, new ProgressRing { Width = 16, Height = 16 }, Ui.Caption(Strings.Common_Loading)));
                 }
                 return;
             }
-            list.Children.Add(Ui.Caption(report.Laravel ? $"PHP {report.Php} · Laravel app" : $"PHP {report.Php}"));
+            list.Children.Add(Ui.Caption(report.Laravel ? Localization.Format(Strings.Sites_ExtensionsLaravel, report.Php) : $"PHP {report.Php}"));
             if (report.Extensions.Count == 0)
             {
-                list.Children.Add(Ui.Text("The project requires no PHP extensions.", foreground: Ui.SecondaryText));
+                list.Children.Add(Ui.Text(Strings.Sites_ExtensionsNone, foreground: Ui.SecondaryText));
             }
             foreach (var ext in report.Extensions)
             {
                 var (glyph, color) = !ext.Available ? (Ui.GlyphWarning, Ui.Critical) : ext.Declared ? (Ui.GlyphPuzzle, Ui.Success) : (Ui.GlyphInfo, Ui.Caution);
-                var detail = ext.Declared ? $"Required by {string.Join(", ", ext.RequiredBy)}" : $"Not required, but used: {ext.Hint}";
+                var detail = ext.Declared ? Localization.Format(Strings.Sites_ExtensionRequiredBy, string.Join(", ", ext.RequiredBy))
+                    : Localization.Format(Strings.Sites_ExtensionUsed, ext.Hint);
                 if (!ext.Available)
                 {
-                    detail += $" — Flock's PHP {report.Php} doesn't include it";
+                    detail += " — " + Localization.Format(Strings.Sites_ExtensionMissing, report.Php);
                 }
                 var caption = Ui.Caption(detail);
                 caption.MaxWidth = 360;
@@ -967,18 +968,18 @@ internal sealed partial class SitesPane : UserControl, ISettingsPane
                 else if (confirming == ext.Name)
                 {
                     var name = ext.Name;
-                    actions.Children.Add(Ui.Link("Cancel", () =>
+                    actions.Children.Add(Ui.Link(Strings.Common_Cancel, () =>
                     {
                         confirming = null;
                         Render();
                     }));
-                    actions.Children.Add(Ui.Button("Require", () => Start("extensions:" + site.Name, () => Add(name)), true,
-                        tooltip: $"Runs composer require ext-{name}:* in {site.Path}, which changes composer.json and composer.lock. Commit them with the project."));
+                    actions.Children.Add(Ui.Button(Strings.Sites_Require, () => Start("extensions:" + site.Name, () => Add(name)), true,
+                        tooltip: Localization.Format(Strings.Sites_RequireTooltip, name, site.Path)));
                 }
                 else if (!ext.Declared)
                 {
                     var name = ext.Name;
-                    var add = Ui.Button("Add to composer.json…", () =>
+                    var add = Ui.Button(Strings.Sites_AddToComposer, () =>
                     {
                         confirming = name;
                         Render();
@@ -1020,9 +1021,12 @@ internal sealed partial class SitesPane : UserControl, ISettingsPane
         var dns = Model.Status?.Dns;
         var depth = dns?.MaxDepth ?? 4;
         var details = dns is { Wildcard: true }
-            ? $"Every subdomain up to {depth} levels below {site.Domain} already works on this PC. Add one here so it also works where wildcard DNS doesn't (it's written to the hosts file), or add an alias like {site.Name}-2.{dns.Tld}."
-            : $"Wildcard subdomains don't work on this PC{(dns?.WildcardProblem is { Length: > 0 } p ? $" ({p})" : "")}, so add each one you use: it's written to the hosts file. A full name like {site.Name}-2.{dns?.Tld ?? "test"} adds an alias.";
-        if (await Window.Ask($"Add a domain to {site.Name}", details, $"tenant1, a.b or {site.Name}-2.{dns?.Tld ?? "test"}", "Add") is { } domain)
+            ? Localization.Plural(Strings.ResourceManager, "Sites_AddDomainWildcard", depth, site.Domain, $"{site.Name}-2.{dns.Tld}")
+            : dns?.WildcardProblem is { Length: > 0 } p
+                ? Localization.Format(Strings.Sites_AddDomainNoWildcardBecause, p, $"{site.Name}-2.{dns.Tld}")
+                : Localization.Format(Strings.Sites_AddDomainNoWildcard, $"{site.Name}-2.{dns?.Tld ?? "test"}");
+        if (await Window.Ask(Localization.Format(Strings.Sites_AddDomainTitle, site.Name), details,
+                Localization.Format(Strings.Sites_AddDomainPlaceholder, $"{site.Name}-2.{dns?.Tld ?? "test"}"), Strings.Common_Add) is { } domain)
         {
             await Model.Sites.AddDomainAsync(site.Name, domain);
         }
@@ -1060,18 +1064,18 @@ internal sealed partial class SitesPane : UserControl, ISettingsPane
         // Pin and unpin items appear only when there is something to pin or unpin (the menu always has the domain items).
         if (site.Php.Length > 0 && !(site.PhpSource == Status.VersionSource.Project && site.PhpPinnedHere))
         {
-            menu.Items.Add(Item($"Pin PHP {site.Php} to Project…", () => Start(site.Name, () => Pin(site, "php", site.Php,
-                $"Writes php={site.Php} to .flockrc in {site.Path}. Commit it, and everyone using Flock on this project gets PHP {site.Php}."))));
+            menu.Items.Add(Item(Localization.Format(Strings.Sites_PinPhpItem, site.Php), () => Start(site.Name, () => Pin(site, "php", site.Php,
+                Localization.Format(Strings.Sites_PinPhpDetails, site.Php, site.Path)))));
         }
         if (nodeMajor.Length > 0 && !(site.NodeSource == Status.VersionSource.Project && site.NodePinnedHere))
         {
-            menu.Items.Add(Item($"Pin Node {nodeMajor} to Project…", () => Start(site.Name, () => Pin(site, "node", nodeMajor,
-                $"Writes {nodeMajor} to {nodeFile} in {site.Path}. Commit it, and Flock, nvm and other Node tools use Node {nodeMajor} for this project."))));
+            menu.Items.Add(Item(Localization.Format(Strings.Sites_PinNodeItem, nodeMajor), () => Start(site.Name, () => Pin(site, "node", nodeMajor,
+                Localization.Format(Strings.Sites_PinNodeDetails, nodeMajor, nodeFile, site.Path)))));
         }
         if (site.RootState is "" or Status.DocumentRootState.Empty && site.RootSource != Status.VersionSource.Project)
         {
-            menu.Items.Add(Item($"Pin Document Root ({RootLabel(site.Root)}) to Project…", () => Start(site.Name, () => Pin(site, "root", site.Root,
-                $"Writes root={site.Root} to .flockrc in {site.Path}. Commit it, and everyone using Flock on this project serves it from {RootLabel(site.Root)}."))));
+            menu.Items.Add(Item(Localization.Format(Strings.Sites_PinRootItem, RootLabel(site.Root)), () => Start(site.Name, () => Pin(site, "root", site.Root,
+                Localization.Format(Strings.Sites_PinRootDetails, site.Root, site.Path, RootLabel(site.Root))))));
         }
         if (site.PhpPinnedHere || site.NodePinnedHere || site.RootPinnedHere)
         {
@@ -1081,22 +1085,22 @@ internal sealed partial class SitesPane : UserControl, ISettingsPane
             }
             if (site.PhpPinnedHere)
             {
-                menu.Items.Add(Item($"Unpin PHP ({Path.GetFileName(site.PhpFile)})…", () => Start(site.Name, () => Unpin(site, "php",
-                    $"Removes the PHP version from {site.PhpFile}. The site then uses Flock's default PHP."))));
+                menu.Items.Add(Item(Localization.Format(Strings.Sites_UnpinPhpItem, Path.GetFileName(site.PhpFile)), () => Start(site.Name, () => Unpin(site, "php",
+                    Localization.Format(Strings.Sites_UnpinPhpDetails, site.PhpFile)))));
             }
             if (site.NodePinnedHere)
             {
-                menu.Items.Add(Item($"Unpin Node ({Path.GetFileName(site.NodeFile)})…", () => Start(site.Name, () => Unpin(site, "node",
-                    $"Removes the Node.js version from .flockrc and deletes .nvmrc / .node-version in {site.Path}. The site then uses Flock's default Node.js."))));
+                menu.Items.Add(Item(Localization.Format(Strings.Sites_UnpinNodeItem, Path.GetFileName(site.NodeFile)), () => Start(site.Name, () => Unpin(site, "node",
+                    Localization.Format(Strings.Sites_UnpinNodeDetails, site.Path)))));
             }
             if (site.RootPinnedHere)
             {
-                menu.Items.Add(Item("Unpin Document Root (.flockrc)…", () => Start(site.Name, () => Unpin(site, "root",
-                    $"Removes root= from .flockrc in {site.Path}. Flock then finds the document root itself."))));
+                menu.Items.Add(Item(Strings.Sites_UnpinRootItem, () => Start(site.Name, () => Unpin(site, "root",
+                    Localization.Format(Strings.Sites_UnpinRootDetails, site.Path)))));
             }
         }
 
-        var button = Ui.IconButton(Ui.GlyphMore, "Pin versions and the document root to the project", () => { });
+        var button = Ui.IconButton(Ui.GlyphMore, Strings.Sites_PinMenuTooltip, () => { });
         button.Flyout = menu;
         button.IsEnabled = menu.Items.Count > 0;
         return button;
@@ -1104,7 +1108,8 @@ internal sealed partial class SitesPane : UserControl, ISettingsPane
 
     private async Task RemoveDomain(Status.Site site, Status.SiteDomain domain)
     {
-        if (await Window.Confirm($"Remove {domain.Host}?", $"{domain.Host} no longer opens {site.Name}.", "Remove", true))
+        if (await Window.Confirm(Localization.Format(Strings.Common_RemoveQuestion, domain.Host), Localization.Format(Strings.Sites_RemoveDomainDetails, domain.Host, site.Name),
+                Strings.Common_Remove, true))
         {
             await Model.Sites.RemoveDomainAsync(site.Name, domain.Entry);
         }
@@ -1113,7 +1118,13 @@ internal sealed partial class SitesPane : UserControl, ISettingsPane
     private async Task Pin(Status.Site site, string tool, string version, string details)
     {
         var shown = tool == "root" ? RootLabel(version) : version;
-        if (await Window.Confirm($"Pin {ToolName(tool)} {shown} to {site.Name}?", details + " This changes a file in your project.", "Pin"))
+        var question = tool switch
+        {
+            "php" => Strings.Sites_PinPhpQuestion,
+            "root" => Strings.Sites_PinRootQuestion,
+            _ => Strings.Sites_PinNodeQuestion
+        };
+        if (await Window.Confirm(Localization.Format(question, shown, site.Name), details + " " + Strings.Sites_ChangesAFile, Strings.Sites_Pin))
         {
             await Model.Sites.PinAsync(site.Name, tool, version);
         }
@@ -1121,20 +1132,16 @@ internal sealed partial class SitesPane : UserControl, ISettingsPane
 
     private async Task Unpin(Status.Site site, string tool, string details)
     {
-        if (await Window.Confirm($"Unpin {ToolName(tool)} from {site.Name}?", details + " This changes files in your project.", "Unpin"))
+        var question = tool switch
+        {
+            "php" => Strings.Sites_UnpinPhpQuestion,
+            "root" => Strings.Sites_UnpinRootQuestion,
+            _ => Strings.Sites_UnpinNodeQuestion
+        };
+        if (await Window.Confirm(Localization.Format(question, site.Name), details + " " + Strings.Sites_ChangesFiles, Strings.Sites_Unpin))
         {
             await Model.Sites.UnpinAsync(site.Name, tool);
         }
-    }
-
-    private static string ToolName(string tool)
-    {
-        return tool switch
-        {
-            "php" => "PHP",
-            "root" => "the document root",
-            _ => "Node"
-        };
     }
 
     private static MenuFlyoutItem Item(string text, Action click)

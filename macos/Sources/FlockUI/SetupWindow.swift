@@ -54,16 +54,20 @@ struct SetupWindow: View {
         VStack(alignment: .leading, spacing: 0) {
             switch stage {
             case .intro:
-                header("Welcome to Flock", "Flock runs your Laravel sites, PHP, mail and databases on this Mac. Setting it up takes a moment:")
+                header(Text("Welcome to Flock"), Text("Flock runs your Laravel sites, PHP, mail and databases on this Mac. Setting it up takes a moment:"))
                 Form {
                     Section {
-                        item("Runs in the background", "The Flock daemon serves your sites and services, and starts whenever you log in.", symbol: "server.rack")
-                        item("php, composer and node in your terminal", "Flock's versions come first on your PATH. Open a new terminal after setup.", symbol: "terminal")
-                        item("*.test sites with trusted HTTPS", "macOS asks for your password twice: once to resolve *.test through Flock (/etc/resolver), once to trust Flock's certificate.", symbol: "lock.fill")
+                        item(Text("Runs in the background"), Text("The Flock daemon serves your sites and services, and starts whenever you log in."), symbol: "server.rack")
+                        item(Text("php, composer and node in your terminal"), Text("Flock's versions come first on your PATH. Open a new terminal after setup."), symbol: "terminal")
+                        item(Text("*.test sites with trusted HTTPS"), Text("macOS asks for your password twice: once to resolve *.test through Flock (/etc/resolver), once to trust Flock's certificate."), symbol: "lock.fill")
                     }
                     Section {
                         Toggle("Open Flock’s menu bar app at login", isOn: Binding(get: { launchAtLogin }, set: { launchAtLogin = $0 }))
                             .toggleStyle(.checkbox)
+                    }
+                    // Settings → General has it too, but only once Flock is set up.
+                    Section {
+                        LanguagePicker()
                     }
                 }
                 .formStyle(.grouped)
@@ -77,15 +81,15 @@ struct SetupWindow: View {
                 }
 
             case .checking:
-                header("Checking Flock's ports…", nil)
+                header(Text("Checking Flock's ports…"), nil)
                 ProgressView().progressViewStyle(.linear).padding(.horizontal, 32).padding(.bottom, 28)
 
             case .conflicts:
-                header("Quit other local environments first", "Flock needs these ports and *.\(model.status?.dns.tld ?? "test") for itself, but other programs use them. Running both would leave neither working.")
+                header(Text("Quit other local environments first"), Text("Flock needs these ports and *.\(model.status?.dns.tld ?? "test") for itself, but other programs use them. Running both would leave neither working."))
                 Form {
                     Section {
                         ForEach(conflicts) { app in
-                            item(app.title, app.detail, symbol: "exclamationmark.triangle.fill", color: .orange)
+                            item(Text(app.title), Text(app.detail), symbol: "exclamationmark.triangle.fill", color: .orange)
                         }
                     }
                 }
@@ -100,21 +104,21 @@ struct SetupWindow: View {
                 }
 
             case .running:
-                header("Setting up Flock…", "macOS asks for your password in a moment, and then once more.")
+                header(Text("Setting up Flock…"), Text("macOS asks for your password in a moment, and then once more."))
                 ProgressView().progressViewStyle(.linear).padding(.horizontal, 32).padding(.bottom, 12)
                 log
 
             case .done:
-                header("Flock is ready", nil)
+                header(Text("Flock is ready"), nil)
                 Form {
                     Section("Next steps") {
                         if let loginProblem {
-                            item("Open Flock at login", loginProblem, symbol: "exclamationmark.triangle")
+                            item(Text("Open Flock at login"), Text(loginProblem), symbol: "exclamationmark.triangle")
                         }
                         runtimes
-                        item("Open a new terminal", "Terminals that were already open still have the old PATH.", symbol: "terminal")
-                        item("Link a project", "In a Laravel project, run `flock link`: the site is then at http://<folder>.test. `flock secure` adds HTTPS.", symbol: "globe")
-                        item("PHP and Node.js","Flock installs the newest PHP and Node.js LTS as the defaults. Settings → PHP and Node install other versions.", symbol: "chevron.left.forwardslash.chevron.right")
+                        item(Text("Open a new terminal"), Text("Terminals that were already open still have the old PATH."), symbol: "terminal")
+                        item(Text("Link a project"), Text("In a Laravel project, run `flock link`: the site is then at http://<folder>.test. `flock secure` adds HTTPS."), symbol: "globe")
+                        item(Text("PHP and Node.js"),Text("Flock installs the newest PHP and Node.js LTS as the defaults. Settings → PHP and Node install other versions."), symbol: "chevron.left.forwardslash.chevron.right")
                     }
                 }
                 .formStyle(.grouped)
@@ -137,9 +141,9 @@ struct SetupWindow: View {
                 }
 
             case .failed:
-                header("Setup didn't finish", declined
-                    ? "The password prompt was cancelled. Flock runs, but *.test sites won't resolve and HTTPS isn't trusted until you allow it."
-                    : "Something went wrong. The output below says what; you can try again.")
+                header(Text("Setup didn't finish"), declined
+                    ? Text("The password prompt was cancelled. Flock runs, but *.test sites won't resolve and HTTPS isn't trusted until you allow it.")
+                    : Text("Something went wrong. The output below says what; you can try again."))
                 log
                 buttons {
                     Button("Close") { dismissWindow(id: WindowID.setup) }
@@ -179,12 +183,12 @@ struct SetupWindow: View {
         stage = result.ok ? .done : .failed
     }
 
-    private func header(_ title: String, _ text: String?) -> some View {
+    private func header(_ title: Text, _ text: Text?) -> some View {
         VStack(alignment: .leading, spacing: 10) {
             AppIconView(size: 60)
-            Text(title).font(.title.weight(.semibold))
+            title.font(.title.weight(.semibold))
             if let text {
-                Text(text).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                text.foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             }
         }
         .padding(.horizontal, 32)
@@ -196,7 +200,7 @@ struct SetupWindow: View {
     private struct Runtime {
         let name: String
         /// The Settings pane that installs it again.
-        let pane: String
+        let pane: SettingsPane
         let install: Status.DefaultInstall
 
         /// "PHP 8.5", or "PHP" while the version isn't known yet.
@@ -209,24 +213,32 @@ struct SetupWindow: View {
     @ViewBuilder
     private var runtimes: some View {
         if let defaults = model.status?.defaults ?? seenDefaults.map(Self.finished) {
-            let all = [Runtime(name: "PHP", pane: "PHP", install: defaults.php), Runtime(name: "Node.js", pane: "Node", install: defaults.node)]
+            let all = [Runtime(name: "PHP", pane: .php, install: defaults.php), Runtime(name: "Node.js", pane: .node, install: defaults.node)]
             let pending = all.filter { $0.install.isPending }
             ForEach(all.filter { $0.install.state == .failed }, id: \.name) { runtime in
-                item("\(runtime.label) couldn't be installed",
-                     (runtime.install.error.isEmpty ? "" : "\(runtime.install.error). ") + "Try again in Settings → \(runtime.pane).",
+                item(Text("\(runtime.label) couldn't be installed"),
+                     runtime.install.error.isEmpty
+                         ? Text("Try again in Settings → \(runtime.pane.title).")
+                         : Text("\(runtime.install.error). Try again in Settings → \(runtime.pane.title)."),
                      symbol: "exclamationmark.triangle.fill", color: .orange)
             }
+            // One install or both (PHP and Node.js): the sentences differ in more than a word.
+            let names = Self.names(pending)
             if pending.contains(where: { $0.install.state == .installing }) {
-                row("Installing \(Self.names(pending))…", "Flock makes \(pending.count > 1 ? "them" : "it") the default for your sites and terminal.") {
+                row(Text("Installing \(names)…"), pending.count > 1
+                    ? Text("Flock makes them the default for your sites and terminal.")
+                    : Text("Flock makes it the default for your sites and terminal.")) {
                     ProgressView().controlSize(.small)
                 }
             } else if !pending.isEmpty {
-                row("Waiting to install \(Self.names(pending))", "\(Self.names(pending)) \(pending.count > 1 ? "are" : "is") installed as soon as Flock can download \(pending.count > 1 ? "them" : "it").") {
+                row(Text("Waiting to install \(names)"), pending.count > 1
+                    ? Text("\(names) are installed as soon as Flock can download them.")
+                    : Text("\(names) is installed as soon as Flock can download it.")) {
                     ProgressView().controlSize(.small)
                 }
             }
             if all.allSatisfy({ $0.install.state == .done }) {
-                item("\(Self.names(all)) are installed", "They're the defaults for your sites and terminal.", symbol: "checkmark.circle.fill", color: .green)
+                item(Text("\(Self.names(all)) are installed"), Text("They're the defaults for your sites and terminal."), symbol: "checkmark.circle.fill", color: .green)
             }
         }
     }
@@ -252,20 +264,20 @@ struct SetupWindow: View {
 
     /// "PHP 8.5 and Node.js 24".
     private static func names(_ runtimes: [Runtime]) -> String {
-        runtimes.map(\.label).joined(separator: " and ")
+        runtimes.map(\.label).formatted(.list(type: .and).locale(AppLanguage.locale))
     }
 
-    private func item(_ title: String, _ text: String, symbol: String, color: Color = .accentColor) -> some View {
+    private func item(_ title: Text, _ text: Text, symbol: String, color: Color = .accentColor) -> some View {
         row(title, text) {
             Image(systemName: symbol).foregroundStyle(color)
         }
     }
 
-    private func row(_ title: String, _ text: String, @ViewBuilder icon: () -> some View) -> some View {
+    private func row(_ title: Text, _ text: Text, @ViewBuilder icon: () -> some View) -> some View {
         Label {
             VStack(alignment: .leading, spacing: 2) {
-                Text(title)
-                Text(text).font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                title
+                text.font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             }
         } icon: {
             icon().frame(width: 22)
@@ -277,7 +289,7 @@ struct SetupWindow: View {
         ScrollViewReader { proxy in
             ScrollView([.vertical, .horizontal]) {
                 VStack(alignment: .leading, spacing: 0) {
-                    Text(output.isEmpty ? " " : output)
+                    Text(verbatim: output.isEmpty ? " " : output)
                         .font(.system(.caption, design: .monospaced))
                         .textSelection(.enabled)
                         .frame(maxWidth: .infinity, alignment: .leading)

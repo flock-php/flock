@@ -12,6 +12,7 @@ use gtk::{gio, glib};
 
 use super::versions::button;
 use crate::api::{Client, Error, WorktreeStatus};
+use crate::i18n::tr;
 use crate::model::AppModel;
 
 /// Starts a job and answers with the worktree's folder.
@@ -164,8 +165,8 @@ impl JobView {
                             return;
                         }
                         "failed" => {
-                            let error = if setup.error.is_empty() { "see the log".to_owned() } else { setup.error.clone() };
-                            this.show(Phase::Failed { path: Some(path.clone()), error: format!("Setup failed: {error}") });
+                            let error = if setup.error.is_empty() { tr!("see the log").to_owned() } else { setup.error.clone() };
+                            this.show(Phase::Failed { path: Some(path.clone()), error: tr!("Setup failed: {error}", error = error) });
                             this.model.refresh();
                             return;
                         }
@@ -198,10 +199,10 @@ impl JobView {
         self.spinner.set_visible(busy);
         self.spinner.set_spinning(busy);
         let (text, class) = match &phase {
-            Phase::Starting => ("Starting…".to_owned(), ""),
+            Phase::Starting => (tr!("Starting…").to_owned(), ""),
             Phase::Running(step) => (step.clone(), ""),
-            Phase::Ready { url: Some(url), .. } => (format!("Ready at {url}"), "success"),
-            Phase::Ready { url: None, .. } => ("Ready".to_owned(), "success"),
+            Phase::Ready { url: Some(url), .. } => (tr!("Ready at {url}", url = url), "success"),
+            Phase::Ready { url: None, .. } => (tr!("Ready").to_owned(), "success"),
             Phase::Failed { error, .. } => (error.clone(), "warning"),
         };
         self.headline.set_label(&text);
@@ -229,31 +230,31 @@ impl JobView {
         };
         match phase {
             Phase::Starting | Phase::Running(_) => {
-                let hide = button("Hide", false, move || close(None));
-                hide.set_tooltip_text(Some("The setup goes on; Flock tells you if it fails"));
+                let hide = button(tr!("Hide"), false, move || close(None));
+                hide.set_tooltip_text(Some(tr!("The setup goes on; Flock tells you if it fails")));
                 self.buttons.append(&hide);
             }
             Phase::Ready { name, url } => {
                 if let Some(url) = url {
                     let weak = Rc::downgrade(self);
-                    self.buttons.append(&button("Open in Browser", false, move || {
-                        let window = weak.upgrade().and_then(|this| this.dialog.root()).and_downcast::<gtk::Window>();
-                        gtk::UriLauncher::new(&url).launch(window.as_ref(), gio::Cancellable::NONE, |_| {});
+                    self.buttons.append(&button(tr!("Open in Browser"), false, move || {
+                        let dialog = weak.upgrade().map(|this| this.dialog.clone().upcast::<gtk::Widget>());
+                        crate::ui::open_uri(dialog.as_ref(), &url);
                     }));
                 }
-                self.buttons.append(&button("Close", true, move || close(name.clone())));
+                self.buttons.append(&button(tr!("Close"), true, move || close(name.clone())));
             }
             Phase::Failed { path, .. } => {
                 if let Some(path) = path {
                     let weak = Rc::downgrade(self);
-                    self.buttons.append(&button("Run Setup Again", false, move || {
+                    self.buttons.append(&button(tr!("Run Setup Again"), false, move || {
                         if let Some(this) = weak.upgrade() {
                             let path = path.clone();
                             this.start(Box::new(move |c: Client| c.setup_worktree(&path, true).map(|_| path)));
                         }
                     }));
                 }
-                self.buttons.append(&button("Close", true, move || close(None)));
+                self.buttons.append(&button(tr!("Close"), true, move || close(None)));
             }
         }
     }

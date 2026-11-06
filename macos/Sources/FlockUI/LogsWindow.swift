@@ -54,7 +54,7 @@ struct LogsWindow: View {
                         SiteLogView(entries: LogFilter.entries(store.entries, level: level, query: query),
                                     filtered: !store.entries.isEmpty, site: name)
                     case .service:
-                        ServiceLogView(text: store.serviceText.isEmpty ? "(empty)" : LogFilter.lines(store.serviceText, query: query))
+                        ServiceLogView(text: store.serviceText.isEmpty ? String(localized: "(empty)") : LogFilter.lines(store.serviceText, query: query))
                     case nil:
                         ContentUnavailableView("Pick a log", systemImage: "doc.text.magnifyingglass")
                     }

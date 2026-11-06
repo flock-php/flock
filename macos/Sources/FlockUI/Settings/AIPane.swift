@@ -83,9 +83,9 @@ struct AIPane: View {
 
     private func caption(_ client: MCPClient) -> String {
         switch client.state {
-        case .registered: "Flock is added"
-        case .available: "Installed"
-        case .missing: "Not installed"
+        case .registered: String(localized: "Flock is added")
+        case .available: String(localized: "Installed")
+        case .missing: String(localized: "Not installed")
         }
     }
 

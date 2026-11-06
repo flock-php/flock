@@ -44,21 +44,24 @@ public sealed partial class GeneralViewModel : ObservableObject, IDisposable
     public bool IsBusy => configuration.IsRunning || isRestarting();
     public bool IsRestarting => isRestarting();
     public Visibility StatusVisibility => Status is null ? Visibility.Collapsed : Visibility.Visible;
-    public string StatusText => Status?.IsDegraded == true ? "Needs attention" : "Running";
-    public Brush StatusBrush => Status?.IsDegraded == true ? Ui.Caution : Ui.Success;
+    // Shown without the daemon too: General also holds the app's own settings (its language).
+    public string StatusText => Status is null ? Strings.Status_NotRunning : Status.IsDegraded ? Strings.Status_NeedsAttention : Strings.Status_Running;
+    public Brush StatusBrush => Status is null ? Ui.Brush("ControlStrongFillColorDisabledBrush") : Status.IsDegraded ? Ui.Caution : Ui.Success;
     public string VersionText => Status?.Version ?? "";
-    public string ProcessText => Status is { } status ? $"pid {status.Pid}" : "";
+    public string ProcessText => Status is { } status ? Localization.Format(Strings.General_Pid, status.Pid) : "";
     public Visibility ConfigVisibility => Config is null ? Visibility.Collapsed : Visibility.Visible;
     public string DomainDescription => Status?.Dns is { Wildcard: true }
-        ? "Every name, any subdomain included, is resolved by Flock's DNS server. Site domains are also in the hosts file."
-        : $"Only site domains and the domains added to sites resolve (the hosts file){(Status?.Dns?.WildcardProblem is { Length: > 0 } problem ? $": {problem}" : string.Empty)}.";
+        ? Strings.General_DomainWildcard
+        : Status?.Dns?.WildcardProblem is { Length: > 0 } problem
+            ? Localization.Format(Strings.General_DomainHostsOnlyBecause, problem)
+            : Strings.General_DomainHostsOnly;
     public string DomainValue => Config is { } config ? $"*.{config.Tld}" : "";
     public string ProjectFoldersDescription => Config is { } config
-        ? $"Every folder inside a project folder is served as <folder>.{config.Tld} — the same as `flock park`."
+        ? Localization.Format(Strings.General_ProjectFoldersDescription, config.Tld)
         : "";
     public string Root => Config?.Root ?? "";
     public string PortsDescription => Config is { } config && (config.Ports.Http != 80 || config.Ports.Https != 443)
-        ? $"Sites use ports {config.Ports.Http} (HTTP) and {config.Ports.Https} (HTTPS), set in config.json, so their addresses include the port."
+        ? Localization.Format(Strings.General_Ports, config.Ports.Http, config.Ports.Https)
         : "";
     public Visibility PortsVisibility => PortsDescription.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
     public bool IsBeta => Config?.Channel == "beta";

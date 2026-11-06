@@ -48,17 +48,17 @@ public struct SecureLink: Equatable, Sendable {
 extension SecureLink.Resolution {
     public var title: String {
         switch self {
-        case .secure(let name, _): "Serve \(name) over HTTPS?"
-        case .secured(let name, _): "\(name) is already secured"
-        case .unknown(let name): "Flock has no site called \(name)"
+        case .secure(let name, _): String(localized: "Serve \(name) over HTTPS?")
+        case .secured(let name, _): String(localized: "\(name) is already secured")
+        case .unknown(let name): String(localized: "Flock has no site called \(name)")
         }
     }
 
     public var message: String {
         switch self {
-        case .secure(_, let domain): "A link asked Flock to secure \(domain). It gets a certificate this computer already trusts."
-        case .secured(_, let domain): "It's served at https://\(domain)."
-        case .unknown: "Add the site in Settings → Sites first."
+        case .secure(_, let domain): String(localized: "A link asked Flock to secure \(domain). It gets a certificate this computer already trusts.")
+        case .secured(_, let domain): String(localized: "It's served at https://\(domain).")
+        case .unknown: String(localized: "Add the site in Settings → Sites first.")
         }
     }
 

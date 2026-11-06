@@ -39,7 +39,7 @@ struct PostgresDetail: View {
                         ServiceInfo(service: service)
                     }
                 } else {
-                    DetailHeader(title: "PostgreSQL", symbol: "cylinder.split.1x2.fill", color: .blue, status: "Loading…")
+                    DetailHeader(title: "PostgreSQL", symbol: "cylinder.split.1x2.fill", color: .blue, status: String(localized: "Loading…"))
                     ProgressView().frame(maxWidth: .infinity).padding(.top, 30)
                 }
             }
@@ -96,10 +96,10 @@ struct PostgresDetail: View {
             return model.settings.busy(busy).describe(busy.major)
         }
         guard let active = versions.activeMajor else {
-            return versions.hasInstalled ? "No version selected" : "Not installed"
+            return versions.hasInstalled ? String(localized: "No version selected") : String(localized: "Not installed")
         }
-        let state = versions.running ? "Running" : (versions.enabled ? "Not running" : "Stopped")
-        return "\(state) · PostgreSQL \(active.major) on port \(versions.port)"
+        let state = versions.running ? String(localized: "Running") : (versions.enabled ? String(localized: "Not running") : String(localized: "Stopped"))
+        return "\(state) · " + String(localized: "PostgreSQL \(active.major) on port \(String(versions.port))")
     }
 
     // MARK: Versions
@@ -146,11 +146,11 @@ struct PostgresDetail: View {
     private func switchAlert(_ target: PostgresMajor) -> Alert {
         let current = model.settings.postgres?.active ?? ""
         let own = target.hasData
-            ? "PostgreSQL \(target.major) uses its own databases."
-            : "PostgreSQL \(target.major) starts with a new, empty set of databases."
+            ? String(localized: "PostgreSQL \(target.major) uses its own databases.")
+            : String(localized: "PostgreSQL \(target.major) starts with a new, empty set of databases.")
         let message = current.isEmpty
             ? own
-            : "PostgreSQL \(current) stops; its databases stay but aren't available until you switch back. \(own)"
+            : String(localized: "PostgreSQL \(current) stops; its databases stay but aren't available until you switch back.") + " " + own
         let id = target.major
         return Alert(
             title: Text("Switch to PostgreSQL \(target.major)?"),
@@ -177,10 +177,10 @@ extension PostgresMajor.Busy {
     func describe(_ major: String) -> String {
         switch self {
         case .idle: ""
-        case .installing: "Installing PostgreSQL \(major)…"
-        case .updating: "Updating PostgreSQL \(major)…"
-        case .switching: "Switching to PostgreSQL \(major)…"
-        case .uninstalling: "Uninstalling PostgreSQL \(major)…"
+        case .installing: String(localized: "Installing PostgreSQL \(major)…")
+        case .updating: String(localized: "Updating PostgreSQL \(major)…")
+        case .switching: String(localized: "Switching to PostgreSQL \(major)…")
+        case .uninstalling: String(localized: "Uninstalling PostgreSQL \(major)…")
         case let .other(raw): "\(raw.prefix(1).uppercased())\(raw.dropFirst()) PostgreSQL \(major)…"
         }
     }
@@ -189,10 +189,10 @@ extension PostgresMajor.Busy {
     var short: String {
         switch self {
         case .idle: ""
-        case .installing: "Installing…"
-        case .updating: "Updating…"
-        case .switching: "Switching…"
-        case .uninstalling: "Uninstalling…"
+        case .installing: String(localized: "Installing…")
+        case .updating: String(localized: "Updating…")
+        case .switching: String(localized: "Switching…")
+        case .uninstalling: String(localized: "Uninstalling…")
         case let .other(raw): "\(raw.prefix(1).uppercased())\(raw.dropFirst())…"
         }
     }
@@ -217,7 +217,7 @@ private struct ActiveServerCard: View {
                 statePill(busy)
             }
 
-            fact("Databases", major.hasData ? Formats.bytes(major.dataSize) : "None yet")
+            fact("Databases", major.hasData ? Formats.bytes(major.dataSize) : String(localized: "None yet"))
 
             if !major.yanked.isEmpty {
                 Label(major.update ? "This build was withdrawn: \(major.yanked) — update to replace it" : "This build was withdrawn: \(major.yanked)",
@@ -228,9 +228,9 @@ private struct ActiveServerCard: View {
 
             if major.update, !major.latest.isEmpty {
                 Divider()
-                UpdateStrip(title: major.latest == major.installed ? "A new build of PostgreSQL \(major.latest) is available" : "PostgreSQL \(major.latest) is available",
-                            note: "Your databases stay; PostgreSQL restarts briefly.",
-                            help: "Installs \(major.latest) and restarts PostgreSQL \(major.major). Your databases stay.",
+                UpdateStrip(title: major.latest == major.installed ? String(localized: "A new build of PostgreSQL \(major.latest) is available") : String(localized: "PostgreSQL \(major.latest) is available"),
+                            note: String(localized: "Your databases stay; PostgreSQL restarts briefly."),
+                            help: String(localized: "Installs \(major.latest) and restarts PostgreSQL \(major.major). Your databases stay."),
                             busy: busy == .updating, disabled: locked) {
                     let id = major.major
                     Task { await model.settings.performOnPostgres(id, .updating) { try await $0.updatePostgres(id) } }
@@ -246,7 +246,7 @@ private struct ActiveServerCard: View {
         if busy != .idle || switching {
             HStack(spacing: 5) {
                 ProgressView().controlSize(.mini)
-                Text(switching ? "Switching…" : busy.short)
+                Text(switching ? String(localized: "Switching…") : busy.short)
             }
             .font(.caption.weight(.medium)).foregroundStyle(.secondary)
         } else {
@@ -254,7 +254,7 @@ private struct ActiveServerCard: View {
         }
     }
 
-    private func fact(_ title: String, _ value: String) -> some View {
+    private func fact(_ title: LocalizedStringKey, _ value: String) -> some View {
         HStack(spacing: 6) {
             Text(title).foregroundStyle(.secondary)
             Text(value).monospacedDigit()
@@ -419,15 +419,15 @@ private struct EmptyPostgres: View {
         let kept = versions.majors.filter(\.hasData)
 
         if let installing {
-            InstallInvitation(symbol: "cylinder.split.1x2.fill", color: .blue, title: "Installing PostgreSQL \(installing.major)",
-                              message: "Downloading PostgreSQL \(installing.latest.isEmpty ? installing.major : installing.latest) and creating its first databases. This takes about a minute.") {
+            InstallInvitation(symbol: "cylinder.split.1x2.fill", color: .blue, title: String(localized: "Installing PostgreSQL \(installing.major)"),
+                              message: String(localized: "Downloading PostgreSQL \(installing.latest.isEmpty ? installing.major : installing.latest) and creating its first databases. This takes about a minute.")) {
                 ProgressView().progressViewStyle(.linear).frame(maxWidth: 260)
             } footer: {
                 Text("It keeps going when you close this window.")
             }
         } else {
-            InstallInvitation(symbol: "cylinder.split.1x2.fill", color: .blue, title: "Install PostgreSQL",
-                              message: "The database for your Laravel apps. You can add other versions later; one runs at a time, and each keeps its own databases.") {
+            InstallInvitation(symbol: "cylinder.split.1x2.fill", color: .blue, title: String(localized: "Install PostgreSQL"),
+                              message: String(localized: "The database for your Laravel apps. You can add other versions later; one runs at a time, and each keeps its own databases.")) {
                 ServiceInstallForm(
                     name: "PostgreSQL",
                     options: versions.majors.map { ServiceInstallForm.Option(id: $0.major, label: optionLabel($0), latest: $0.latest) },
@@ -452,7 +452,7 @@ private struct EmptyPostgres: View {
     /// "17 (17.6)", or "17 (17.6) — your databases" when its databases are kept.
     private func optionLabel(_ major: PostgresMajor) -> String {
         let label = major.latest.isEmpty ? major.major : "\(major.major) (\(major.latest))"
-        return major.hasData ? label + " — your databases" : label
+        return major.hasData ? String(localized: "\(label) — your databases") : label
     }
 
     /// The port belongs to PostgreSQL, not to a version, so it is set before the install.
@@ -525,12 +525,12 @@ private struct UninstallPostgresSheet: View {
 
     private var message: String {
         guard major.active else {
-            return "Removes the PostgreSQL \(major.installed) server."
+            return String(localized: "Removes the PostgreSQL \(major.installed) server.")
         }
         let next = versions?.majors.first { $0.isInstalled && $0.major != major.major }
         if let next {
-            return "PostgreSQL \(major.major) stops and Flock switches to PostgreSQL \(next.major) with its own databases."
+            return String(localized: "PostgreSQL \(major.major) stops and Flock switches to PostgreSQL \(next.major) with its own databases.")
         }
-        return "PostgreSQL \(major.major) stops, and your sites can't use PostgreSQL until you install a version again."
+        return String(localized: "PostgreSQL \(major.major) stops, and your sites can't use PostgreSQL until you install a version again.")
     }
 }

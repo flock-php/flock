@@ -114,7 +114,7 @@ struct PostgresExtensionsSheet: View {
             if !busy.isEmpty {
                 HStack(spacing: 6) {
                     ProgressView().controlSize(.small)
-                    Text("\(busy.prefix(1).uppercased())\(busy.dropFirst())…").font(.caption).foregroundStyle(.secondary)
+                    Text(Self.describe(busy)).font(.caption).foregroundStyle(.secondary)
                 }
             } else {
                 actions(ext)
@@ -122,21 +122,32 @@ struct PostgresExtensionsSheet: View {
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 8)
-        .help(ext.license.isEmpty ? "" : "License: \(ext.license)")
+        .help(ext.license.isEmpty ? "" : String(localized: "License: \(ext.license)"))
+    }
+
+    /// "Installing…" for what the daemon (or this sheet) reports an extension is doing.
+    private static func describe(_ busy: String) -> String {
+        switch busy {
+        case "installing": String(localized: "Installing…")
+        case "updating": String(localized: "Updating…")
+        case "uninstalling": String(localized: "Uninstalling…")
+        case "waiting": String(localized: "Waiting…")
+        default: "\(busy.prefix(1).uppercased())\(busy.dropFirst())…"
+        }
     }
 
     private func caption(_ ext: PostgresExtension) -> String {
         if !ext.supported {
-            return "Not available for PostgreSQL \(major)"
+            return String(localized: "Not available for PostgreSQL \(major)")
         }
         var parts = [ext.description]
         if ext.discontinued {
-            parts.append("No longer updated for PostgreSQL \(major)")
+            parts.append(String(localized: "No longer updated for PostgreSQL \(major)"))
         }
         if ext.isInstalled {
             parts.append("CREATE EXTENSION \(ext.creates);")
         } else if ext.preload {
-            parts.append("PostgreSQL \(major) restarts to load it")
+            parts.append(String(localized: "PostgreSQL \(major) restarts to load it"))
         }
         return parts.joined(separator: " · ")
     }
@@ -205,7 +216,7 @@ struct PostgresExtensionsSheet: View {
             }
             .font(.callout)
             if ext.linked {
-                Text("CREATE EXTENSION \(ext.name);")
+                Text(verbatim: "CREATE EXTENSION \(ext.name);")
                     .font(.caption).foregroundStyle(.secondary)
                     .textSelection(.enabled)
             } else {

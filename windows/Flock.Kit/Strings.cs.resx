@@ -1,0 +1,201 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+    <xsd:schema id="root" xmlns="" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:msdata="urn:schemas-microsoft-com:xml-msdata">
+        <xsd:element name="root" msdata:IsDataSet="true">
+            <xsd:complexType>
+                <xsd:choice maxOccurs="unbounded">
+                    <xsd:element name="data">
+                        <xsd:complexType>
+                            <xsd:sequence>
+                                <xsd:element name="value" type="xsd:string" minOccurs="0" msdata:Ordinal="1" />
+                                <xsd:element name="comment" type="xsd:string" minOccurs="0" msdata:Ordinal="2" />
+                            </xsd:sequence>
+                            <xsd:attribute name="name" type="xsd:string" msdata:Ordinal="1" />
+                            <xsd:attribute name="type" type="xsd:string" msdata:Ordinal="3" />
+                            <xsd:attribute name="mimetype" type="xsd:string" msdata:Ordinal="4" />
+                        </xsd:complexType>
+                    </xsd:element>
+                    <xsd:element name="resheader">
+                        <xsd:complexType>
+                            <xsd:sequence>
+                                <xsd:element name="value" type="xsd:string" minOccurs="0" msdata:Ordinal="1" />
+                            </xsd:sequence>
+                            <xsd:attribute name="name" type="xsd:string" use="required" />
+                        </xsd:complexType>
+                    </xsd:element>
+                </xsd:choice>
+            </xsd:complexType>
+        </xsd:element>
+    </xsd:schema>
+    <resheader name="resmimetype">
+        <value>text/microsoft-resx</value>
+    </resheader>
+    <resheader name="version">
+        <value>2.0</value>
+    </resheader>
+    <resheader name="reader">
+        <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+    </resheader>
+    <resheader name="writer">
+        <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+    </resheader>
+    <data name="Busy_Downloading" xml:space="preserve">
+        <value>Stahuje se…</value>
+    </data>
+    <data name="Busy_Installing" xml:space="preserve">
+        <value>Instaluje se…</value>
+    </data>
+    <data name="Busy_Switching" xml:space="preserve">
+        <value>Přepíná se…</value>
+    </data>
+    <data name="Busy_Uninstalling" xml:space="preserve">
+        <value>Odinstalovává se…</value>
+    </data>
+    <data name="Busy_Updating" xml:space="preserve">
+        <value>Aktualizuje se…</value>
+    </data>
+    <data name="Busy_Working" xml:space="preserve">
+        <value>Pracuje se…</value>
+    </data>
+    <data name="Client_EmptyAnswer" xml:space="preserve">
+        <value>prázdná odpověď z {0}</value>
+    </data>
+    <data name="Client_HttpStatus" xml:space="preserve">
+        <value>Flock odpověděl chybou HTTP {0}</value>
+    </data>
+    <data name="Client_NotRunning" xml:space="preserve">
+        <value>Flock neběží</value>
+    </data>
+    <data name="Client_OutcomeUnknown" xml:space="preserve">
+        <value>Spojení selhalo. Změna se možná provedla; před dalším pokusem obnovte její stav.</value>
+    </data>
+    <data name="Client_Timeout" xml:space="preserve">
+        <value>Flock na {0} {1} neodpověděl včas</value>
+    </data>
+    <data name="Client_UnexpectedAnswer" xml:space="preserve">
+        <value>Neočekávaná odpověď z {0}: {1}</value>
+    </data>
+    <data name="Conflict_AnswersFor" xml:space="preserve">
+        <value>odpovídá za {0} ({1})</value>
+    </data>
+    <data name="Conflict_Both" xml:space="preserve">
+        <value>{0} a {1}</value>
+    </data>
+    <data name="Conflict_Detail" xml:space="preserve">
+        <value>{0} {1}.</value>
+    </data>
+    <data name="Conflict_Port" xml:space="preserve">
+        <value>port {0} ({1})</value>
+    </data>
+    <data name="Conflict_Quit" xml:space="preserve">
+        <value>Ukončete {0}</value>
+    </data>
+    <data name="Conflict_Uses" xml:space="preserve">
+        <value>používá {0}</value>
+    </data>
+    <data name="Editor_None" xml:space="preserve">
+        <value>Neodkazovat</value>
+    </data>
+    <data name="EventKind_Jobs" xml:space="preserve">
+        <value>Úlohy</value>
+    </data>
+    <data name="EventKind_Logs" xml:space="preserve">
+        <value>Logy</value>
+    </data>
+    <data name="EventKind_Queries" xml:space="preserve">
+        <value>Dotazy</value>
+    </data>
+    <data name="EventKind_Requests" xml:space="preserve">
+        <value>Požadavky</value>
+    </data>
+    <data name="EventKind_Views" xml:space="preserve">
+        <value>Šablony</value>
+    </data>
+    <data name="InstallLink_AlreadyInstalledMessage" xml:space="preserve">
+        <value>Najdete ho v Nastavení → {0}.</value>
+    </data>
+    <data name="InstallLink_AlreadyInstalledTitle" xml:space="preserve">
+        <value>{0} je už nainstalováno</value>
+    </data>
+    <data name="InstallLink_InstallMessage" xml:space="preserve">
+        <value>Odkaz požádal Flock o instalaci {0} {1}. {2}</value>
+    </data>
+    <data name="InstallLink_InstallTitle" xml:space="preserve">
+        <value>Nainstalovat {0} {1}?</value>
+    </data>
+    <data name="InstallLink_InstallingMessage" xml:space="preserve">
+        <value>Průběh uvidíte v Nastavení → {0}.</value>
+    </data>
+    <data name="InstallLink_InstallingTitle" xml:space="preserve">
+        <value>{0} se už instaluje</value>
+    </data>
+    <data name="InstallLink_NewerFlock" xml:space="preserve">
+        <value>Odkaz je možná určený pro novější Flock. Aktualizujte Flock a zkuste to znovu.</value>
+    </data>
+    <data name="InstallLink_NoBuild" xml:space="preserve">
+        <value>Pro tento počítač není k dispozici žádné sestavení, nebo je odkaz určený pro novější Flock.</value>
+    </data>
+    <data name="InstallLink_PurposeNode" xml:space="preserve">
+        <value>Projekty, které ho používají, dostanou node, npm a npx hned po instalaci.</value>
+    </data>
+    <data name="InstallLink_PurposePhp" xml:space="preserve">
+        <value>Weby, které ho používají, začnou fungovat hned po instalaci.</value>
+    </data>
+    <data name="InstallLink_PurposeService" xml:space="preserve">
+        <value>Poběží na 127.0.0.1 pro vaše weby.</value>
+    </data>
+    <data name="InstallLink_UnavailableMessage" xml:space="preserve">
+        <value>Flock ho na této platformě nedokáže spustit.</value>
+    </data>
+    <data name="InstallLink_UnavailableTitle" xml:space="preserve">
+        <value>{0} není na tomto počítači k dispozici</value>
+    </data>
+    <data name="InstallLink_UnknownTitle" xml:space="preserve">
+        <value>Flock nenabízí {0}</value>
+    </data>
+    <data name="List_And" xml:space="preserve">
+        <value>{0} a {1}</value>
+    </data>
+    <data name="List_Separator" xml:space="preserve">
+        <value>, </value>
+    </data>
+    <data name="Pane_Services" xml:space="preserve">
+        <value>Služby</value>
+    </data>
+    <data name="Proxy_NotRunning" xml:space="preserve">
+        <value>Neběží</value>
+    </data>
+    <data name="Proxy_Running" xml:space="preserve">
+        <value>Běží</value>
+    </data>
+    <data name="SecureLink_AlreadySecuredMessage" xml:space="preserve">
+        <value>Je dostupný na https://{0}.</value>
+    </data>
+    <data name="SecureLink_AlreadySecuredTitle" xml:space="preserve">
+        <value>Web {0} je už zabezpečený</value>
+    </data>
+    <data name="SecureLink_SecureMessage" xml:space="preserve">
+        <value>Odkaz požádal Flock o zabezpečení {0}. Web dostane certifikát, kterému tento počítač už důvěřuje.</value>
+    </data>
+    <data name="SecureLink_SecureTitle" xml:space="preserve">
+        <value>Zabezpečit web {0} pomocí HTTPS?</value>
+    </data>
+    <data name="SecureLink_UnknownMessage" xml:space="preserve">
+        <value>Nejdřív web přidejte v Nastavení → Weby.</value>
+    </data>
+    <data name="SecureLink_UnknownTitle" xml:space="preserve">
+        <value>Flock nemá web s názvem {0}</value>
+    </data>
+    <data name="Timeline_Job" xml:space="preserve">
+        <value>Úloha</value>
+    </data>
+    <data name="Timeline_Query" xml:space="preserve">
+        <value>Dotaz</value>
+    </data>
+    <data name="Timeline_View" xml:space="preserve">
+        <value>Šablona</value>
+    </data>
+    <data name="UpdateFeed_Invalid" xml:space="preserve">
+        <value>Zdroj aktualizací není platný: {0}</value>
+    </data>
+</root>

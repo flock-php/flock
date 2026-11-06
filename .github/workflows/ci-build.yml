@@ -211,6 +211,10 @@ jobs:
             -   name: Test
                 run: swift test --package-path macos
 
+            # Every text in the code has its cs and es translations in Localizable.xcstrings.
+            -   name: Translations
+                run: macos/check-strings.sh
+
     windows-check:
         name: Windows app
         needs: changes

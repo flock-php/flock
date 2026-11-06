@@ -7,6 +7,7 @@ use std::time::Duration;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 
+use crate::i18n::{tr, tr_noop, trc};
 use crate::paths;
 
 #[derive(Debug, Clone, PartialEq)]
@@ -18,8 +19,10 @@ pub enum Error {
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            Error::NotRunning => write!(f, "Flock is not running"),
-            Error::Server { status, message } if message.is_empty() => write!(f, "Flock answered with HTTP {status}"),
+            Error::NotRunning => f.write_str(tr!("Flock is not running")),
+            Error::Server { status, message } if message.is_empty() => {
+                f.write_str(&tr!("Flock answered with HTTP {status}", status = status))
+            }
             Error::Server { message, .. } => write!(f, "{message}"),
         }
     }
@@ -478,7 +481,8 @@ impl Client {
         timeout: Duration,
     ) -> Result<T, Error> {
         let bytes = self.send(method, path, body, timeout)?;
-        serde_json::from_slice(&bytes).map_err(|e| Error::Server { status: 200, message: format!("unexpected answer from Flock: {e}") })
+        serde_json::from_slice(&bytes)
+            .map_err(|e| Error::Server { status: 200, message: tr!("unexpected answer from Flock: {error}", error = e) })
     }
 
     /// A plain-text answer, such as an install log.
@@ -623,8 +627,13 @@ impl Status {
 }
 
 /// The kinds of events Flock captures besides dumps, in the order the apps list them.
-pub const EVENT_KINDS: [(&str, &str); 5] =
-    [("query", "Queries"), ("log", "Logs"), ("view", "Views"), ("job", "Jobs"), ("request", "Requests")];
+pub const EVENT_KINDS: [(&str, &str); 5] = [
+    ("query", tr_noop!("Queries")),
+    ("log", tr_noop!("Logs")),
+    ("view", tr_noop!("Views")),
+    ("job", tr_noop!("Jobs")),
+    ("request", tr_noop!("Requests")),
+];
 
 /// GET /v1/config (api.ConfigView): config.json plus the installed versions.
 #[derive(Deserialize, Debug, Clone, PartialEq, Default)]
@@ -682,9 +691,9 @@ impl Job {
     /// "Downloading… 42%", "Downloading…" (size unknown) or "Installing…".
     pub fn text(&self) -> String {
         match self.phase.as_str() {
-            "installing" => "Installing…".to_owned(),
-            _ if (0.0..=1.0).contains(&self.progress) => format!("Downloading… {}%", (self.progress * 100.0).round()),
-            _ => "Downloading…".to_owned(),
+            "installing" => tr!("Installing…").to_owned(),
+            _ if (0.0..=1.0).contains(&self.progress) => tr!("Downloading… {percent}%", percent = (self.progress * 100.0).round()),
+            _ => tr!("Downloading…").to_owned(),
         }
     }
 }
@@ -1217,9 +1226,9 @@ impl ProxyStatus {
     /// What answers at the upstream: "Node.js 22.23.4", "Running" or "Not running".
     pub fn server_text(&self) -> String {
         match (&self.server, self.running) {
-            (_, false) => "Not running".to_owned(),
+            (_, false) => tr!("Not running").to_owned(),
             (Some(server), true) if !server.is_empty() => server.clone(),
-            _ => "Running".to_owned(),
+            _ => tr!("Running").to_owned(),
         }
     }
 }
@@ -1251,19 +1260,31 @@ impl WorktreeStatus {
         self.state == "failed"
     }
 
+    /// How lists name its database: the mode asked for ("copy"), or "own database" for the
+    /// project's default; a mode this app doesn't know as the daemon says it.
+    pub fn database_label(&self) -> &str {
+        match self.db_mode.as_str() {
+            "" => tr!("own database"),
+            "shared" => trc!("database", "shared"),
+            "copy" => trc!("database", "copy"),
+            "fresh" => trc!("database", "fresh"),
+            other => other,
+        }
+    }
+
     /// "Waiting…", "composer install…", "Ready" or "Setup failed".
     pub fn text(&self) -> String {
         match self.state.as_str() {
-            "queued" => "Waiting…".to_owned(),
+            "queued" => tr!("Waiting…").to_owned(),
             "running" => self.step_text(),
-            "failed" => "Setup failed".to_owned(),
-            _ => "Ready".to_owned(),
+            "failed" => tr!("Setup failed").to_owned(),
+            _ => tr!("Ready").to_owned(),
         }
     }
 
     /// What a running setup does: "Composer install…", or "Setting up…" between steps.
     pub fn step_text(&self) -> String {
-        if self.step.is_empty() { "Setting up…".to_owned() } else { format!("{}…", capitalized(&self.step)) }
+        if self.step.is_empty() { tr!("Setting up…").to_owned() } else { format!("{}…", capitalized(&self.step)) }
     }
 }
 
@@ -1303,7 +1324,7 @@ impl Branches {
     pub fn choices(&self) -> Vec<(String, String)> {
         let mut choices = Vec::new();
         if self.current.is_empty() {
-            choices.push((String::new(), "The current commit".to_owned()));
+            choices.push((String::new(), tr!("The current commit").to_owned()));
         }
         let mut names: Vec<&String> = Vec::new();
         for name in [&self.current, &self.default].into_iter().chain(self.local.iter().flatten()) {
@@ -1313,9 +1334,9 @@ impl Branches {
         }
         for name in names {
             let label = if *name == self.current {
-                format!("{name} (current)")
+                tr!("{name} (current)", name = name)
             } else if *name == self.default {
-                format!("{name} (default)")
+                tr!("{name} (default)", name = name)
             } else {
                 name.clone()
             };

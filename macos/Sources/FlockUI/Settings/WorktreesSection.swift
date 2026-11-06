@@ -32,13 +32,13 @@ struct SiteWorktreesSection: View {
             }
             HStack(spacing: 8) {
                 Button("New Worktree…") { creatingState.wrappedValue = true }
-                Text(worktrees.isEmpty ? "Work on another branch at its own address, e.g. feature.\(site.domain)." : "")
+                Text(worktrees.isEmpty ? String(localized: "Work on another branch at its own address, e.g. feature.\(site.domain).") : "")
                     .font(.caption).foregroundStyle(.secondary)
             }
         }
         .sheet(isPresented: creatingState.projectedValue, onDismiss: { requestState.wrappedValue = nil }) {
             if let request = requestState.wrappedValue {
-                WorktreeJobView(title: "New Worktree of \(site.name)") { [name = site.name] client in
+                WorktreeJobView(title: String(localized: "New Worktree of \(site.name)")) { [name = site.name] client in
                     try await client.createWorktree(site: name, branch: request.branch, from: request.from, db: request.db).path
                 } close: { worktree in
                     creatingState.wrappedValue = false
@@ -94,7 +94,7 @@ struct WorktreeDetail: View {
         VStack(alignment: .leading, spacing: 20) {
             header
             section("Worktree") {
-                field("Branch") { Text(worktree.branch.isEmpty ? "Detached HEAD" : worktree.branch).textSelection(.enabled) }
+                field("Branch") { Text(worktree.branch.isEmpty ? String(localized: "Detached HEAD") : worktree.branch).textSelection(.enabled) }
                 field("Site") {
                     Button(parent, action: selectParent).buttonStyle(.link)
                 }
@@ -153,7 +153,7 @@ struct WorktreeDetail: View {
             Button("Remove", role: .destructive) { remove(force: false) }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("Flock runs its before_delete hook and deletes \(worktree.path)\(ownDatabase.isEmpty ? "" : " and its database \(ownDatabase)"). \(worktree.branch.isEmpty ? "Commits" : "The branch \(worktree.branch)") stays.")
+            Text(removeMessage)
         }
         .alert("Couldn't remove \(worktree.worktreeLabel)", isPresented: Binding(get: { removeError != nil }, set: { if !$0 { removeError = nil } })) {
             Button("Remove Anyway", role: .destructive) { remove(force: true) }
@@ -197,11 +197,11 @@ struct WorktreeDetail: View {
         case .queued, .running:
             HStack(spacing: 6) {
                 ProgressView().controlSize(.small)
-                Text(setup?.step.isEmpty == false ? "\(setup!.step.prefix(1).uppercased())\(setup!.step.dropFirst())…" : "Setting up…")
+                Text(setup?.step.isEmpty == false ? "\(setup!.step.prefix(1).uppercased())\(setup!.step.dropFirst())…" : String(localized: "Setting up…"))
             }
             .font(.callout)
         case .failed:
-            Label("Setup failed: \(setup?.error ?? "see its log")", systemImage: "exclamationmark.triangle.fill")
+            Label("Setup failed: \(setup?.error ?? String(localized: "see its log"))", systemImage: "exclamationmark.triangle.fill")
                 .font(.callout).foregroundStyle(.orange)
                 .textSelection(.enabled)
                 .fixedSize(horizontal: false, vertical: true)
@@ -222,24 +222,33 @@ struct WorktreeDetail: View {
     private var switchTitle: String {
         guard let mode = switching else { return "" }
         switch mode {
-        case .shared: return "Use \(parent)'s database?"
-        case .copy: return "Give \(worktree.worktreeLabel) a copy of \(parent)'s database?"
-        case .fresh: return "Give \(worktree.worktreeLabel) a new, empty database?"
+        case .shared: return String(localized: "Use \(parent)'s database?")
+        case .copy: return String(localized: "Give \(worktree.worktreeLabel) a copy of \(parent)'s database?")
+        case .fresh: return String(localized: "Give \(worktree.worktreeLabel) a new, empty database?")
         }
+    }
+
+    /// What removing deletes and what stays, in whole sentences.
+    private var removeMessage: String {
+        let deletes = ownDatabase.isEmpty
+            ? String(localized: "Flock runs its before_delete hook and deletes \(worktree.path).")
+            : String(localized: "Flock runs its before_delete hook and deletes \(worktree.path) and its database \(ownDatabase).")
+        let stays = worktree.branch.isEmpty ? String(localized: "Commits stay.") : String(localized: "The branch \(worktree.branch) stays.")
+        return deletes + " " + stays
     }
 
     private func switchMessage(_ mode: DatabaseMode) -> String {
         let new = switch mode {
-        case .shared: "It will use \(parent)'s database."
-        case .copy: "Flock copies \(parent)'s database for it and runs the migrations."
-        case .fresh: "Flock creates an empty database for it and runs the migrations."
+        case .shared: String(localized: "It will use \(parent)'s database.")
+        case .copy: String(localized: "Flock copies \(parent)'s database for it and runs the migrations.")
+        case .fresh: String(localized: "Flock creates an empty database for it and runs the migrations.")
         }
-        return ownDatabase.isEmpty ? new : "\(new) Its database \(ownDatabase) is dropped."
+        return ownDatabase.isEmpty ? new : new + " " + String(localized: "Its database \(ownDatabase) is dropped.")
     }
 
     private func switchDatabase(to mode: DatabaseMode) {
         let path = worktree.path
-        jobState.wrappedValue = WorktreeJob(title: "Switching \(worktree.worktreeLabel)'s Database") { client in
+        jobState.wrappedValue = WorktreeJob(title: String(localized: "Switching \(worktree.worktreeLabel)'s Database")) { client in
             _ = try await client.switchWorktreeDatabase(path: path, to: mode)
             return path
         }
@@ -247,7 +256,7 @@ struct WorktreeDetail: View {
 
     private func runSetup() {
         let path = worktree.path
-        jobState.wrappedValue = WorktreeJob(title: "Setting Up \(worktree.worktreeLabel)") { client in
+        jobState.wrappedValue = WorktreeJob(title: String(localized: "Setting Up \(worktree.worktreeLabel)")) { client in
             _ = try await client.setupWorktree(path: path)
             return path
         }
@@ -266,14 +275,14 @@ struct WorktreeDetail: View {
         }
     }
 
-    private func section<Content: View>(_ title: String, @ViewBuilder content: () -> Content) -> some View {
+    private func section<Content: View>(_ title: LocalizedStringKey, @ViewBuilder content: () -> Content) -> some View {
         VStack(alignment: .leading, spacing: 10) {
             Text(title).font(.subheadline.weight(.semibold))
             content()
         }
     }
 
-    private func field<Content: View>(_ label: String, @ViewBuilder content: () -> Content) -> some View {
+    private func field<Content: View>(_ label: LocalizedStringKey, @ViewBuilder content: () -> Content) -> some View {
         HStack(alignment: .firstTextBaseline, spacing: 12) {
             Text(label).foregroundStyle(.secondary)
                 .frame(width: 80, alignment: .leading)
@@ -290,7 +299,7 @@ struct WorktreeState: View {
     var body: some View {
         switch worktree.worktree?.state {
         case .queued, .running:
-            ProgressView().controlSize(.mini).help(worktree.worktree?.step ?? "Setting up")
+            ProgressView().controlSize(.mini).help(worktree.worktree?.step ?? String(localized: "Setting up"))
         case .failed:
             Image(systemName: "exclamationmark.triangle.fill").font(.caption).foregroundStyle(.orange)
                 .help("Setup failed: \(worktree.worktree?.error ?? "")")
@@ -366,19 +375,22 @@ private struct NewWorktreeSheet: View {
 
     private func label(_ name: String) -> String {
         switch name {
-        case branches.current: "\(name) (current)"
-        case branches.default: "\(name) (default)"
+        case branches.current: String(localized: "\(name) (current)")
+        case branches.default: String(localized: "\(name) (default)")
         default: name
         }
     }
 
     private var explanation: String {
-        let address = branch.isEmpty ? "its own address" : "\(slug).\(site.domain)"
+        // Whole sentences for each case: the fragments wouldn't translate on their own.
+        let address = "\(slug).\(site.domain)"
         if exists {
-            return "\(branch) exists, so the worktree checks it out. Flock creates it next to \(site.name), sets it up and serves it at \(address)."
+            return String(localized: "\(branch) exists, so the worktree checks it out. Flock creates it next to \(site.name), sets it up and serves it at \(address).")
         }
-        let name = branch.isEmpty ? "a new branch with a name of its own" : "the new branch \(branch)"
-        return "Flock creates the worktree next to \(site.name) on \(name), sets it up and serves it at \(address)."
+        if branch.isEmpty {
+            return String(localized: "Flock creates the worktree next to \(site.name) on a new branch with a name of its own, sets it up and serves it at its own address.")
+        }
+        return String(localized: "Flock creates the worktree next to \(site.name) on the new branch \(branch), sets it up and serves it at \(address).")
     }
 
     /// The name it's served under, as Flock makes it from the branch (config.WorktreeSlug).
@@ -429,7 +441,7 @@ struct WorktreeJobView: View {
             headline
             ScrollViewReader { proxy in
                 ScrollView {
-                    Text(logState.wrappedValue.isEmpty ? " " : logState.wrappedValue)
+                    Text(verbatim: logState.wrappedValue.isEmpty ? " " : logState.wrappedValue)
                         .font(.system(.caption, design: .monospaced))
                         .textSelection(.enabled)
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -471,10 +483,10 @@ struct WorktreeJobView: View {
         case let .running(_, step):
             HStack(spacing: 6) {
                 ProgressView().controlSize(.small)
-                Text(step.isEmpty ? "Setting up…" : "\(step.prefix(1).uppercased())\(step.dropFirst())…")
+                Text(step.isEmpty ? String(localized: "Setting up…") : "\(step.prefix(1).uppercased())\(step.dropFirst())…")
             }
         case .ready:
-            Label("Ready\(worktree?.url.map { " at \($0)" } ?? "")", systemImage: "checkmark.circle.fill")
+            Label(worktree?.url.map { String(localized: "Ready at \($0)") } ?? String(localized: "Ready"), systemImage: "checkmark.circle.fill")
                 .foregroundStyle(.green)
         case let .failed(_, error):
             Label(error, systemImage: "exclamationmark.triangle.fill")
@@ -544,7 +556,7 @@ struct WorktreeJobView: View {
                     phase = .ready(path: path)
                     return
                 case .failed:
-                    phase = .failed(path: path, error: "Setup failed: \(setup.error ?? "see the log")")
+                    phase = .failed(path: path, error: String(localized: "Setup failed: \(setup.error ?? String(localized: "see the log"))"))
                     return
                 default:
                     phase = .running(path: path, step: setup.step)

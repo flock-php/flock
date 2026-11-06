@@ -1,13 +1,14 @@
 <UserControl
     x:Class="Flock.Tray.Settings.AboutPane"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:l="using:Flock.Tray">
     <StackPanel Spacing="0">
         <StackPanel Orientation="Horizontal" Spacing="20" Margin="0,0,0,24">
             <Image Source="Assets/AppIcon.png" Width="72" Height="72" />
             <StackPanel Spacing="2" VerticalAlignment="Center">
                 <TextBlock Text="Flock" Style="{StaticResource TitleLargeTextBlockStyle}" />
-                <TextBlock Text="A native local development environment for Laravel." Style="{StaticResource CaptionTextBlockStyle}"
+                <TextBlock Text="{l:Loc Key=About_Tagline}" Style="{StaticResource CaptionTextBlockStyle}"
                            Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
             </StackPanel>
         </StackPanel>
@@ -17,7 +18,7 @@
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
-                    <TextBlock Text="App" /><TextBlock x:Name="AppVersion" Grid.Column="1" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                    <TextBlock Text="{l:Loc Key=About_App}" /><TextBlock x:Name="AppVersion" Grid.Column="1" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                 </Grid>
             </Border>
             <Border Style="{StaticResource CardStyle}">
@@ -25,7 +26,7 @@
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
-                    <TextBlock Text="Daemon" /><TextBlock Text="{Binding DaemonVersion}" Grid.Column="1" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                    <TextBlock Text="{l:Loc Key=General_Daemon}" /><TextBlock Text="{Binding DaemonVersion}" Grid.Column="1" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                 </Grid>
             </Border>
             <Border Style="{StaticResource CardStyle}">
@@ -34,10 +35,10 @@
                         <ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
                     <StackPanel Spacing="1">
-                        <TextBlock Text="Data folder" />
+                        <TextBlock Text="{l:Loc Key=About_DataFolder}" />
                         <TextBlock Text="{Binding DataFolder}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextTrimming="CharacterEllipsis" />
                     </StackPanel>
-                    <Button Grid.Column="1" Content="Show in Explorer" Click="ShowDataFolder" />
+                    <Button Grid.Column="1" Content="{l:Loc Key=Common_ShowInExplorer}" Click="ShowDataFolder" />
                 </Grid>
             </Border>
             <Border Style="{StaticResource CardStyle}">
@@ -45,20 +46,7 @@
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
-                    <TextBlock Text="Flock documentation" /><Button Grid.Column="1" Content="Open" Click="OpenDocumentation" />
-                </Grid>
-            </Border>
-            <Border Style="{StaticResource CardStyle}">
-                <Grid Style="{StaticResource SettingRowStyle}">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" />
-                    </Grid.ColumnDefinitions>
-                    <StackPanel Spacing="1">
-                        <TextBlock Text="Found a bug?" />
-                        <TextBlock Text="Opens a new GitHub issue with your versions filled in." Style="{StaticResource CaptionTextBlockStyle}"
-                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
-                    </StackPanel>
-                    <Button Grid.Column="1" Content="Report an issue" Click="ReportIssue" />
+                    <TextBlock Text="{l:Loc Key=About_Documentation}" /><Button Grid.Column="1" Content="{l:Loc Key=Common_Open}" Click="OpenDocumentation" />
                 </Grid>
             </Border>
             <Border Style="{StaticResource CardStyle}">
@@ -67,27 +55,40 @@
                         <ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
                     <StackPanel Spacing="1">
-                        <TextBlock Text="License" />
-                        <TextBlock Text="Copyright © Guava s.r.o. Licensed under the AGPL-3.0." Style="{StaticResource CaptionTextBlockStyle}"
+                        <TextBlock Text="{l:Loc Key=About_FoundBug}" />
+                        <TextBlock Text="{l:Loc Key=About_FoundBugDescription}" Style="{StaticResource CaptionTextBlockStyle}"
                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
                     </StackPanel>
-                    <Button Grid.Column="1" Content="View" Click="OpenLicense" />
+                    <Button Grid.Column="1" Content="{l:Loc Key=About_ReportIssue}" Click="ReportIssue" />
+                </Grid>
+            </Border>
+            <Border Style="{StaticResource CardStyle}">
+                <Grid Style="{StaticResource SettingRowStyle}">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <StackPanel Spacing="1">
+                        <TextBlock Text="{l:Loc Key=About_License}" />
+                        <TextBlock Text="{l:Loc Key=About_LicenseDescription}" Style="{StaticResource CaptionTextBlockStyle}"
+                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
+                    </StackPanel>
+                    <Button Grid.Column="1" Content="{l:Loc Key=Common_View}" Click="OpenLicense" />
                 </Grid>
             </Border>
         </StackPanel>
         <StackPanel Spacing="4" Margin="0,0,0,24">
-            <TextBlock Text="Uninstall" Style="{StaticResource BodyStrongTextBlockStyle}" Margin="1,0,0,6" />
+            <TextBlock Text="{l:Loc Key=About_Uninstall}" Style="{StaticResource BodyStrongTextBlockStyle}" Margin="1,0,0,6" />
             <Border Style="{StaticResource CardStyle}">
                 <Grid Style="{StaticResource SettingRowStyle}">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
                     <StackPanel Spacing="1">
-                        <TextBlock Text="Uninstall Flock" />
-                        <TextBlock Text="Stops Flock and removes it from this PC. Your sites, databases and settings are kept."
+                        <TextBlock Text="{l:Loc Key=About_UninstallFlock}" />
+                        <TextBlock Text="{l:Loc Key=About_UninstallDescription}"
                                    Style="{StaticResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
                     </StackPanel>
-                    <Button Grid.Column="1" Content="Uninstall Flock…" Click="ConfirmUninstallClicked" />
+                    <Button Grid.Column="1" Content="{l:Loc Key=About_UninstallFlockEllipsis}" Click="ConfirmUninstallClicked" />
                 </Grid>
             </Border>
         </StackPanel>

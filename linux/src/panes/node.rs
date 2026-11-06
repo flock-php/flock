@@ -9,9 +9,10 @@ use adw::prelude::*;
 use gtk::{gio, glib};
 
 use super::common::{PaneView, ask_link, group, report};
-use super::versions::{badge, busy_button, button, checked_text, confirm, more_menu};
+use super::versions::{MenuItem, badge, busy_button, button, checked_text, confirm, more_menu};
 use super::{Data, Pane};
 use crate::api::{Client, Error, NodeRelease, NodeVersions, SettingsChange};
+use crate::i18n::tr;
 use crate::links::{self, Link};
 use crate::model::AppModel;
 
@@ -34,9 +35,9 @@ struct Inner {
 impl NodePane {
     pub fn new(model: Rc<AppModel>, banner: adw::Banner) -> Self {
         Self(Rc::new(Inner {
-            view: PaneView::new(
-                "node, npm and npx follow the project's .nvmrc / .node-version, then the site's version, then the default.",
-            ),
+            view: PaneView::new(tr!(
+                "node, npm and npx follow the project's .nvmrc / .node-version, then the site's version, then the default."
+            )),
             model,
             banner,
             versions: RefCell::default(),
@@ -113,9 +114,9 @@ impl Inner {
         let Some(resolution) = link.resolve_node(self.versions.borrow().as_ref(), &installing) else { return };
         self.model.set_link(None);
         let this = self.clone();
-        ask_link(&self.view.scrolled, resolution, "Install", move |target| {
+        ask_link(&self.view.scrolled, resolution, tr!("Install"), move |target| {
             let major = target.line.clone();
-            this.run(&target.line, format!("Downloading Node.js {}…", target.version), move |c| c.install_node(&major));
+            this.run(&target.line, tr!("Downloading Node.js {version}…", version = target.version), move |c| c.install_node(&major));
         });
     }
 
@@ -129,20 +130,22 @@ impl Inner {
         self.shown.replace(Some(key));
         let Some(versions) = versions else {
             let loading = group("", "");
-            loading.add(&adw::ActionRow::builder().title("Loading Node.js versions…").build());
+            loading.add(&adw::ActionRow::builder().title(tr!("Loading Node.js versions…")).build());
             self.view.set_groups(&[loading.upcast()]);
             return;
         };
         let mut footer = String::new();
         if !versions.check_error.is_empty() {
-            footer = format!("Couldn't check for updates: {}\n\n", versions.check_error);
+            footer = tr!("Couldn't check for updates: {error}", error = versions.check_error) + "\n\n";
         }
-        footer.push_str("Official Node.js builds, the newest release of each major. A project that pins a version in .nvmrc gets that major offered when you run node, npm or npx there. Global packages (npm install -g) belong to a Node line and survive its updates; those of the default version are on your PATH.");
-        let list = group("Versions", &footer);
+        footer.push_str(tr!(
+            "Official Node.js builds, the newest release of each major. A project that pins a version in .nvmrc gets that major offered when you run node, npm or npx there. Global packages (npm install -g) belong to a Node line and survive its updates; those of the default version are on your PATH."
+        ));
+        let list = group(tr!("Versions"), &footer);
         list.set_header_suffix(Some(&self.check_button(versions.checked_at.as_deref())));
         let releases = versions.versions.unwrap_or_default();
         if releases.is_empty() {
-            list.add(&adw::ActionRow::builder().title("No Node.js versions to show yet.").css_classes(["dim-label"]).build());
+            list.add(&adw::ActionRow::builder().title(tr!("No Node.js versions to show yet.")).css_classes(["dim-label"]).build());
         }
         for release in &releases {
             list.add(&self.release_row(release));
@@ -154,7 +157,7 @@ impl Inner {
         let line = gtk::Box::builder().spacing(6).build();
         line.append(&gtk::Label::builder().label(checked_text(checked_at)).css_classes(["caption", "dim-label"]).build());
         let this = self.clone();
-        let check = busy_button("Check now", "Checking…", self.checking.get(), move || {
+        let check = busy_button(tr!("Check now"), tr!("Checking…"), self.checking.get(), move || {
             this.checking.set(true);
             this.render();
             let this = this.clone();
@@ -171,13 +174,8 @@ impl Inner {
 
     fn release_row(self: &Rc<Self>, release: &NodeRelease) -> adw::ActionRow {
         let installed = !release.installed.is_empty();
-        let version = if release.update {
-            format!("{} → {}", release.installed, release.latest)
-        } else if installed {
-            release.installed.clone()
-        } else {
-            release.latest.clone()
-        };
+        // An update's target is on its button ("Update to 22.12.0"), so not here too.
+        let version = if installed { release.installed.clone() } else { release.latest.clone() };
         let row = adw::ActionRow::builder().title(format!("Node {}", release.major)).build();
         let icon = gtk::Image::from_icon_name("package-x-generic-symbolic");
         if !installed {
@@ -186,29 +184,29 @@ impl Inner {
         row.add_prefix(&icon);
         row.add_suffix(&gtk::Label::builder().label(&version).css_classes(["dim-label", "numeric"]).build());
         if release.default {
-            row.add_suffix(&badge("Default", "accent"));
+            row.add_suffix(&badge(tr!("Default"), "accent"));
         }
 
         let step = self.steps.borrow().get(&release.major).cloned().or_else(|| {
             (self.default_install.borrow().as_deref() == Some(release.major.as_str()))
-                .then(|| format!("Downloading Node.js {}…", release.latest))
+                .then(|| tr!("Downloading Node.js {version}…", version = release.latest))
         });
         if let Some(step) = &step {
             row.set_subtitle(&glib::markup_escape_text(step));
             row.add_suffix(&gtk::Spinner::builder().spinning(true).build());
         } else {
             let mut line = (if release.update {
-                "Update available"
+                tr!("Update available")
             } else if installed {
-                "Up to date"
+                tr!("Up to date")
             } else {
-                "Not installed"
+                tr!("Not installed")
             })
             .to_owned();
             if !release.npm.is_empty() {
                 line.push_str(&format!(" · npm {}", release.npm));
                 if !release.npm_latest.is_empty() {
-                    line.push_str(&format!(" (npm {} available)", release.npm_latest));
+                    line.push_str(&tr!(" (npm {version} available)", version = release.npm_latest));
                 }
             }
             row.set_subtitle(&glib::markup_escape_text(&line));
@@ -223,57 +221,69 @@ impl Inner {
             let (this, m, latest) = (self.clone(), major.clone(), release.latest.clone());
             button(label, suggested, move || {
                 let m2 = m.clone();
-                this.run(&m, format!("Downloading Node.js {latest}…"), move |c| c.install_node(&m2));
+                this.run(&m, tr!("Downloading Node.js {version}…", version = latest), move |c| c.install_node(&m2));
             })
         };
         if !installed {
-            actions.append(&install("Install", false));
+            actions.append(&install(tr!("Install"), false));
         } else {
             if release.update {
-                let update = install(&format!("Update to {}", release.latest), true);
-                update.set_tooltip_text(Some(&format!(
-                    "Downloads Node.js {}, then removes {}. Global packages stay.",
-                    release.latest, release.installed
+                let update = install(&tr!("Update to {version}", version = release.latest), true);
+                update.set_tooltip_text(Some(&tr!(
+                    "Downloads Node.js {new}, then removes {old}. Global packages stay.",
+                    new = release.latest,
+                    old = release.installed
                 )));
                 actions.append(&update);
             }
             if !release.npm_latest.is_empty() {
                 let (this, m, npm) = (self.clone(), major.clone(), release.npm_latest.clone());
-                actions.append(&button("Update npm", false, move || {
+                actions.append(&button(tr!("Update npm"), false, move || {
                     let m2 = m.clone();
-                    this.run(&m, format!("Updating npm to {npm}…"), move |c| c.update_npm(&m2));
+                    this.run(&m, tr!("Updating npm to {version}…", version = npm), move |c| c.update_npm(&m2));
                 }));
             }
+            let mut items: Vec<MenuItem> = Vec::new();
             if !release.default {
+                // Next to an update button, it goes into the menu: the row's title keeps its room.
                 let (this, m) = (self.clone(), major.clone());
-                actions.append(&button("Make Default", false, move || this.make_default(&m)));
+                let make_default = move || this.make_default(&m);
+                if release.update || !release.npm_latest.is_empty() {
+                    items.push((tr!("Make Default").to_owned(), true, false, Box::new(make_default)));
+                } else {
+                    actions.append(&button(tr!("Make Default"), false, make_default));
+                }
             }
             let (this, m, r) = (self.clone(), major.clone(), row.clone());
-            actions.append(&more_menu(vec![(
-                "Uninstall…".to_owned(),
+            items.push((
+                tr!("Uninstall…").to_owned(),
                 !release.default,
                 true,
                 Box::new(move || {
                     let (this, m) = (this.clone(), m.clone());
                     confirm(
                         &r,
-                        &format!("Uninstall Node {m}?"),
-                        &format!("Its global npm packages are removed too. Projects and sites that use Node {m} fall back to the default version until you install it again."),
-                        "Uninstall",
+                        &tr!("Uninstall Node {version}?", version = m),
+                        &tr!(
+                            "Its global npm packages are removed too. Projects and sites that use Node {version} fall back to the default version until you install it again.",
+                            version = m
+                        ),
+                        tr!("Uninstall"),
                         move || {
                             let m2 = m.clone();
-                            this.run(&m, "Uninstalling…".to_owned(), move |c| c.uninstall_node(&m2));
+                            this.run(&m, tr!("Uninstalling…").to_owned(), move |c| c.uninstall_node(&m2));
                         },
                     );
                 }),
-            )]));
+            ));
+            actions.append(&more_menu(items));
         }
         row.add_suffix(&actions);
         row
     }
 
     fn make_default(self: &Rc<Self>, major: &str) {
-        self.steps.borrow_mut().insert(major.to_owned(), format!("Making Node {major} the default…"));
+        self.steps.borrow_mut().insert(major.to_owned(), tr!("Making Node {version} the default…", version = major));
         self.render();
         let (this, banner, m) = (self.clone(), self.banner.clone(), major.to_owned());
         self.model.change_settings(SettingsChange { default_node: Some(major.to_owned()), ..Default::default() }, move |e| {

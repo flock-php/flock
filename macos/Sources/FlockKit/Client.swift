@@ -26,8 +26,8 @@ public enum FlockError: LocalizedError, Equatable {
 
     public var errorDescription: String? {
         switch self {
-        case .notRunning: "Flock is not running"
-        case let .server(status, message): message.isEmpty ? "Flock answered with HTTP \(status)" : message
+        case .notRunning: String(localized: "Flock is not running")
+        case let .server(status, message): message.isEmpty ? String(localized: "Flock answered with HTTP \(String(status))") : message
         }
     }
 }

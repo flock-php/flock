@@ -15,10 +15,13 @@ public struct FlockBarApp: App {
 
     public init() {}
 
+    /// Every scene gets the app's locale (AppLanguage.locale): the system's would format dates in
+    /// another language than the windows when Settings → General picks one.
     public var body: some Scene {
         MenuBarExtra {
             PanelView()
                 .environment(model)
+                .environment(\.locale, AppLanguage.locale)
         } label: {
             MenuBarLabel(model: model)
         }
@@ -27,24 +30,28 @@ public struct FlockBarApp: App {
         Window("Mail", id: WindowID.mail) {
             MailWindow()
                 .environment(model)
+                .environment(\.locale, AppLanguage.locale)
         }
         .defaultSize(width: 980, height: 640)
 
         Window("Dumps", id: WindowID.dumps) {
             DumpsWindow()
                 .environment(model)
+                .environment(\.locale, AppLanguage.locale)
         }
         .defaultSize(width: 900, height: 600)
 
         Window("Logs", id: WindowID.logs) {
             LogsWindow()
                 .environment(model)
+                .environment(\.locale, AppLanguage.locale)
         }
         .defaultSize(width: 980, height: 640)
 
         Window("Flock Settings", id: WindowID.settings) {
             SettingsWindow()
                 .environment(model)
+                .environment(\.locale, AppLanguage.locale)
         }
         .defaultSize(width: 860, height: 560)
         .windowStyle(.hiddenTitleBar)
@@ -53,6 +60,7 @@ public struct FlockBarApp: App {
         Window("Set Up Flock", id: WindowID.setup) {
             SetupWindow()
                 .environment(model)
+                .environment(\.locale, AppLanguage.locale)
         }
         .windowResizability(.contentSize)
         .defaultPosition(.center)

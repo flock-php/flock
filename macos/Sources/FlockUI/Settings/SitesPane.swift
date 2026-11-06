@@ -68,7 +68,7 @@ struct SitesPane: View {
                     .help("Serve a server of its own, e.g. a Node.js dev server on a port, at a .\(model.status?.dns.tld ?? "test") domain")
                     .padding(.bottom, 6)
                 Button("Add Site…") {
-                    for url in SettingsStore.chooseDirectories(prompt: "Add", multiple: false) {
+                    for url in SettingsStore.chooseDirectories(prompt: String(localized: "Add"), multiple: false) {
                         Task { await store.perform { _ = try await $0.linkSite(path: url.path) } }
                     }
                 }
@@ -237,9 +237,11 @@ struct SitesPane: View {
         let dns = model.status?.dns
         let depth = dns?.maxDepth ?? 4
         if dns?.wildcard ?? true {
-            return "Every subdomain up to \(depth) levels below the site already works. Add a full name like \(adding ?? "app")-2.\(dns?.tld ?? "test") for an alias, or a subdomain (tenant1, a.b) so it is listed here and also resolves on Windows machines without wildcard DNS."
+            let alias = "\(adding ?? "app")-2.\(dns?.tld ?? "test")"
+            return String(localized: "Every subdomain up to \(depth) levels below the site already works. Add a full name like \(alias) for an alias, or a subdomain (tenant1, a.b) so it is listed here and also resolves on Windows machines without wildcard DNS.")
         }
-        return "Wildcard subdomains don't work here (\(dns?.wildcardProblem ?? "")), so add each subdomain you use (tenant1, a.b). A full name adds an alias."
+        let problem = dns?.wildcardProblem ?? ""
+        return String(localized: "Wildcard subdomains don't work here (\(problem)), so add each subdomain you use (tenant1, a.b). A full name adds an alias.")
     }
 
     /// A site in the list: its name and address, a lock when it is secured, a badge while it is shared, a
@@ -286,7 +288,7 @@ struct SitesPane: View {
             Circle()
                 .fill(proxy.running ? Color.green : Color.secondary.opacity(0.5))
                 .frame(width: 6, height: 6)
-                .help(proxy.running ? proxy.server ?? "Running" : "Not running")
+                .help(proxy.running ? proxy.server ?? String(localized: "Running") : String(localized: "Not running"))
             if proxy.secured {
                 Image(systemName: "lock.fill").font(.caption).foregroundStyle(.secondary)
                     .help("Served over HTTPS")
@@ -324,8 +326,8 @@ struct SitesPane: View {
                         .disabled(proxy.url == nil)
                     Button {
                         confirm = ConfirmAction(
-                            title: "Remove \(proxy.name)?", button: "Remove", destructive: true,
-                            message: "Flock stops serving \(proxy.domain). The server at \(proxy.upstream) keeps running.",
+                            title: String(localized: "Remove \(proxy.name)?"), button: String(localized: "Remove"), destructive: true,
+                            message: String(localized: "Flock stops serving \(proxy.domain). The server at \(proxy.upstream) keeps running."),
                             run: { [name = proxy.name] client in try await client.removeProxy(name) })
                     } label: { Image(systemName: "minus.circle") }
                         .help("Remove proxy")
@@ -346,7 +348,7 @@ struct SitesPane: View {
                             Circle()
                                 .fill(proxy.running ? Color.green : Color.secondary.opacity(0.5))
                                 .frame(width: 7, height: 7)
-                            Text(proxy.running ? proxy.server ?? "Running" : "Not running")
+                            Text(proxy.running ? proxy.server ?? String(localized: "Running") : String(localized: "Not running"))
                         }
                         if !proxy.running {
                             Text("Nothing answers at \(upstreamLabel(proxy.upstream)) yet.")
@@ -443,8 +445,8 @@ struct SitesPane: View {
                     if !site.parked {
                         Button {
                             confirm = ConfirmAction(
-                                title: "Remove \(site.name)?", button: "Remove", destructive: true,
-                                message: "Flock stops serving \(site.domain). The project in \(site.path) is not touched.",
+                                title: String(localized: "Remove \(site.name)?"), button: String(localized: "Remove"), destructive: true,
+                                message: String(localized: "Flock stops serving \(site.domain). The project in \(site.path) is not touched."),
                                 run: { [name = site.name] client in try await client.unlinkSite(name) })
                         } label: { Image(systemName: "minus.circle") }
                             .help("Remove site")
@@ -478,14 +480,14 @@ struct SitesPane: View {
                                         .foregroundStyle(.orange)
                                         .fixedSize(horizontal: false, vertical: true)
                                 } else if let url = domain.url.flatMap(URL.init(string:)) {
-                                    Link(domain.alias ? "\(domain.host) (alias)" : domain.host, destination: url)
+                                    Link(domain.alias ? String(localized: "\(domain.host) (alias)") : domain.host, destination: url)
                                 } else {
                                     Text(domain.host)
                                 }
                                 Button {
                                     confirm = ConfirmAction(
-                                        title: "Remove \(domain.host)?", button: "Remove", destructive: true,
-                                        message: "\(domain.host) is no longer served by \(site.name).",
+                                        title: String(localized: "Remove \(domain.host)?"), button: String(localized: "Remove"), destructive: true,
+                                        message: String(localized: "\(domain.host) is no longer served by \(site.name)."),
                                         run: { [name = site.name, entry = domain.entry] client in try await client.removeDomain(site: name, domain: entry) })
                                 } label: { Image(systemName: "minus.circle") }
                                     .buttonStyle(.borderless)
@@ -509,7 +511,8 @@ struct SitesPane: View {
                 rootHints(site)
             }
 
-            section("Share") {
+            // The heading is a noun where the button ("Share") is a verb, in Czech.
+            section(Text(String(localized: "Share section", defaultValue: "Share", comment: "The heading of a site's sharing settings."))) {
                 shareFields(site)
             }
 
@@ -552,15 +555,19 @@ struct SitesPane: View {
     }
 
     /// A section of the details: a heading and its settings.
-    private func section<Content: View>(_ title: String, @ViewBuilder content: () -> Content) -> some View {
+    private func section<Content: View>(_ title: LocalizedStringKey, @ViewBuilder content: () -> Content) -> some View {
+        section(Text(title), content: content)
+    }
+
+    private func section<Content: View>(_ title: Text, @ViewBuilder content: () -> Content) -> some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text(title).font(.subheadline.weight(.semibold))
+            title.font(.subheadline.weight(.semibold))
             content()
         }
     }
 
     /// A labelled setting: the label in a fixed column, so the controls line up.
-    private func field<Content: View>(_ label: String, @ViewBuilder content: () -> Content) -> some View {
+    private func field<Content: View>(_ label: LocalizedStringKey, @ViewBuilder content: () -> Content) -> some View {
         HStack(alignment: .firstTextBaseline, spacing: 12) {
             Text(label).foregroundStyle(.secondary)
                 .frame(width: 80, alignment: .leading)
@@ -574,13 +581,13 @@ struct SitesPane: View {
     private func versionPicker(label: String, current: String, source: Status.VersionSource, pinned: String, file: String,
                                defaultVersion: String, installed: [String], change: @escaping (String) -> Void) -> some View {
         // On the first run there's no default until Flock has installed one.
-        let follow = !pinned.isEmpty ? "Use \(fileName(file)) (\(label) \(pinned))"
-            : defaultVersion.isEmpty ? "Default" : "Default (\(label) \(defaultVersion))"
+        let follow = !pinned.isEmpty ? String(localized: "Use \(fileName(file)) (\(label) \(pinned))")
+            : defaultVersion.isEmpty ? String(localized: "Default") : String(localized: "Default (\(label) \(defaultVersion))")
         let versions = source == .isolated && !current.isEmpty && !installed.contains(current) ? installed + [current] : installed
         let help: String = switch source {
-        case .isolated: "\(label) \(current) is set for this site on this machine (isolated)."
-        case .project: "The project pins \(label) \(pinned) in \(fileName(file))."
-        case .default: "The site follows Flock's default \(label) version."
+        case .isolated: String(localized: "\(label) \(current) is set for this site on this machine (isolated).")
+        case .project: String(localized: "The project pins \(label) \(pinned) in \(fileName(file)).")
+        case .default: String(localized: "The site follows Flock's default \(label) version.")
         }
         return Picker(label, selection: Binding(
             get: { source == .isolated ? current : "" },
@@ -606,19 +613,19 @@ struct SitesPane: View {
     private func rootPicker(_ site: Status.Site) -> some View {
         let store = model.settings
         let follow: String = switch (site.rootSource, site.rootPinnedHere, site.rootState) {
-        case (_, true, _): "Use .flockrc (\(rootLabel(site.rootPinned)))"
-        case (.default, _, .notFound): "Automatic (none found)"
-        case (.default, _, _): "Automatic (\(rootLabel(site.root)))"
-        default: "Automatic"
+        case (_, true, _): String(localized: "Use .flockrc (\(rootLabel(site.rootPinned)))")
+        case (.default, _, .notFound): String(localized: "Automatic (none found)")
+        case (.default, _, _): String(localized: "Automatic (\(rootLabel(site.root)))")
+        default: String(localized: "Automatic")
         }
         var folders = site.rootSuggestions
         if site.rootSource == .isolated, !folders.contains(site.root) {
             folders.append(site.root)
         }
         let help: String = switch site.rootSource {
-        case .isolated: "\(rootLabel(site.root)) is set for this site on this machine."
-        case .project: "The project sets \(rootLabel(site.root)) in .flockrc."
-        case .default: "Flock serves the first of public/, www/, web/ and webroot/ with an index.php, else the project folder."
+        case .isolated: String(localized: "\(rootLabel(site.root)) is set for this site on this machine.")
+        case .project: String(localized: "The project sets \(rootLabel(site.root)) in .flockrc.")
+        case .default: String(localized: "Flock serves the first of public/, www/, web/ and webroot/ with an index.php, else the project folder.")
         }
         return Picker("Document root", selection: Binding(
             get: { site.rootSource == .isolated ? site.root : "" },
@@ -649,10 +656,10 @@ struct SitesPane: View {
     private func chooseRoot(_ site: Status.Site) {
         let store = model.settings
         let start = URL(fileURLWithPath: site.path)
-        guard let folder = SettingsStore.chooseDirectories(prompt: "Choose", multiple: false, in: start,
-                                                           message: "Choose the folder with the app's index.php in \(site.name).").first else { return }
+        guard let folder = SettingsStore.chooseDirectories(prompt: String(localized: "Choose"), multiple: false, in: start,
+                                                           message: String(localized: "Choose the folder with the app's index.php in \(site.name).")).first else { return }
         guard let root = site.root(for: folder) else {
-            store.error = "\(folder.path) isn't in \(site.path). The document root must be a folder in the project."
+            store.error = String(localized: "\(folder.path) isn't in \(site.path). The document root must be a folder in the project.")
             return
         }
         Task { await store.perform { _ = try await $0.updateSite(site.name, SiteChange(root: root)) } }
@@ -693,7 +700,7 @@ struct SitesPane: View {
     }
 
     /// "src/www", or "Project folder" for ".".
-    private func rootLabel(_ root: String) -> String { root == "." ? "Project folder" : root }
+    private func rootLabel(_ root: String) -> String { root == "." ? String(localized: "Project folder") : root }
 
     /// What runs the site's PHP (PHP-FPM or FrankenPHP); on FrankenPHP also its mode (classic or
     /// Laravel Octane), its state, Restart and its log.
@@ -725,7 +732,7 @@ struct SitesPane: View {
                 }
                 .labelsHidden()
                 .fixedSize()
-                .help(site.octaneAvailable ? "" : "Install Laravel Octane in the project (composer require laravel/octane) to use worker mode.")
+                .help(site.octaneAvailable ? "" : String(localized: "Install Laravel Octane in the project (composer require laravel/octane) to use worker mode."))
             }
 
             frankenPHPState(site)
@@ -802,15 +809,14 @@ struct SitesPane: View {
 
     /// "Running FrankenPHP 1.13.0 with PHP 8.4.14 · worker mode".
     private func runningText(_ site: Status.Site, _ franken: Status.SiteFrankenPHP) -> String {
-        let text = "Running FrankenPHP \(franken.version) with PHP \(franken.phpVersion)"
-        return site.worker == .octane ? text + " · worker mode" : text
+        let text = String(localized: "Running FrankenPHP \(franken.version) with PHP \(franken.phpVersion)")
+        return site.worker == .octane ? text + " · " + String(localized: "worker mode") : text
     }
 
     /// "Downloading FrankenPHP for PHP 8.4… 42%"; without a percentage while the size is unknown.
     private func downloadingText(_ site: Status.Site, _ franken: Status.SiteFrankenPHP) -> String {
-        let text = "Downloading FrankenPHP for PHP \(site.php)…"
-        guard let progress = franken.progress else { return text }
-        return "\(text) \(Int((progress * 100).rounded()))%"
+        guard let progress = franken.progress else { return String(localized: "Downloading FrankenPHP for PHP \(site.php)…") }
+        return String(localized: "Downloading FrankenPHP for PHP \(site.php)… \(Int((progress * 100).rounded()))%")
     }
 
     /// The name of the site's FrankenPHP log, a service log in the Logs window.
@@ -871,7 +877,7 @@ struct SitesPane: View {
                 runningShare(site, share, stop: stop)
             case .failed:
                 VStack(alignment: .leading, spacing: 8) {
-                    Label(share.error ?? "Sharing failed.", systemImage: "exclamationmark.triangle.fill")
+                    Label(share.error ?? String(localized: "Sharing failed."), systemImage: "exclamationmark.triangle.fill")
                         .foregroundStyle(.orange)
                         .textSelection(.enabled)
                         .fixedSize(horizontal: false, vertical: true)
@@ -926,7 +932,7 @@ struct SitesPane: View {
             }
             VStack(alignment: .leading, spacing: 2) {
                 if let expires = share.expiresAt {
-                    Text("Ends at \(expires.formatted(date: .omitted, time: .shortened))")
+                    Text("Ends at \(expires.formatted(Date.FormatStyle(date: .omitted, time: .shortened).locale(AppLanguage.locale)))")
                 }
                 if !share.allow.isEmpty {
                     Text("Only for: \(share.allow.joined(separator: ", "))")
@@ -1009,9 +1015,9 @@ struct SitesPane: View {
                 .fixedSize(horizontal: false, vertical: true)
             Button(site.boost == .missing ? "Add Flock to its guidelines…" : "Update it…") {
                 confirm = ConfirmAction(
-                    title: site.boost == .missing ? "Add Flock to \(site.name)'s Boost guidelines?" : "Update Flock's guideline in \(site.name)?",
-                    button: site.boost == .missing ? "Add" : "Update",
-                    message: "Writes .ai/guidelines/flock.md in \(site.path) and runs php artisan boost:update, so AI agents know Flock serves the app and picks its PHP version. Commit it with the rest of .ai/guidelines. This changes files in your project.",
+                    title: site.boost == .missing ? String(localized: "Add Flock to \(site.name)'s Boost guidelines?") : String(localized: "Update Flock's guideline in \(site.name)?"),
+                    button: site.boost == .missing ? String(localized: "Add") : String(localized: "Update"),
+                    message: String(localized: "Writes .ai/guidelines/flock.md in \(site.path) and runs php artisan boost:update, so AI agents know Flock serves the app and picks its PHP version. Commit it with the rest of .ai/guidelines. This changes files in your project."),
                     run: { [name = site.name] client in try await client.addBoostGuideline(site: name) })
             }
             .buttonStyle(.link)
@@ -1030,24 +1036,24 @@ struct SitesPane: View {
             if canPinPHP {
                 Button("Pin PHP \(site.php) to Project…") {
                     confirm = ConfirmAction(
-                        title: "Pin PHP \(site.php) to \(site.name)?", button: "Pin",
-                        message: "Writes php=\(site.php) to .flockrc in \(site.path). Commit it, and everyone using Flock on this project gets PHP \(site.php). This changes a file in your project.",
+                        title: String(localized: "Pin PHP \(site.php) to \(site.name)?"), button: String(localized: "Pin"),
+                        message: String(localized: "Writes php=\(site.php) to .flockrc in \(site.path). Commit it, and everyone using Flock on this project gets PHP \(site.php). This changes a file in your project."),
                         run: { [name = site.name, php = site.php] client in try await client.pin(site: name, tool: "php", version: php) })
                 }
             }
             if canPinNode {
                 Button("Pin Node \(nodeMajor) to Project…") {
                     confirm = ConfirmAction(
-                        title: "Pin Node \(nodeMajor) to \(site.name)?", button: "Pin",
-                        message: "Writes \(nodeMajor) to \(nodeFile) in \(site.path). Commit it, and Flock, nvm and other Node tools use Node \(nodeMajor) for this project. This changes a file in your project.",
+                        title: String(localized: "Pin Node \(nodeMajor) to \(site.name)?"), button: String(localized: "Pin"),
+                        message: String(localized: "Writes \(nodeMajor) to \(nodeFile) in \(site.path). Commit it, and Flock, nvm and other Node tools use Node \(nodeMajor) for this project. This changes a file in your project."),
                         run: { [name = site.name] client in try await client.pin(site: name, tool: "node", version: nodeMajor) })
                 }
             }
             if canPinRoot {
                 Button("Pin Document Root (\(rootLabel(site.root))) to Project…") {
                     confirm = ConfirmAction(
-                        title: "Pin the document root \(rootLabel(site.root)) to \(site.name)?", button: "Pin",
-                        message: "Writes root=\(site.root) to .flockrc in \(site.path). Commit it, and everyone using Flock on this project serves it from \(rootLabel(site.root)). This changes a file in your project.",
+                        title: String(localized: "Pin the document root \(rootLabel(site.root)) to \(site.name)?"), button: String(localized: "Pin"),
+                        message: String(localized: "Writes root=\(site.root) to .flockrc in \(site.path). Commit it, and everyone using Flock on this project serves it from \(rootLabel(site.root)). This changes a file in your project."),
                         run: { [name = site.name, root = site.root] client in try await client.pin(site: name, tool: "root", version: root) })
                 }
             }
@@ -1057,24 +1063,24 @@ struct SitesPane: View {
             if site.phpPinnedHere {
                 Button("Unpin PHP (\(fileName(site.phpFile)))…") {
                     confirm = ConfirmAction(
-                        title: "Unpin PHP from \(site.name)?", button: "Unpin",
-                        message: "Removes the PHP version from \(site.phpFile). The site then uses Flock's default PHP. This changes files in your project.",
+                        title: String(localized: "Unpin PHP from \(site.name)?"), button: String(localized: "Unpin"),
+                        message: String(localized: "Removes the PHP version from \(site.phpFile). The site then uses Flock's default PHP. This changes files in your project."),
                         run: { [name = site.name] client in try await client.unpin(site: name, tool: "php") })
                 }
             }
             if site.nodePinnedHere {
                 Button("Unpin Node (\(fileName(site.nodeFile)))…") {
                     confirm = ConfirmAction(
-                        title: "Unpin Node from \(site.name)?", button: "Unpin",
-                        message: "Removes the Node.js version from .flockrc and deletes .nvmrc / .node-version in \(site.path). The site then uses Flock's default Node.js. This changes files in your project.",
+                        title: String(localized: "Unpin Node from \(site.name)?"), button: String(localized: "Unpin"),
+                        message: String(localized: "Removes the Node.js version from .flockrc and deletes .nvmrc / .node-version in \(site.path). The site then uses Flock's default Node.js. This changes files in your project."),
                         run: { [name = site.name] client in try await client.unpin(site: name, tool: "node") })
                 }
             }
             if site.rootPinnedHere {
                 Button("Unpin Document Root (.flockrc)…") {
                     confirm = ConfirmAction(
-                        title: "Unpin the document root from \(site.name)?", button: "Unpin",
-                        message: "Removes root= from .flockrc in \(site.path). Flock then finds the document root itself. This changes files in your project.",
+                        title: String(localized: "Unpin the document root from \(site.name)?"), button: String(localized: "Unpin"),
+                        message: String(localized: "Removes root= from .flockrc in \(site.path). Flock then finds the document root itself. This changes files in your project."),
                         run: { [name = site.name] client in try await client.unpin(site: name, tool: "root") })
                 }
             }

@@ -11,6 +11,7 @@ use super::common::{PaneView, code_block, group, report, status_dot};
 use super::versions::button;
 use super::{Data, Pane};
 use crate::api::{Client, Error, Mcp, McpClient};
+use crate::i18n::tr;
 
 pub struct AiPane(Rc<Inner>);
 
@@ -25,9 +26,9 @@ struct Inner {
 
 impl AiPane {
     pub fn new(banner: adw::Banner) -> Self {
-        let view = PaneView::new(
-            "Let AI agents like Claude Code and Cursor work with Flock: your sites' URLs and PHP versions, logs, dumps and mail, and installing versions and services.",
-        );
+        let view = PaneView::new(tr!(
+            "Let AI agents like Claude Code and Cursor work with Flock: your sites' URLs and PHP versions, logs, dumps and mail, and installing versions and services."
+        ));
         Self(Rc::new(Inner { view, banner, mcp: RefCell::default(), working: RefCell::default(), loaded: Cell::new(false) }))
     }
 }
@@ -66,8 +67,8 @@ impl Inner {
     fn render(self: &Rc<Self>) {
         let mcp = self.mcp.borrow().clone();
         let clients = group(
-            "AI clients",
-            "Added once, Flock works in every project. Restart the client, or reload its MCP servers, after adding Flock.",
+            tr!("AI clients"),
+            tr!("Added once, Flock works in every project. Restart the client, or reload its MCP servers, after adding Flock."),
         );
         match &mcp {
             Some(mcp) => {
@@ -75,18 +76,18 @@ impl Inner {
                     clients.add(&self.client_row(client));
                 }
             }
-            None => clients.add(&adw::ActionRow::builder().title("Loading…").build()),
+            None => clients.add(&adw::ActionRow::builder().title(tr!("Loading…")).build()),
         }
-        let other = group("Other clients", "Add this to the client's MCP settings.");
+        let other = group(tr!("Other clients"), tr!("Add this to the client's MCP settings."));
         other.add(&code_block(mcp.as_ref().map_or("", |m| m.snippet.as_str())));
         self.view.set_groups(&[clients.upcast(), other.upcast()]);
     }
 
     fn client_row(self: &Rc<Self>, client: &McpClient) -> adw::ActionRow {
         let caption = match client.state.as_str() {
-            "registered" => "Flock is added",
-            "available" => "Installed",
-            _ => "Not installed",
+            "registered" => tr!("Flock is added"),
+            "available" => tr!("Installed"),
+            _ => tr!("Not installed"),
         };
         let mut subtitle = caption.to_owned();
         if !client.problem.is_empty() {
@@ -105,11 +106,11 @@ impl Inner {
         let id = client.id.clone();
         let this = self.clone();
         let action = match client.state.as_str() {
-            "registered" => Some(button("Remove", false, move || {
+            "registered" => Some(button(tr!("Remove"), false, move || {
                 let id2 = id.clone();
                 this.run(Some(id.clone()), move |c| c.unregister_mcp(&id2));
             })),
-            "available" => Some(button("Add", false, move || {
+            "available" => Some(button(tr!("Add"), false, move || {
                 let id2 = id.clone();
                 this.run(Some(id.clone()), move |c| c.register_mcp(&id2));
             })),

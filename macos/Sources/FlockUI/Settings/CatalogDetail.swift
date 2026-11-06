@@ -30,8 +30,8 @@ struct UnavailableNotice: View {
     var body: some View {
         let style = ServiceStyle.of(service.id)
         InstallInvitation(symbol: style.symbol, color: style.color.opacity(0.5),
-                          title: "Not available on macOS",
-                          message: service.unavailable.isEmpty ? "Flock can't run \(service.name) on this Mac." : service.unavailable) {} footer: {}
+                          title: String(localized: "Not available on macOS"),
+                          message: service.unavailable.isEmpty ? String(localized: "Flock can't run \(service.name) on this Mac.") : service.unavailable) {} footer: {}
     }
 }
 
@@ -71,21 +71,21 @@ struct CatalogDetail: View {
                 } else if store.catalog == nil {
                     ProgressView().frame(maxWidth: .infinity).padding(.top, 30)
                 } else {
-                    InstallInvitation(symbol: style.symbol, color: style.color, title: "\(service.name) isn't offered",
-                                      message: "This Flock daemon doesn't know \(service.name). Update Flock, then try again.") {} footer: {}
+                    InstallInvitation(symbol: style.symbol, color: style.color, title: String(localized: "\(service.name) isn't offered"),
+                                      message: String(localized: "This Flock daemon doesn't know \(service.name). Update Flock, then try again.")) {} footer: {}
                 }
             }
             .padding(16)
         }
         .sheet(isPresented: logState.projectedValue) {
-            JobLogSheet(title: "\(service.name) install log",
+            JobLogSheet(title: String(localized: "\(service.name) install log"),
                         running: { store.catalog?[service.id]?.job?.isRunning ?? false },
                         load: { await store.catalogLog(service.id) })
         }
         .alert(item: switchState.projectedValue) { line in
             switchAlert(line, entry: entry)
         }
-        .confirmationDialog(uninstallState.wrappedValue.map { "Uninstall \(service.name) \($0.label)?" } ?? "",
+        .confirmationDialog(uninstallState.wrappedValue.map { String(localized: "Uninstall \(service.name) \($0.label)?") } ?? "",
                             isPresented: Binding(get: { uninstallState.wrappedValue != nil }, set: { if !$0 { uninstallState.wrappedValue = nil } }),
                             presenting: uninstallState.wrappedValue) { line in
             if line.hasData {
@@ -105,12 +105,12 @@ struct CatalogDetail: View {
 
     private func status(_ entry: CatalogService?) -> String {
         if let job = entry?.job, job.isRunning {
-            return job.job.action == .update ? "Updating…" : "Installing…"
+            return job.job.action == .update ? String(localized: "Updating…") : String(localized: "Installing…")
         }
-        guard service.installed else { return service.available ? "Not installed" : "Not available" }
-        var parts = [service.running ? "Running" : (service.enabled ? "Not running" : "Stopped")]
+        guard service.installed else { return service.available ? String(localized: "Not installed") : String(localized: "Not available") }
+        var parts = [service.running ? String(localized: "Running") : (service.enabled ? String(localized: "Not running") : String(localized: "Stopped"))]
         if service.port > 0 {
-            parts.append("Port \(service.port)")
+            parts.append(String(localized: "Port \(String(service.port))"))
         }
         return parts.joined(separator: " · ")
     }
@@ -190,28 +190,30 @@ struct CatalogDetail: View {
         Task { await model.settings.performOnCatalog(id) { try await $0.uninstallCatalogService(id, line: target, deleteData: deleteData) } }
     }
 
+    /// Whole sentences, one after the other.
     private func uninstallMessage(_ line: CatalogLine, entry: CatalogService?) -> String {
         let name = service.name
-        var message = ""
+        var sentences: [String] = []
         if line.active {
             if let next = entry?.lines.first(where: { $0.installed && $0.id != line.id }) {
-                message = "\(name) \(line.label) stops and \(name) \(next.label) becomes the active version. "
+                sentences.append(String(localized: "\(name) \(line.label) stops and \(name) \(next.label) becomes the active version."))
             } else {
-                message = "\(name) \(line.label) stops; your sites can't use \(name) until you install a version again. "
+                sentences.append(String(localized: "\(name) \(line.label) stops; your sites can't use \(name) until you install a version again."))
             }
         }
-        return message + (line.hasData
-            ? "Keep its data to pick up where you left off when you install \(line.label) again."
-            : "It holds no data.")
+        sentences.append(line.hasData
+            ? String(localized: "Keep its data to pick up where you left off when you install \(line.label) again.")
+            : String(localized: "It holds no data."))
+        return sentences.joined(separator: " ")
     }
 
     private func switchAlert(_ target: CatalogLine, entry: CatalogService?) -> Alert {
         let name = service.name
         let current = entry?.line ?? ""
         let own = target.hasData
-            ? "\(name) \(target.label) uses its own data."
-            : "\(name) \(target.label) starts with empty data."
-        let message = current.isEmpty ? own : "\(name) \(current) stops; its data stays but isn't used until you switch back. \(own)"
+            ? String(localized: "\(name) \(target.label) uses its own data.")
+            : String(localized: "\(name) \(target.label) starts with empty data.")
+        let message = current.isEmpty ? own : String(localized: "\(name) \(current) stops; its data stays but isn't used until you switch back.") + " " + own
         let id = service.id
         return Alert(
             title: Text("Switch to \(name) \(target.label)?"),
@@ -229,9 +231,9 @@ extension CatalogJob {
     func title(_ entry: CatalogService) -> String {
         let target = version.isEmpty ? entry.name : "\(entry.name) \(version)"
         return switch job.phase {
-        case .downloading: "Downloading \(target)…"
-        case .installing: "Installing \(target)…"
-        case .unknown: job.action == .update ? "Updating \(entry.name)…" : "Installing \(entry.name)…"
+        case .downloading: String(localized: "Downloading \(target)…")
+        case .installing: String(localized: "Installing \(target)…")
+        case .unknown: job.action == .update ? String(localized: "Updating \(entry.name)…") : String(localized: "Installing \(entry.name)…")
         }
     }
 }
@@ -239,7 +241,7 @@ extension CatalogJob {
 extension CatalogService {
     /// What installing takes, for a footnote.
     var methodText: String {
-        estimate.isEmpty ? "Downloads a ready-made build." : "Downloads a ready-made build (\(estimate))."
+        estimate.isEmpty ? String(localized: "Downloads a ready-made build.") : String(localized: "Downloads a ready-made build (\(estimate)).")
     }
 }
 
@@ -318,26 +320,26 @@ private struct CatalogLineRow: View {
     }
 
     private var installHelp: String {
-        var help = line.latest.isEmpty ? "Downloads the newest \(entry.name) \(line.label)." : "Downloads \(entry.name) \(line.latest)."
+        var sentences = [line.latest.isEmpty ? String(localized: "Downloads the newest \(entry.name) \(line.label).") : String(localized: "Downloads \(entry.name) \(line.latest).")]
         if entry.isInstalled {
-            help += " \(entry.name) \(entry.line) keeps running until you switch."
+            sentences.append(String(localized: "\(entry.name) \(entry.line) keeps running until you switch."))
         }
         if line.hasData {
-            help += " Its data is still here and comes back."
+            sentences.append(String(localized: "Its data is still here and comes back."))
         }
-        return help
+        return sentences.joined(separator: " ")
     }
 
     private var detail: String {
         var parts: [String] = []
         if line.installed {
             parts.append(line.version)
-            parts.append(line.update ? (line.latest == line.version ? "new build available" : "\(line.latest) available") : "up to date")
+            parts.append(line.update ? (line.latest == line.version ? String(localized: "new build available") : String(localized: "\(line.latest) available")) : String(localized: "up to date"))
         } else {
-            parts.append(line.latest.isEmpty ? "Not installed" : "Not installed · \(line.latest) available")
+            parts.append(line.latest.isEmpty ? String(localized: "Not installed") : String(localized: "Not installed · \(line.latest) available"))
         }
         if line.hasData {
-            parts.append(line.installed ? "has data" : "data kept")
+            parts.append(line.installed ? String(localized: "has data") : String(localized: "data kept"))
         }
         return parts.joined(separator: " · ")
     }
@@ -359,8 +361,8 @@ private struct CatalogInstallCard: View {
         let job = entry.job
 
         InstallInvitation(symbol: style.symbol, color: style.color,
-                          title: job?.isRunning == true ? "Installing \(entry.name)" : "Install \(entry.name)",
-                          message: entry.description.isEmpty ? "Runs on 127.0.0.1 for your sites." : entry.description) {
+                          title: job?.isRunning == true ? String(localized: "Installing \(entry.name)") : String(localized: "Install \(entry.name)"),
+                          message: entry.description.isEmpty ? String(localized: "Runs on 127.0.0.1 for your sites.") : entry.description) {
             if let job, job.isRunning {
                 ComponentJobProgress(title: job.title(entry), job: job.job, showLog: showLog) {
                     perform { try await $0.cancelCatalogJob(entry.id) }
@@ -400,7 +402,7 @@ private struct CatalogInstallCard: View {
             version: Binding(get: { selectedLine }, set: { lineState.wrappedValue = $0 }),
             portText: Binding(get: { portText }, set: { portState.wrappedValue = $0 }),
             note: entry.port != entry.defaultPort && portState.wrappedValue == nil
-                ? "Port \(String(entry.defaultPort)) is taken, so Flock suggests \(String(entry.port))." : nil,
+                ? String(localized: "Port \(String(entry.defaultPort)) is taken, so Flock suggests \(String(entry.port)).") : nil,
             busy: busy
         ) {
             let line = selectedLine
@@ -488,7 +490,7 @@ struct ServiceInstallForm: View {
     }
 
     private var installLabel: String {
-        guard let latest = options.first(where: { $0.id == version })?.latest, !latest.isEmpty else { return "Install \(name)" }
-        return "Install \(name) \(latest)"
+        guard let latest = options.first(where: { $0.id == version })?.latest, !latest.isEmpty else { return String(localized: "Install \(name)") }
+        return String(localized: "Install \(name) \(latest)")
     }
 }

@@ -18,8 +18,8 @@ struct SettingsIcon: View {
 
 /// Title and short explanation at the top of a pane.
 struct PaneHeader: View {
-    let title: String
-    let subtitle: String
+    let title: LocalizedStringKey
+    let subtitle: LocalizedStringKey
 
     var body: some View {
         VStack(alignment: .leading, spacing: 3) {
@@ -75,12 +75,13 @@ struct CodeBlock: View {
 
 /// A capsule label such as "Default".
 struct Badge: View {
-    let text: String
+    let text: LocalizedStringKey
     var color: Color = .accentColor
 
     var body: some View {
         Text(text)
             .font(.caption2.weight(.semibold))
+            .fixedSize()
             .padding(.horizontal, 6)
             .padding(.vertical, 2)
             .foregroundStyle(color)

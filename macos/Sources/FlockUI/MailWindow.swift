@@ -112,7 +112,7 @@ private struct MailRow: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
-            Text(message.subject.isEmpty ? "(no subject)" : message.subject).lineLimit(1)
+            Text(message.subject.isEmpty ? String(localized: "(no subject)") : message.subject).lineLimit(1)
             HStack(spacing: 4) {
                 Text(message.inbox)
                     .font(.caption2)
@@ -132,6 +132,15 @@ private struct MailDetailView: View {
     enum Mode: String, CaseIterable, Identifiable {
         case html = "HTML", text = "Text", raw = "Raw", headers = "Headers"
         var id: Self { self }
+
+        var title: String {
+            switch self {
+            case .html: "HTML"
+            case .text: String(localized: "Text")
+            case .raw: String(localized: "Raw")
+            case .headers: String(localized: "Headers")
+            }
+        }
     }
 
     let id: String
@@ -201,14 +210,14 @@ private struct MailDetailView: View {
 
     private func header(_ detail: MailDetail) -> some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text(detail.subject.isEmpty ? "(no subject)" : detail.subject).font(.title3.weight(.semibold))
+            Text(detail.subject.isEmpty ? String(localized: "(no subject)") : detail.subject).font(.title3.weight(.semibold))
             Grid(alignment: .leading, horizontalSpacing: 8, verticalSpacing: 2) {
                 field("From", detail.from)
                 field("To", detail.to.joined(separator: ", "))
                 if !detail.cc.isEmpty {
                     field("Cc", detail.cc.joined(separator: ", "))
                 }
-                field("Date", detail.date.formatted(date: .abbreviated, time: .standard))
+                field("Date", detail.date.formatted(Date.FormatStyle(date: .abbreviated, time: .standard).locale(AppLanguage.locale)))
                 field("Inbox", detail.inbox)
             }
             .font(.callout)
@@ -220,7 +229,7 @@ private struct MailDetailView: View {
                             Button {
                                 Task { await model.mail.save(attachment, of: detail.id) }
                             } label: {
-                                Label("\(attachment.filename) (\(attachment.size.formatted(.byteCount(style: .file))))", systemImage: "paperclip")
+                                Label("\(attachment.filename) (\(Formats.bytes(Int64(attachment.size))))", systemImage: "paperclip")
                             }
                             .help("Save…")
                         }
@@ -232,7 +241,7 @@ private struct MailDetailView: View {
             }
 
             Picker("View", selection: modeState.projectedValue) {
-                ForEach(Mode.allCases) { Text($0.rawValue).tag($0) }
+                ForEach(Mode.allCases) { Text($0.title).tag($0) }
             }
             .pickerStyle(.segmented)
             .labelsHidden()
@@ -242,7 +251,7 @@ private struct MailDetailView: View {
         .textSelection(.enabled)
     }
 
-    private func field(_ name: String, _ value: String) -> some View {
+    private func field(_ name: LocalizedStringKey, _ value: String) -> some View {
         GridRow {
             Text(name).foregroundStyle(.secondary)
             Text(value)
@@ -260,7 +269,7 @@ private struct MailDetailView: View {
                     .background(Color.white)
             }
         case .text:
-            MonospacedText(detail.text.isEmpty ? "(no text part)" : detail.text)
+            MonospacedText(detail.text.isEmpty ? String(localized: "(no text part)") : detail.text)
         case .raw:
             switch raw {
             case let .success(text):

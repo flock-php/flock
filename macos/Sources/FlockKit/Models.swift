@@ -633,11 +633,11 @@ public struct Event: Decodable, Sendable, Equatable, Identifiable, Hashable {
         /// "Queries", "Logs", ... for menus and settings.
         public var title: String {
             switch self {
-            case .query: "Queries"
-            case .log: "Logs"
-            case .view: "Views"
-            case .job: "Jobs"
-            case .request: "Requests"
+            case .query: String(localized: "Queries")
+            case .log: String(localized: "Logs")
+            case .view: String(localized: "Views")
+            case .job: String(localized: "Jobs")
+            case .request: String(localized: "Requests")
             }
         }
     }

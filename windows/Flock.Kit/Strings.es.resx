@@ -1,0 +1,201 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+    <xsd:schema id="root" xmlns="" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:msdata="urn:schemas-microsoft-com:xml-msdata">
+        <xsd:element name="root" msdata:IsDataSet="true">
+            <xsd:complexType>
+                <xsd:choice maxOccurs="unbounded">
+                    <xsd:element name="data">
+                        <xsd:complexType>
+                            <xsd:sequence>
+                                <xsd:element name="value" type="xsd:string" minOccurs="0" msdata:Ordinal="1" />
+                                <xsd:element name="comment" type="xsd:string" minOccurs="0" msdata:Ordinal="2" />
+                            </xsd:sequence>
+                            <xsd:attribute name="name" type="xsd:string" msdata:Ordinal="1" />
+                            <xsd:attribute name="type" type="xsd:string" msdata:Ordinal="3" />
+                            <xsd:attribute name="mimetype" type="xsd:string" msdata:Ordinal="4" />
+                        </xsd:complexType>
+                    </xsd:element>
+                    <xsd:element name="resheader">
+                        <xsd:complexType>
+                            <xsd:sequence>
+                                <xsd:element name="value" type="xsd:string" minOccurs="0" msdata:Ordinal="1" />
+                            </xsd:sequence>
+                            <xsd:attribute name="name" type="xsd:string" use="required" />
+                        </xsd:complexType>
+                    </xsd:element>
+                </xsd:choice>
+            </xsd:complexType>
+        </xsd:element>
+    </xsd:schema>
+    <resheader name="resmimetype">
+        <value>text/microsoft-resx</value>
+    </resheader>
+    <resheader name="version">
+        <value>2.0</value>
+    </resheader>
+    <resheader name="reader">
+        <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+    </resheader>
+    <resheader name="writer">
+        <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+    </resheader>
+    <data name="Busy_Downloading" xml:space="preserve">
+        <value>Descargando…</value>
+    </data>
+    <data name="Busy_Installing" xml:space="preserve">
+        <value>Instalando…</value>
+    </data>
+    <data name="Busy_Switching" xml:space="preserve">
+        <value>Cambiando…</value>
+    </data>
+    <data name="Busy_Uninstalling" xml:space="preserve">
+        <value>Desinstalando…</value>
+    </data>
+    <data name="Busy_Updating" xml:space="preserve">
+        <value>Actualizando…</value>
+    </data>
+    <data name="Busy_Working" xml:space="preserve">
+        <value>Procesando…</value>
+    </data>
+    <data name="Client_EmptyAnswer" xml:space="preserve">
+        <value>respuesta vacía de {0}</value>
+    </data>
+    <data name="Client_HttpStatus" xml:space="preserve">
+        <value>Flock respondió con HTTP {0}</value>
+    </data>
+    <data name="Client_NotRunning" xml:space="preserve">
+        <value>Flock no se está ejecutando</value>
+    </data>
+    <data name="Client_OutcomeUnknown" xml:space="preserve">
+        <value>La conexión falló. Es posible que el cambio se haya completado; actualiza su estado antes de volver a intentarlo.</value>
+    </data>
+    <data name="Client_Timeout" xml:space="preserve">
+        <value>Flock no respondió a {0} {1} a tiempo</value>
+    </data>
+    <data name="Client_UnexpectedAnswer" xml:space="preserve">
+        <value>Respuesta inesperada de {0}: {1}</value>
+    </data>
+    <data name="Conflict_AnswersFor" xml:space="preserve">
+        <value>responde por {0} ({1})</value>
+    </data>
+    <data name="Conflict_Both" xml:space="preserve">
+        <value>{0} y {1}</value>
+    </data>
+    <data name="Conflict_Detail" xml:space="preserve">
+        <value>{0} {1}.</value>
+    </data>
+    <data name="Conflict_Port" xml:space="preserve">
+        <value>el puerto {0} ({1})</value>
+    </data>
+    <data name="Conflict_Quit" xml:space="preserve">
+        <value>Cierra {0}</value>
+    </data>
+    <data name="Conflict_Uses" xml:space="preserve">
+        <value>usa {0}</value>
+    </data>
+    <data name="Editor_None" xml:space="preserve">
+        <value>No enlazar</value>
+    </data>
+    <data name="EventKind_Jobs" xml:space="preserve">
+        <value>Trabajos</value>
+    </data>
+    <data name="EventKind_Logs" xml:space="preserve">
+        <value>Registros</value>
+    </data>
+    <data name="EventKind_Queries" xml:space="preserve">
+        <value>Consultas</value>
+    </data>
+    <data name="EventKind_Requests" xml:space="preserve">
+        <value>Solicitudes</value>
+    </data>
+    <data name="EventKind_Views" xml:space="preserve">
+        <value>Vistas</value>
+    </data>
+    <data name="InstallLink_AlreadyInstalledMessage" xml:space="preserve">
+        <value>Lo encontrarás en Configuración → {0}.</value>
+    </data>
+    <data name="InstallLink_AlreadyInstalledTitle" xml:space="preserve">
+        <value>{0} ya está instalado</value>
+    </data>
+    <data name="InstallLink_InstallMessage" xml:space="preserve">
+        <value>Un enlace pidió a Flock instalar {0} {1}. {2}</value>
+    </data>
+    <data name="InstallLink_InstallTitle" xml:space="preserve">
+        <value>¿Instalar {0} {1}?</value>
+    </data>
+    <data name="InstallLink_InstallingMessage" xml:space="preserve">
+        <value>Configuración → {0} muestra el progreso.</value>
+    </data>
+    <data name="InstallLink_InstallingTitle" xml:space="preserve">
+        <value>{0} ya se está instalando</value>
+    </data>
+    <data name="InstallLink_NewerFlock" xml:space="preserve">
+        <value>Puede que el enlace sea para una versión más reciente de Flock. Actualiza Flock y vuelve a intentarlo.</value>
+    </data>
+    <data name="InstallLink_NoBuild" xml:space="preserve">
+        <value>No hay ninguna compilación para este equipo, o el enlace es para una versión más reciente de Flock.</value>
+    </data>
+    <data name="InstallLink_PurposeNode" xml:space="preserve">
+        <value>Los proyectos que la usan obtienen node, npm y npx en cuanto esté instalada.</value>
+    </data>
+    <data name="InstallLink_PurposePhp" xml:space="preserve">
+        <value>Los sitios que la usan se sirven en cuanto esté instalada.</value>
+    </data>
+    <data name="InstallLink_PurposeService" xml:space="preserve">
+        <value>Se ejecuta en 127.0.0.1 para tus sitios.</value>
+    </data>
+    <data name="InstallLink_UnavailableMessage" xml:space="preserve">
+        <value>Flock no puede ejecutarlo en esta plataforma.</value>
+    </data>
+    <data name="InstallLink_UnavailableTitle" xml:space="preserve">
+        <value>{0} no está disponible en este equipo</value>
+    </data>
+    <data name="InstallLink_UnknownTitle" xml:space="preserve">
+        <value>Flock no ofrece {0}</value>
+    </data>
+    <data name="List_And" xml:space="preserve">
+        <value>{0} y {1}</value>
+    </data>
+    <data name="List_Separator" xml:space="preserve">
+        <value>, </value>
+    </data>
+    <data name="Pane_Services" xml:space="preserve">
+        <value>Servicios</value>
+    </data>
+    <data name="Proxy_NotRunning" xml:space="preserve">
+        <value>No está en ejecución</value>
+    </data>
+    <data name="Proxy_Running" xml:space="preserve">
+        <value>En ejecución</value>
+    </data>
+    <data name="SecureLink_AlreadySecuredMessage" xml:space="preserve">
+        <value>Se sirve en https://{0}.</value>
+    </data>
+    <data name="SecureLink_AlreadySecuredTitle" xml:space="preserve">
+        <value>{0} ya está protegido</value>
+    </data>
+    <data name="SecureLink_SecureMessage" xml:space="preserve">
+        <value>Un enlace pidió a Flock proteger {0}. Recibirá un certificado en el que este equipo ya confía.</value>
+    </data>
+    <data name="SecureLink_SecureTitle" xml:space="preserve">
+        <value>¿Servir {0} por HTTPS?</value>
+    </data>
+    <data name="SecureLink_UnknownMessage" xml:space="preserve">
+        <value>Primero añade el sitio en Configuración → Sitios.</value>
+    </data>
+    <data name="SecureLink_UnknownTitle" xml:space="preserve">
+        <value>Flock no tiene ningún sitio llamado {0}</value>
+    </data>
+    <data name="Timeline_Job" xml:space="preserve">
+        <value>Trabajo</value>
+    </data>
+    <data name="Timeline_Query" xml:space="preserve">
+        <value>Consulta</value>
+    </data>
+    <data name="Timeline_View" xml:space="preserve">
+        <value>Vista</value>
+    </data>
+    <data name="UpdateFeed_Invalid" xml:space="preserve">
+        <value>La fuente de actualizaciones no es válida: {0}</value>
+    </data>
+</root>

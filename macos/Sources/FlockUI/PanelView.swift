@@ -127,26 +127,26 @@ struct PanelView: View {
     private func services(_ status: Status) -> some View {
         VStack(alignment: .leading, spacing: 5) {
             SectionTitle("Services")
-            ServiceRow(name: "Web", detail: "http :\(status.httpPort) · https :\(status.httpsPort)", up: true)
+            ServiceRow(name: String(localized: "Web"), detail: "http :\(status.httpPort) · https :\(status.httpsPort)", up: true)
             if status.dns.wildcard {
                 ServiceRow(name: "DNS", detail: "*.\(status.dns.tld)", up: true)
             } else if !status.dns.tld.isEmpty {
-                ServiceRow(name: "DNS", detail: status.dns.wildcardProblem.isEmpty ? "*.\(status.dns.tld) doesn't resolve" : status.dns.wildcardProblem, up: false)
+                ServiceRow(name: "DNS", detail: status.dns.wildcardProblem.isEmpty ? String(localized: "*.\(status.dns.tld) doesn't resolve") : status.dns.wildcardProblem, up: false)
                     .help(status.dns.wildcardProblem)
             }
-            ServiceRow(name: "Mail", detail: status.mail.isEmpty ? "stopped" : "smtp \(status.mail)", up: !status.mail.isEmpty)
+            ServiceRow(name: String(localized: "Mail"), detail: status.mail.isEmpty ? String(localized: "stopped") : "smtp \(status.mail)", up: !status.mail.isEmpty)
             if let postgres = status.postgres {
                 ServiceRow(name: "PostgreSQL", detail: postgres, up: status.processes.first { $0.name == "postgres" }?.up ?? false)
             }
             ForEach(status.extras) { extra in
-                ServiceRow(name: extra.name, detail: extra.enabled ? "\(extra.version) on 127.0.0.1:\(extra.port)" : "stopped", up: extra.up)
+                ServiceRow(name: extra.name, detail: extra.enabled ? String(localized: "\(extra.version) on 127.0.0.1:\(String(extra.port))") : String(localized: "stopped"), up: extra.up)
             }
             notInstalled(status)
             ForEach(status.processes.filter { $0.name.hasPrefix("php") }) { process in
                 ServiceRow(name: process.name, detail: processDetail(process), up: process.up)
             }
             ForEach(status.processes.filter { !$0.up && !$0.name.hasPrefix("php") }) { process in
-                Text("\(process.name): \(process.lastError ?? "down")")
+                Text(verbatim: "\(process.name): \(process.lastError ?? String(localized: "down"))")
                     .font(.caption2)
                     .foregroundStyle(.red)
                     .lineLimit(3)
@@ -176,9 +176,9 @@ struct PanelView: View {
 
     private func processDetail(_ process: Status.Process) -> String {
         if !process.up {
-            return process.lastError ?? "down"
+            return process.lastError ?? String(localized: "down")
         }
-        return process.restarts > 0 ? "up (restarted \(process.restarts)×)" : "up"
+        return process.restarts > 0 ? String(localized: "up (restarted \(process.restarts)×)") : String(localized: "up")
     }
 
     private func sites(_ sites: [Status.Site], proxies: [Status.Proxy]) -> some View {
@@ -238,7 +238,7 @@ struct PanelView: View {
             }
         } else {
             VStack(alignment: .leading, spacing: 8) {
-                Text(model.isUpdating ? "Updating Flock…" : model.error ?? "Flock is not running")
+                Text(model.isUpdating ? String(localized: "Updating Flock…") : model.error ?? String(localized: "Flock is not running"))
                     .font(.callout)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -274,14 +274,15 @@ struct PanelView: View {
 }
 
 private struct SectionTitle: View {
-    let title: String
+    let title: LocalizedStringKey
 
-    init(_ title: String) {
+    init(_ title: LocalizedStringKey) {
         self.title = title
     }
 
     var body: some View {
-        Text(title.uppercased())
+        Text(title)
+            .textCase(.uppercase)
             .font(.caption2.weight(.semibold))
             .foregroundStyle(.secondary)
     }
@@ -381,7 +382,7 @@ private struct SiteRow: View {
                 // A button of its own: the row still opens the site.
                 Button(action: toggle) {
                     HStack(spacing: 2) {
-                        Text("\(worktrees)").font(.caption2.monospacedDigit())
+                        Text(worktrees, format: .number).font(.caption2.monospacedDigit())
                         Image(systemName: expanded ? "chevron.down" : "chevron.right").font(.caption2.weight(.semibold))
                     }
                     .foregroundStyle(.secondary)
@@ -389,6 +390,7 @@ private struct SiteRow: View {
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
+                // One apart in code as well: builds without the compiled catalog (swift run) have no plural rules.
                 .help(expanded ? "Hide its worktrees" : worktrees == 1 ? "Show its worktree" : "Show its \(worktrees) worktrees")
             }
         }
@@ -442,7 +444,7 @@ private struct SiteRow: View {
     /// The row's tooltip: where a site without a document root is fixed, else its address.
     private var help: String {
         if site.rootState == .notFound {
-            return "No public/, www/, web/ or webroot/ with an index.php in \(site.path). Choose the document root in Settings → Sites."
+            return String(localized: "No public/, www/, web/ or webroot/ with an index.php in \(site.path). Choose the document root in Settings → Sites.")
         }
         return site.url ?? site.problem ?? site.path
     }
@@ -477,7 +479,7 @@ private struct ProxyRow: View {
                 Circle()
                     .fill(proxy.running ? Color.green : Color.secondary.opacity(0.5))
                     .frame(width: 6, height: 6)
-                Text(proxy.running ? proxy.server ?? "Running" : "Not running")
+                Text(proxy.running ? proxy.server ?? String(localized: "Running") : String(localized: "Not running"))
                     .font(.caption2.monospacedDigit())
                     .foregroundStyle(.secondary)
             }
@@ -487,7 +489,7 @@ private struct ProxyRow: View {
         }
         .buttonStyle(.plain)
         .disabled(proxy.url == nil)
-        .help(proxy.running ? "\(proxy.url ?? proxy.domain) → \(proxy.upstream)" : "Nothing answers at \(proxy.upstream). Start the server there.")
+        .help(proxy.running ? "\(proxy.url ?? proxy.domain) → \(proxy.upstream)" : String(localized: "Nothing answers at \(proxy.upstream). Start the server there."))
         .background(isHovered ? Color.primary.opacity(0.08) : .clear, in: RoundedRectangle(cornerRadius: 5))
         .onHover { isHovered = $0 }
     }
@@ -516,11 +518,11 @@ private struct WorktreeRow: View {
                     if let setup = worktree.worktree, setup.busy {
                         HStack(spacing: 4) {
                             ProgressView().controlSize(.mini)
-                            Text(setup.step.isEmpty ? "Setting up…" : "\(setup.step.prefix(1).uppercased())\(setup.step.dropFirst())…")
+                            Text(setup.step.isEmpty ? String(localized: "Setting up…") : "\(setup.step.prefix(1).uppercased())\(setup.step.dropFirst())…")
                         }
                         .font(.caption2).foregroundStyle(.secondary)
                     } else if let setup = worktree.worktree, setup.state == .failed {
-                        Text("Setup failed: \(setup.error ?? "see its log")").font(.caption2).foregroundStyle(.red)
+                        Text("Setup failed: \(setup.error ?? String(localized: "see its log"))").font(.caption2).foregroundStyle(.red)
                     } else if let problem = worktree.problem {
                         Text(problem).font(.caption2).foregroundStyle(.red)
                     }
@@ -545,7 +547,7 @@ private struct WorktreeRow: View {
 }
 
 private struct ShortcutButton: View {
-    let title: String
+    let title: LocalizedStringKey
     let symbol: String
     let count: Int?
     let action: () -> Void
@@ -557,7 +559,7 @@ private struct ShortcutButton: View {
                 HStack(spacing: 3) {
                     Text(title)
                     if let count, count > 0 {
-                        Text("\(count)")
+                        Text(count, format: .number)
                             .font(.caption2.weight(.semibold))
                             .padding(.horizontal, 5)
                             .background(Color.accentColor.opacity(0.25), in: Capsule())

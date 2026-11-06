@@ -9,16 +9,22 @@ use adw::prelude::*;
 use gtk::{gio, glib};
 
 use crate::api::{Error, Job};
+use crate::i18n::{tr, trn};
 
 /// The line under a version's name: a job's progress, its error, a withdrawn build, or `idle`.
 pub fn detail(row: &adw::ActionRow, job: Option<&Job>, yanked: &str, update: bool, idle: &str) {
     let (text, class) = match job {
         Some(job) if job.running() => (job.text(), None),
         Some(job) if job.failed() => {
-            (if job.error.is_empty() { "The download failed.".to_owned() } else { job.error.clone() }, Some("error"))
+            (if job.error.is_empty() { tr!("The download failed.").to_owned() } else { job.error.clone() }, Some("error"))
         }
         _ if !yanked.is_empty() => {
-            (if update { format!("Withdrawn: {yanked} — update to replace it") } else { format!("Withdrawn: {yanked}") }, Some("warning"))
+            let text = if update {
+                tr!("Withdrawn: {reason} — update to replace it", reason = yanked)
+            } else {
+                tr!("Withdrawn: {reason}", reason = yanked)
+            };
+            (text, Some("warning"))
         }
         _ => (idle.to_owned(), if update { Some("accent") } else { None }),
     };
@@ -83,7 +89,7 @@ pub fn more_menu(items: Vec<MenuItem>) -> gtk::MenuButton {
     }
     gtk::MenuButton::builder()
         .icon_name("view-more-symbolic")
-        .tooltip_text("More")
+        .tooltip_text(tr!("More"))
         .popover(&popover)
         .valign(gtk::Align::Center)
         .css_classes(["flat"])
@@ -101,24 +107,22 @@ pub fn badge(text: &str, class: &str) -> gtk::Label {
 /// "Checked 5 minutes ago", from the daemon's RFC 3339 time.
 pub fn checked_text(checked_at: Option<&str>) -> String {
     let Some(time) = checked_at.and_then(|t| glib::DateTime::from_iso8601(t, None).ok()) else {
-        return "Not checked yet".to_owned();
+        return tr!("Not checked yet").to_owned();
     };
     let Ok(now) = glib::DateTime::now_utc() else { return String::new() };
     let minutes = now.difference(&time).as_seconds() / 60;
     match minutes {
-        ..1 => "Checked just now".to_owned(),
-        1 => "Checked a minute ago".to_owned(),
-        2..60 => format!("Checked {minutes} minutes ago"),
-        60..120 => "Checked an hour ago".to_owned(),
-        _ if minutes < 48 * 60 => format!("Checked {} hours ago", minutes / 60),
-        _ => format!("Checked {} days ago", minutes / (24 * 60)),
+        ..1 => tr!("Checked just now").to_owned(),
+        1..60 => trn!("Checked a minute ago", "Checked {n} minutes ago", minutes),
+        _ if minutes < 48 * 60 => trn!("Checked an hour ago", "Checked {n} hours ago", minutes / 60),
+        _ => trn!("Checked {n} day ago", "Checked {n} days ago", minutes / (24 * 60)),
     }
 }
 
 /// Asks before something is removed; confirmed runs on "Uninstall".
 pub fn confirm(parent: &impl IsA<gtk::Widget>, title: &str, body: &str, action: &str, confirmed: impl Fn() + 'static) {
     let dialog = adw::AlertDialog::new(Some(title), Some(body));
-    dialog.add_responses(&[("cancel", "Cancel"), ("ok", action)]);
+    dialog.add_responses(&[("cancel", tr!("Cancel")), ("ok", action)]);
     dialog.set_response_appearance("ok", adw::ResponseAppearance::Destructive);
     dialog.choose(Some(parent), gio::Cancellable::NONE, move |response| {
         if response == "ok" {
@@ -145,7 +149,7 @@ pub fn show_log(
         .right_margin(10)
         .build();
     let scrolled = gtk::ScrolledWindow::builder().child(&text).vexpand(true).build();
-    let copy = gtk::Button::with_label("Copy");
+    let copy = gtk::Button::with_label(tr!("Copy"));
     let header = adw::HeaderBar::new();
     header.pack_start(&copy);
     let view = adw::ToolbarView::new();
@@ -168,7 +172,7 @@ pub fn show_log(
         let mut shown = String::new();
         while open.get() {
             let read = read.clone();
-            let log = gio::spawn_blocking(read).await.expect("log request").unwrap_or_else(|_| "No install log yet.".to_owned());
+            let log = gio::spawn_blocking(read).await.expect("log request").unwrap_or_else(|_| tr!("No install log yet.").to_owned());
             let tail: Vec<&str> = log.lines().collect();
             let tail = tail[tail.len().saturating_sub(400)..].join("\n");
             if tail != shown {

@@ -39,7 +39,7 @@ struct ServicesPane: View {
             HStack(spacing: 0) {
                 List(selection: Binding<Service.ID?>(get: { selected?.id }, set: { model.servicesSelection = $0 })) {
                     ForEach(categories(of: services), id: \.self) { category in
-                        Section(category) {
+                        Section(Self.title(of: category)) {
                             ForEach(services.filter { $0.category == category }) { service in
                                 ServiceRow(service: service, activity: activity(of: service), locked: locked(service)) {
                                     model.servicesSelection = service.id
@@ -67,7 +67,8 @@ struct ServicesPane: View {
                     }
                 }
                 .listStyle(.inset)
-                .frame(width: 230)
+                // Wide enough for "Nainstalovat…" next to a name and its state.
+                .frame(width: 250)
 
                 Divider()
 
@@ -190,6 +191,21 @@ struct ServicesPane: View {
         return store.isBusy || activity(of: service) == .working
     }
 
+    /// The categories come from the daemon in English; the ones Flock has are shown translated.
+    private static func title(of category: String) -> String {
+        switch category {
+        case "Core": String(localized: "Core")
+        // Its own key: a heading for several databases, "Bases de datos" in Spanish.
+        case "Database": String(localized: "Database category", defaultValue: "Database")
+        case "Cache & Queue": String(localized: "Cache & Queue")
+        case "Search": String(localized: "Search")
+        case "Storage": String(localized: "Storage")
+        case "Mail": String(localized: "Mail")
+        case "Debugging": String(localized: "Debugging")
+        default: category
+        }
+    }
+
     private func categories(of services: [Service]) -> [String] {
         let present = Set(services.map(\.category))
         let ordered = Self.categoryOrder.filter(present.contains)
@@ -249,6 +265,7 @@ private struct ServiceRow: View {
             } else if service.isInstallable, service.available {
                 Button("Install…", action: select)
                     .controlSize(.small)
+                    .fixedSize()
             }
         }
         .padding(.vertical, 3)
@@ -259,17 +276,17 @@ private struct ServiceRow: View {
     private var detail: String {
         if !service.installed {
             guard service.isInstallable else { return "" }
-            return service.available ? "Not installed" : "Not available on macOS"
+            return service.available ? String(localized: "Not installed") : String(localized: "Not available on macOS")
         }
         var parts: [String] = []
         if !service.version.isEmpty {
             parts.append(service.version)
         }
         if service.port > 0 {
-            parts.append("Port \(service.port)")
+            parts.append(String(localized: "Port \(String(service.port))"))
         }
         if !service.running {
-            parts.append("Stopped")
+            parts.append(String(localized: "Stopped"))
         }
         return parts.joined(separator: " · ")
     }
@@ -341,7 +358,7 @@ struct ServiceInfo: View {
                 }
             } else if service.hasFixedPort {
                 row("Port") {
-                    Text(String(service.port) + " · set by `flock install`").monospacedDigit().foregroundStyle(.secondary)
+                    Text(String(localized: "\(String(service.port)) · set by `flock install`")).monospacedDigit().foregroundStyle(.secondary)
                 }
             }
 
@@ -400,20 +417,20 @@ struct ServiceInfo: View {
         switch service.id {
         case "web":
             return service.running
-                ? "Caddy serves every site over HTTPS (https://app.\(tld)) with certificates from Flock's local certificate authority, which `flock install` trusts."
-                : "Sites don't open while the web server is down. Its log may tell why; `flock restart` starts it again."
+                ? String(localized: "Caddy serves every site over HTTPS (https://app.\(tld)) with certificates from Flock's local certificate authority, which `flock install` trusts.")
+                : String(localized: "Sites don't open while the web server is down. Its log may tell why; `flock restart` starts it again.")
         case "dns":
             if !dnsBroken {
-                return "macOS sends every name under .\(tld) here (/etc/resolver/\(tld), set up by `flock install`), so any subdomain of a site works (tenant1.app.\(tld), a.b.app.\(tld)) without adding it."
+                return String(localized: "macOS sends every name under .\(tld) here (/etc/resolver/\(tld), set up by `flock install`), so any subdomain of a site works (tenant1.app.\(tld), a.b.app.\(tld)) without adding it.")
             }
-            let problem = service.problem.isEmpty ? "the DNS server isn't running" : service.problem
-            return "*.\(tld) doesn't resolve: \(problem). macOS has no hosts-file fallback, so sites don't open until it does; `flock install` sets /etc/resolver/\(tld) up again."
+            let problem = service.problem.isEmpty ? String(localized: "the DNS server isn't running") : service.problem
+            return String(localized: "*.\(tld) doesn't resolve: \(problem). macOS has no hosts-file fallback, so sites don't open until it does; `flock install` sets /etc/resolver/\(tld) up again.")
         default:
             return nil
         }
     }
 
-    private func row(_ title: String, @ViewBuilder trailing: () -> some View) -> some View {
+    private func row(_ title: LocalizedStringKey, @ViewBuilder trailing: () -> some View) -> some View {
         HStack {
             Text(title).font(.subheadline.weight(.medium))
             Spacer()

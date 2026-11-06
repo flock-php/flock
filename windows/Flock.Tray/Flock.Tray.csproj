@@ -50,6 +50,11 @@
     <ItemGroup>
         <Content Include="Assets\*.ico;Assets\*.png" CopyToOutputDirectory="PreserveNewest"/>
     </ItemGroup>
+    <ItemGroup>
+        <!-- Translations: Strings.cs.resx and Strings.es.resx build into satellite assemblies (cs\, es\). XAML reads them with {l:Loc}. -->
+        <EmbeddedResource Update="Strings.resx" Generator="ResXFileCodeGenerator" LastGenOutput="Strings.Designer.cs"/>
+        <Compile Update="Strings.Designer.cs" DesignTime="True" AutoGen="True" DependentUpon="Strings.resx"/>
+    </ItemGroup>
     <!-- Hide SDK payload links in the IDE while keeping their output-copy metadata. -->
     <Target Name="HideWindowsAppSDKPayloadLinks" AfterTargets="AddMicrosoftWindowsAppSDKPayloadFilesFromComponents">
         <ItemGroup>

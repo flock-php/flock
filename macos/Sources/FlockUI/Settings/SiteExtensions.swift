@@ -77,7 +77,7 @@ struct SiteExtensionsSheet: View {
 
     private var subtitle: String {
         guard let report else { return site.path }
-        return report.laravel ? "PHP \(report.php) · Laravel app" : "PHP \(report.php)"
+        return report.laravel ? String(localized: "PHP \(report.php) · Laravel app") : "PHP \(report.php)"
     }
 
     private func row(_ ext: PHPExtension) -> some View {
@@ -108,11 +108,9 @@ struct SiteExtensionsSheet: View {
     }
 
     private func detail(_ ext: PHPExtension) -> String {
-        var text = ext.declared ? "Required by \(ext.requiredBy.joined(separator: ", "))" : "Not required, but used: \(ext.hint)"
-        if !ext.available {
-            text += " — Flock's PHP \(report?.php ?? "") doesn't include it"
-        }
-        return text
+        let text = ext.declared ? String(localized: "Required by \(ext.requiredBy.joined(separator: ", "))") : String(localized: "Not required, but used: \(ext.hint)")
+        guard !ext.available else { return text }
+        return text + " — " + String(localized: "Flock's PHP \(report?.php ?? "") doesn't include it")
     }
 
     private func load() async {

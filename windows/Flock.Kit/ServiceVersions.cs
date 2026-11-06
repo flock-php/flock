@@ -83,12 +83,12 @@ public sealed class PostgresMajor
     [JsonIgnore]
     public string BusyText => Busy switch
     {
-        PostgresBusy.Installing => "Installing…",
-        PostgresBusy.Updating => "Updating…",
-        PostgresBusy.Switching => "Switching…",
-        PostgresBusy.Uninstalling => "Uninstalling…",
+        PostgresBusy.Installing => Strings.Busy_Installing,
+        PostgresBusy.Updating => Strings.Busy_Updating,
+        PostgresBusy.Switching => Strings.Busy_Switching,
+        PostgresBusy.Uninstalling => Strings.Busy_Uninstalling,
         "" => "",
-        _ => "Working…",
+        _ => Strings.Busy_Working,
     };
 
     [JsonIgnore]
@@ -132,9 +132,9 @@ public abstract class JobState
     [JsonIgnore]
     public string PhaseText => Phase switch
     {
-        "downloading" => "Downloading…",
-        "installing" => "Installing…",
-        _ => Action == "update" ? "Updating…" : "Working…",
+        "downloading" => Strings.Busy_Downloading,
+        "installing" => Strings.Busy_Installing,
+        _ => Action == "update" ? Strings.Busy_Updating : Strings.Busy_Working,
     };
 }
 
