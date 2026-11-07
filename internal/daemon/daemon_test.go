@@ -358,6 +358,24 @@ func TestFoldersInParkedPathsAreFollowed(t *testing.T) {
 	waitFor(false)
 }
 
+func TestProjectFilesFollowsCustomCaddyfile(t *testing.T) {
+	site := t.TempDir()
+	d := daemon{cfg: &config.Config{Sites: []config.Site{{Name: "app", Path: site}}}}
+	before := d.projectFiles()
+
+	file := filepath.Join(site, ".flock", "Caddyfile")
+	if err := os.MkdirAll(filepath.Dir(file), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(file, []byte("header X-Test yes\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	after := d.projectFiles()
+	if before == after || !strings.Contains(after, file) {
+		t.Fatalf("custom Caddyfile did not change the project fingerprint: before %q, after %q", before, after)
+	}
+}
+
 func TestGitWorktreesAreServedUnderTheirSite(t *testing.T) {
 	if _, err := exec.LookPath("git"); err != nil {
 		t.Skip("git is not installed")

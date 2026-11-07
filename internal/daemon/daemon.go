@@ -442,8 +442,22 @@ func (d *daemon) projectFiles() string {
 				fmt.Fprintf(&b, "%s\n", file)
 			}
 		}
+		if file := caddyfile(site.Path); file != "" {
+			if info, err := os.Stat(file); err == nil {
+				fmt.Fprintf(&b, "%s %d %d\n", file, info.Size(), info.ModTime().UnixNano())
+			}
+		}
 	}
 	return b.String()
+}
+
+// caddyfile returns a site's optional project-specific Caddy directives file.
+func caddyfile(project string) string {
+	file := filepath.Join(project, ".flock", "Caddyfile")
+	if info, err := os.Stat(file); err == nil && !info.IsDir() {
+		return file
+	}
+	return ""
 }
 
 // breakpointInterval is how often the sites' PhpStorm workspaces are checked for breakpoints.
@@ -687,6 +701,13 @@ func (d *daemon) reload() error {
 		}
 
 		ws := web.Site{Domain: domain, Aliases: aliases, Root: root.Dir}
+		if file := caddyfile(site.Path); file != "" {
+			data, readErr := os.ReadFile(file)
+			if readErr != nil {
+				return fmt.Errorf("read %s: %w", file, readErr)
+			}
+			ws.Handlers = string(data)
+		}
 		if cfg.Xdebug {
 			ws.DebugFPM = debugPool(version)
 		}

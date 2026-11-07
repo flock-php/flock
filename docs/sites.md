@@ -95,6 +95,27 @@ Requests pass to the server with their `Host` header, so the app sees `softpack.
 
 A proxy's name can't be a linked site's: Flock refuses it. A folder of the same name in a project folder is served by the proxy instead, so `flock proxy softpack 3000` works for `~/Code/softpack`; `flock unproxy softpack` serves the folder again.
 
+## Custom Caddy handlers
+
+Put a `.flock/Caddyfile` in a PHP project to add [HTTP handler directives](https://caddyserver.com/docs/caddyfile/directives) to the site. Flock loads its handlers into an ordered `route`, after its local-access guard, and reloads them when the file changes. Write handlers only, without a site address or surrounding braces. Site options such as `tls` and `handle_errors` aren't supported there.
+
+For example, this allows a separate frontend to call the site and answers CORS preflight requests:
+
+```caddyfile
+@cors_preflight method OPTIONS
+
+header {
+    Access-Control-Allow-Origin "https://admin.example.test"
+    Access-Control-Allow-Methods "GET, POST, PUT, PATCH, DELETE, OPTIONS"
+    Access-Control-Allow-Headers "Content-Type, Authorization"
+    Vary "Origin"
+}
+
+respond @cors_preflight 204
+```
+
+Keep production CORS policy in the application or production web server too: this file only configures the local site served by Flock. If the file isn't valid Caddy syntax, Flock keeps the previous web configuration and reports the error in its warnings.
+
 ## Listing sites
 
 :::app
