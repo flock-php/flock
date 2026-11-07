@@ -126,6 +126,7 @@ its default Git description may not be a version the updater can compare.
 - [ ] Mail: send from tinker → appears in Mail, HTML view, attachments save
 - [ ] Dumps: `dump()` in a route → Dumps window, the file link opens the editor
 - [ ] `flock restart` and the tray's Restart bring the daemon back with a new pid
+- [ ] `flock stop` and the tray's Stop end the daemon, its services (with the clean shutdowns above) and flockd.exe, and nothing starts them again; the menu then offers Start Flock. `flock start` and Start Flock bring it back, and so does signing out and in
 - [ ] Ports 80/443 taken (IIS, Skype…) → the warning names the program
 - [ ] Sign out and in → daemon starts; with "Open Flock at sign-in" on, the tray icon too
 - [ ] `flock uninstall` removes the task, PATH entry, hosts block, helper service, CA and Flock's

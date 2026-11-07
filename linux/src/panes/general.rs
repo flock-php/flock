@@ -51,9 +51,15 @@ impl GeneralPane {
         group.add(&info_row("Version", &status.version));
         group.add(&info_row("Process", &format!("pid {}", status.pid)));
 
+        let busy = self.model.is_restarting() || self.model.is_stopping();
+        let model = self.model.clone();
+        let stop = busy_button("Stop Daemon", "Stopping…", self.model.is_stopping(), move || model.stop());
+        stop.set_sensitive(!busy);
         let model = self.model.clone();
         let restart = busy_button("Restart Daemon", "Restarting…", self.model.is_restarting(), move || model.restart());
+        restart.set_sensitive(!busy);
         let row = adw::ActionRow::new();
+        row.add_suffix(&stop);
         row.add_suffix(&restart);
         group.add(&row);
         group
@@ -232,7 +238,7 @@ impl Pane for GeneralPane {
 
     fn update(&self, data: &Data) {
         let Some(status) = data.status.clone() else { return };
-        let key = (status.clone(), data.config.clone(), self.model.is_restarting());
+        let key = (status.clone(), data.config.clone(), self.model.is_restarting() || self.model.is_stopping());
         if self.shown.borrow().as_ref() == Some(&key) {
             return;
         }

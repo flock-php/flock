@@ -2,6 +2,7 @@ package cli
 
 import (
 	"bytes"
+	"context"
 	"encoding/csv"
 	"errors"
 	"fmt"
@@ -22,6 +23,7 @@ import (
 	"golang.org/x/sys/windows"
 	"golang.org/x/sys/windows/registry"
 
+	"flock/internal/api"
 	"flock/internal/certs"
 	"flock/internal/dns"
 	"flock/internal/hosts"
@@ -514,6 +516,74 @@ func restartService() error {
 	return fmt.Errorf("the background daemon is not installed — run `flock install`")
 }
 
+// stopTimeout is how long `flock stop` waits for the daemon to stop its services: each gets up to
+// 10 s to shut down cleanly before it is killed.
+const stopTimeout = time.Minute
+
+// stopDaemon asks the daemon (pid, 0 when it doesn't answer) to shut down, which stops its services
+// cleanly (PostgreSQL, MySQL and Valkey save their data) where ending the scheduled task kills them.
+// The daemon then exits with code 0, so the watchdog ends instead of restarting it, and the task
+// with it. The task stays as it is and starts the daemon again at the next sign-in. A daemon that
+// doesn't stop in time, or one from before `flock stop`, is ended the way `flock restart` does.
+func stopDaemon(ctx context.Context, client *api.Client, pid int) error {
+	root, err := paths.Root()
+	if err != nil {
+		return err
+	}
+	if pid != 0 && client.Stop(ctx) == nil && waitProcessExit(root, pid, stopTimeout) {
+		return nil
+	}
+	installed := taskInstalled()
+	if !installed && !runKeyInstalled() {
+		if pid != 0 {
+			return fmt.Errorf("the daemon (pid %d) did not stop — see `flock logs daemon`", pid)
+		}
+		return nil
+	}
+	if pid != 0 {
+		fmt.Println("! the daemon didn't stop by itself in time; ending it")
+	}
+	// a watchdog waiting to start a crashed daemon again.
+	if installed {
+		_ = exec.Command("schtasks", "/End", "/TN", taskName).Run()
+	}
+	stopDaemonProcess()
+	waitDaemonGone(root)
+	if daemonAnswers(root) {
+		return fmt.Errorf("the daemon could not be ended and is still running — see `flock logs daemon`")
+	}
+	return nil
+}
+
+// waitProcessExit waits up to timeout for the process pid to exit.
+func waitProcessExit(root string, pid int, timeout time.Duration) bool {
+	p, err := windows.OpenProcess(windows.SYNCHRONIZE, false, uint32(pid))
+	if err != nil {
+		// Gone already, or not ours to wait for: then at least wait for the API to go.
+		waitDaemonGone(root)
+		return !daemonAnswers(root)
+	}
+	defer windows.CloseHandle(p)
+	event, err := windows.WaitForSingleObject(p, uint32(timeout.Milliseconds()))
+	return err == nil && event == windows.WAIT_OBJECT_0
+}
+
+// startDaemon starts the scheduled task (or the Run key's command) and waits until the daemon answers.
+func startDaemon() error {
+	root, err := paths.Root()
+	if err != nil {
+		return err
+	}
+	if taskInstalled() {
+		return runTask(root)
+	}
+	if runKeyInstalled() {
+		exe, args := daemonCommand(root)
+		return startDetached(exe, args)
+	}
+	return fmt.Errorf("the background daemon is not installed — run `flock install`")
+}
+
 // waitDaemonGone waits (up to 10 s) until no daemon answers on the socket any more. Ending the task
 // or the process returns before Windows has ended it, and a daemon started meanwhile finds the old
 // one still answering, exits as "already running", and its watchdog doesn't retry: nothing runs.
@@ -526,6 +596,16 @@ func waitDaemonGone(root string) {
 		}
 		_ = conn.Close()
 	}
+}
+
+// daemonAnswers reports whether a daemon still answers on the socket.
+func daemonAnswers(root string) bool {
+	conn, err := net.DialTimeout("unix", paths.Socket(root), 500*time.Millisecond)
+	if err != nil {
+		return false
+	}
+	_ = conn.Close()
+	return true
 }
 
 // privilegedFirst: `flock install` runs ensurePrivileged before it replaces anything, so declining

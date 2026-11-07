@@ -124,7 +124,7 @@ struct SettingsWindow: View {
                     Text(model.error ?? "Start the daemon to change its settings.")
                 } actions: {
                     Button("Start Flock") { Task { await model.restart() } }
-                        .disabled(model.isRestarting)
+                        .disabled(model.isRestarting || model.isStopping)
                 }
             }
         } else {

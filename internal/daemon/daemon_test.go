@@ -253,6 +253,71 @@ func TestRefusesToStartTwice(t *testing.T) {
 	}
 }
 
+// runUntilStopped runs a daemon that only Stop ends, and returns its client and Run's result.
+func runUntilStopped(t *testing.T, root string) (*api.Client, chan error) {
+	t.Helper()
+
+	done := make(chan error, 1)
+	go func() { done <- Run(context.Background(), Config{Root: root, Version: "dev"}) }()
+	client := api.NewClient(paths.Socket(root))
+	deadline := time.Now().Add(5 * time.Second)
+	for _, err := client.Status(context.Background()); err != nil; _, err = client.Status(context.Background()) {
+		if time.Now().After(deadline) {
+			t.Fatal("daemon did not become ready")
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	return client, done
+}
+
+// stopAndWait stops the daemon and wants Run to return nil: the Windows watchdog restarts a
+// daemon that exits with an error.
+func stopAndWait(t *testing.T, client *api.Client, done chan error) {
+	t.Helper()
+
+	if err := client.Stop(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("Run returned %v", err)
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatal("daemon did not stop")
+	}
+}
+
+func TestStopEndsRun(t *testing.T) {
+	root, _ := testRoot(t, nil)
+	client, done := runUntilStopped(t, root)
+
+	stopAndWait(t, client, done)
+	if _, err := client.Status(context.Background()); !errors.Is(err, api.ErrDaemonNotRunning) {
+		t.Fatalf("want ErrDaemonNotRunning after stop, got %v", err)
+	}
+}
+
+func TestStopEndsRunWhileARequestIsStillRunning(t *testing.T) {
+	apiShutdownTimeout = 100 * time.Millisecond
+	t.Cleanup(func() { apiShutdownTimeout = 5 * time.Second })
+	root, _ := testRoot(t, nil)
+	client, done := runUntilStopped(t, root)
+
+	// A request the daemon is still reading when it stops, as an install would still be running.
+	conn, err := net.Dial("unix", paths.Socket(root))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Close()
+	if _, err := conn.Write([]byte("GET /v1/status HTTP/1.1\r\nHost: flockd\r\n")); err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(50 * time.Millisecond)
+
+	stopAndWait(t, client, done)
+}
+
 func TestRemovesStaleSocket(t *testing.T) {
 	root, _ := testRoot(t, nil)
 	if err := os.WriteFile(paths.Socket(root), nil, 0o600); err != nil {

@@ -51,6 +51,9 @@ type Config struct {
 // retryInterval is how often a degraded daemon tries to start what failed.
 var retryInterval = 15 * time.Second
 
+// apiShutdownTimeout is how long a stopping daemon lets API requests finish.
+var apiShutdownTimeout = 5 * time.Second
+
 // trustInBrowsers adds the CA to the browsers' own trust stores (Linux). Tests replace it: it
 // writes to the user's home.
 var trustInBrowsers = certs.TrustInBrowsers
@@ -109,7 +112,12 @@ type daemon struct {
 	wildcard        wildcardState
 
 	defaults defaults // the first run's default PHP and Node.js
+
+	stop context.CancelFunc // ends Run (see Stop)
 }
+
+// Stop makes Run return: it stops every service, and the daemon exits with code 0.
+func (d *daemon) Stop() { d.stop() }
 
 func (d *daemon) shutdown() {
 	// First, while reloads still work: stopping a share reloads the web server.
@@ -281,7 +289,11 @@ func Run(ctx context.Context, cfg Config) error {
 		return err
 	}
 
-	d := &daemon{root: cfg.Root, version: cfg.Version, startedAt: time.Now(), procs: supervisor.New(), leaves: certs.NewLeaves(), restarts: map[string]int{}}
+	// `flock stop` ends the daemon through the API (Stop), as a signal would.
+	ctx, stop := context.WithCancel(ctx)
+	defer stop()
+
+	d := &daemon{root: cfg.Root, version: cfg.Version, startedAt: time.Now(), procs: supervisor.New(), leaves: certs.NewLeaves(), restarts: map[string]int{}, stop: stop}
 	defer d.shutdown()
 
 	d.binaries = binaries.NewCatalog(binaries.DefaultSource(cfg.Root), d.channel)
@@ -393,10 +405,16 @@ loop:
 		}
 	}
 
-	shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), apiShutdownTimeout)
 	defer cancel()
 
-	return apiServer.Shutdown(shutdownCtx)
+	if err := apiServer.Shutdown(shutdownCtx); !errors.Is(err, context.DeadlineExceeded) {
+		return err
+	}
+	// A request still running (an install) is cut off: returning an error would make the Windows
+	// watchdog start a daemon again that `flock stop` stopped.
+	_ = apiServer.Close()
+	return nil
 }
 
 // postgresExtensionFiles fingerprints the active PostgreSQL major's custom extensions folder, so

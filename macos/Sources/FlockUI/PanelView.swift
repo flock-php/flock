@@ -69,7 +69,7 @@ struct PanelView: View {
                 Text(model.headline).font(.caption).foregroundStyle(.secondary)
             }
             Spacer()
-            if model.isRestarting || model.isUpdating {
+            if model.isRestarting || model.isStopping || model.isUpdating {
                 ProgressView().controlSize(.small)
             }
         }
@@ -245,19 +245,23 @@ struct PanelView: View {
                 Button("Start Flock") {
                     Task { await model.restart() }
                 }
-                .disabled(model.isRestarting || model.isUpdating)
+                .disabled(model.isRestarting || model.isStopping || model.isUpdating)
             }
         }
     }
 
     private var footer: some View {
         HStack {
-            // Restart and Settings need the daemon; before the setup, Set Up Flock is the way on.
+            // Restart, Stop and Settings need the daemon; before the setup, Set Up Flock is the way on.
             if !model.needsSetup {
                 Button("Restart") {
                     Task { await model.restart() }
                 }
-                .disabled(model.isRestarting || model.isUpdating || !model.isRunning)
+                .disabled(model.isRestarting || model.isStopping || model.isUpdating || !model.isRunning)
+                Button("Stop") {
+                    Task { await model.stop() }
+                }
+                .disabled(model.isRestarting || model.isStopping || model.isUpdating || !model.isRunning)
                 Button("Settings…") {
                     open(WindowID.settings)
                 }

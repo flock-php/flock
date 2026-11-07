@@ -15,6 +15,8 @@ This page lists the `flock` commands. The other pages show where to find each ac
 | `flock install [--skip-privileged]` | Set Flock up: shims on PATH, background daemon, `.test` DNS and trusted HTTPS |
 | `flock uninstall [--purge]` | Remove Flock. Keeps site settings and databases unless `--purge` is given |
 | `flock status` | Show the state of the daemon and its services |
+| `flock stop` | Stop the daemon and all services until `flock start`, or until it starts by itself again (at the next login; on Linux, when the computer starts) |
+| `flock start` | Start the daemon and all services after `flock stop` |
 | `flock restart` | Restart the daemon and all services |
 | `flock logs [name] [-n 50] [-f]` | Show service logs (daemon, web, php8.5-fpm on macOS and Linux or php8.5-cgi on Windows, postgres, …). Without a name, lists the logs |
 | `flock update` | Update Flock, CLI and daemon included: the app installs the new version (on Linux, apt or dnf) |

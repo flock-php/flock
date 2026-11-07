@@ -25,6 +25,7 @@ pub struct AppModel {
     action_error: RefCell<Option<String>>,
     needs_setup: Cell<bool>,
     restarting: Cell<bool>,
+    stopping: Cell<bool>,
     polling: Cell<bool>,
     /// A flock:// link the pane it opened asks about once its data is loaded.
     link: RefCell<Option<Link>>,
@@ -64,6 +65,10 @@ impl AppModel {
 
     pub fn is_restarting(&self) -> bool {
         self.restarting.get()
+    }
+
+    pub fn is_stopping(&self) -> bool {
+        self.stopping.get()
     }
 
     pub fn link(&self) -> Option<Link> {
@@ -167,6 +172,24 @@ impl AppModel {
         glib::spawn_future_local(async move {
             let out = gio::spawn_blocking(|| installation::run(&["restart"])).await.expect("flock restart");
             this.restarting.set(false);
+            this.action_error.replace(if out.ok { None } else { Some(out.text) });
+            this.changed();
+            this.refresh();
+        });
+    }
+
+    /// Runs `flock stop`: the daemon and its services stop until Start Flock or the next boot.
+    pub fn stop(self: &Rc<Self>) {
+        self.stopping.set(true);
+        self.changed();
+        let this = self.clone();
+        glib::spawn_future_local(async move {
+            let out = gio::spawn_blocking(|| installation::run(&["stop"])).await.expect("flock stop");
+            this.stopping.set(false);
+            // Stopped: no stale status (and its Stop and Restart buttons) until the next poll.
+            if out.ok {
+                this.status.replace(None);
+            }
             this.action_error.replace(if out.ok { None } else { Some(out.text) });
             this.changed();
             this.refresh();

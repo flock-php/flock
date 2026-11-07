@@ -34,6 +34,7 @@ type fakeBackend struct {
 	pg         *postgres.Manager
 	frankenphp *frankenphp.Manager
 	binaries   *binaries.Catalog
+	stopped    bool
 }
 
 func (f *fakeBackend) PHP() *php.Manager { return f.php }
@@ -64,6 +65,7 @@ func (f *fakeBackend) RemoveWorktree(context.Context, string, bool) (string, err
 
 func (f *fakeBackend) Status() Status      { return Status{Sites: f.sites} }
 func (f *fakeBackend) Reload() error       { return nil }
+func (f *fakeBackend) Stop()               { f.stopped = true }
 func (f *fakeBackend) Root() string        { return f.root }
 func (f *fakeBackend) ReleasePHP(string)   {}
 func (f *fakeBackend) Services() []Service { return []Service{} }
@@ -120,6 +122,21 @@ func TestTokenIsRequiredWhenConfigured(t *testing.T) {
 	}
 	if resp, _ := call(t, "GET", srv.URL+"/v1/status", "secret", ""); resp.StatusCode != http.StatusOK {
 		t.Fatalf("right token: %d", resp.StatusCode)
+	}
+}
+
+func TestStopShutsTheDaemonDown(t *testing.T) {
+	b := &fakeBackend{root: t.TempDir()}
+	srv := serve(t, b, "secret")
+
+	if resp, _ := call(t, "POST", srv.URL+"/v1/stop", "", ""); resp.StatusCode != http.StatusUnauthorized || b.stopped {
+		t.Fatalf("no token: %d, stopped %v", resp.StatusCode, b.stopped)
+	}
+	if resp, _ := call(t, "GET", srv.URL+"/v1/stop", "secret", ""); resp.StatusCode != http.StatusMethodNotAllowed || b.stopped {
+		t.Fatalf("GET: %d, stopped %v", resp.StatusCode, b.stopped)
+	}
+	if resp, body := call(t, "POST", srv.URL+"/v1/stop", "secret", ""); resp.StatusCode != http.StatusOK || !b.stopped {
+		t.Fatalf("POST: %d %s, stopped %v", resp.StatusCode, body, b.stopped)
 	}
 }
 

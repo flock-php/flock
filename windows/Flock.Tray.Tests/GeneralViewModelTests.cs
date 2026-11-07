@@ -90,6 +90,33 @@ public sealed class GeneralViewModelTests : IDisposable
         Assert.True(notified > 0);
     }
 
+    [Fact]
+    public async Task StopIsOfferedWhileRunningAndBlocksRestartUntilItHasFinished()
+    {
+        Status? status = null;
+        var stopping = false;
+        var finish = new TaskCompletionSource();
+        using var stoppable = new GeneralViewModel(configuration, () => Task.CompletedTask, () => false, () => status,
+            stop: () => finish.Task, isStopping: () => stopping);
+        Assert.False(stoppable.StopCommand.CanExecute(null));
+
+        status = new Status { Pid = 42 };
+        Assert.True(stoppable.StopCommand.CanExecute(null));
+        stopping = true;
+        var stop = stoppable.StopCommand.ExecuteAsync(null);
+        Assert.True(stoppable.IsStopping);
+        Assert.False(stoppable.StopCommand.CanExecute(null));
+        Assert.False(stoppable.RestartCommand.CanExecute(null));
+
+        stopping = false;
+        status = null;
+        finish.SetResult();
+        await stop;
+
+        Assert.False(stoppable.StopCommand.CanExecute(null));
+        Assert.True(stoppable.RestartCommand.CanExecute(null));
+    }
+
     private sealed class Handler : HttpMessageHandler
     {
         public bool FailWrites { get; set; }

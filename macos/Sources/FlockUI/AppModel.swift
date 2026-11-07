@@ -17,6 +17,7 @@ final class AppModel {
     /// it is dismissed or the next user action succeeds.
     var actionError: String?
     private(set) var isRestarting = false
+    private(set) var isStopping = false
 
     /// Flock isn't set up for this user yet, and this app can do it (see Installation).
     var needsSetup: Bool
@@ -222,6 +223,16 @@ final class AppModel {
             return
         }
         let result = await Installation.run(binary, ["restart"])
+        actionError = result.ok ? nil : result.output
+        await refresh()
+    }
+
+    /// Runs `flock stop`: the daemon and its services stop until Start Flock or the next login.
+    func stop() async {
+        isStopping = true
+        defer { isStopping = false }
+
+        let result = await Installation.run(FlockPaths.flockBinary, ["stop"])
         actionError = result.ok ? nil : result.output
         await refresh()
     }

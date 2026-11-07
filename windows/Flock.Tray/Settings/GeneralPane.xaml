@@ -43,13 +43,18 @@
                         <ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
                     <StackPanel Spacing="1">
-                        <TextBlock Text="Restart" />
-                        <TextBlock Text="Restarts the daemon and every service it runs." Style="{StaticResource CaptionTextBlockStyle}"
-                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
+                        <TextBlock Text="Stop or restart" />
+                        <TextBlock Text="Stops or restarts the daemon and every service it runs."
+                                   Style="{StaticResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
                     </StackPanel>
-                    <Button Grid.Column="1" Command="{Binding RestartCommand}">
-                        <controls:BusyContent Text="Restart Daemon" BusyText="Restarting…" IsBusy="{Binding IsRestarting}" />
-                    </Button>
+                    <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                        <Button Command="{Binding StopCommand}">
+                            <controls:BusyContent Text="Stop Daemon" BusyText="Stopping…" IsBusy="{Binding IsStopping}" />
+                        </Button>
+                        <Button Command="{Binding RestartCommand}">
+                            <controls:BusyContent Text="Restart Daemon" BusyText="Restarting…" IsBusy="{Binding IsRestarting}" />
+                        </Button>
+                    </StackPanel>
                 </Grid>
             </Border>
         </StackPanel>

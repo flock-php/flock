@@ -230,6 +230,8 @@ type Settings struct {
 type Backend interface {
 	Status() Status
 	Reload() error
+	// Stop shuts the daemon down: it stops every service and exits, as on SIGTERM.
+	Stop()
 	Root() string
 	// Mutate loads config.json, applies change, saves it and reloads the daemon.
 	Mutate(change func(*config.Config) error) error
@@ -285,6 +287,10 @@ func NewHandler(b Backend, token string) http.Handler {
 			return
 		}
 		writeJSON(w, http.StatusOK, b.Status())
+	})
+	mux.HandleFunc("POST /v1/stop", func(w http.ResponseWriter, _ *http.Request) {
+		writeJSON(w, http.StatusOK, map[string]any{})
+		b.Stop()
 	})
 	mux.HandleFunc("POST /v1/settings", func(w http.ResponseWriter, r *http.Request) {
 		var settings Settings
@@ -374,6 +380,13 @@ func (c *Client) Reload(ctx context.Context) (Status, error) {
 	err := c.do(ctx, http.MethodPost, "/v1/reload", &status)
 
 	return status, err
+}
+
+// Stop asks the daemon to shut down. It returns once the daemon has accepted, which may still be
+// stopping its services then.
+func (c *Client) Stop(ctx context.Context) error {
+	var out struct{}
+	return c.do(ctx, http.MethodPost, "/v1/stop", &out)
 }
 
 // UpdateSettings changes the given global settings and returns the resulting status.

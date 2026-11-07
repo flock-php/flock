@@ -285,6 +285,7 @@ fn start_tray(app: &adw::Application, model: &Rc<model::AppModel>, windows: &Rc<
             m.change_settings(change, move |error| model.report(error));
         }
         tray::Command::Restart => m.restart(),
+        tray::Command::Stop => m.stop(),
         tray::Command::Quit => app.quit(),
         tray::Command::Available(_) => {}
     });

@@ -282,9 +282,10 @@ public sealed partial class App : Application
         // While an update is available it follows the first item; the rest keep their order.
         var update = State.UpdateService.Available is { } available && !State.UpdateService.IsBusy ? $"Update to {available.Version}…" : null;
         // Before the setup there is nothing to open yet: Mail, Dumps, Logs and Settings all need the daemon.
+        var running = State.IsRunning;
         List<string?> items = State.NeedsSetup
-            ? ["Set Up Flock…", null, "Quit Flock"]
-            : ["Open Flock", null, "Mail", "Dumps", "Logs", "Settings…", null, State.IsRunning ? "Restart Flock" : "Start Flock", "Quit Flock"];
+            ? ["Set Up Flock…", null, "Quit Flock Tray"]
+            : ["Open Flock", null, "Mail", "Dumps", "Logs", "Settings…", null, .. running ? new[] { "Restart Flock", "Stop Flock" } : ["Start Flock"], "Quit Flock Tray"];
         if (update is not null)
         {
             items.Insert(1, update);
@@ -316,7 +317,8 @@ public sealed partial class App : Application
             case 4: Open(WindowKind.Logs); break;
             case 5: Open(WindowKind.Settings); break;
             case 7: _ = State.RestartAsync(); break;
-            case 8: Quit(); break;
+            case 8 when running: _ = State.StopAsync(); break;
+            case 8 or 9: Quit(); break;
         }
     }
 

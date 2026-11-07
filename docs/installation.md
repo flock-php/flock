@@ -95,3 +95,20 @@ Stop that program, then click **Restart** at the bottom of the Flock panel. On L
 :::cli
 Stop that program and run `flock restart`.
 :::
+
+## Stopping Flock
+
+Flock's daemon runs in the background, so your sites keep working when the app is closed. To free its memory when you're not working, stop it: every service (PHP, databases, mail, …) stops with it, and the databases shut down cleanly.
+
+:::app
+Click **Stop** at the bottom of the Flock panel, or **Stop Daemon** in **Settings → General**. On Windows and Linux, **Stop Flock** in the menu of Flock's icon does the same. While Flock is stopped, the panel and Settings show **Start Flock**, which starts it again.
+:::
+
+:::cli
+```bash
+flock stop
+flock start
+```
+:::
+
+Stopping lasts until you start Flock again, or until it starts by itself: at your next login (on Linux, when the computer starts).

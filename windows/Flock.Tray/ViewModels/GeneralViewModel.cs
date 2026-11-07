@@ -16,20 +16,25 @@ public sealed partial class GeneralViewModel : ObservableObject, IDisposable
     private readonly RuntimeService? model;
     private readonly Func<Task> restart;
     private readonly Func<bool> isRestarting;
+    private readonly Func<Task> stop;
+    private readonly Func<bool> isStopping;
 
     public GeneralViewModel(RuntimeService model)
-        : this(model.Configuration, model.RestartAsync, () => model.IsRestarting, () => model.Status, () => model.Error ?? model.ActionError)
+        : this(model.Configuration, model.RestartAsync, () => model.IsRestarting, () => model.Status, () => model.Error ?? model.ActionError,
+            model.StopAsync, () => model.IsStopping)
     {
         this.model = model;
         model.Changed += NotifyState;
     }
 
     public GeneralViewModel(ConfigurationService configuration, Func<Task>? restart = null, Func<bool>? isRestarting = null,
-        Func<Status?>? status = null, Func<string?>? runtimeError = null)
+        Func<Status?>? status = null, Func<string?>? runtimeError = null, Func<Task>? stop = null, Func<bool>? isStopping = null)
     {
         this.configuration = configuration;
         this.restart = restart ?? (() => Task.CompletedTask);
         this.isRestarting = isRestarting ?? (() => false);
+        this.stop = stop ?? (() => Task.CompletedTask);
+        this.isStopping = isStopping ?? (() => false);
         statusValue = status ?? (() => null);
         runtimeErrorValue = runtimeError ?? (() => null);
         configuration.Changed += NotifyState;
@@ -41,8 +46,9 @@ public sealed partial class GeneralViewModel : ObservableObject, IDisposable
     public FlockConfig? Config => configuration.Current;
     public Status? Status => statusValue();
     public string? Error => configuration.Error ?? runtimeErrorValue();
-    public bool IsBusy => configuration.IsRunning || isRestarting();
+    public bool IsBusy => configuration.IsRunning || isRestarting() || isStopping();
     public bool IsRestarting => isRestarting();
+    public bool IsStopping => isStopping();
     public Visibility StatusVisibility => Status is null ? Visibility.Collapsed : Visibility.Visible;
     public string StatusText => Status?.IsDegraded == true ? "Needs attention" : "Running";
     public Brush StatusBrush => Status?.IsDegraded == true ? Ui.Caution : Ui.Success;
@@ -75,7 +81,12 @@ public sealed partial class GeneralViewModel : ObservableObject, IDisposable
     [RelayCommand(CanExecute = nameof(CanRestart))]
     private Task Restart() => restart();
 
-    private bool CanRestart() => !isRestarting();
+    private bool CanRestart() => !isRestarting() && !isStopping();
+
+    [RelayCommand(CanExecute = nameof(CanStop))]
+    private Task Stop() => stop();
+
+    private bool CanStop() => Status is not null && !isRestarting() && !isStopping();
 
     [RelayCommand]
     private Task SetChannel(string? value) => value is null ? Task.CompletedTask : SetChannelAsync(value);
@@ -102,6 +113,7 @@ public sealed partial class GeneralViewModel : ObservableObject, IDisposable
         OnPropertyChanged(nameof(Error));
         OnPropertyChanged(nameof(IsBusy));
         OnPropertyChanged(nameof(IsRestarting));
+        OnPropertyChanged(nameof(IsStopping));
         OnPropertyChanged(nameof(StatusVisibility));
         OnPropertyChanged(nameof(StatusText));
         OnPropertyChanged(nameof(StatusBrush));
@@ -118,5 +130,6 @@ public sealed partial class GeneralViewModel : ObservableObject, IDisposable
         OnPropertyChanged(nameof(BetaEnabled));
         OnPropertyChanged(nameof(ExperimentalVisibility));
         RestartCommand.NotifyCanExecuteChanged();
+        StopCommand.NotifyCanExecuteChanged();
     }
 }

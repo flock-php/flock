@@ -288,7 +288,7 @@ impl MainWindow {
             self.unavailable
                 .set_description(Some(&self.model.error().unwrap_or_else(|| "Start the daemon to change its settings.".to_owned())));
             self.unavailable_button.set_label("Start Flock");
-            self.unavailable_button.set_sensitive(!self.model.is_restarting());
+            self.unavailable_button.set_sensitive(!self.model.is_restarting() && !self.model.is_stopping());
             self.stack.set_visible_child_name("unavailable");
             return;
         }

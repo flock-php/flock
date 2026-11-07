@@ -29,7 +29,8 @@ public sealed class PanelViewModel : ObservableObject, IDisposable
         model.Dumps.Changed += DumpsChanged;
         ToggleDumpsCommand = new AsyncRelayCommand<bool>(SetDumpsAsync, _ => !model.Dumps.IsCaptureBusy);
         ToggleXdebugCommand = new AsyncRelayCommand<bool>(SetXdebugAsync);
-        RestartCommand = new AsyncRelayCommand(model.RestartAsync, () => !IsRestarting);
+        RestartCommand = new AsyncRelayCommand(model.RestartAsync, () => !IsRestarting && !IsStopping);
+        StopCommand = new AsyncRelayCommand(model.StopAsync, () => StopEnabled);
         InstallUpdateCommand = new RelayCommand(() => App.Current.InstallUpdate(), () => CanInstallUpdate);
         OpenMailCommand = new RelayCommand(() => App.Current.Open(WindowKind.Mail));
         OpenDumpsCommand = new RelayCommand(() => App.Current.Open(WindowKind.Dumps));
@@ -73,6 +74,7 @@ public sealed class PanelViewModel : ObservableObject, IDisposable
     public bool IsRunning => model.IsRunning;
     public bool IsDegraded => model.IsDegraded;
     public bool IsRestarting => model.IsRestarting;
+    public bool IsStopping => model.IsStopping;
     public bool IsUpdating => model.IsUpdating;
     public bool IsCaptureBusy => model.Dumps.IsCaptureBusy;
     public bool NeedsSetup => model.NeedsSetup;
@@ -90,7 +92,7 @@ public sealed class PanelViewModel : ObservableObject, IDisposable
     public string UpdateMessage => !IsUpdateBusy && AvailableUpdate is { } update ? $"Flock {update.Version} is available" : model.UpdateService.Summary;
     public int MailCount => Status?.MailCount ?? 0;
     public int DumpCount => Status?.DumpCount ?? 0;
-    public Visibility RestartVisibility => IsRestarting ? Visibility.Visible : Visibility.Collapsed;
+    public Visibility RestartVisibility => IsRestarting || IsStopping ? Visibility.Visible : Visibility.Collapsed;
     public Visibility UpdateVisibility => HasUpdate ? Visibility.Visible : Visibility.Collapsed;
     public Visibility StatusContentVisibility => HasStatusContent ? Visibility.Visible : Visibility.Collapsed;
     public Visibility WarningsVisibility => Status?.Warnings.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
@@ -104,8 +106,9 @@ public sealed class PanelViewModel : ObservableObject, IDisposable
     public Visibility MailCountVisibility => MailCount > 0 ? Visibility.Visible : Visibility.Collapsed;
     public Visibility DumpCountVisibility => DumpCount > 0 ? Visibility.Visible : Visibility.Collapsed;
     public bool CaptureEnabled => !IsCaptureBusy;
-    public bool StartEnabled => !IsRestarting;
-    public bool RestartEnabled => IsRunning && !IsRestarting;
+    public bool StartEnabled => !IsRestarting && !IsStopping;
+    public bool RestartEnabled => IsRunning && !IsRestarting && !IsStopping;
+    public bool StopEnabled => RestartEnabled;
     public ObservableCollection<PanelSiteRow> Sites { get; } = [];
     public ObservableCollection<PanelServiceRow> Services { get; } = [];
     /// <summary>Proxies (`flock proxy`), listed after the sites.</summary>
@@ -113,6 +116,7 @@ public sealed class PanelViewModel : ObservableObject, IDisposable
     public IAsyncRelayCommand<bool> ToggleDumpsCommand { get; }
     public IAsyncRelayCommand<bool> ToggleXdebugCommand { get; }
     public IAsyncRelayCommand RestartCommand { get; }
+    public IAsyncRelayCommand StopCommand { get; }
     public IRelayCommand InstallUpdateCommand { get; }
     public IRelayCommand OpenMailCommand { get; }
     public IRelayCommand OpenDumpsCommand { get; }
@@ -191,6 +195,7 @@ public sealed class PanelViewModel : ObservableObject, IDisposable
         OnPropertyChanged(nameof(IsRunning));
         OnPropertyChanged(nameof(IsDegraded));
         OnPropertyChanged(nameof(IsRestarting));
+        OnPropertyChanged(nameof(IsStopping));
         OnPropertyChanged(nameof(IsUpdating));
         OnPropertyChanged(nameof(IsCaptureBusy));
         OnPropertyChanged(nameof(NeedsSetup));
@@ -224,7 +229,9 @@ public sealed class PanelViewModel : ObservableObject, IDisposable
         OnPropertyChanged(nameof(CaptureEnabled));
         OnPropertyChanged(nameof(StartEnabled));
         OnPropertyChanged(nameof(RestartEnabled));
+        OnPropertyChanged(nameof(StopEnabled));
         RestartCommand.NotifyCanExecuteChanged();
+        StopCommand.NotifyCanExecuteChanged();
         ToggleDumpsCommand.NotifyCanExecuteChanged();
         InstallUpdateCommand.NotifyCanExecuteChanged();
     }

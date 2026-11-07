@@ -2,6 +2,7 @@ package cli
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -17,6 +18,7 @@ import (
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
 
+	"flock/internal/api"
 	"flock/internal/certs"
 	"flock/internal/dns"
 	"flock/internal/node"
@@ -337,6 +339,30 @@ func uninstallService() error {
 		return nil
 	}
 	return systemctl("stop", unitName(name))
+}
+
+// stopDaemon makes systemd stop the daemon (SIGTERM, so its services shut down cleanly).
+func stopDaemon(context.Context, *api.Client, int) error {
+	name, err := serviceUser()
+	if err != nil {
+		return err
+	}
+	if !serviceInstalled() {
+		return fmt.Errorf("the background daemon is not installed — run `flock install`")
+	}
+	return systemctl("stop", unitName(name))
+}
+
+// startDaemon makes systemd start the daemon after `flock stop`.
+func startDaemon() error {
+	name, err := serviceUser()
+	if err != nil {
+		return err
+	}
+	if !serviceInstalled() {
+		return fmt.Errorf("the background daemon is not installed — run `flock install`")
+	}
+	return systemctl("start", unitName(name))
 }
 
 // restartService makes systemd stop and start the daemon.

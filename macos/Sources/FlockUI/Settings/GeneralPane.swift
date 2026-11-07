@@ -43,12 +43,19 @@ struct GeneralPane: View {
                         LabeledContent("Process", value: "pid \(status.pid)")
                     }
                     LabeledContent("") {
-                        Button {
-                            Task { await model.restart() }
-                        } label: {
-                            BusyLabel(title: "Restart Daemon", busyTitle: "Restarting…", isBusy: model.isRestarting)
+                        HStack {
+                            Button {
+                                Task { await model.stop() }
+                            } label: {
+                                BusyLabel(title: "Stop Daemon", busyTitle: "Stopping…", isBusy: model.isStopping)
+                            }
+                            Button {
+                                Task { await model.restart() }
+                            } label: {
+                                BusyLabel(title: "Restart Daemon", busyTitle: "Restarting…", isBusy: model.isRestarting)
+                            }
                         }
-                        .disabled(model.isRestarting)
+                        .disabled(model.isRestarting || model.isStopping)
                     }
                 }
 
