@@ -46,14 +46,15 @@ var (
 	}
 )
 
-// shellProfiles are the profiles addToShellPath writes to: ~/.bashrc always, ~/.zshrc if present.
+// shellProfiles are the profiles addToShellPath writes to: ~/.bashrc always, .zshrc if present (in
+// $ZDOTDIR if that is set).
 var shellProfiles = []string{".bashrc", ".zshrc"}
 
 // ---------------------------------------------------------------------------------------------
 // Shell PATH
 
 // addToShellPath prepends dirs, in this order, for every shell: a marked line in ~/.bashrc (and
-// ~/.zshrc if present), a file in fish's conf.d if fish is set up, and one in environment.d for
+// .zshrc if present), a file in fish's conf.d if fish is set up, and one in environment.d for
 // programs started from the desktop. The shell lines only apply while Flock's bin dir exists, so
 // a Flock removed without `flock uninstall` doesn't leave PATH pointing nowhere.
 func addToShellPath(dirs ...string) error {
@@ -68,7 +69,7 @@ func addToShellPath(dirs ...string) error {
 	}
 	line := fmt.Sprintf(`if [ -d %s ]; then export PATH=%s:"$PATH"; fi`, quoted[0], strings.Join(quoted, ":"))
 	for _, name := range shellProfiles {
-		path := filepath.Join(home, name)
+		path := profilePath(home, name)
 		if _, err := os.Stat(path); err != nil && name != ".bashrc" {
 			continue
 		}
@@ -139,8 +140,7 @@ func removeFromShellProfiles() (bool, error) {
 		return false, err
 	}
 	removed := false
-	for _, name := range shellProfiles {
-		path := filepath.Join(home, name)
+	for _, path := range profileFiles(home, shellProfiles) {
 		data, err := os.ReadFile(path)
 		if err != nil {
 			continue
