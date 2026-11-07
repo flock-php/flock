@@ -3,6 +3,8 @@ package config
 import (
 	"fmt"
 	"net/url"
+	"os"
+	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
@@ -11,11 +13,24 @@ import (
 // Proxy is a name served by a server of its own rather than by PHP, e.g. a Node.js dev server or
 // an object store: <name>.<tld> and its subdomains (up to MaxDepth levels) are passed to Upstream,
 // WebSocket upgrades included. The Host header passes unchanged.
+//
+// Command optionally starts that server: Flock runs it through the shell in Dir when the proxy is
+// started, and stops it when it's stopped. Without a StopCommand it's the server itself, running
+// in the foreground, which Flock keeps running and whose output goes to the proxy's log. With one
+// it starts a server that runs in the background (e.g. `docker compose up -d`) and exits, and
+// StopCommand stops that server again.
 type Proxy struct {
-	Name     string `json:"name"`
-	Upstream string `json:"upstream"` // as NormalizeUpstream returns it, e.g. "http://127.0.0.1:3000"
-	Secured  bool   `json:"secured"`
+	Name        string `json:"name"`
+	Upstream    string `json:"upstream"` // as NormalizeUpstream returns it, e.g. "http://127.0.0.1:3000"
+	Secured     bool   `json:"secured"`
+	Command     string `json:"command,omitempty"`
+	Dir         string `json:"dir,omitempty"` // where Command runs, absolute
+	StopCommand string `json:"stop_command,omitempty"`
 }
+
+// ProxyLog is "proxy-<name>": the name of a proxy's command's log (<root>/log/proxy-<name>.log)
+// and of its process.
+func ProxyLog(name string) string { return "proxy-" + name }
 
 // ProxyDomain is the hostname of a proxy.
 func (c *Config) ProxyDomain(p Proxy) string {
@@ -78,6 +93,26 @@ func (c *Config) UpsertProxy(p Proxy) error {
 	}
 	if slices.ContainsFunc(c.Sites, func(s Site) bool { return s.Name == p.Name }) {
 		return fmt.Errorf("%s is a linked site's name — unlink the site first, or choose another name", p.Name)
+	}
+	p.Command, p.StopCommand = strings.TrimSpace(p.Command), strings.TrimSpace(p.StopCommand)
+	switch {
+	case p.Command == "" && p.StopCommand != "":
+		return fmt.Errorf("%s has a stop command but no command: give the command that starts the server", p.Name)
+	case p.Command == "":
+		p.Dir = ""
+	case !filepath.IsAbs(p.Dir):
+		return fmt.Errorf("%s: the folder the command runs in must be an absolute path", p.Name)
+	}
+	for _, command := range []string{p.Command, p.StopCommand} {
+		if err := ValidCommand(command); err != nil {
+			return fmt.Errorf("%s: %w", p.Name, err)
+		}
+	}
+	if p.Dir != "" {
+		p.Dir = filepath.Clean(p.Dir)
+		if info, err := os.Stat(p.Dir); err != nil || !info.IsDir() {
+			return fmt.Errorf("%s is not a folder", p.Dir)
+		}
 	}
 	domain := c.ProxyDomain(p)
 	for _, s := range c.AllSites() {

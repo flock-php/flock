@@ -71,7 +71,30 @@ type ProxyStatus struct {
 	// machine: "Node.js 22.23.4" (one of Flock's versions), "Node.js", or the program's name.
 	Running bool   `json:"running"`
 	Server  string `json:"server,omitempty"`
+	// Command is set when the proxy has a command that starts its server (config.Proxy.Command).
+	Command *ProxyCommand `json:"command,omitempty"`
 }
+
+// ProxyCommand is the command that starts a proxy's server, and where it stands.
+type ProxyCommand struct {
+	Command     string `json:"command"`
+	Dir         string `json:"dir"`
+	StopCommand string `json:"stop_command,omitempty"` // set when Command starts a server in the background
+	// State is ProxyStopped until the proxy is started, then ProxyStarting until its upstream
+	// answers, ProxyRunning, or ProxyFailed when the command exited or failed (see Problem and Log).
+	State   string `json:"state"`
+	Problem string `json:"problem,omitempty"`
+	Log     string `json:"log"` // the command's output: /v1/logs/services/{name}, `flock logs <name>`
+}
+
+// States of a proxy's command. Stopped is also the state of a server that answers but that Flock
+// didn't start (Running tells).
+const (
+	ProxyStopped  = "stopped"
+	ProxyStarting = "starting"
+	ProxyRunning  = "running"
+	ProxyFailed   = "failed"
+)
 
 // DefaultsStatus is the first run's install of the default PHP and Node.js.
 type DefaultsStatus struct {
@@ -164,6 +187,8 @@ type SiteStatus struct {
 	// FrankenPHP is the state of the site's FrankenPHP process, when Server is "frankenphp". Until
 	// it runs, the site is served through FastCGI.
 	FrankenPHP *SiteFrankenPHP `json:"frankenphp,omitempty"`
+	// NodeServer is the state of the site's dev server, when Server is "node".
+	NodeServer *SiteNodeServer `json:"node_server,omitempty"`
 	// Boost is whether the project uses Laravel Boost and has Flock's guideline (see package boost):
 	// "" (no Boost), "missing", "current", "outdated" or "custom".
 	Boost string `json:"boost,omitempty"`
@@ -189,6 +214,31 @@ type SiteFrankenPHP struct {
 	Problem    string  `json:"problem,omitempty"`
 	Log        string  `json:"log"` // name for /v1/logs/services/{name}
 }
+
+// SiteNodeServer is the dev server of a Node.js site (Server "node"): the project's `npm run dev`,
+// which Flock runs with the site's Node.js on Port and serves the site's domains from.
+type SiteNodeServer struct {
+	State   string `json:"state"`             // NodeStarting, NodeRunning, NodeFailed or NodeUnavailable
+	Version string `json:"version,omitempty"` // the Node.js it runs on, e.g. "22.23.4"
+	Script  string `json:"script"`            // the package.json script it runs: "dev" ("" for a custom command)
+	// Command is what runs, e.g. "npm run dev -- --port 21000"; Custom is set when it's the
+	// site's own (config.Site.Command), and Configured is that as set, {port} and all, for editing.
+	Command    string `json:"command"`
+	Custom     bool   `json:"custom,omitempty"`
+	Configured string `json:"configured,omitempty"`
+	Port       int    `json:"port"` // loopback port the web server proxies to
+	Problem    string `json:"problem,omitempty"`
+	Log        string `json:"log"` // name for /v1/logs/services/{name}
+}
+
+// States of a Node.js site's dev server: started but not answering yet (a dev server compiles
+// first), answering, exited (see its log), or not runnable (its Node.js isn't installed).
+const (
+	NodeStarting    = "starting"
+	NodeRunning     = "running"
+	NodeFailed      = "failed"
+	NodeUnavailable = "unavailable"
+)
 
 // SiteDomain is one of a site's extra domains.
 type SiteDomain struct {
@@ -249,6 +299,10 @@ type Backend interface {
 	Binaries() *binaries.Catalog
 	// RestartSite restarts a FrankenPHP site's process, e.g. so Octane's workers load changed code.
 	RestartSite(name string) error
+	// StartProxy runs a proxy's command (config.Proxy.Command); StopProxy stops it, or runs its
+	// stop command when it starts a server in the background.
+	StartProxy(name string) error
+	StopProxy(name string) error
 	// Shares runs the sites' tunnels (nil when unavailable); StartShare starts one after checking
 	// that the site can be shared, with the app's debug mode on for visitors when debug is set.
 	Shares() *share.Manager

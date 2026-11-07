@@ -124,7 +124,7 @@ func newUseCommand() *cobra.Command {
 }
 
 func newNodeCommand() *cobra.Command {
-	cmd := &cobra.Command{Use: "node", Short: "Manage Node.js versions"}
+	cmd := &cobra.Command{Use: "node", Short: "Manage Node.js versions, and serve sites as Node.js apps"}
 
 	install := &cobra.Command{
 		Use:   "install <version>",
@@ -176,5 +176,6 @@ func newNodeCommand() *cobra.Command {
 	}
 
 	cmd.AddCommand(install, list, def)
+	cmd.AddCommand(nodeSiteCommands()...)
 	return cmd
 }

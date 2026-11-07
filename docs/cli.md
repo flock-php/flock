@@ -29,9 +29,11 @@ This page lists the `flock` commands. The other pages show where to find each ac
 | `flock link [name] [--php 8.4] [--secure]` | Serve the current directory as `<name>.test` |
 | `flock unlink [name]` | Remove a linked site |
 | `flock sites` | List linked and parked sites, and proxies |
-| `flock proxy <name> <port\|host:port\|url> [--secure]` | Proxy `<name>.test` to a local service, e.g. a Node.js dev server |
+| `flock proxy <name> <port\|host:port\|url> [--secure] [--command <cmd>] [--dir <folder>] [--stop-command <cmd>]` | Proxy `<name>.test` to a local service, e.g. a Node.js dev server, optionally with the command that starts it |
 | `flock unproxy <name>` | Stop serving a proxy |
 | `flock proxies` | List proxies |
+| `flock proxies start <name>` | Run a proxy's command, which starts its server (its output: `flock logs proxy-<name>`) |
+| `flock proxies stop <name>` | Stop a proxy's command, or run its stop command |
 | `flock secure [name]` | Serve a site or proxy over HTTPS with a trusted certificate |
 | `flock unsecure [name]` | Serve a site or proxy over plain HTTP |
 | `flock domain add <domain> [site]` | Add a subdomain or alias to a site (`flock domains` works too) |
@@ -56,6 +58,9 @@ This page lists the `flock` commands. The other pages show where to find each ac
 | `flock node install <version>` | Install the newest release of a Node.js major, e.g. `22` |
 | `flock node list` | List installed Node.js versions |
 | `flock node default <major>` | Set the default Node.js version |
+| `flock node serve [site] [--command <command>]` | Serve a site as a Node.js app: Flock runs its `npm run dev`, or the command given, with the site's Node.js |
+| `flock node unserve [site]` | Stop a site's dev server and serve it with PHP again |
+| `flock node restart [site]` | Restart a Node.js site's dev server |
 | `flock isolate <php\|node> <version> [--site <site>]` | Use a version for this site, on this machine only |
 | `flock unisolate <php\|node> [--site <site>]` | Remove an isolation |
 | `flock isolated` | List every site's versions and where they come from |

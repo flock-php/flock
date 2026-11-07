@@ -3,6 +3,7 @@ package api
 import (
 	"errors"
 	"fmt"
+	"io/fs"
 	"mime"
 	"net/http"
 	"net/url"
@@ -230,6 +231,20 @@ func registerLogs(mux *http.ServeMux, b Backend) {
 		}
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 		_, _ = w.Write([]byte(text))
+	})
+
+	// A service's log is emptied, e.g. a proxy's command output (its process keeps appending).
+	mux.HandleFunc("DELETE /v1/logs/services/{name}", func(w http.ResponseWriter, r *http.Request) {
+		name := r.PathValue("name")
+		if strings.ContainsAny(name, `/\`) || strings.HasPrefix(name, ".") {
+			writeError(w, http.StatusBadRequest, fmt.Errorf("invalid log name %q", name))
+			return
+		}
+		if err := os.Truncate(filepath.Join(logDir(), name+".log"), 0); err != nil && !errors.Is(err, fs.ErrNotExist) {
+			writeError(w, http.StatusInternalServerError, err)
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
 	})
 
 	mux.HandleFunc("GET /v1/logs/sites/{name}", func(w http.ResponseWriter, r *http.Request) {

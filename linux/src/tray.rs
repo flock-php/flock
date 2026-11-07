@@ -95,11 +95,20 @@ impl SiteItem {
             .top_sites()
             .into_iter()
             .map(|site| SiteItem {
-                label: site.domain.clone(),
+                label: Self::site_label(site),
                 url: site.url.clone(),
                 worktrees: status.worktrees_of(&site.name).into_iter().map(Self::worktree).collect(),
             })
             .collect()
+    }
+
+    /// "acme.test", or a Node.js app's "softpack.test · Node.js 22.23.4" ("· Not running").
+    fn site_label(site: &SiteStatus) -> String {
+        if !site.is_node() {
+            return site.domain.clone();
+        }
+        let server = site.node_server.as_ref().map_or_else(|| "Node.js".to_owned(), |ns| ns.short_text());
+        format!("{} · {server}", site.domain)
     }
 
     /// "softpack.test · Node.js 22.23.4": what answers at the upstream, or "· Not running".
@@ -349,15 +358,18 @@ mod tests {
     use super::*;
 
     #[test]
-    fn labels_proxies_after_the_sites() {
+    fn labels_node_sites_and_proxies() {
         let status: Status = serde_json::from_str(
-            r#"{"sites":[{"name":"acme","domain":"acme.test","server":"fastcgi"}],
+            r#"{"sites":[{"name":"acme","domain":"acme.test","server":"fastcgi"},
+                {"name":"softpack","domain":"softpack.test","server":"node","url":"http://softpack.test",
+                  "node_server":{"state":"running","version":"22.23.4","port":21001}},
+                {"name":"broken","domain":"broken.test","server":"node","node_server":{"state":"failed","problem":"exited"}}],
               "proxies":[{"name":"blog","domain":"blog.test","upstream":"http://127.0.0.1:3000","url":"http://blog.test","running":false},
                 {"name":"minio","domain":"minio.test","upstream":"http://127.0.0.1:9000","running":true}]}"#,
         )
         .unwrap();
         let labels: Vec<String> = SiteItem::all(&status).into_iter().map(|s| s.label).collect();
-        assert_eq!(labels, ["acme.test"]);
+        assert_eq!(labels, ["acme.test", "softpack.test · Node.js 22.23.4", "broken.test · Not running"]);
         let proxies: Vec<SiteItem> = status.proxies.iter().map(SiteItem::proxy).collect();
         assert_eq!(proxies[0].label, "blog.test · Not running");
         assert_eq!(proxies[0].url.as_deref(), Some("http://blog.test"));

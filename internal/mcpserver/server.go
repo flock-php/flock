@@ -41,7 +41,9 @@ type Daemon interface {
 	InstallNode(ctx context.Context, major string) (api.NodeVersions, error)
 
 	LinkSite(ctx context.Context, dir, name string) (api.Status, error)
-	Proxy(ctx context.Context, name, upstream string, secured *bool) (api.Status, error)
+	Proxy(ctx context.Context, name, upstream string, opts api.ProxyOptions) (api.Status, error)
+	StartProxy(ctx context.Context, name string) (api.Status, error)
+	StopProxy(ctx context.Context, name string) (api.Status, error)
 	UpdateSite(ctx context.Context, name string, change api.SiteChange) (api.Status, error)
 	AddDomain(ctx context.Context, name, domain string) (api.Status, error)
 	PinSite(ctx context.Context, name, tool, version string) (api.Status, error)

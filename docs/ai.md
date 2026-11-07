@@ -67,8 +67,9 @@ These tools change things, so clients ask you first:
 | `service` | Install, start or stop a service |
 | `install_version` | Install a PHP or Node.js version |
 | `link_site` | Serve a project as a new site |
-| `proxy_site` | Proxy `<name>.test` to a local service, e.g. a Node.js dev server on a port |
-| `update_site` | Turn HTTPS on or off, isolate, unisolate, pin or unpin a version, add a domain, switch between FrankenPHP (with or without Octane) and PHP-FPM, or restart it |
+| `proxy_site` | Proxy `<name>.test` to a local service, e.g. a Node.js dev server on a port, optionally with the command that starts it |
+| `proxy_server` | Start or stop a proxy's server with its command |
+| `update_site` | Turn HTTPS on or off, isolate, unisolate, pin or unpin a version, add a domain, switch between FrankenPHP (with or without Octane), PHP-FPM and a Node.js app's dev server, or restart it |
 | `set_debugging` | Turn Xdebug or dump capture on or off |
 | `create_database` | Create a database in PostgreSQL, MySQL or MariaDB |
 | `create_worktree` | Create a [git worktree](worktrees.md) of a site on a branch (or one Flock names), at its own URL, and wait while Flock sets it up |

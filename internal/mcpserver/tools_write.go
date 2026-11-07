@@ -67,9 +67,19 @@ func (s *server) addWriteTools(srv *mcp.Server) {
 		Name: "proxy_site",
 		Description: "Serve a server of its own, e.g. a Node.js dev server (Next.js, Nuxt, Vite) or an object store, at " +
 			"http(s)://<name>.test: every request, WebSocket upgrades included, passes to the upstream with its Host header. " +
-			"Proxying a name again changes its upstream. Start the server itself as usual (e.g. npm run dev).",
+			"Proxying a name again changes its upstream. Give it a command (e.g. npm run dev) to start and stop its server with proxy_server, " +
+			"or start the server yourself as usual.",
 		Annotations: additive(true),
 	}, s.proxySite)
+
+	mcp.AddTool(srv, &mcp.Tool{
+		Name: "proxy_server",
+		Description: "Start or stop a proxy's server by running the command it was given (proxy_site's command). A started command runs " +
+			"until it's stopped and its output is in list_sites' proxy log (`flock logs <log>`); with a stop_command, start runs " +
+			"the command once (a server that runs in the background) and stop runs the stop command.",
+		Annotations: additive(true),
+		InputSchema: schema[proxyServerIn](map[string][]any{"action": {"start", "stop"}}),
+	}, s.proxyServer)
 
 	mcp.AddTool(srv, &mcp.Tool{
 		Name: "update_site",
@@ -79,13 +89,14 @@ func (s *server) addWriteTools(srv *mcp.Server) {
 			"- pin (tool, version) / unpin (tool): write the version into the project's .flockrc (committed, so everyone " +
 			"working on the project gets it); pin without a version pins the one the site uses now.\n" +
 			"- add_domain (domain): an extra domain, a subdomain (\"tenant1\" → tenant1.<site>.test) or an alias (\"my-app-2.test\").\n" +
-			"- set_server (server, worker): run PHP through FastCGI (PHP-FPM) or FrankenPHP, optionally in Octane's worker mode.\n" +
-			"- restart: restart a FrankenPHP site's process, e.g. so Octane workers load changed code.",
+			"- set_server (server, worker): run PHP through FastCGI (PHP-FPM) or FrankenPHP, optionally in Octane's worker mode, " +
+			"or serve a Node.js app (node): Flock runs its npm run dev with the site's Node.js.\n" +
+			"- restart: restart a FrankenPHP site's process, e.g. so Octane workers load changed code, or a Node.js site's dev server.",
 		Annotations: additive(false),
 		InputSchema: schema[updateSiteIn](map[string][]any{
 			"action": {"secure", "unsecure", "isolate", "unisolate", "pin", "unpin", "add_domain", "set_server", "restart"},
 			"tool":   {"php", "node"},
-			"server": {"fastcgi", "frankenphp"},
+			"server": {"fastcgi", "frankenphp", "node"},
 			"worker": {"classic", "octane"},
 		}),
 	}, s.updateSite)
@@ -648,9 +659,12 @@ func (s *server) linkSite(ctx context.Context, _ *mcp.CallToolRequest, in linkSi
 }
 
 type proxySiteIn struct {
-	Name     string `json:"name" jsonschema:"the proxy's name, which makes its domain <name>.test"`
-	Upstream string `json:"upstream" jsonschema:"where requests go: a port on 127.0.0.1 (3000), host:port (localhost:5173) or a URL (https://127.0.0.1:8443)"`
-	Secure   *bool  `json:"secure,omitempty" jsonschema:"serve over HTTPS; left out, a new proxy is served over HTTP and an existing one keeps its setting"`
+	Name        string  `json:"name" jsonschema:"the proxy's name, which makes its domain <name>.test"`
+	Upstream    string  `json:"upstream" jsonschema:"where requests go: a port on 127.0.0.1 (3000), host:port (localhost:5173) or a URL (https://127.0.0.1:8443)"`
+	Secure      *bool   `json:"secure,omitempty" jsonschema:"serve over HTTPS; left out, a new proxy is served over HTTP and an existing one keeps its setting"`
+	Command     *string `json:"command,omitempty" jsonschema:"the command that starts the proxy's server, e.g. npm run dev (empty removes it); left out, it's kept"`
+	Dir         string  `json:"dir,omitempty" jsonschema:"the absolute folder the command runs in; by default the project Flock was started in"`
+	StopCommand *string `json:"stop_command,omitempty" jsonschema:"only for a command that starts a server in the background and exits (docker compose up -d): the command that stops it"`
 }
 
 type proxySiteOut struct {
@@ -662,30 +676,78 @@ func (s *server) proxySite(ctx context.Context, _ *mcp.CallToolRequest, in proxy
 	if in.Name == "" || in.Upstream == "" {
 		return nil, proxySiteOut{}, errors.New("give the proxy's name and its upstream, e.g. name softpack and upstream 3000")
 	}
-	st, err := s.Daemon.Proxy(ctx, in.Name, in.Upstream, in.Secure)
+	opts := api.ProxyOptions{Secured: in.Secure, Command: in.Command, StopCommand: in.StopCommand}
+	if in.Command != nil && *in.Command != "" {
+		dir := cmpOr(in.Dir, s.Dir)
+		if dir == "" || !filepath.IsAbs(dir) {
+			return nil, proxySiteOut{}, errors.New("give the folder the command runs in as an absolute path")
+		}
+		opts.Dir = &dir
+	}
+	st, err := s.Daemon.Proxy(ctx, in.Name, in.Upstream, opts)
 	if err != nil {
 		return nil, proxySiteOut{}, err
 	}
 	name := config.SiteName(in.Name)
-	for _, p := range st.Proxies {
-		if p.Name == name {
-			if p.Problem != "" {
-				return nil, proxySiteOut{Message: "Proxied, but not served: " + p.Problem, Proxy: &p}, nil
-			}
-			return nil, proxySiteOut{Message: fmt.Sprintf("Proxied: %s passes to %s.", p.URL, p.Upstream), Proxy: &p}, nil
+	if p, ok := findProxy(st, name); ok {
+		switch {
+		case p.Problem != "":
+			return nil, proxySiteOut{Message: "Proxied, but not served: " + p.Problem, Proxy: &p}, nil
+		case p.Command != nil:
+			return nil, proxySiteOut{Message: fmt.Sprintf("Proxied: %s passes to %s. Start its server with proxy_server.", p.URL, p.Upstream), Proxy: &p}, nil
 		}
+		return nil, proxySiteOut{Message: fmt.Sprintf("Proxied: %s passes to %s.", p.URL, p.Upstream), Proxy: &p}, nil
 	}
 	return nil, proxySiteOut{Message: "Proxied " + name + "."}, nil
 }
 
+type proxyServerIn struct {
+	Name   string `json:"name" jsonschema:"the proxy's name"`
+	Action string `json:"action" jsonschema:"start or stop"`
+}
+
+func (s *server) proxyServer(ctx context.Context, _ *mcp.CallToolRequest, in proxyServerIn) (*mcp.CallToolResult, proxySiteOut, error) {
+	var st api.Status
+	var err error
+	switch in.Action {
+	case "start":
+		st, err = s.Daemon.StartProxy(ctx, in.Name)
+	case "stop":
+		st, err = s.Daemon.StopProxy(ctx, in.Name)
+	default:
+		return nil, proxySiteOut{}, fmt.Errorf("action must be start or stop, not %q", in.Action)
+	}
+	if err != nil {
+		return nil, proxySiteOut{}, err
+	}
+	p, ok := findProxy(st, in.Name)
+	if !ok || p.Command == nil {
+		return nil, proxySiteOut{Message: "Done."}, nil
+	}
+	if in.Action == "stop" {
+		return nil, proxySiteOut{Message: "Stopped " + in.Name + "'s server.", Proxy: &p}, nil
+	}
+	return nil, proxySiteOut{Message: fmt.Sprintf("Started `%s` in %s; it's %s. Its output: `flock logs %s`.", p.Command.Command, p.Command.Dir, p.Command.State, p.Command.Log), Proxy: &p}, nil
+}
+
+func findProxy(st api.Status, name string) (api.ProxyStatus, bool) {
+	for _, p := range st.Proxies {
+		if p.Name == name {
+			return p, true
+		}
+	}
+	return api.ProxyStatus{}, false
+}
+
 type updateSiteIn struct {
 	siteArg
-	Action  string `json:"action" jsonschema:"what to change; see the tool's description"`
-	Tool    string `json:"tool,omitempty" jsonschema:"isolate, unisolate, pin and unpin: php or node"`
-	Version string `json:"version,omitempty" jsonschema:"isolate and pin: e.g. 8.4 for PHP or 22 for Node.js"`
-	Domain  string `json:"domain,omitempty" jsonschema:"add_domain: a subdomain (tenant1) or an alias (my-app-2.test)"`
-	Server  string `json:"server,omitempty" jsonschema:"set_server: fastcgi or frankenphp"`
-	Worker  string `json:"worker,omitempty" jsonschema:"set_server with frankenphp: classic (the default) or octane (Laravel Octane's worker mode)"`
+	Action  string  `json:"action" jsonschema:"what to change; see the tool's description"`
+	Tool    string  `json:"tool,omitempty" jsonschema:"isolate, unisolate, pin and unpin: php or node"`
+	Version string  `json:"version,omitempty" jsonschema:"isolate and pin: e.g. 8.4 for PHP or 22 for Node.js"`
+	Domain  string  `json:"domain,omitempty" jsonschema:"add_domain: a subdomain (tenant1) or an alias (my-app-2.test)"`
+	Server  string  `json:"server,omitempty" jsonschema:"set_server: fastcgi, frankenphp, or node (a Node.js app: Flock runs its npm run dev with the site's Node.js)"`
+	Worker  string  `json:"worker,omitempty" jsonschema:"set_server with frankenphp: classic (the default) or octane (Laravel Octane's worker mode)"`
+	Command *string `json:"command,omitempty" jsonschema:"set_server with node: the dev server's command instead of npm run dev, e.g. pnpm dev --port {port} ({port} becomes its port; empty goes back to npm run dev)"`
 }
 
 func (s *server) updateSite(ctx context.Context, _ *mcp.CallToolRequest, in updateSiteIn) (*mcp.CallToolResult, siteActionOut, error) {
@@ -744,10 +806,13 @@ func (s *server) updateSite(ctx context.Context, _ *mcp.CallToolRequest, in upda
 		st, err = s.Daemon.AddDomain(ctx, site.Name, in.Domain)
 		msg = fmt.Sprintf("Added %s to %s.", in.Domain, site.Name)
 	case "set_server":
-		if in.Server != config.ServerFastCGI && in.Server != config.ServerFrankenPHP {
-			return nil, siteActionOut{}, errors.New("set_server needs server: fastcgi or frankenphp")
+		if in.Server != config.ServerFastCGI && in.Server != config.ServerFrankenPHP && in.Server != config.ServerNode {
+			return nil, siteActionOut{}, errors.New("set_server needs server: fastcgi, frankenphp or node")
 		}
 		change := api.SiteChange{Server: &in.Server}
+		if in.Server == config.ServerNode {
+			change.Command = in.Command
+		}
 		switch in.Worker {
 		case "octane":
 			change.Worker = ptr(config.WorkerOctane)

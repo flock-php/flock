@@ -127,3 +127,35 @@ func TestProxiesRoundTrip(t *testing.T) {
 		t.Fatalf("got %+v", loaded.Proxies)
 	}
 }
+
+func TestAProxysCommandRunsInAFolder(t *testing.T) {
+	cfg, dir := Default(), t.TempDir()
+	ok := Proxy{Name: "softpack", Upstream: "http://127.0.0.1:3000", Command: " npm run dev ", Dir: dir + "/"}
+	if err := cfg.UpsertProxy(ok); err != nil {
+		t.Fatal(err)
+	}
+	if p, _ := cfg.FindProxy("softpack"); p.Command != "npm run dev" || p.Dir != dir {
+		t.Fatalf("stored as %+v", p)
+	}
+
+	for name, p := range map[string]Proxy{
+		"relative folder":   {Command: "npm run dev", Dir: "softpack"},
+		"missing folder":    {Command: "npm run dev", Dir: dir + "/missing"},
+		"stop without one":  {StopCommand: "docker compose stop", Dir: dir},
+		"two lines":         {Command: "npm install\nnpm run dev", Dir: dir},
+		"stop on two lines": {Command: "docker compose up -d", StopCommand: "a\nb", Dir: dir},
+	} {
+		p.Name, p.Upstream = "softpack", "http://127.0.0.1:3000"
+		if err := cfg.UpsertProxy(p); err == nil {
+			t.Errorf("%s: accepted %+v", name, p)
+		}
+	}
+
+	// Without a command, the folder isn't kept.
+	if err := cfg.UpsertProxy(Proxy{Name: "softpack", Upstream: "http://127.0.0.1:3000", Dir: dir}); err != nil {
+		t.Fatal(err)
+	}
+	if p, _ := cfg.FindProxy("softpack"); p.Dir != "" {
+		t.Errorf("a folder without a command: %+v", p)
+	}
+}

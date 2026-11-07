@@ -36,6 +36,9 @@ type Site struct {
 	// of a proxied name (config.Proxy: "http://127.0.0.1:3000", no Root). When set, requests go there
 	// instead of to FPM; those that ask for Xdebug still go to DebugFPM.
 	Proxy string
+	// Down, when set, says why the site's own server can't run (a Node.js app's dev server, e.g.
+	// its port is taken): its names answer 503 with it instead of reaching whatever listens there.
+	Down string
 	// CertFile and KeyFile (from certs.SiteCert, covering Domain and *.Domain) are set when the site
 	// is secured. Deeper subdomains and aliases get certificates from Config.Issue.
 	CertFile string
@@ -253,6 +256,9 @@ const xdebugRequest = `{cookie.XDEBUG_SESSION} != "" || {cookie.XDEBUG_TRIGGER} 
 	`{query.XDEBUG_SESSION} != "" || {query.XDEBUG_SESSION_START} != "" || {query.XDEBUG_TRIGGER} != ""`
 
 func app(s Site) string {
+	if s.Down != "" {
+		return fmt.Sprintf("\theader Cache-Control no-store\n\trespond %s 503\n", quote(s.Down))
+	}
 	root := ""
 	if s.Root != "" {
 		root = fmt.Sprintf("\troot * %s\n", quote(s.Root))

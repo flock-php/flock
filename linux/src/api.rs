@@ -257,7 +257,8 @@ impl Client {
         self.request("DELETE", &format!("/v1/sites/{}", escape(name)), None::<&()>, DEFAULT_TIMEOUT)
     }
 
-    /// Restarts a FrankenPHP site's process, e.g. so Octane's workers load changed code.
+    /// Restarts a FrankenPHP site's process, e.g. so Octane's workers load changed code, or a
+    /// Node.js site's dev server.
     pub fn restart_site(&self, name: &str) -> Result<Status, Error> {
         self.request("POST", &format!("/v1/sites/{}/restart", escape(name)), None::<&()>, Duration::from_secs(60))
     }
@@ -271,6 +272,23 @@ impl Client {
     /// Serves a proxy over HTTPS (on) or plain HTTP.
     pub fn secure_proxy(&self, name: &str, on: bool) -> Result<Status, Error> {
         self.request("PATCH", &proxy_path(name), Some(&serde_json::json!({ "secured": on })), DEFAULT_TIMEOUT)
+    }
+
+    /// Sets the command that starts a proxy's server, the folder it runs in and, for a server it
+    /// starts in the background, the command that stops it. An empty command removes them.
+    pub fn set_proxy_command(&self, name: &str, command: &str, dir: &str, stop_command: &str) -> Result<Status, Error> {
+        let body = serde_json::json!({ "command": command, "dir": dir, "stop_command": stop_command });
+        self.request("PATCH", &proxy_path(name), Some(&body), DEFAULT_TIMEOUT)
+    }
+
+    /// Runs a proxy's command.
+    pub fn start_proxy(&self, name: &str) -> Result<Status, Error> {
+        self.request("POST", &format!("{}/start", proxy_path(name)), None::<&()>, Duration::from_secs(60))
+    }
+
+    /// Stops a proxy's command, or runs its stop command.
+    pub fn stop_proxy(&self, name: &str) -> Result<Status, Error> {
+        self.request("POST", &format!("{}/stop", proxy_path(name)), None::<&()>, Duration::from_secs(130))
     }
 
     /// Stops serving a proxy; the server at its upstream keeps running.
@@ -1093,11 +1111,13 @@ pub struct SiteStatus {
     pub root_suggestions: Option<Vec<String>>,
     pub debugging: bool,
     pub domains: Option<Vec<SiteDomain>>,
-    /// fastcgi or frankenphp; worker is "" (classic) or octane.
+    /// fastcgi, frankenphp or node; worker is "" (classic) or octane.
     pub server: String,
     pub worker: String,
     pub octane_available: bool,
     pub frankenphp: Option<SiteFrankenPhp>,
+    /// The site's dev server, when server is node.
+    pub node_server: Option<SiteNodeServer>,
     /// "", missing, current, outdated or custom.
     pub boost: String,
     pub share: Option<ShareStatus>,
@@ -1137,6 +1157,11 @@ impl SiteStatus {
     /// The database Flock made for the worktree, if it has one of its own.
     pub fn own_database(&self) -> Option<&str> {
         self.worktree.as_ref().map(|w| w.database.as_str()).filter(|d| !d.is_empty())
+    }
+
+    /// A Node.js app: Flock runs its `npm run dev` and serves the site from it, not PHP.
+    pub fn is_node(&self) -> bool {
+        self.server == "node"
     }
 
     /// FrankenPHP runs PHP 8.2 and newer; a version that can't be read doesn't block it.
@@ -1189,6 +1214,83 @@ pub struct SiteFrankenPhp {
     pub log: String,
 }
 
+/// The dev server of a Node.js site: the project's `npm run <script>`, which Flock runs with the
+/// site's Node.js on port and serves the site from.
+#[derive(Deserialize, Debug, Clone, PartialEq, Default)]
+#[serde(default)]
+pub struct SiteNodeServer {
+    /// starting (it doesn't answer yet), running, failed (it exited or can't start) or unavailable
+    /// (its Node.js isn't installed); others are shown as they are.
+    pub state: String,
+    /// The Node.js it runs on, e.g. "22.23.4"; "" when none matches.
+    pub version: String,
+    pub script: String,
+    pub port: u32,
+    /// The command line Flock runs, e.g. "npm run dev -- --port 21000 --hostname 127.0.0.1", or
+    /// the site's own (custom); "" from an older daemon.
+    pub command: String,
+    pub custom: bool,
+    /// The site's own command as set, {port} and all, for editing; "" from an older daemon.
+    pub configured: String,
+    pub problem: String,
+    /// Its service log, for /v1/logs/services/{log}.
+    pub log: String,
+}
+
+impl SiteNodeServer {
+    pub fn running(&self) -> bool {
+        self.state == "running"
+    }
+
+    pub fn starting(&self) -> bool {
+        self.state == "starting"
+    }
+
+    /// It exited, can't start, or has no Node.js: problem says why.
+    pub fn failed(&self) -> bool {
+        self.state == "failed" || self.state == "unavailable"
+    }
+
+    /// The npm script it runs: "dev".
+    pub fn script(&self) -> &str {
+        if self.script.is_empty() { "dev" } else { &self.script }
+    }
+
+    /// The command line it runs: the daemon's, else npm run <script> -- --port <port>.
+    pub fn command_line(&self) -> String {
+        if !self.command.is_empty() {
+            return self.command.clone();
+        }
+        let port = if self.port > 0 { self.port.to_string() } else { "…".to_owned() };
+        format!("npm run {} -- --port {port}", self.script())
+    }
+
+    /// "Running on Node.js 22.23.4 — port 21000", "Starting npm run dev on Node.js 22.23.4…",
+    /// "Not running" or "Node.js isn't installed".
+    pub fn text(&self) -> String {
+        match self.state.as_str() {
+            "running" => format!("Running on Node.js {} — port {}", self.version, self.port),
+            "starting" if self.version.is_empty() => format!("Starting npm run {}…", self.script()),
+            "starting" => format!("Starting npm run {} on Node.js {}…", self.script(), self.version),
+            "failed" => "Not running".to_owned(),
+            "unavailable" => "Node.js isn't installed".to_owned(),
+            "" => "Unknown".to_owned(),
+            state => capitalized(state),
+        }
+    }
+
+    /// What lists show next to the site: "Node.js 22.23.4" while it runs or starts, else "Not running".
+    pub fn short_text(&self) -> String {
+        if (self.running() || self.starting()) && !self.version.is_empty() {
+            format!("Node.js {}", self.version)
+        } else if self.running() || self.starting() {
+            "Node.js".to_owned()
+        } else {
+            "Not running".to_owned()
+        }
+    }
+}
+
 /// A name served by a server of its own rather than by PHP, e.g. a Node.js dev server: every
 /// request, WebSocket upgrades included, passes to upstream with its Host header.
 #[derive(Deserialize, Debug, Clone, PartialEq, Default)]
@@ -1206,6 +1308,31 @@ pub struct ProxyStatus {
     /// "Node.js 22.23.4" for one of Flock's Node.js versions.
     pub running: bool,
     pub server: Option<String>,
+    /// The command that starts its server, when it has one.
+    pub command: Option<ProxyCommand>,
+}
+
+/// The command that starts a proxy's server (`flock proxy --command`), and where it stands.
+#[derive(Deserialize, Debug, Clone, PartialEq, Default)]
+#[serde(default)]
+pub struct ProxyCommand {
+    pub command: String,
+    /// The folder it runs in.
+    pub dir: String,
+    /// Set when command starts a server in the background: the command that stops it.
+    pub stop_command: String,
+    /// stopped, starting, running or failed.
+    pub state: String,
+    pub problem: String,
+    /// The name of its service log.
+    pub log: String,
+}
+
+impl ProxyCommand {
+    /// Flock runs it (the upstream may not answer yet).
+    pub fn started(&self) -> bool {
+        self.state == "starting" || self.state == "running"
+    }
 }
 
 impl ProxyStatus {
@@ -1216,6 +1343,11 @@ impl ProxyStatus {
 
     /// What answers at the upstream: "Node.js 22.23.4", "Running" or "Not running".
     pub fn server_text(&self) -> String {
+        match self.command.as_ref().map(|c| c.state.as_str()) {
+            Some("starting") => return "Starting…".to_owned(),
+            Some("failed") => return "Not running".to_owned(),
+            _ => {}
+        }
         match (&self.server, self.running) {
             (_, false) => "Not running".to_owned(),
             (Some(server), true) if !server.is_empty() => server.clone(),
@@ -1367,6 +1499,9 @@ pub struct SiteChange {
     pub worker: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub root: Option<String>,
+    /// A Node.js site's own dev server command ("pnpm dev"); "" goes back to npm run dev.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub command: Option<String>,
 }
 
 /// GET /v1/sites/{name}/extensions (phpext.Report).
@@ -1441,6 +1576,45 @@ mod tests {
     }
 
     #[test]
+    fn decodes_a_node_sites_dev_server() {
+        let json = r#"{"sites":[
+            {"name":"softpack","domain":"softpack.test","path":"/home/a/softpack","server":"node",
+              "node_server":{"state":"running","version":"22.23.4","script":"dev","port":21001,"log":"node-softpack"}},
+            {"name":"starting","domain":"starting.test","path":"/home/a/starting","server":"node",
+              "node_server":{"state":"starting","version":"22.23.4","port":21002}},
+            {"name":"broken","domain":"broken.test","path":"/home/a/broken","server":"node",
+              "node_server":{"state":"exploded","problem":"npm run dev exited"}},
+            {"name":"shop","domain":"shop.test","path":"/home/a/shop","server":"fastcgi"}]}"#;
+        let status: Status = serde_json::from_str(json).unwrap();
+        let softpack = &status.sites[0];
+        let ns = softpack.node_server.as_ref().unwrap();
+        assert!(softpack.is_node() && ns.running() && !ns.failed());
+        assert_eq!((ns.version.as_str(), ns.port, ns.log.as_str()), ("22.23.4", 21001, "node-softpack"));
+        assert_eq!(ns.text(), "Running on Node.js 22.23.4 — port 21001");
+        assert_eq!(ns.short_text(), "Node.js 22.23.4");
+        // No script: the daemon's default.
+        let starting = status.sites[1].node_server.as_ref().unwrap();
+        assert_eq!(starting.text(), "Starting npm run dev on Node.js 22.23.4…");
+        // A state this app doesn't know yet still decodes.
+        let broken = status.sites[2].node_server.as_ref().unwrap();
+        assert_eq!(broken.text(), "Exploded");
+        assert_eq!(broken.short_text(), "Not running");
+        assert!(!status.sites[3].is_node() && status.sites[3].node_server.is_none());
+        // An older daemon sends no command: the default one.
+        assert!(!ns.custom);
+        assert_eq!(ns.command_line(), "npm run dev -- --port 21001");
+        let custom =
+            r#"{"state":"running","port":21003,"command":"pnpm dev --port 21003","custom":true,"configured":"pnpm dev --port {port}"}"#;
+        let custom: SiteNodeServer = serde_json::from_str(custom).unwrap();
+        assert!(custom.custom && ns.configured.is_empty());
+        assert_eq!(custom.configured, "pnpm dev --port {port}");
+        assert_eq!(custom.command_line(), "pnpm dev --port 21003");
+        // An older daemon's site.
+        let old: SiteStatus = serde_json::from_str(r#"{"name":"old","server":"something-new"}"#).unwrap();
+        assert!(!old.is_node() && old.node_server.is_none());
+    }
+
+    #[test]
     fn decodes_proxies() {
         let json = r#"{"proxies":[
             {"name":"softpack","domain":"softpack.test","upstream":"http://127.0.0.1:3000","secured":true,
@@ -1461,6 +1635,15 @@ mod tests {
         assert_eq!(blog.server_text(), "Not running");
         let unnamed = ProxyStatus { running: true, ..Default::default() };
         assert_eq!(unnamed.server_text(), "Running");
+        assert!(softpack.command.is_none());
+        let json = r#"{"name":"softpack","running":false,
+            "command":{"command":"npm run dev","dir":"/code/softpack","state":"starting","log":"proxy-softpack"}}"#;
+        let started: ProxyStatus = serde_json::from_str(json).unwrap();
+        let command = started.command.as_ref().unwrap();
+        assert_eq!((command.command.as_str(), command.dir.as_str()), ("npm run dev", "/code/softpack"));
+        assert_eq!(command.log, "proxy-softpack");
+        assert!(command.started() && command.stop_command.is_empty());
+        assert_eq!(started.server_text(), "Starting…");
         // An older daemon sends none.
         assert!(serde_json::from_str::<Status>(r#"{"version":"1.4.0"}"#).unwrap().proxies.is_empty());
     }
@@ -1473,6 +1656,10 @@ mod tests {
         let secured = serde_json::to_value(ProxyChange::new("softpack", "3001", Some(true))).unwrap();
         assert_eq!(secured, serde_json::json!({ "name": "softpack", "upstream": "3001", "secured": true }));
         assert_eq!(proxy_path("soft pack"), "/v1/proxies/soft%20pack");
+        let node = serde_json::to_value(SiteChange { server: Some("node".into()), ..Default::default() }).unwrap();
+        assert_eq!(node, serde_json::json!({ "server": "node" }));
+        let default = serde_json::to_value(SiteChange { command: Some(String::new()), ..Default::default() }).unwrap();
+        assert_eq!(default, serde_json::json!({ "command": "" }));
     }
 
     #[test]

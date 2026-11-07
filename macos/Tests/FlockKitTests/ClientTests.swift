@@ -150,10 +150,17 @@ struct ClientTests {
         _ = try await client.proxy(name: "softpack", upstream: "3001", secured: true)
         _ = try await client.secureProxy("soft pack", false)
         _ = try await client.removeProxy("softpack")
+        _ = try await client.setProxyCommand("softpack", command: "npm run dev", dir: "/code/softpack", stopCommand: "")
+        _ = try await client.startProxy("softpack")
+        _ = try await client.stopProxy("softpack")
+        try await client.clearServiceLog("proxy-softpack")
 
         let requests = StubProtocol.requests
-        #expect(requests.map(\.method) == ["POST", "POST", "PATCH", "DELETE"])
-        #expect(requests.map { URL(string: $0.url)?.path ?? "" } == ["/v1/proxies", "/v1/proxies", "/v1/proxies/soft pack", "/v1/proxies/softpack"])
+        #expect(requests.map(\.method) == ["POST", "POST", "PATCH", "DELETE", "PATCH", "POST", "POST", "DELETE"])
+        #expect(requests.map { URL(string: $0.url)?.path ?? "" } == ["/v1/proxies", "/v1/proxies", "/v1/proxies/soft pack", "/v1/proxies/softpack",
+                                                                    "/v1/proxies/softpack", "/v1/proxies/softpack/start", "/v1/proxies/softpack/stop", "/v1/logs/services/proxy-softpack"])
+        let command = try JSONSerialization.jsonObject(with: Data(requests[4].body.utf8)) as? [String: String]
+        #expect(command == ["command": "npm run dev", "dir": "/code/softpack", "stop_command": ""])
         // A new proxy leaves secured out, so the daemon keeps an existing one's setting.
         let first = try JSONSerialization.jsonObject(with: Data(requests[0].body.utf8)) as? [String: Any]
         #expect(first?.keys.sorted() == ["name", "upstream"] && first?["upstream"] as? String == "3000")

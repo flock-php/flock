@@ -138,3 +138,31 @@ func TestAWorktreeWinsOverTheSameSubdomainOfItsSite(t *testing.T) {
 		t.Error("adding a worktree's domain as a subdomain must be refused")
 	}
 }
+
+func TestWorktreePortsAreStableAndDistinct(t *testing.T) {
+	a := worktreePort("/code/app-feature", map[int]bool{})
+	if a != worktreePort("/code/app-feature/", map[int]bool{}) || a < FirstWorktreePort || a >= FirstWorktreePort+worktreePorts {
+		t.Fatalf("port %d", a)
+	}
+	if b := worktreePort("/code/app-feature", map[int]bool{a: true}); b == a {
+		t.Fatalf("a taken port was handed out again: %d", b)
+	}
+}
+
+func TestANodeWorktreeSkipsPortsAlreadyConfigured(t *testing.T) {
+	repo := t.TempDir()
+	wtPath := filepath.Join(t.TempDir(), "app-feature")
+	addWorktree(t, repo, wtPath, "app-feature", "ref: refs/heads/feature")
+	cfg := Default()
+	if err := cfg.Upsert(Site{Name: "app", Path: repo, Server: ServerNode, Port: FirstSitePort}); err != nil {
+		t.Fatal(err)
+	}
+	// A service configured on the port the worktree's path hashes to.
+	hashed := worktreePort(wtPath, map[int]bool{})
+	cfg.Services.Extras = map[string]Extra{"redis": {Version: "7", Port: hashed}}
+
+	wt, ok := cfg.FindSite("feature.app")
+	if !ok || wt.Port == 0 || wt.Port == hashed {
+		t.Fatalf("worktree port %d, the service's is %d (%+v)", wt.Port, hashed, wt)
+	}
+}

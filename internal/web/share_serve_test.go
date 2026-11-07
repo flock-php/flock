@@ -7,6 +7,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/fcgi"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -119,6 +120,79 @@ func TestServesAShareThroughCaddy(t *testing.T) {
 	for _, path := range []string{"/.env", "/hot", "/HOT", "/telescope/requests", "/_debugbar/open", "/build/manifest.json/../../.env", "/%2eenv"} {
 		if resp, body := get(path, nil); resp.StatusCode != http.StatusNotFound || strings.Contains(body, "secret") || strings.Contains(body, "5173") {
 			t.Errorf("%s: %d %q", path, resp.StatusCode, body)
+		}
+	}
+}
+
+// TestServesANodeAppsShareFromItsDevServer runs the embedded Caddy with a share of a Node.js app:
+// requests reach its dev server under the site's own name, the env files and git don't.
+func TestServesANodeAppsShareFromItsDevServer(t *testing.T) {
+	dir, err := os.MkdirTemp("", "flock-share-test-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(dir) })
+
+	dev := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprintf(w, "path=%s host=%s origin=%s xfh=%s xfp=%s xff=%s",
+			r.URL.Path, r.Host, r.Header.Get("Origin"), r.Header.Get("X-Forwarded-Host"), r.Header.Get("X-Forwarded-Proto"), r.Header.Get("X-Forwarded-For"))
+	}))
+	t.Cleanup(dev.Close)
+
+	share := Share{Port: freePort(t), DevServer: dev.URL, Domain: "softpack.test"}
+	cfg := Config{
+		StorageDir: filepath.Join(dir, "caddy"),
+		LogFile:    filepath.Join(dir, "web.log"),
+		HTTPPort:   freePort(t),
+		HTTPSPort:  freePort(t),
+		Bind:       "127.0.0.1",
+		TLD:        "test",
+		Shares:     []Share{share},
+	}
+	if err := Apply(cfg); err != nil {
+		t.Fatalf("%v\n%s", err, Caddyfile(cfg))
+	}
+	t.Cleanup(func() { _ = Stop() })
+
+	get := func(path string, header map[string]string) (int, string) {
+		t.Helper()
+		req, _ := http.NewRequest(http.MethodGet, fmt.Sprintf("http://127.0.0.1:%d%s", share.Port, path), nil)
+		req.Host = "quiet-river-lamp.trycloudflare.com"
+		for k, v := range header {
+			req.Header.Set(k, v)
+		}
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer resp.Body.Close()
+		data, _ := io.ReadAll(resp.Body)
+		return resp.StatusCode, string(data)
+	}
+
+	status, page := get("/_next/webpack-hmr", map[string]string{
+		"Origin": "https://quiet-river-lamp.trycloudflare.com", "CF-Connecting-IP": "203.0.113.7", "X-Forwarded-Host": "evil.com",
+	})
+	want := "path=/_next/webpack-hmr host=softpack.test origin=http://softpack.test xfh=quiet-river-lamp.trycloudflare.com xfp=https xff=203.0.113.7"
+	if status != 200 || page != want {
+		t.Errorf("got %d %q\nwant %q", status, page, want)
+	}
+	// The app's own requests (a Server Action's POST, say) keep an Origin matching X-Forwarded-Host.
+	if _, page := get("/dashboard", map[string]string{"Origin": "https://quiet-river-lamp.trycloudflare.com"}); !strings.Contains(page, " origin=https://quiet-river-lamp.trycloudflare.com xfh=quiet-river-lamp.trycloudflare.com ") {
+		t.Errorf("an app request's Origin: %q", page)
+	}
+	if _, page := get("/@vite/client", map[string]string{"Origin": "https://quiet-river-lamp.trycloudflare.com"}); !strings.Contains(page, " origin=http://softpack.test ") {
+		t.Errorf("Vite's client script's Origin: %q", page)
+	}
+	if _, page := get("/", map[string]string{"Origin": "https://quiet-river-lamp.trycloudflare.com", "Upgrade": "websocket"}); !strings.Contains(page, " origin=http://softpack.test ") {
+		t.Errorf("a WebSocket upgrade's Origin: %q", page)
+	}
+	if _, page := get("/node_modules/.vite/deps/react.js", nil); !strings.HasPrefix(page, "path=/node_modules/.vite/deps/react.js ") || !strings.Contains(page, "origin= ") {
+		t.Errorf("a dot directory of the dev server's, without an Origin: %q", page)
+	}
+	for _, path := range []string{"/.env", "/.env.local", "/.envrc", "/.env-production", "/app/.env", "/app/.envrc", "/.git", "/.git/config", "/app/.git", "/app/.git/HEAD", "/.ENV"} {
+		if status, page := get(path, nil); status != http.StatusNotFound || strings.Contains(page, "path=") {
+			t.Errorf("%s: %d %q", path, status, page)
 		}
 	}
 }

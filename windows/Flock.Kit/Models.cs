@@ -161,6 +161,8 @@ public sealed class Status
         /// <summary>Something answers at the upstream; Server names it when it runs on this machine, e.g. "Node.js 22.23.4".</summary>
         public bool Running { get; init; }
         public string? Server { get; init; }
+        /// <summary>The command that starts its server, when it has one.</summary>
+        public ProxyCommand? Command { get; init; }
 
         /// <summary>The upstream without the http:// Flock adds: 127.0.0.1:3000.</summary>
         [JsonIgnore]
@@ -168,7 +170,42 @@ public sealed class Status
 
         /// <summary>What answers at the upstream: the server's name, "Running" or "Not running".</summary>
         [JsonIgnore]
-        public string ServerLabel => Running ? Server is { Length: > 0 } server ? server : "Running" : "Not running";
+        public string ServerLabel => Command?.State switch
+        {
+            ProxyCommandState.Starting => "Starting…",
+            ProxyCommandState.Failed => "Not running",
+            _ => Running ? Server is { Length: > 0 } server ? server : "Running" : "Not running",
+        };
+
+        /// <summary>Flock runs its command (it may not answer yet).</summary>
+        [JsonIgnore]
+        public bool Started => Command?.State is ProxyCommandState.Starting or ProxyCommandState.Running;
+    }
+
+    /// <summary>The command that starts a proxy's server (flock proxy --command), and where it stands.</summary>
+    public sealed class ProxyCommand
+    {
+        public string Command { get; init; } = "";
+        /// <summary>The folder it runs in.</summary>
+        public string Dir { get; init; } = "";
+        /// <summary>Set when Command starts a server in the background: the command that stops it.</summary>
+        public string StopCommand { get; init; } = "";
+        /// <summary>One of ProxyCommandState.</summary>
+        public string State { get; init; } = "";
+        public string Problem { get; init; } = "";
+        /// <summary>Name for /v1/logs/services/{name}.</summary>
+        public string Log { get; init; } = "";
+    }
+
+    public static class ProxyCommandState
+    {
+        /// <summary>Not started; something else may still answer at the upstream.</summary>
+        public const string Stopped = "stopped";
+        /// <summary>Started; the upstream doesn't answer yet.</summary>
+        public const string Starting = "starting";
+        public const string Running = "running";
+        /// <summary>It exited or failed; see Problem.</summary>
+        public const string Failed = "failed";
     }
 
     /// <summary>One of a site's extra domains: a subdomain ("tenant1") or an alias ("my-app-2.test").</summary>
@@ -223,7 +260,7 @@ public sealed class Status
         public List<SiteDomain> Domains { get; init; } = [];
         /// <summary>PhpStorm breakpoints send every request of the site to Xdebug.</summary>
         public bool Debugging { get; init; }
-        /// <summary>What runs the site's PHP: SiteServer.FastCgi (php-cgi) or SiteServer.FrankenPhp.</summary>
+        /// <summary>What serves the site: SiteServer.FastCgi (php-cgi), SiteServer.FrankenPhp or SiteServer.Node (a Node.js app's npm run dev).</summary>
         public string Server { get; init; } = SiteServer.FastCgi;
         /// <summary>FrankenPHP's worker mode: "" (classic) or SiteServer.Octane.</summary>
         public string Worker { get; init; } = "";
@@ -232,6 +269,8 @@ public sealed class Status
         /// <summary>The site's FrankenPHP process, when Server is FrankenPHP.</summary>
         [JsonPropertyName("frankenphp")]
         public SiteFrankenPhp? FrankenPhp { get; init; }
+        /// <summary>The site's dev server, when Server is SiteServer.Node.</summary>
+        public SiteNodeServer? NodeServer { get; init; }
         /// <summary>Whether the project uses Laravel Boost and has Flock's guideline: "" (no Boost) or one of BoostState.</summary>
         public string Boost { get; init; } = "";
         /// <summary>The site's tunnel (`flock share`), while there is one.</summary>
@@ -252,6 +291,10 @@ public sealed class Status
 
         [JsonIgnore]
         public bool IsFrankenPhp => Server == SiteServer.FrankenPhp;
+
+        /// <summary>A Node.js app: Flock runs its npm run dev and serves the site from it (see NodeServer).</summary>
+        [JsonIgnore]
+        public bool IsNode => Server == SiteServer.Node;
 
         [JsonIgnore]
         public bool IsShared => Share?.IsRunning == true;
@@ -305,6 +348,8 @@ public sealed class Status
     {
         public const string FastCgi = "fastcgi";
         public const string FrankenPhp = "frankenphp";
+        /// <summary>A Node.js app: Flock runs its npm run dev (see Site.NodeServer).</summary>
+        public const string Node = "node";
         /// <summary>FrankenPHP's worker mode for Laravel Octane.</summary>
         public const string Octane = "octane";
     }
@@ -348,6 +393,55 @@ public sealed class Status
 
         [JsonIgnore]
         public bool HasProgress => Progress is >= 0 and <= 1;
+    }
+
+    /// <summary>
+    /// The dev server of a Node.js site: the project's npm run Script, which Flock runs with the
+    /// site's Node.js on Port and serves the site from.
+    /// </summary>
+    public sealed class SiteNodeServer
+    {
+        /// <summary>One of NodeServerState.</summary>
+        public string State { get; init; } = "";
+        /// <summary>The Node.js it runs on, e.g. "22.23.4"; empty when none matches.</summary>
+        public string Version { get; init; } = "";
+        public string Script { get; init; } = "dev";
+        public int Port { get; init; }
+        /// <summary>The command line Flock runs, e.g. "npm run dev -- --port 21000 --hostname 127.0.0.1"; empty from older daemons.</summary>
+        public string Command { get; init; } = "";
+        /// <summary>The site has a command of its own (Command), instead of npm run Script.</summary>
+        public bool Custom { get; init; }
+        /// <summary>The site's own command as set, {port} and all, for editing; empty from older daemons.</summary>
+        public string Configured { get; init; } = "";
+        /// <summary>Why it fails or can't start.</summary>
+        public string Problem { get; init; } = "";
+        /// <summary>Name for /v1/logs/services/{name}.</summary>
+        public string Log { get; init; } = "";
+
+        [JsonIgnore]
+        public bool IsRunning => State == NodeServerState.Running;
+
+        [JsonIgnore]
+        public bool IsStarting => State == NodeServerState.Starting;
+
+        [JsonIgnore]
+        public bool IsUnavailable => State == NodeServerState.Unavailable;
+
+        /// <summary>It exited or can't start (Problem says why).</summary>
+        [JsonIgnore]
+        public bool IsFailed => State is NodeServerState.Failed or NodeServerState.Unavailable;
+    }
+
+    /// <summary>Values of SiteNodeServer.State.</summary>
+    public static class NodeServerState
+    {
+        /// <summary>Started, compiling; it doesn't answer yet.</summary>
+        public const string Starting = "starting";
+        public const string Running = "running";
+        /// <summary>It exited, or can't start.</summary>
+        public const string Failed = "failed";
+        /// <summary>Its Node.js isn't installed.</summary>
+        public const string Unavailable = "unavailable";
     }
 
     /// <summary>

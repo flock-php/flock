@@ -26,6 +26,9 @@ type Spec struct {
 	Dir        string
 	LogFile    string    // stdout+stderr are appended here
 	StopSignal os.Signal // graceful stop signal; ignored on Windows (see Stop)
+	// Group stops the process's whole group (its tree on Windows), not only the process: for a
+	// launcher such as npm, whose children (a dev server) would otherwise keep running and keep its port.
+	Group bool
 
 	// Stop, when set, asks the process to exit instead of StopSignal, for processes signals can't
 	// reach (Windows). It returns once the request is made; the supervisor then waits for the exit
@@ -117,6 +120,17 @@ func (s *Supervisor) Status() []ProcStatus {
 	return out
 }
 
+// Stop stops a process, if it runs, and waits for it to exit.
+func (s *Supervisor) Stop(name string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if p, ok := s.procs[name]; ok {
+		p.halt()
+		delete(s.procs, name)
+	}
+}
+
 // Retain stops every process whose name is not in keep.
 func (s *Supervisor) Retain(keep map[string]bool) {
 	s.mu.Lock()
@@ -173,6 +187,9 @@ func (p *proc) run() {
 
 var errStopped = fmt.Errorf("stopped")
 
+// stopGrace is how long a process has to exit once asked to, before it's killed.
+var stopGrace = 10 * time.Second
+
 func (p *proc) once() error {
 	log, err := openLog(p.spec.LogFile)
 	if err != nil {
@@ -204,17 +221,44 @@ func (p *proc) once() error {
 	select {
 	case err := <-exited:
 		fmt.Fprintf(log, "[flock] %s exited: %v\n", p.spec.Name, err)
+		if p.spec.Group {
+			// What it started (a dev server, holding the port) goes too, before it starts again.
+			terminate(cmd, p.spec.StopSignal, true)
+			endGroup(cmd, time.After(stopGrace))
+		}
 		return err
 	case <-p.stop:
 		p.terminate(cmd, log)
+		grace := time.After(stopGrace)
 		select {
 		case <-exited:
-		case <-time.After(10 * time.Second):
-			_ = cmd.Process.Kill()
+		case <-grace:
+			kill(cmd, p.spec.Group)
 			<-exited
+		}
+		if p.spec.Group {
+			// The launcher may exit on the signal while a child it started ignores it.
+			endGroup(cmd, grace)
 		}
 		fmt.Fprintf(log, "[flock] %s stopped\n", p.spec.Name)
 		return errStopped
+	}
+}
+
+// endGroup waits for the rest of cmd's group to exit once cmd did, killing it at deadline.
+func endGroup(cmd *exec.Cmd, deadline <-chan time.Time) {
+	killed := false
+	for groupAlive(cmd) {
+		select {
+		case <-deadline:
+			if killed {
+				return
+			}
+			kill(cmd, true)
+			// Killed, it's gone once reaped: wait a moment, so its port is free for what starts next.
+			killed, deadline = true, time.After(time.Second)
+		case <-time.After(50 * time.Millisecond):
+		}
 	}
 }
 
@@ -227,7 +271,7 @@ func (p *proc) terminate(cmd *exec.Cmd, log io.Writer) {
 		}
 		fmt.Fprintf(log, "[flock] graceful stop of %s failed: %v\n", p.spec.Name, err)
 	}
-	terminate(cmd, p.spec.StopSignal)
+	terminate(cmd, p.spec.StopSignal, p.spec.Group)
 }
 
 // lastLine returns the last meaningful line the process logged (Flock's own markers skipped),

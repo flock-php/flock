@@ -28,8 +28,10 @@ internal sealed partial class SitesPane
         var share = site.Share;
         if (share is null)
         {
-            section.Children.Add(Ui.Caption(
-                "Show the site at a temporary public address to preview work in progress, never for production. Visitors don't get debug pages, dumps or the dev tools."));
+            // A Node.js site's visitors reach its dev server itself.
+            section.Children.Add(Ui.Caption(site.IsNode
+                ? "Show the app at a temporary public address to preview work in progress, never for production. Visitors reach its dev server, so they see what you see: its error overlay and source maps included."
+                : "Show the site at a temporary public address to preview work in progress, never for production. Visitors don't get debug pages, dumps or the dev tools."));
             var start = Ui.Button("Share…", () => Start(site.Name, () => StartShare(site)));
             start.IsEnabled = site.Url is not null;
             section.Children.Add(start);

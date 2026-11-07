@@ -43,6 +43,8 @@ func (f *fakeBackend) Catalog() *catalog.Manager               { return f.catalo
 func (f *fakeBackend) FrankenPHP() *frankenphp.Manager         { return f.frankenphp }
 func (f *fakeBackend) Binaries() *binaries.Catalog             { return f.binaries }
 func (f *fakeBackend) RestartSite(string) error                { return nil }
+func (f *fakeBackend) StartProxy(string) error                 { return nil }
+func (f *fakeBackend) StopProxy(string) error                  { return nil }
 func (f *fakeBackend) Shares() *share.Manager                  { return nil }
 func (f *fakeBackend) StartShare(string, []string, bool) error { return nil }
 func (f *fakeBackend) CreateWorktree(context.Context, WorktreeCreate) (WorktreeCreated, error) {
@@ -283,6 +285,15 @@ func TestLogsEndpoints(t *testing.T) {
 	}
 	if resp, _ := call(t, "GET", srv.URL+"/v1/logs/services/..%2Fconfig", "", ""); resp.StatusCode == http.StatusOK {
 		t.Fatal("path traversal must be rejected")
+	}
+	if resp, _ := call(t, "DELETE", srv.URL+"/v1/logs/services/..%2Fconfig", "", ""); resp.StatusCode != http.StatusBadRequest {
+		t.Fatal("clearing: path traversal must be rejected")
+	}
+	if resp, _ := call(t, "DELETE", srv.URL+"/v1/logs/services/web", "", ""); resp.StatusCode != http.StatusNoContent {
+		t.Fatalf("clear: %d", resp.StatusCode)
+	}
+	if _, body := call(t, "GET", srv.URL+"/v1/logs/services/web", "", ""); strings.TrimSpace(body) != "" {
+		t.Fatalf("cleared: %q", body)
 	}
 	if _, body := call(t, "GET", srv.URL+"/v1/logs/sites/shop", "", ""); !strings.Contains(body, `"level":"error"`) {
 		t.Fatalf("site log: %s", body)
@@ -559,6 +570,32 @@ func TestProxyEndpoints(t *testing.T) {
 		t.Fatalf("re-proxy: %+v", p)
 	}
 
+	// A command, kept when the proxy is changed otherwise; an empty one removes it and its stop command.
+	dir, _ := json.Marshal(b.root)
+	if resp, body := call(t, "PATCH", srv.URL+"/v1/proxies/soft-pack", "", `{"command":"docker compose up -d","stop_command":"docker compose stop","dir":`+string(dir)+`}`); resp.StatusCode != http.StatusOK {
+		t.Fatalf("command: %d %s", resp.StatusCode, body)
+	}
+	if resp, body := call(t, "POST", srv.URL+"/v1/proxies", "", `{"name":"soft-pack","upstream":"3002"}`); resp.StatusCode != http.StatusOK {
+		t.Fatalf("re-proxy: %d %s", resp.StatusCode, body)
+	}
+	if p, _ := b.config(t).FindProxy("soft-pack"); p.Command != "docker compose up -d" || p.StopCommand != "docker compose stop" || p.Dir != b.root {
+		t.Fatalf("command not kept: %+v", p)
+	}
+	if resp, _ := call(t, "PATCH", srv.URL+"/v1/proxies/soft-pack", "", `{"command":"npm run dev","dir":"relative"}`); resp.StatusCode != http.StatusBadRequest {
+		t.Errorf("a relative folder, got %d", resp.StatusCode)
+	}
+	if resp, body := call(t, "PATCH", srv.URL+"/v1/proxies/soft-pack", "", `{"command":""}`); resp.StatusCode != http.StatusOK {
+		t.Fatalf("no command: %d %s", resp.StatusCode, body)
+	}
+	if p, _ := b.config(t).FindProxy("soft-pack"); p.Command != "" || p.StopCommand != "" || p.Dir != "" {
+		t.Fatalf("command not removed: %+v", p)
+	}
+	for _, action := range []string{"start", "stop"} {
+		if resp, body := call(t, "POST", srv.URL+"/v1/proxies/soft-pack/"+action, "", ""); resp.StatusCode != http.StatusOK {
+			t.Errorf("%s: %d %s", action, resp.StatusCode, body)
+		}
+	}
+
 	for _, bad := range []string{`{"name":"x","upstream":"ftp://h:1"}`, `{"name":"x","upstream":""}`, `{"name":"","upstream":"3000"}`} {
 		if resp, _ := call(t, "POST", srv.URL+"/v1/proxies", "", bad); resp.StatusCode != http.StatusBadRequest {
 			t.Errorf("%s must be rejected, got %d", bad, resp.StatusCode)
@@ -573,5 +610,59 @@ func TestProxyEndpoints(t *testing.T) {
 	}
 	if resp, _ := call(t, "DELETE", srv.URL+"/v1/proxies/soft-pack", "", ""); resp.StatusCode != http.StatusBadRequest {
 		t.Fatalf("unproxying twice, got %d", resp.StatusCode)
+	}
+}
+
+func TestSitesSwitchToNodeAndBack(t *testing.T) {
+	b := &fakeBackend{root: t.TempDir()}
+	srv := serve(t, b, "")
+	cfg := b.config(t)
+	cfg.Parked = []string{t.TempDir()}
+	if err := os.Mkdir(filepath.Join(cfg.Parked[0], "app"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := cfg.Save(b.root); err != nil {
+		t.Fatal(err)
+	}
+
+	// A folder in a project folder becomes a linked site, with a port for its dev server.
+	if resp, body := call(t, "PATCH", srv.URL+"/v1/sites/app", "", `{"server":"node"}`); resp.StatusCode != http.StatusOK {
+		t.Fatalf("to Node.js: %d %s", resp.StatusCode, body)
+	}
+	site, _ := b.config(t).FindSite("app")
+	if !site.RunsNode() || site.Parked || site.Port != config.FirstSitePort {
+		t.Fatalf("site: %+v", site)
+	}
+	if resp, body := call(t, "PATCH", srv.URL+"/v1/sites/app", "", `{"server":"fastcgi"}`); resp.StatusCode != http.StatusOK {
+		t.Fatalf("back to FastCGI: %d %s", resp.StatusCode, body)
+	}
+	if site, _ := b.config(t).FindSite("app"); site.RunsNode() || site.Port != config.FirstSitePort {
+		t.Fatalf("site: %+v", site)
+	}
+}
+
+func TestNodeSitesTakeACommandOfTheirOwn(t *testing.T) {
+	b := &fakeBackend{root: t.TempDir()}
+	srv := serve(t, b, "")
+	cfg := b.config(t)
+	cfg.Upsert(config.Site{Name: "app", Path: t.TempDir()})
+	if err := cfg.Save(b.root); err != nil {
+		t.Fatal(err)
+	}
+
+	if resp, body := call(t, "PATCH", srv.URL+"/v1/sites/app", "", `{"server":"node","command":"  pnpm dev --port {port} "}`); resp.StatusCode != http.StatusOK {
+		t.Fatalf("command: %d %s", resp.StatusCode, body)
+	}
+	if site, _ := b.config(t).FindSite("app"); !site.RunsNode() || site.Command != "pnpm dev --port {port}" {
+		t.Fatalf("site: %+v", site)
+	}
+	if resp, _ := call(t, "PATCH", srv.URL+"/v1/sites/app", "", `{"command":"npm run dev\nrm -rf ~"}`); resp.StatusCode != http.StatusBadRequest {
+		t.Errorf("a command of two lines, got %d", resp.StatusCode)
+	}
+	if resp, _ := call(t, "PATCH", srv.URL+"/v1/sites/app", "", `{"command":""}`); resp.StatusCode != http.StatusOK {
+		t.Fatalf("reset: %d", resp.StatusCode)
+	}
+	if site, _ := b.config(t).FindSite("app"); site.Command != "" {
+		t.Fatalf("site: %+v", site)
 	}
 }

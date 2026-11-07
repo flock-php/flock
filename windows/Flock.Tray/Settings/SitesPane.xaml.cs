@@ -11,8 +11,8 @@ namespace Flock.Tray.Settings;
 ///     offers the project's pinned version (or the default) first, then the installed versions, which
 ///     isolate the site on this machine; the document root picker works the same way. The "…" menu
 ///     pins a version or the document root into the project or removes it again. Each site runs on
-///     php-cgi or on FrankenPHP (classic, or Laravel Octane's worker mode). Proxies (`flock proxy`)
-///     follow the sites in a group of their own.
+///     php-cgi or on FrankenPHP (classic, or Laravel Octane's worker mode), or is a Node.js app whose
+///     npm run dev Flock runs. Proxies (`flock proxy`) follow the sites in a group of their own.
 /// </summary>
 internal sealed partial class SitesPane : UserControl, ISettingsPane
 {
@@ -24,6 +24,8 @@ internal sealed partial class SitesPane : UserControl, ISettingsPane
 
     // Sites whose FrankenPHP restart is in flight.
     private readonly HashSet<string> restarting = [];
+    // Unsaved Command edits per site: a status refresh rebuilds the detail pane, and keeps them.
+    private readonly Dictionary<string, string> commandDrafts = [];
     private readonly SitesViewModel viewModel;
     private bool active;
     private CancellationTokenSource? activeLifetime;
@@ -363,10 +365,24 @@ internal sealed partial class SitesPane : UserControl, ISettingsPane
             panel.Children.Add(Warning(problem));
         }
 
-        var server = Ui.Column(2, Ui.Row(6, Ui.StatusDot(proxy.Running), Ui.Text(proxy.ServerLabel, wrap: false)));
-        if (!proxy.Running)
+        var serverRow = Ui.Row(6, Ui.StatusDot(proxy.Running), Ui.Text(proxy.ServerLabel, wrap: false));
+        if (proxy.Command is { } command)
         {
-            server.Children.Add(Ui.Caption($"Nothing answers at {proxy.UpstreamLabel} yet.", Ui.TertiaryText));
+            serverRow.Children.Add(proxy.Started
+                ? Ui.Button("Stop", () => Start(proxy.Name, () => Model.Sites.StopProxyAsync(proxy.Name)))
+                : Ui.Button("Start", () => Start(proxy.Name, () => Model.Sites.StartProxyAsync(proxy.Name))));
+            serverRow.Children.Add(Ui.Button("Show Log", () => App.Current.OpenLog(new LogsViewModel.ServiceSource(command.Log))));
+        }
+        var server = Ui.Column(2, serverRow);
+        if (proxy.Command is { State: Status.ProxyCommandState.Failed, Problem.Length: > 0 } failed)
+        {
+            server.Children.Add(Ui.Caption(failed.Problem, Ui.TertiaryText));
+        }
+        else if (!proxy.Running)
+        {
+            server.Children.Add(Ui.Caption(proxy.Command?.State == Status.ProxyCommandState.Starting
+                ? $"Waiting for {proxy.UpstreamLabel} to answer…"
+                : $"Nothing answers at {proxy.UpstreamLabel} yet.", Ui.TertiaryText));
         }
         var https = new ToggleSwitch { IsOn = proxy.Secured, MinWidth = 0 };
         Ui.AutomationName(https, "HTTPS");
@@ -379,13 +395,29 @@ internal sealed partial class SitesPane : UserControl, ISettingsPane
         var upstream = Ui.MonoText(proxy.Upstream);
         upstream.VerticalAlignment = VerticalAlignment.Center;
         var change = Ui.Button("Change…", () => Start(proxy.Name, () => ChangeUpstreamAsync(proxy)));
-        panel.Children.Add(Section("Proxy",
+        var commandText = Ui.MonoText(proxy.Command?.Command is { Length: > 0 } configured ? configured : "None");
+        commandText.VerticalAlignment = VerticalAlignment.Center;
+        var fields = new List<UIElement>
+        {
             Field("Server", server),
             Field("HTTPS", https),
             Field("Upstream", Ui.Row(8, upstream, change)),
-            Ui.Caption(
-                $"Every request passes to the upstream with its Host header, WebSocket upgrades (hot reload) included. Flock doesn't start the server, so start it as usual. Until it answers, {proxy.Domain} shows a page saying so.",
-                Ui.TertiaryText)));
+            Field("Command", Ui.Row(8, commandText, Ui.Button("Change…", () => Start(proxy.Name, () => ChangeProxyCommandAsync(proxy))))),
+        };
+        if (proxy.Command is { } runs)
+        {
+            var dir = Ui.MonoText(runs.Dir);
+            dir.VerticalAlignment = VerticalAlignment.Center;
+            fields.Add(Field("Folder", Ui.Row(8, dir, Ui.Button("Change…", () => Start(proxy.Name, () => ChangeProxyFolderAsync(proxy, runs))))));
+            var stop = Ui.MonoText(runs.StopCommand is { Length: > 0 } stopCommand ? stopCommand : "None");
+            stop.VerticalAlignment = VerticalAlignment.Center;
+            fields.Add(Field("Stop command", Ui.Row(8, stop, Ui.Button("Change…", () => Start(proxy.Name, () => ChangeProxyStopCommandAsync(proxy, runs))))));
+        }
+        fields.Add(Ui.Caption(proxy.Command is null
+                ? $"Every request passes to the upstream with its Host header, WebSocket upgrades (hot reload) included. Start the server as usual, or give the proxy a command so Flock starts it. Until it answers, {proxy.Domain} shows a page saying so."
+                : "Every request passes to the upstream with its Host header, WebSocket upgrades (hot reload) included. Flock runs the command when you click Start, with Flock's PHP and Node.js on PATH and PORT set, and keeps it running until you click Stop or quit Flock. A stop command is only for a command that starts a server in the background and exits.",
+            Ui.TertiaryText));
+        panel.Children.Add(Section("Proxy", fields.ToArray()));
 
         var card = Ui.Card(panel, new Thickness(20, 16, 16, 20));
         card.VerticalAlignment = VerticalAlignment.Top;
@@ -399,6 +431,35 @@ internal sealed partial class SitesPane : UserControl, ISettingsPane
                 "Port, host:port or URL", "Change", proxy.UpstreamLabel) is { } upstream && upstream != proxy.UpstreamLabel)
         {
             await Model.Sites.ProxyAsync(proxy.Name, upstream);
+        }
+    }
+
+    private async Task ChangeProxyCommandAsync(Status.Proxy proxy)
+    {
+        if (await Window.Ask($"The command that starts {proxy.Name}",
+                "Flock runs it through the shell when you click Start, and keeps it running until you click Stop. Leave it empty for none.",
+                "e.g. npm run dev", "Save", proxy.Command?.Command ?? "") is { } command && command.Trim() != (proxy.Command?.Command ?? ""))
+        {
+            var dir = proxy.Command?.Dir is { Length: > 0 } configured ? configured : Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+            await Model.Sites.SetProxyCommandAsync(proxy.Name, command.Trim(), dir, proxy.Command?.StopCommand ?? "");
+        }
+    }
+
+    private async Task ChangeProxyFolderAsync(Status.Proxy proxy, Status.ProxyCommand command)
+    {
+        if (await Window.Ask($"The folder {proxy.Name}'s command runs in", "A full path, e.g. C:\\Code\\softpack.", "Folder", "Save", command.Dir) is { Length: > 0 } dir && dir.Trim() != command.Dir)
+        {
+            await Model.Sites.SetProxyCommandAsync(proxy.Name, command.Command, dir.Trim(), command.StopCommand);
+        }
+    }
+
+    private async Task ChangeProxyStopCommandAsync(Status.Proxy proxy, Status.ProxyCommand command)
+    {
+        if (await Window.Ask($"The command that stops {proxy.Name}",
+                "Only for a command that starts a server in the background and exits (docker compose up -d): Stop runs this instead. Leave it empty for none.",
+                "e.g. docker compose stop", "Save", command.StopCommand) is { } stop && stop.Trim() != command.StopCommand)
+        {
+            await Model.Sites.SetProxyCommandAsync(proxy.Name, command.Command, command.Dir, stop.Trim());
         }
     }
 
@@ -417,6 +478,8 @@ internal sealed partial class SitesPane : UserControl, ISettingsPane
         var secured = row?.Secured ?? site.Secured;
         var php = row?.Php ?? site.Php;
         var node = row?.Node ?? Major(site.Node ?? "");
+        // A Node.js app's dev server serves everything: no document root, PHP version or extensions.
+        var isNode = (row?.Server ?? site.Server) == Status.SiteServer.Node;
         var panel = new StackPanel { Spacing = 20 };
 
         // Header: name, address and folder, and the site's actions.
@@ -438,8 +501,12 @@ internal sealed partial class SitesPane : UserControl, ISettingsPane
 
         var open = Ui.IconButton(Ui.GlyphOpen, $"Open {site.Url ?? site.Domain}", () => Model.Open(site));
         open.IsEnabled = site.Url is not null;
-        var actions = Ui.Row(0, open, Ui.IconButton(Ui.GlyphFolder, "Show in Explorer", () => Model.Reveal(site.Path)),
-            Ui.IconButton(Ui.GlyphPuzzle, "PHP extensions", () => Start("extensions:" + site.Name, () => ShowExtensions(site))), More(site));
+        var actions = Ui.Row(0, open, Ui.IconButton(Ui.GlyphFolder, "Show in Explorer", () => Model.Reveal(site.Path)));
+        if (!isNode)
+        {
+            actions.Children.Add(Ui.IconButton(Ui.GlyphPuzzle, "PHP extensions", () => Start("extensions:" + site.Name, () => ShowExtensions(site))));
+        }
+        actions.Children.Add(More(site, isNode));
         if (!site.Parked)
         {
             actions.Children.Add(Ui.IconButton(Ui.GlyphDelete, "Remove site", () => Start(site.Name, () => RemoveSiteAsync(site))));
@@ -489,13 +556,16 @@ internal sealed partial class SitesPane : UserControl, ISettingsPane
         {
             siteSection.Children.Add(Ui.Caption($"Subdomains only work when you add them here: {dns.WildcardProblem}.", Ui.Caution));
         }
-        siteSection.Children.Add(Field("Root", RootPicker(site)));
-        foreach (var hint in RootHints(site))
+        if (!isNode)
         {
-            siteSection.Children.Add(hint);
+            siteSection.Children.Add(Field("Root", RootPicker(site)));
+            foreach (var hint in RootHints(site))
+            {
+                siteSection.Children.Add(hint);
+            }
+            siteSection.Children.Add(Ui.Caption(
+                "The folder Flock serves the site from. One picked here applies on this machine only; pin it (…) to write it into .flockrc for everyone.", Ui.TertiaryText));
         }
-        siteSection.Children.Add(Ui.Caption(
-            "The folder Flock serves the site from. One picked here applies on this machine only; pin it (…) to write it into .flockrc for everyone.", Ui.TertiaryText));
         panel.Children.Add(siteSection);
         panel.Children.Add(Share(site));
 
@@ -506,13 +576,14 @@ internal sealed partial class SitesPane : UserControl, ISettingsPane
         var nodePicker = Picker("Node", node, site.NodeSource, Major(site.NodePinned), site.NodeFile, config?.DefaultNode ?? "",
             config?.NodeMajors ?? [],
             version => new SiteChange(Node: version), site.Name, value => row?.SetDraftNode(value));
-        var versions = Section("Versions", Field("PHP", phpPicker), Field("Node.js", nodePicker));
-        foreach (var hint in Hints(site))
+        var versions = isNode ? Section("Versions", Field("Node.js", nodePicker)) : Section("Versions", Field("PHP", phpPicker), Field("Node.js", nodePicker));
+        foreach (var hint in Hints(site, isNode))
         {
             versions.Children.Add(hint);
         }
-        versions.Children.Add(Ui.Caption(
-            "A version picked here applies on this machine only. To set it for everyone working on the project, pin it (…): PHP goes into .flockrc, Node.js into .nvmrc.",
+        versions.Children.Add(Ui.Caption(isNode
+            ? "A version picked here applies on this machine only, and restarts the dev server. To set it for everyone working on the project, pin it (…) into .nvmrc."
+            : "A version picked here applies on this machine only. To set it for everyone working on the project, pin it (…): PHP goes into .flockrc, Node.js into .nvmrc.",
             Ui.TertiaryText));
         panel.Children.Add(versions);
 
@@ -581,29 +652,42 @@ internal sealed partial class SitesPane : UserControl, ISettingsPane
     }
 
     /// <summary>
-    ///     What runs the site's PHP: php-cgi, or FrankenPHP (classic or Laravel Octane's worker mode),
-    ///     with FrankenPHP's state, Restart and its log.
+    ///     What serves the site: php-cgi, FrankenPHP (classic or Laravel Octane's worker mode) with
+    ///     FrankenPHP's state, Restart and its log, or a Node.js app's dev server.
     /// </summary>
     private StackPanel Server(Status.Site site, SiteRowViewModel? row = null)
     {
-        var franken = (row?.Server ?? site.Server) == Status.SiteServer.FrankenPhp;
+        string[] servers = [Status.SiteServer.FastCgi, Status.SiteServer.FrankenPhp, Status.SiteServer.Node];
+        var current = row?.Server ?? site.Server;
+        var selected = Math.Max(0, Array.IndexOf(servers, current));
+        var franken = current == Status.SiteServer.FrankenPhp;
+        var isNode = current == Status.SiteServer.Node;
         var server = new ComboBox { MinWidth = 140 };
         server.Items.Add(new ComboBoxItem { Content = "PHP-CGI" });
         // FrankenPHP needs PHP 8.2; a site already on it keeps the option (the daemon explains the fallback).
         server.Items.Add(new ComboBoxItem { Content = "FrankenPHP", IsEnabled = franken || SupportsFrankenPhp(site.Php) });
-        server.SelectedIndex = franken ? 1 : 0;
+        server.Items.Add(new ComboBoxItem { Content = "Node.js (npm run dev)" });
+        server.SelectedIndex = selected;
         server.SelectionChanged += (_, _) =>
         {
-            if (server.SelectedIndex < 0 || server.SelectedIndex == 1 == franken)
+            if (server.SelectedIndex < 0 || server.SelectedIndex == selected)
             {
                 return;
             }
-            var change = server.SelectedIndex == 1 ? Status.SiteServer.FrankenPhp : Status.SiteServer.FastCgi;
+            var change = servers[server.SelectedIndex];
             Start(site.Name, () => UpdateSiteAsync(site.Name, new SiteChange(Server: change), () => row?.SetDraftServer(change)), false);
         };
         Ui.AutomationName(server, "Server");
 
         var section = Section("Server", Field("Runs on", server));
+        if (isNode)
+        {
+            foreach (var line in NodeServerFields(site))
+            {
+                section.Children.Add(line);
+            }
+            return section;
+        }
         if (franken)
         {
             var octane = (row?.Worker ?? site.Worker) == Status.SiteServer.Octane;
@@ -647,9 +731,105 @@ internal sealed partial class SitesPane : UserControl, ISettingsPane
         }
         section.Children.Add(Ui.Caption(franken && !site.OctaneAvailable
             ? "FrankenPHP needs PHP 8.2 or newer. Requests that ask for Xdebug still go to PHP-CGI. For worker mode, install Laravel Octane in the project (composer require laravel/octane)."
-            : "FrankenPHP needs PHP 8.2 or newer. Requests that ask for Xdebug still go to PHP-CGI.", Ui.TertiaryText));
+            : "FrankenPHP needs PHP 8.2 or newer. Requests that ask for Xdebug still go to PHP-CGI. A Node.js app (Next.js, Nuxt, Vite): Flock runs its npm run dev.", Ui.TertiaryText));
         return section;
     }
+
+    /// <summary>
+    ///     A Node.js site's dev server: whether it runs, on which Node.js and port, the command Flock
+    ///     runs (and the site's own one), its restart and its log.
+    /// </summary>
+    private IEnumerable<UIElement> NodeServerFields(Status.Site site)
+    {
+        var ns = site.NodeServer;
+        var dot = Ui.StatusDot(ns is { IsRunning: true });
+        if (ns is { IsStarting: true })
+        {
+            dot.Fill = Ui.Caution;
+        }
+        else if (ns is { IsFailed: true })
+        {
+            dot.Fill = Ui.Critical;
+        }
+        var state = Ui.Column(2, Ui.Row(6, dot, Ui.Text(NodeStateText(ns), wrap: false)));
+        if (ns is { IsFailed: true, Problem.Length: > 0 })
+        {
+            state.Children.Add(Warning(ns.Problem));
+        }
+        if (ns is { Command.Length: > 0 })
+        {
+            var running = Ui.MonoText(ns.Command, 12);
+            running.IsTextSelectionEnabled = true;
+            running.TextWrapping = TextWrapping.Wrap;
+            state.Children.Add(running);
+        }
+        yield return Field("Dev server", state);
+
+        // The site's own command; empty: npm run dev.
+        var saved = ns is { Custom: true } ? (ns.Configured.Length > 0 ? ns.Configured : ns.Command) : "";
+        var command = new TextBox
+        {
+            PlaceholderText = "npm run dev",
+            Text = commandDrafts.TryGetValue(site.Name, out var draft) ? draft : saved,
+            MinWidth = 260,
+            FontFamily = Ui.Mono,
+        };
+        Ui.AutomationName(command, "Command");
+        command.TextChanged += (_, _) =>
+        {
+            if (command.Text == saved)
+            {
+                commandDrafts.Remove(site.Name);
+            }
+            else
+            {
+                commandDrafts[site.Name] = command.Text;
+            }
+        };
+        void Save()
+        {
+            var text = command.Text.Trim();
+            commandDrafts.Remove(site.Name);
+            if (text != saved.Trim())
+            {
+                Start(site.Name, () => Model.Sites.UpdateAsync(site.Name, new SiteChange(Command: text)));
+            }
+        }
+        command.KeyDown += (_, e) =>
+        {
+            if (e.Key == Windows.System.VirtualKey.Enter)
+            {
+                Save();
+            }
+        };
+        var save = Ui.Button("Save", Save, tooltip: "Run this command instead of npm run dev; it restarts the dev server");
+        yield return Field("Command", Ui.Column(4, Ui.Row(8, command, save),
+            Ui.Caption("Leave empty for npm run dev. {port} is replaced by the dev server's port; PORT is set too.", Ui.TertiaryText)));
+
+        var restart = Ui.Button("Restart", () => Start(site.Name, () => Restart(site.Name)),
+            tooltip: ns is { Custom: true } ? "Restart the dev server" : $"Restart npm run {ns?.Script ?? "dev"}");
+        restart.IsEnabled = ns is { IsUnavailable: false } && !restarting.Contains(site.Name);
+        var log = ns is { Log.Length: > 0 } n ? n.Log : $"node-{site.Name}";
+        var buttons = Ui.Row(8, restart, Ui.Button("Show Log", () => App.Current.OpenLog(new LogsViewModel.ServiceSource(log))));
+        if (restarting.Contains(site.Name))
+        {
+            buttons.Children.Insert(0, new ProgressRing { Width = 16, Height = 16 });
+        }
+        yield return buttons;
+        yield return Ui.Caption(
+            $"Flock runs the dev server in the project with the Node.js under Versions on port {(ns is { Port: > 0 } ? ns.Port.ToString(System.Globalization.CultureInfo.CurrentCulture) : "…")}, restarts it when it exits, and serves the site's domains and HTTPS from it, hot reload included. A Node.js version picked or pinned here restarts it.",
+            Ui.TertiaryText);
+    }
+
+    private static string NodeStateText(Status.SiteNodeServer? ns) => ns switch
+    {
+        null => "Starting…",
+        { IsRunning: true } => $"Running on Node.js {ns.Version} — port {ns.Port}",
+        { IsStarting: true } => ns.Version.Length > 0 ? $"Starting on Node.js {ns.Version}…" : "Starting…",
+        { IsUnavailable: true } => "Node.js isn't installed",
+        { IsFailed: true } => "Not running",
+        _ => "Unknown",
+    };
 
     /// <summary>The status lines of a site's FrankenPHP: running, downloading, or why php-cgi serves it meanwhile.</summary>
     private static IEnumerable<UIElement> FrankenPhpState(Status.Site site, Status.SiteFrankenPhp state)
@@ -850,9 +1030,9 @@ internal sealed partial class SitesPane : UserControl, ISettingsPane
     }
 
     /// <summary>Notes when versions disagree: an isolation over the project's pin, .flockrc over .nvmrc.</summary>
-    private IEnumerable<UIElement> Hints(Status.Site site)
+    private IEnumerable<UIElement> Hints(Status.Site site, bool isNode = false)
     {
-        if (site.PhpSource == Status.VersionSource.Isolated && site.PhpPinned.Length > 0 && site.PhpPinned != site.Php)
+        if (!isNode && site.PhpSource == Status.VersionSource.Isolated && site.PhpPinned.Length > 0 && site.PhpPinned != site.Php)
         {
             yield return Hint($"PHP {site.Php} is isolated here; the project pins {site.PhpPinned} in {Path.GetFileName(site.PhpFile)}.",
                 $"Use {Path.GetFileName(site.PhpFile)}", () => Start(site.Name, () => Model.Sites.UpdateAsync(site.Name, new SiteChange(Php: ""))));
@@ -1051,14 +1231,15 @@ internal sealed partial class SitesPane : UserControl, ISettingsPane
         return hint;
     }
 
-    private Button More(Status.Site site)
+    private Button More(Status.Site site, bool isNode = false)
     {
         var menu = new MenuFlyout();
         var nodeMajor = Major(site.Node ?? "");
         var nodeFile = site.NodePinnedHere ? Path.GetFileName(site.NodeFile) : ".nvmrc";
 
         // Pin and unpin items appear only when there is something to pin or unpin (the menu always has the domain items).
-        if (site.Php.Length > 0 && !(site.PhpSource == Status.VersionSource.Project && site.PhpPinnedHere))
+        // A Node.js app has no PHP version or document root to pin (unpinning stays offered).
+        if (!isNode && site.Php.Length > 0 && !(site.PhpSource == Status.VersionSource.Project && site.PhpPinnedHere))
         {
             menu.Items.Add(Item($"Pin PHP {site.Php} to Project…", () => Start(site.Name, () => Pin(site, "php", site.Php,
                 $"Writes php={site.Php} to .flockrc in {site.Path}. Commit it, and everyone using Flock on this project gets PHP {site.Php}."))));
@@ -1068,7 +1249,7 @@ internal sealed partial class SitesPane : UserControl, ISettingsPane
             menu.Items.Add(Item($"Pin Node {nodeMajor} to Project…", () => Start(site.Name, () => Pin(site, "node", nodeMajor,
                 $"Writes {nodeMajor} to {nodeFile} in {site.Path}. Commit it, and Flock, nvm and other Node tools use Node {nodeMajor} for this project."))));
         }
-        if (site.RootState is "" or Status.DocumentRootState.Empty && site.RootSource != Status.VersionSource.Project)
+        if (!isNode && site.RootState is "" or Status.DocumentRootState.Empty && site.RootSource != Status.VersionSource.Project)
         {
             menu.Items.Add(Item($"Pin Document Root ({RootLabel(site.Root)}) to Project…", () => Start(site.Name, () => Pin(site, "root", site.Root,
                 $"Writes root={site.Root} to .flockrc in {site.Path}. Commit it, and everyone using Flock on this project serves it from {RootLabel(site.Root)}."))));

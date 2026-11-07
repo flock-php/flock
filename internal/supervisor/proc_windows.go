@@ -5,6 +5,7 @@ package supervisor
 import (
 	"os"
 	"os/exec"
+	"strconv"
 	"sync"
 	"syscall"
 	"unsafe"
@@ -19,10 +20,27 @@ func configure(cmd *exec.Cmd) {
 }
 
 // terminate kills the process: Windows has no portable graceful signal for console-less children
-// (services that can be asked to exit another way set Spec.Stop).
-func terminate(cmd *exec.Cmd, _ os.Signal) {
+// (services that can be asked to exit another way set Spec.Stop). With group, its children too.
+func terminate(cmd *exec.Cmd, _ os.Signal, group bool) {
+	kill(cmd, group)
+}
+
+// kill ends a process, with group its whole tree: taskkill /T follows the parent links, so npm's
+// dev server goes too (it would keep its port until the daemon exits, see started).
+func kill(cmd *exec.Cmd, group bool) {
+	if group {
+		tree := exec.Command("taskkill", "/T", "/F", "/PID", strconv.Itoa(cmd.Process.Pid))
+		configure(tree)
+		if tree.Run() == nil {
+			return
+		}
+	}
 	_ = cmd.Process.Kill()
 }
+
+// groupAlive is false on Windows: kill takes the whole tree at once, and a child that outlives its
+// parent can't be found from it there.
+func groupAlive(*exec.Cmd) bool { return false }
 
 var (
 	jobOnce sync.Once

@@ -232,11 +232,41 @@ public class DecodingTests
     }
 
     [Fact]
+    public void DecodesANodeSitesDevServer()
+    {
+        var status = FlockJson.Decode<Status>("""
+            {"version":"dev","pid":1,"started_at":"2026-10-13T14:10:01Z",
+             "sites":[{"name":"softpack","domain":"softpack.test","path":"C:\\code\\softpack","server":"node",
+                       "node_server":{"state":"running","version":"22.23.4","script":"dev","port":21001,"log":"node-softpack","command":"pnpm dev --port 21001","custom":true,"configured":"pnpm dev --port {port}"}},
+                      {"name":"web","domain":"web.test","path":"C:\\code\\web","server":"node",
+                       "node_server":{"state":"failed","port":21002,"problem":"npm run dev exited: missing script","log":"node-web"}},
+                      {"name":"shop","domain":"shop.test","path":"C:\\code\\shop","server":"fastcgi"}]}
+            """);
+
+        var softpack = status.Sites[0];
+        Assert.True(softpack.IsNode);
+        Assert.False(softpack.IsFrankenPhp);
+        var node = softpack.NodeServer!;
+        Assert.True(node.IsRunning);
+        Assert.Equal(("22.23.4", "dev", 21001, "node-softpack", ""), (node.Version, node.Script, node.Port, node.Log, node.Problem));
+        Assert.Equal(("pnpm dev --port 21001", true, "pnpm dev --port {port}"), (node.Command, node.Custom, node.Configured));
+        var web = status.Sites[1].NodeServer!;
+        Assert.True(web.IsFailed);
+        Assert.False(web.IsRunning);
+        // Fields the daemon leaves out keep their defaults.
+        Assert.Equal(("", "dev", "", false, ""), (web.Version, web.Script, web.Command, web.Custom, web.Configured));
+        Assert.NotEmpty(web.Problem);
+        Assert.False(status.Sites[2].IsNode);
+        Assert.Null(status.Sites[2].NodeServer);
+    }
+
+    [Fact]
     public void DecodesProxies()
     {
         var status = FlockJson.Decode<Status>("""
             {"version":"dev","pid":1,"started_at":"2026-10-13T14:10:01Z",
-             "proxies":[{"name":"softpack","domain":"softpack.test","upstream":"http://127.0.0.1:3000","secured":true,"url":"https://softpack.test","running":true,"server":"Node.js 22.23.4"},
+             "proxies":[{"name":"softpack","domain":"softpack.test","upstream":"http://127.0.0.1:3000","secured":true,"url":"https://softpack.test","running":true,"server":"Node.js 22.23.4",
+                         "command":{"command":"npm run dev","dir":"C:\\Code\\softpack","stop_command":"","state":"running","log":"proxy-softpack"}},
                         {"name":"blog","domain":"blog.test","upstream":"https://127.0.0.1:8443","secured":false,"problem":"blog.test is served by a site of the same name","running":false}]}
             """);
 
@@ -247,7 +277,12 @@ public class DecodingTests
         Assert.True(softpack.Running);
         Assert.Equal("Node.js 22.23.4", softpack.ServerLabel);
         Assert.Equal("127.0.0.1:3000", softpack.UpstreamLabel);
+        Assert.Equal(("npm run dev", @"C:\Code\softpack", "", Status.ProxyCommandState.Running, "proxy-softpack"),
+            (softpack.Command!.Command, softpack.Command.Dir, softpack.Command.StopCommand, softpack.Command.State, softpack.Command.Log));
+        Assert.True(softpack.Started);
         var blog = status.Proxies[1];
+        Assert.Null(blog.Command);
+        Assert.False(blog.Started);
         Assert.Null(blog.Url);
         Assert.NotNull(blog.Problem);
         Assert.False(blog.Running);
