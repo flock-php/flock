@@ -190,11 +190,27 @@ internal sealed partial class SitesPane : UserControl, ISettingsPane
         }
     }
 
+    /// <summary>Asks for a folder, then for the domain to serve it as (<see cref="AddSiteView"/>), and adds it.</summary>
     private async Task AddSiteAsync()
     {
-        if (await Window.PickFolder() is { } path)
+        if (await Window.PickFolder() is not { } path)
         {
-            await Model.Sites.LinkAsync(path);
+            return;
+        }
+        var folder = Path.GetFileName(Path.TrimEndingDirectorySeparator(path));
+        var form = new AddSiteView(folder, Model.Status?.Dns.Tld is { Length: > 0 } tld ? tld : "test");
+        var dialog = new ContentDialog
+        {
+            Title = $"Add {folder}",
+            Content = form,
+            PrimaryButtonText = "Add",
+            CloseButtonText = "Cancel",
+            DefaultButton = ContentDialogButton.Primary,
+            XamlRoot = Window.XamlRoot,
+        };
+        if (await dialog.ShowAsync() == ContentDialogResult.Primary)
+        {
+            await Model.Sites.LinkAsync(path, form.Domain);
         }
     }
 

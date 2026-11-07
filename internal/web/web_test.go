@@ -16,6 +16,7 @@ func testConfig() Config {
 		Sites: []Site{
 			{Domain: "plain.test", Root: "/code/plain/public", FPM: []string{"unix//run/php85.sock"}},
 			{Domain: "safe.test", Root: "/code/safe/public", FPM: []string{"unix//run/php84.sock"}, CertFile: "/c/safe.crt", KeyFile: "/c/safe.key"},
+			{Name: "filament-ui-playground", Domain: "filament.ui-playground.test", Root: "/code/filament/public", FPM: []string{"unix//run/php85.sock"}},
 		},
 	}
 }
@@ -38,6 +39,8 @@ func TestCaddyfileRoutesSitesAndSubdomains(t *testing.T) {
 		"rewrite * /unlinked.html",
 		"https://plain.test:443, https://*.plain.test:443, https://*.*.plain.test:443, https://*.*.*.plain.test:443, https://*.*.*.*.plain.test:443 {",
 		`vars flock_site "plain"`,
+		"http://filament.ui-playground.test:80, http://*.filament.ui-playground.test:80,",
+		`vars flock_site "filament-ui-playground"`,
 		`php_fastcgi "unix//run/php84.sock"`,
 		`storage file_system "/data/Application Support/caddy"`,
 		"abort @remote",
