@@ -5,6 +5,7 @@ using Flock.Kit;
 using Flock.Tray.Infrastructure;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Media.Imaging;
 namespace Flock.Tray.Settings;
 
 internal sealed partial class AboutPane : UserControl, ISettingsPane
@@ -17,6 +18,7 @@ internal sealed partial class AboutPane : UserControl, ISettingsPane
     {
         this.model = model;
         InitializeComponent();
+        AppIcon.Source = new BitmapImage(new Uri(Path.Combine(AppContext.BaseDirectory, "Assets", "AppIcon.png")));
         version = Assembly.GetExecutingAssembly().GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion ?? "dev";
         viewModel = new AboutViewModel(model);
         DataContext = viewModel;

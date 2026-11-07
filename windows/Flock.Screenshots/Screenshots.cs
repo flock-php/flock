@@ -13,6 +13,7 @@ internal sealed class Screenshots(Screenshots.Options options)
     private static readonly Shot[] All =
     [
         new("settings-general-project-folders", app => app.ShowSettings(SettingsPane.General, "Updates")),
+        new("settings-general-daemon", app => app.ShowSettings(SettingsPane.General)),
         new("settings-sites", app => app.ShowSite("shop")),
         new("settings-sites-https", app => app.ShowSite("acme")),
         new("settings-sites-add-domain", app => app.ShowAddDomain("acme", "admin")),
@@ -24,6 +25,8 @@ internal sealed class Screenshots(Screenshots.Options options)
         new("settings-services-postgres", app => app.ShowService("postgres")),
         new("settings-services-install", app => app.ShowService("mariadb")),
         new("settings-debugger", app => app.ShowSettings(SettingsPane.Debugger)),
+        new("settings-mail", app => app.ShowSettings(SettingsPane.Mail)),
+        new("settings-about", app => app.ShowSettings(SettingsPane.About)),
         new("logs-window", app => app.ShowLog("acme")),
         new("mail-window", app => app.ShowMail()),
         new("dumps-window", app => app.ShowWindow(WindowKind.Dumps)),

@@ -7,58 +7,158 @@
         <settings:InverseBooleanVisibilityConverter x:Key="InverseBooleanVisibilityConverter" />
         <settings:StatusBrushConverter x:Key="StatusBrushConverter" />
         <settings:StringVisibilityConverter x:Key="StringVisibilityConverter" />
+        <Style x:Key="ServiceFilterSegmentStyle" TargetType="RadioButton">
+            <Setter Property="HorizontalAlignment" Value="Stretch" />
+            <Setter Property="VerticalAlignment" Value="Stretch" />
+            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+            <Setter Property="ContentTemplate">
+                <Setter.Value>
+                    <DataTemplate>
+                        <TextBlock Text="{Binding}" TextWrapping="Wrap" TextAlignment="Center" />
+                    </DataTemplate>
+                </Setter.Value>
+            </Setter>
+            <Setter Property="MinWidth" Value="0" />
+            <Setter Property="MinHeight" Value="32" />
+            <Setter Property="UseSystemFocusVisuals" Value="True" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="RadioButton">
+                        <Border x:Name="Segment" Background="Transparent" CornerRadius="4">
+                            <VisualStateManager.VisualStateGroups>
+                                <VisualStateGroup x:Name="CommonStates">
+                                    <VisualStateGroup.Transitions>
+                                        <VisualTransition From="Normal" To="PointerOver">
+                                            <Storyboard>
+                                                <DoubleAnimation Storyboard.TargetName="InteractionBackground" Storyboard.TargetProperty="Opacity"
+                                                                 To="1" Duration="0:0:0.1" />
+                                            </Storyboard>
+                                        </VisualTransition>
+                                        <VisualTransition To="Normal">
+                                            <Storyboard>
+                                                <DoubleAnimation Storyboard.TargetName="InteractionBackground" Storyboard.TargetProperty="Opacity"
+                                                                 To="0" Duration="0:0:0.1" />
+                                            </Storyboard>
+                                        </VisualTransition>
+                                    </VisualStateGroup.Transitions>
+                                    <VisualState x:Name="Normal" />
+                                    <VisualState x:Name="PointerOver">
+                                        <VisualState.Setters>
+                                            <Setter Target="InteractionBackground.Opacity" Value="1" />
+                                        </VisualState.Setters>
+                                    </VisualState>
+                                    <VisualState x:Name="Pressed">
+                                        <VisualState.Setters>
+                                            <Setter Target="InteractionBackground.Opacity" Value="1" />
+                                            <Setter Target="InteractionBackground.Background" Value="{ThemeResource SubtleFillColorTertiaryBrush}" />
+                                        </VisualState.Setters>
+                                    </VisualState>
+                                    <VisualState x:Name="Disabled">
+                                        <VisualState.Setters>
+                                            <Setter Target="Segment.Opacity" Value="0.4" />
+                                        </VisualState.Setters>
+                                    </VisualState>
+                                </VisualStateGroup>
+                                <VisualStateGroup x:Name="CheckStates">
+                                    <VisualStateGroup.Transitions>
+                                        <VisualTransition From="Unchecked" To="Checked">
+                                            <Storyboard>
+                                                <DoubleAnimation Storyboard.TargetName="SelectedBackground" Storyboard.TargetProperty="Opacity"
+                                                                 To="1" Duration="0:0:0.15" />
+                                            </Storyboard>
+                                        </VisualTransition>
+                                        <VisualTransition From="Checked" To="Unchecked">
+                                            <Storyboard>
+                                                <DoubleAnimation Storyboard.TargetName="SelectedBackground" Storyboard.TargetProperty="Opacity"
+                                                                 To="0" Duration="0:0:0.15" />
+                                            </Storyboard>
+                                        </VisualTransition>
+                                    </VisualStateGroup.Transitions>
+                                    <VisualState x:Name="Unchecked" />
+                                    <VisualState x:Name="Checked">
+                                        <VisualState.Setters>
+                                            <Setter Target="SelectedBackground.Opacity" Value="1" />
+                                            <Setter Target="SegmentContent.Foreground" Value="{ThemeResource TextOnAccentFillColorPrimaryBrush}" />
+                                        </VisualState.Setters>
+                                    </VisualState>
+                                </VisualStateGroup>
+                            </VisualStateManager.VisualStateGroups>
+                            <Grid>
+                                <Border x:Name="SelectedBackground" Background="{ThemeResource AccentFillColorDefaultBrush}" CornerRadius="4" Opacity="0" />
+                                <Border x:Name="InteractionBackground" Background="{ThemeResource SubtleFillColorSecondaryBrush}" CornerRadius="4" Opacity="0" />
+                                <ContentPresenter x:Name="SegmentContent" Content="{TemplateBinding Content}" ContentTemplate="{TemplateBinding ContentTemplate}" Margin="8,6"
+                                                  Foreground="{TemplateBinding Foreground}"
+                                                  FontFamily="{TemplateBinding FontFamily}" FontSize="{TemplateBinding FontSize}" FontWeight="{TemplateBinding FontWeight}"
+                                                  HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}" VerticalAlignment="Center" />
+                            </Grid>
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
     </UserControl.Resources>
-    <Grid ColumnSpacing="16">
+    <Grid ColumnSpacing="16" RowSpacing="8">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" /><RowDefinition Height="*" />
+        </Grid.RowDefinitions>
         <Grid.ColumnDefinitions>
             <ColumnDefinition Width="240" /><ColumnDefinition Width="*" MinWidth="360" />
         </Grid.ColumnDefinitions>
-        <Grid Grid.Column="0" RowSpacing="4">
-            <Grid.RowDefinitions>
-                <RowDefinition Height="Auto" /><RowDefinition Height="*" />
-            </Grid.RowDefinitions>
-            <SelectorBar x:Name="Filter" SelectionChanged="FilterChanged" ToolTipService.ToolTip="Show only installed services, or every service Flock offers"
-                         Margin="-4,-8,0,4">
-                <SelectorBarItem Text="Installed" />
-                <SelectorBarItem Text="All" />
-            </SelectorBar>
-            <ScrollViewer Grid.Row="1" x:Name="ListScroller" VerticalScrollBarVisibility="Auto">
-                <ItemsControl ItemsSource="{Binding VisibleServiceGroups}">
-                    <ItemsControl.ItemTemplate>
-                        <DataTemplate>
-                            <StackPanel Spacing="8" Margin="0,8,0,12">
-                                <TextBlock Text="{Binding Name}" Style="{StaticResource BodyStrongTextBlockStyle}" />
-                                <ItemsControl ItemsSource="{Binding Services}">
-                                    <ItemsControl.ItemTemplate>
-                                        <DataTemplate>
-                                            <Button Click="ServiceSelected" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch" Padding="12,10">
-                                                <Grid ColumnSpacing="8">
-                                                    <Grid.ColumnDefinitions>
-                                                        <ColumnDefinition Width="Auto" /><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" />
-                                                    </Grid.ColumnDefinitions>
-                                                    <Ellipse Style="{StaticResource StatusDotStyle}"
-                                                             Fill="{Binding Running, Converter={StaticResource StatusBrushConverter}}" />
-                                                    <StackPanel Grid.Column="1" Spacing="2">
-                                                        <TextBlock Text="{Binding Name}" Style="{StaticResource BodyStrongTextBlockStyle}" />
-                                                        <TextBlock Text="{Binding ListDetail}"
-                                                                   Visibility="{Binding ListDetail, Converter={StaticResource StringVisibilityConverter}}"
-                                                                   Style="{StaticResource CaptionTextBlockStyle}"
-                                                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                                                    </StackPanel>
-                                                    <TextBlock Grid.Column="2" Text="Install…" VerticalAlignment="Center"
-                                                               Visibility="{Binding Installed, Converter={StaticResource InverseBooleanVisibilityConverter}}"
-                                                               Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}" />
-                                                </Grid>
-                                            </Button>
-                                        </DataTemplate>
-                                    </ItemsControl.ItemTemplate>
-                                </ItemsControl>
-                            </StackPanel>
-                        </DataTemplate>
-                    </ItemsControl.ItemTemplate>
-                </ItemsControl>
-            </ScrollViewer>
-        </Grid>
-        <ScrollViewer Grid.Column="1" x:Name="DetailScroller" VerticalScrollBarVisibility="Auto" HorizontalScrollMode="Disabled" HorizontalScrollBarVisibility="Disabled">
+        <Border Grid.Column="0" Margin="0,0,14,0" Padding="2" CornerRadius="6"
+                Background="{ThemeResource SubtleFillColorSecondaryBrush}" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1">
+            <Grid ColumnSpacing="2" ToolTipService.ToolTip="Show only installed services, or every service Flock offers">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" /><ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                <RadioButton x:Name="AllFilter" Content="All" GroupName="ServiceFilter" Checked="FilterChanged"
+                             Style="{StaticResource ServiceFilterSegmentStyle}" />
+                <RadioButton x:Name="InstalledFilter" Grid.Column="1" Content="Installed" GroupName="ServiceFilter" Checked="FilterChanged"
+                             Style="{StaticResource ServiceFilterSegmentStyle}" />
+            </Grid>
+        </Border>
+        <ScrollViewer Grid.Row="1" x:Name="ListScroller" VerticalScrollBarVisibility="Auto"
+                      HorizontalScrollMode="Disabled" HorizontalScrollBarVisibility="Disabled">
+            <ItemsControl ItemsSource="{Binding VisibleServiceGroups}" Margin="0,0,14,0">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate>
+                        <StackPanel Spacing="8" Margin="0,8,0,12">
+                            <TextBlock Text="{Binding Name}" Style="{StaticResource BodyStrongTextBlockStyle}" />
+                            <ItemsControl ItemsSource="{Binding Services}">
+                                <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate>
+                                        <StackPanel Spacing="4" />
+                                    </ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Button Click="ServiceSelected" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch" Padding="12,10">
+                                            <Grid ColumnSpacing="8">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="Auto" /><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" />
+                                                </Grid.ColumnDefinitions>
+                                                <Ellipse Style="{StaticResource StatusDotStyle}"
+                                                         Fill="{Binding Running, Converter={StaticResource StatusBrushConverter}}" />
+                                                <StackPanel Grid.Column="1" Spacing="2">
+                                                    <TextBlock Text="{Binding Name}" Style="{StaticResource BodyStrongTextBlockStyle}" />
+                                                    <TextBlock Text="{Binding ListDetail}"
+                                                               Visibility="{Binding ListDetail, Converter={StaticResource StringVisibilityConverter}}"
+                                                               Style="{StaticResource CaptionTextBlockStyle}"
+                                                               Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                                </StackPanel>
+                                                <TextBlock Grid.Column="2" Text="Install…" VerticalAlignment="Center"
+                                                           Visibility="{Binding Installed, Converter={StaticResource InverseBooleanVisibilityConverter}}"
+                                                           Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}" />
+                                            </Grid>
+                                        </Button>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </StackPanel>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+        </ScrollViewer>
+        <ScrollViewer Grid.RowSpan="2" Grid.Column="1" x:Name="DetailScroller" VerticalScrollBarVisibility="Auto" HorizontalScrollMode="Disabled" HorizontalScrollBarVisibility="Disabled">
             <ContentControl x:Name="DetailHost" HorizontalContentAlignment="Stretch" VerticalContentAlignment="Stretch" />
         </ScrollViewer>
     </Grid>

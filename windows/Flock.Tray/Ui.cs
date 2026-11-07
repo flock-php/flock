@@ -55,6 +55,20 @@ internal static class Ui
 
     public static Brush Brush(string key) => Resource<Brush>(key);
 
+    /// <summary>Uses the flyout palette without depending on an acrylic backdrop behind a constrained popup.</summary>
+    public static Style OpaqueMenuPresenterStyle()
+    {
+        var background = Brush("AcrylicBackgroundFillColorDefaultBrush");
+        return new Style(typeof(MenuFlyoutPresenter))
+        {
+            Setters =
+            {
+                new Setter(Control.BackgroundProperty,
+                    background is AcrylicBrush acrylic ? new SolidColorBrush(acrylic.FallbackColor) : background),
+            },
+        };
+    }
+
     public static Brush SecondaryText => Brush("TextFillColorSecondaryBrush");
     public static Brush TertiaryText => Brush("TextFillColorTertiaryBrush");
     public static Brush Success => Brush("SystemFillColorSuccessBrush");

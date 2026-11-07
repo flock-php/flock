@@ -9,12 +9,12 @@
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
-                    <StackPanel Spacing="1">
+                    <StackPanel Spacing="1" VerticalAlignment="Center">
                         <TextBlock Text="Capture dumps" />
                         <TextBlock Text="Turn it off to see dumps in the page again." Style="{StaticResource CaptionTextBlockStyle}"
                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
                     </StackPanel>
-                    <ToggleSwitch Grid.Column="1" MinWidth="0" IsOn="{Binding Capturing, Mode=TwoWay}" OnContent="" OffContent="" />
+                    <ToggleSwitch Grid.Column="1" MinWidth="0" IsOn="{Binding Capturing, Mode=TwoWay}" OnContent="" OffContent="" VerticalAlignment="Center" />
                 </Grid>
             </Border>
             <Border Style="{StaticResource CardStyle}">
@@ -22,7 +22,7 @@
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
-                    <TextBlock Text="Captured" /><Button Grid.Column="1" Content="Open Dumps" Click="OpenDumps" />
+                    <TextBlock Text="Captured" VerticalAlignment="Center" /><Button Grid.Column="1" Content="Open Dumps" Click="OpenDumps" VerticalAlignment="Center" />
                 </Grid>
             </Border>
         </StackPanel>
@@ -33,7 +33,7 @@
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
-                    <TextBlock Text="Open files in" /><ComboBox x:Name="Editor" Grid.Column="1" MinWidth="160" SelectionChanged="EditorChanged" />
+                    <TextBlock Text="Open files in" VerticalAlignment="Center" /><ComboBox x:Name="Editor" Grid.Column="1" MinWidth="160" SelectionChanged="EditorChanged" VerticalAlignment="Center" />
                 </Grid>
             </Border>
         </StackPanel>

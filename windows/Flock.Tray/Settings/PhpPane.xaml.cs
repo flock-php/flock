@@ -7,6 +7,7 @@ using Flock.Tray.Infrastructure;
 using Flock.Tray.ViewModels;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Controls.Primitives;
 namespace Flock.Tray.Settings;
 
 internal sealed partial class PhpPane : UserControl, ISettingsPane
@@ -146,7 +147,12 @@ internal sealed partial class PhpPane : UserControl, ISettingsPane
     {
         if (sender is Button button && Row(button) is { } row)
         {
-            var menu = new MenuFlyout();
+            var menu = new MenuFlyout
+            {
+                Placement = FlyoutPlacementMode.BottomEdgeAlignedRight,
+                ShouldConstrainToRootBounds = true,
+                MenuFlyoutPresenterStyle = Ui.OpaqueMenuPresenterStyle(),
+            };
             var ini = model.Configuration.Current?.Php.FirstOrDefault(version => version.Version == row.Minor)?.Ini;
             if (ini is { Length: > 0 })
             {
@@ -217,7 +223,12 @@ internal sealed partial class PhpPane : UserControl, ISettingsPane
     {
         if (sender is Button button && button.DataContext is FrankenPhpVersionViewModel row)
         {
-            var menu = new MenuFlyout();
+            var menu = new MenuFlyout
+            {
+                Placement = FlyoutPlacementMode.BottomEdgeAlignedRight,
+                ShouldConstrainToRootBounds = true,
+                MenuFlyoutPresenterStyle = Ui.OpaqueMenuPresenterStyle(),
+            };
             if (row.HasRunningJob)
             {
                 menu.Items.Add(Item("Show log", () => ShowFrankenLog(row)));
