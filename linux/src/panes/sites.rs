@@ -11,6 +11,7 @@
 //! daemon refuses it), so one selection covers both.
 
 use std::cell::{Cell, RefCell};
+use std::collections::HashMap;
 use std::rc::Rc;
 
 use adw::prelude::*;
@@ -22,8 +23,8 @@ use super::versions::{MenuItem, badge, button, more_menu};
 use super::worktree_job;
 use super::{Data, Pane};
 use crate::api::{
-    Branches, Client, Config, Error, ExtensionReport, PhpExtension, ProxyStatus, ShareStatus, SiteChange, SiteStatus, Status,
-    WorktreeStatus,
+    Branches, Client, Config, Error, ExtensionReport, PhpExtension, ProxyStatus, ShareStatus, SiteChange, SiteNodeServer, SiteStatus,
+    Status, WorktreeStatus,
 };
 use crate::links::{self, Link};
 use crate::model::AppModel;
@@ -42,8 +43,10 @@ struct Inner {
     status: RefCell<Option<Status>>,
     config: RefCell<Option<Config>>,
     selected: RefCell<Option<String>>,
-    /// The FrankenPHP site that is restarting.
+    /// The FrankenPHP or Node.js site that is restarting.
     restarting: RefCell<Option<String>>,
+    /// Unsaved Command edits per site: a status refresh renders the detail again, and keeps them.
+    command_drafts: RefCell<HashMap<String, String>>,
     shown: RefCell<Option<String>>,
     /// The sites whose worktrees the list shows (prefs.rs).
     expanded: RefCell<Vec<String>>,
@@ -59,6 +62,9 @@ struct Removal {
     label: String,
     parent: String,
 }
+
+/// What can serve a site, as the API names it and as Runs on offers it.
+const SERVERS: [(&str, &str); 3] = [("fastcgi", "PHP-FPM"), ("frankenphp", "FrankenPHP"), ("node", "Node.js (npm run dev)")];
 
 /// The database modes of a worktree, and how the Database rows name them.
 const DB_MODES: [&str; 3] = ["shared", "copy", "fresh"];
@@ -81,6 +87,7 @@ impl SitesPane {
             config: RefCell::default(),
             selected: RefCell::default(),
             restarting: RefCell::default(),
+            command_drafts: RefCell::default(),
             shown: RefCell::default(),
             expanded: RefCell::new(prefs::load().expanded_sites),
             removing: RefCell::default(),
@@ -460,10 +467,12 @@ impl Inner {
         let path = site.path.clone();
         folder.connect_clicked(move |b| launch_file(b, &path));
         actions.append(&folder);
-        let extensions = icon_button("application-x-addon-symbolic", "PHP extensions");
-        let (this, s) = (self.clone(), site.clone());
-        extensions.connect_clicked(move |_| this.show_extensions(&s));
-        actions.append(&extensions);
+        if !site.is_node() {
+            let extensions = icon_button("application-x-addon-symbolic", "PHP extensions");
+            let (this, s) = (self.clone(), site.clone());
+            extensions.connect_clicked(move |_| this.show_extensions(&s));
+            actions.append(&extensions);
+        }
         actions.append(&self.pin_menu(site));
         if !site.parked {
             let remove = icon_button("user-trash-symbolic", "Remove site");
@@ -491,7 +500,11 @@ impl Inner {
     fn site_group(self: &Rc<Self>, site: &SiteStatus, status: &Status) -> adw::PreferencesGroup {
         let group = group(
             "Site",
-            "The document root is the folder Flock serves the site from. One picked here applies on this machine only; pin it to write it into .flockrc for everyone.",
+            if site.is_node() {
+                ""
+            } else {
+                "The document root is the folder Flock serves the site from. One picked here applies on this machine only; pin it to write it into .flockrc for everyone."
+            },
         );
         let https = adw::SwitchRow::builder().title("HTTPS").active(site.secured).build();
         let (this, name) = (self.clone(), site.name.clone());
@@ -543,6 +556,10 @@ impl Inner {
             );
         }
 
+        // A Node.js app's dev server serves everything; it has no document root.
+        if site.is_node() {
+            return group;
+        }
         group.add(&self.root_row(site));
         if let Some(hint) = root_hint(site) {
             let row = adw::ActionRow::builder()
@@ -668,7 +685,11 @@ impl Inner {
         };
         match &site.share {
             None => {
-                group.set_description(Some("Show the site at a temporary public address to preview work in progress, never for production. Visitors don't get debug pages, dumps or the dev tools."));
+                group.set_description(Some(if site.is_node() {
+                    "Show the app at a temporary public address to preview work in progress, never for production. Visitors reach its dev server, so they see what you see: its error overlay and source maps included."
+                } else {
+                    "Show the site at a temporary public address to preview work in progress, never for production. Visitors don't get debug pages, dumps or the dev tools."
+                }));
                 let row = adw::ActionRow::new();
                 let (this, n) = (self.clone(), name.clone());
                 let share = button("Share…", false, move || this.ask_share(&n));
@@ -814,24 +835,31 @@ impl Inner {
     }
 
     fn versions_group(self: &Rc<Self>, site: &SiteStatus, config: &Config) -> adw::PreferencesGroup {
+        let node_app = site.is_node();
         let group = group(
             "Versions",
-            "A version picked here applies on this machine only. To set it for everyone working on the project, pin it: PHP goes into .flockrc, Node.js into .nvmrc.",
+            if node_app {
+                "A version picked here applies on this machine only, and restarts the dev server. To set it for everyone working on the project, pin it into .nvmrc."
+            } else {
+                "A version picked here applies on this machine only. To set it for everyone working on the project, pin it: PHP goes into .flockrc, Node.js into .nvmrc."
+            },
         );
         let php: Vec<String> = config.php.iter().flatten().map(|p| p.version.clone()).collect();
         let mut node: Vec<String> = config.node.iter().flatten().map(|v| major(v)).collect();
         node.dedup();
-        let (this, name) = (self.clone(), site.name.clone());
-        group.add(&version_row(
-            "PHP",
-            &site.php,
-            &site.php_source,
-            &site.php_pinned,
-            &site.php_file,
-            &config.default_php,
-            &php,
-            move |v| this.change(&name, SiteChange { php: Some(v), ..Default::default() }),
-        ));
+        if !node_app {
+            let (this, name) = (self.clone(), site.name.clone());
+            group.add(&version_row(
+                "PHP",
+                &site.php,
+                &site.php_source,
+                &site.php_pinned,
+                &site.php_file,
+                &config.default_php,
+                &php,
+                move |v| this.change(&name, SiteChange { php: Some(v), ..Default::default() }),
+            ));
+        }
         let (this, name) = (self.clone(), site.name.clone());
         group.add(&version_row(
             "Node",
@@ -843,7 +871,7 @@ impl Inner {
             &node,
             move |v| this.change(&name, SiteChange { node: Some(v), ..Default::default() }),
         ));
-        if site.php_source == "isolated" && !site.php_pinned.is_empty() && site.php_pinned != site.php {
+        if !node_app && site.php_source == "isolated" && !site.php_pinned.is_empty() && site.php_pinned != site.php {
             let file = file_name(&site.php_file);
             let row = adw::ActionRow::builder()
                 .title(glib::markup_escape_text(&format!(
@@ -885,25 +913,32 @@ impl Inner {
     }
 
     fn server_group(self: &Rc<Self>, site: &SiteStatus) -> adw::PreferencesGroup {
-        let footer = if site.server == "frankenphp" && !site.octane_available {
+        let franken = site.server == "frankenphp";
+        let footer = if site.is_node() {
+            ""
+        } else if franken && !site.octane_available {
             "FrankenPHP needs PHP 8.2 or newer. Requests that ask for Xdebug still go to PHP-FPM. For worker mode, install Laravel Octane in the project (composer require laravel/octane)."
         } else {
-            "FrankenPHP needs PHP 8.2 or newer. Requests that ask for Xdebug still go to PHP-FPM."
+            "FrankenPHP needs PHP 8.2 or newer. Requests that ask for Xdebug still go to PHP-FPM. A Node.js app (Next.js, Nuxt, Vite): Flock runs its npm run dev."
         };
         let group = group("Server", footer);
-        let franken = site.server == "frankenphp";
-        let runs_on = adw::ComboRow::builder()
-            .title("Runs on")
-            .model(&gtk::StringList::new(&["PHP-FPM", "FrankenPHP"]))
-            .selected(u32::from(franken))
-            .build();
-        runs_on.set_sensitive(site.supports_frankenphp() || franken);
+        // FrankenPHP is offered for PHP 8.2 and newer, or while the site runs on it.
+        let servers: Vec<(&str, &str)> =
+            SERVERS.into_iter().filter(|(value, _)| *value != "frankenphp" || site.supports_frankenphp() || franken).collect();
+        let labels: Vec<&str> = servers.iter().map(|(_, label)| *label).collect();
+        let current = servers.iter().position(|(value, _)| *value == site.server).unwrap_or(0);
+        let runs_on = adw::ComboRow::builder().title("Runs on").model(&gtk::StringList::new(&labels)).selected(current as u32).build();
         let (this, name) = (self.clone(), site.name.clone());
         runs_on.connect_selected_notify(move |row| {
-            let server = if row.selected() == 1 { "frankenphp" } else { "fastcgi" };
-            this.change(&name, SiteChange { server: Some(server.to_owned()), ..Default::default() });
+            if let Some((server, _)) = servers.get(row.selected() as usize).filter(|_| row.selected() as usize != current) {
+                this.change(&name, SiteChange { server: Some((*server).to_owned()), ..Default::default() });
+            }
         });
         group.add(&runs_on);
+        if site.is_node() {
+            self.node_server_rows(&group, site);
+            return group;
+        }
         if !franken {
             return group;
         }
@@ -964,6 +999,91 @@ impl Inner {
         group
     }
 
+    /// A Node.js site's dev server: whether it runs, on which Node.js and port, why not, and its
+    /// restart and log.
+    fn node_server_rows(self: &Rc<Self>, group: &adw::PreferencesGroup, site: &SiteStatus) {
+        let ns = site.node_server.clone();
+        let state = adw::ActionRow::builder()
+            .title("Dev server")
+            .subtitle(glib::markup_escape_text(&ns.as_ref().map_or_else(|| "Starting…".to_owned(), SiteNodeServer::text)))
+            .build();
+        state.add_prefix(&node_state_icon(ns.as_ref()));
+        group.add(&state);
+        // Why it doesn't run: npm's error, or the Node.js to install.
+        if let Some(ns) = ns.as_ref().filter(|ns| ns.failed() && !ns.problem.is_empty()) {
+            group.add(
+                &adw::ActionRow::builder()
+                    .title(glib::markup_escape_text(&ns.problem))
+                    .title_selectable(true)
+                    .css_classes(["warning"])
+                    .build(),
+            );
+        }
+
+        let actions = adw::ActionRow::new();
+        let restarting = self.restarting.borrow().as_deref() == Some(site.name.as_str());
+        if restarting {
+            actions.add_suffix(&gtk::Spinner::builder().spinning(true).build());
+        }
+        let command = ns.as_ref().map_or_else(|| "npm run dev".to_owned(), SiteNodeServer::command_line);
+        let (this, name) = (self.clone(), site.name.clone());
+        let restart = button("Restart", false, move || this.restart(&name));
+        restart.set_sensitive(ns.as_ref().is_some_and(|ns| ns.state != "unavailable") && !restarting);
+        restart.set_tooltip_text(Some(&format!("Restart {command}")));
+        actions.add_suffix(&restart);
+        let log = ns.as_ref().map(|ns| ns.log.clone()).filter(|l| !l.is_empty()).unwrap_or_else(|| format!("node-{}", site.name));
+        let show_log = gtk::Button::builder().label("Show Log").valign(gtk::Align::Center).action_name("app.open").build();
+        show_log.set_action_target_value(Some(&format!("logs/services/{log}").to_variant()));
+        actions.add_suffix(&show_log);
+        group.add(&actions);
+
+        // The site's own command, e.g. pnpm dev; applying an empty one goes back to npm run dev.
+        let custom = ns
+            .as_ref()
+            .filter(|ns| ns.custom)
+            .map(|ns| if ns.configured.is_empty() { ns.command.clone() } else { ns.configured.clone() })
+            .unwrap_or_default();
+        let text = self.command_drafts.borrow().get(&site.name).cloned().unwrap_or_else(|| custom.clone());
+        let entry =
+            gtk::Entry::builder().placeholder_text("npm run dev").text(text.as_str()).hexpand(true).valign(gtk::Align::Center).build();
+        entry.connect_changed({
+            let (this, name, custom) = (self.clone(), site.name.clone(), custom.clone());
+            move |entry| {
+                let text = entry.text().to_string();
+                let mut drafts = this.command_drafts.borrow_mut();
+                if text == custom {
+                    drafts.remove(&name);
+                } else {
+                    drafts.insert(name.clone(), text);
+                }
+            }
+        });
+        let row = adw::ActionRow::builder().title("Command").build();
+        if let Some(ns) = ns.as_ref().filter(|ns| !ns.command.is_empty()) {
+            row.set_subtitle(&glib::markup_escape_text(&format!("Runs {}", ns.command)));
+            row.set_subtitle_selectable(true);
+        }
+        row.add_suffix(&entry);
+        let apply: Rc<dyn Fn()> = Rc::new({
+            let (this, name, entry) = (self.clone(), site.name.clone(), entry.clone());
+            move || {
+                let command = entry.text().trim().to_owned();
+                this.command_drafts.borrow_mut().remove(&name);
+                if command != custom {
+                    this.change(&name, SiteChange { command: Some(command), ..Default::default() });
+                }
+            }
+        });
+        let a = apply.clone();
+        entry.connect_activate(move |_| a());
+        row.add_suffix(&button("Apply", false, move || apply()));
+        group.add(&row);
+
+        group.set_description(Some(&glib::markup_escape_text(
+            "Leave empty for npm run dev. {port} is replaced by the dev server's port; PORT is set too. Flock runs it in the project with the Node.js under Versions, restarts it when it exits, and serves the site's domains and HTTPS from it, hot reload included. A Node.js version picked or pinned here restarts it.",
+        )));
+    }
+
     fn restart(self: &Rc<Self>, name: &str) {
         self.restarting.replace(Some(name.to_owned()));
         self.render();
@@ -1011,10 +1131,11 @@ impl Inner {
     fn pin_menu(self: &Rc<Self>, site: &SiteStatus) -> gtk::MenuButton {
         let node = major(&site.node);
         let node_file = if site.node_pinned_here() { file_name(&site.node_file) } else { ".nvmrc".to_owned() };
-        let can_pin_php = !(site.php_source == "project" && site.php_pinned_here());
+        // A Node.js app has no PHP version or document root to pin.
+        let can_pin_php = !site.is_node() && !(site.php_source == "project" && site.php_pinned_here());
         let can_pin_node = !node.is_empty() && !(site.node_source == "project" && site.node_pinned_here());
         let state = site.root_state.clone().unwrap_or_default();
-        let can_pin_root = (state.is_empty() || state == "empty") && site.root_source != "project";
+        let can_pin_root = !site.is_node() && (state.is_empty() || state == "empty") && site.root_source != "project";
         let mut items: Vec<MenuItem> = Vec::new();
         let s = site.clone();
         let pin = {
@@ -1791,13 +1912,17 @@ fn slug(branch: &str) -> String {
     out.trim_matches('-').to_owned()
 }
 
-/// What a site's list row warns about: the site, its document root, a domain, or its FrankenPHP.
+/// What a site's list row warns about: the site, its document root, a domain, its FrankenPHP or
+/// its Node.js dev server.
 fn problem(site: &SiteStatus) -> Option<String> {
     if let Some(p) = site.problem.clone().or_else(|| site.notice.clone()) {
         return Some(p);
     }
     if let Some(domain) = site.domains.iter().flatten().find(|d| d.problem.is_some()) {
         return Some(format!("{}: {}", domain.host, domain.problem.clone().unwrap_or_default()));
+    }
+    if site.is_node() {
+        return site.node_server.as_ref().filter(|ns| ns.failed() && !ns.problem.is_empty()).map(|ns| ns.problem.clone());
     }
     site.frankenphp
         .as_ref()
@@ -1825,6 +1950,25 @@ fn proxy_suffixes(proxy: &ProxyStatus) -> Vec<gtk::Widget> {
         widgets.push(lock.upcast());
     }
     widgets
+}
+
+/// The state of a Node.js dev server, for a row's prefix: a spinner while it starts, else a dot in
+/// green (running), orange (failed) or grey.
+fn node_state_icon(ns: Option<&SiteNodeServer>) -> gtk::Widget {
+    match ns {
+        None => gtk::Spinner::builder().spinning(true).build().upcast(),
+        Some(ns) if ns.starting() => gtk::Spinner::builder().spinning(true).build().upcast(),
+        Some(ns) => {
+            let class = if ns.running() {
+                "success"
+            } else if ns.failed() {
+                "warning"
+            } else {
+                "dim-label"
+            };
+            gtk::Label::builder().label("●").css_classes([class]).build().upcast()
+        }
+    }
 }
 
 /// Why the site isn't served from its root, or a root set here over the project's.

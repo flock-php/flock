@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"hash/fnv"
 	"os"
 	"path/filepath"
 	"sort"
@@ -155,6 +156,10 @@ func (c *Config) worktreeSites(byName map[string]Site) {
 	sort.Slice(parents, func(i, j int) bool { return parents[i].Name < parents[j].Name })
 
 	var byPath map[string]string // real path → site name, built once a site has worktrees
+	ports := map[int]bool{}      // taken: Flock's and its services' ports, sites', and worktrees' so far
+	for port := range c.UsedPorts("") {
+		ports[port] = true
+	}
 	for _, parent := range parents {
 		for _, wt := range Worktrees(parent.Path) {
 			if byPath == nil {
@@ -189,13 +194,41 @@ func (c *Config) worktreeSites(byName map[string]Site) {
 			}
 
 			// Settings follow the parent; the server too, except FrankenPHP, whose process and
-			// port are the parent's own.
-			byName[name] = Site{
+			// port are the parent's own. A Node.js app's worktree runs a dev server of its own.
+			site := Site{
 				Name: name, Path: wt.Path, PHP: parent.PHP, Node: parent.Node, Secured: parent.Secured,
-				Root: parent.Root, Parent: parent.Name, Branch: wt.Branch,
+				Root: parent.Root, Parent: parent.Name, Branch: wt.Branch, Command: parent.Command,
 			}
+			if parent.RunsNode() {
+				site.Server, site.Port = ServerNode, worktreePort(wt.Path, ports)
+				ports[site.Port] = true
+			}
+			byName[name] = site
 		}
 	}
+}
+
+// Worktrees of Node.js sites get dev server ports from FirstWorktreePort on, away from the ports
+// SetServer hands out one by one from FirstSitePort.
+const (
+	FirstWorktreePort = 22000
+	worktreePorts     = 8000
+)
+
+// worktreePort is a worktree's dev server port: derived from its path, so it stays the same
+// while worktrees come and go (a new port restarts the dev server), and moved on from one that
+// another worktree already has.
+func worktreePort(path string, taken map[int]bool) int {
+	h := fnv.New32a()
+	h.Write([]byte(filepath.Clean(path)))
+	offset := int(h.Sum32() % worktreePorts)
+	for i := range worktreePorts {
+		port := FirstWorktreePort + (offset+i)%worktreePorts
+		if !taken[port] {
+			return port
+		}
+	}
+	return FirstWorktreePort + offset
 }
 
 // SamePath reports whether a and b are the same folder, also when one goes through a symlink.

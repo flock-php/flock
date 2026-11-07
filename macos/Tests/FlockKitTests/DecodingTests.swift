@@ -41,6 +41,19 @@ private func decode<T: Decodable>(_ type: T.Type, _ json: String) throws -> T {
     #expect(status.channel == "beta")
 }
 
+@Test func decodesANodeSitesDevServer() throws {
+    let status = try decode(Status.self, """
+    {"version":"dev","pid":1,"started_at":"2026-10-13T14:10:01Z",
+     "sites":[{"name":"softpack","domain":"softpack.test","path":"/code/softpack","server":"node",
+               "node_server":{"state":"running","version":"22.23.4","script":"dev","command":"npm run dev -- --port 21001","port":21001,"log":"node-softpack"}},
+              {"name":"shop","domain":"shop.test","path":"/code/shop","server":"fastcgi"}]}
+    """)
+    let ns = try #require(status.sites[0].nodeServer)
+    #expect(status.sites[0].server == .node && ns.state == .running && ns.version == "22.23.4" && ns.port == 21001 && ns.log == "node-softpack")
+    #expect(ns.command == "npm run dev -- --port 21001" && !ns.custom)
+    #expect(status.sites[1].server == .fastcgi && status.sites[1].nodeServer == nil)
+}
+
 @Test func decodesProxies() throws {
     let status = try decode(Status.self, """
     {"version":"dev","pid":1,"started_at":"2026-10-13T14:10:01Z",

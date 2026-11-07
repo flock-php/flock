@@ -120,6 +120,12 @@ func newSitesCommand() *cobra.Command {
 						url = "⚠ " + site.Problem
 					}
 					version := site.PHP
+					if ns := site.NodeServer; ns != nil {
+						version = "Node.js " + ns.Version
+						if ns.State != api.NodeRunning {
+							version += " (" + ns.State + ")"
+						}
+					}
 					if site.Server == "frankenphp" {
 						version += " FrankenPHP"
 						if site.Worker == "octane" {

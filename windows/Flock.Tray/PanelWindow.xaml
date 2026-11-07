@@ -150,6 +150,8 @@
                                                                 Visibility="{Binding SharedVisibility}" ToolTipService.ToolTip="{Binding ShareTooltip}">
                                                             <TextBlock Text="Shared" FontSize="11" FontWeight="SemiBold" Foreground="{ThemeResource SystemFillColorSuccessBrush}" />
                                                         </Border>
+                                                        <Ellipse Width="6" Height="6" Fill="{Binding NodeStateBrush}" VerticalAlignment="Center"
+                                                                 Visibility="{Binding NodeVisibility}" />
                                                         <TextBlock Text="{Binding PhpLabel}" Style="{StaticResource CaptionTextBlockStyle}"
                                                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                                                     </StackPanel>

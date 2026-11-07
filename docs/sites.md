@@ -70,7 +70,7 @@ Remove a link with `flock unlink [name]`.
 
 ## Proxying a local service
 
-Apps that aren't PHP, such as a Next.js, Nuxt or Vite dev server, an object store or a dashboard, run a server of their own on a port. A proxy passes a `.test` domain to that server, so the app gets a name, and HTTPS, like a site:
+A Next.js, Nuxt or Vite app in a project folder is best served as a site that runs on Node.js: Flock runs its dev server with the project's Node.js (see [Node.js apps](node.md#nodejs-apps)). For any other local service on a port, such as an object store, a dashboard or a dev server outside your project folders, a proxy passes a `.test` domain to it, so it gets a name, and HTTPS, like a site:
 
 :::app
 On macOS, click **Add Proxy…** in **Settings → Sites**, and give a name and the port (or host:port or URL). Proxies are listed under the sites, here and in the Flock panel, with what serves them (for example Node.js 22, when it's one of Flock's versions) or **Not running**; select one to turn on HTTPS, change its upstream or remove it.

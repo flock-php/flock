@@ -6,7 +6,9 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 )
@@ -117,4 +119,60 @@ func TestFailingStopFuncFallsBackToTheSignal(t *testing.T) {
 func readFile(path string) string {
 	data, _ := os.ReadFile(path)
 	return string(data)
+}
+
+func TestGroupStopsTheChildrenToo(t *testing.T) {
+	dir := t.TempDir()
+	pidFile := filepath.Join(dir, "child.pid")
+	s := New()
+	// The shell starts a child (as npm starts a dev server) and waits for it.
+	s.Ensure(Spec{Name: "launcher", Path: "/bin/sh", Args: []string{"-c", "sleep 60 & echo $! > " + pidFile + "; wait"}, Group: true})
+	waitFor(t, func() bool { data, _ := os.ReadFile(pidFile); return len(strings.TrimSpace(string(data))) > 0 })
+	data, _ := os.ReadFile(pidFile)
+	child, err := strconv.Atoi(strings.TrimSpace(string(data)))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	s.StopAll()
+
+	waitFor(t, func() bool { return syscall.Kill(child, 0) != nil })
+}
+
+// childPID starts a group launcher through s that writes its child's pid, and returns that pid.
+func childPID(t *testing.T, s *Supervisor, script string) int {
+	t.Helper()
+	dir := t.TempDir()
+	pidFile := filepath.Join(dir, "child.pid")
+	// A log file, as dev servers have: without one, Wait also waits for the child's output pipe.
+	s.Ensure(Spec{Name: "launcher", Path: "/bin/sh", Args: []string{"-c", strings.ReplaceAll(script, "PIDFILE", pidFile)}, LogFile: filepath.Join(dir, "launcher.log"), Group: true})
+	waitFor(t, func() bool { data, _ := os.ReadFile(pidFile); return len(strings.TrimSpace(string(data))) > 0 })
+	data, _ := os.ReadFile(pidFile)
+	child, err := strconv.Atoi(strings.TrimSpace(string(data)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return child
+}
+
+func TestGroupStopKillsAChildThatIgnoresTheSignal(t *testing.T) {
+	grace := stopGrace
+	stopGrace = 500 * time.Millisecond
+	t.Cleanup(func() { stopGrace = grace })
+	s := New()
+	// The launcher exits on SIGTERM; its child ignores it and keeps running.
+	child := childPID(t, s, `sh -c 'trap "" TERM; sleep 60' & echo $! > PIDFILE; wait`)
+
+	s.StopAll()
+
+	waitFor(t, func() bool { return syscall.Kill(child, 0) != nil })
+}
+
+func TestGroupEndsTheChildrenOfALauncherThatExits(t *testing.T) {
+	s := New()
+	defer s.StopAll()
+	// The launcher exits by itself, leaving its child (and the port it holds) behind.
+	child := childPID(t, s, `sleep 60 & echo $! > PIDFILE`)
+
+	waitFor(t, func() bool { return syscall.Kill(child, 0) != nil })
 }

@@ -29,6 +29,10 @@ type Share struct {
 	FPM []string
 	// Debug turns the app's debug mode on for visitors (APP_DEBUG=true), whatever .env says.
 	Debug bool
+	// DevServer is set for a Node.js app (config.ServerNode): requests go to its dev server
+	// instead of PHP, as if they were for Domain, the site's own name (see devServerShare).
+	DevServer string
+	Domain    string
 }
 
 // shareBlock serves a share. Requests come from cloudflared on loopback, so:
@@ -46,6 +50,10 @@ func shareBlock(s Share) string {
 	b.WriteString("\theader {\n\t\tX-Robots-Tag \"noindex, nofollow\"\n\t\tReferrer-Policy same-origin\n\t}\n")
 	for _, h := range []string{"X-Forwarded-Port", "X-Forwarded-Prefix", "Forwarded", "X-Original-URL", "X-Rewrite-URL"} {
 		fmt.Fprintf(&b, "\trequest_header -%s\n", h)
+	}
+	if s.DevServer != "" {
+		b.WriteString(devServerShare(s))
+		return b.String()
 	}
 	// The * matcher keeps a public path starting with / from being read as a path matcher.
 	fmt.Fprintf(&b, "\tflock_share * %s\n", quote(s.Public))
@@ -84,6 +92,41 @@ func shareBlock(s Share) string {
 	b.WriteString("\t}\n\tfile_server {\n\t\thide .*\n\t}\n}\n")
 	return b.String()
 }
+
+// devServerShare passes a shared Node.js app's requests to its dev server, which is the app: there
+// are no PHP settings to make it safe, so visitors see what the developer sees (the error overlay,
+// source maps). What the share still does:
+//   - env files (.env*, .envrc included) and git (a .git directory or file) are never served, at
+//     any depth (Vite's own deny list covers .env, but not every dev server has one), while other
+//     dot directories such as node_modules/.vite stay;
+//   - the dev server gets the site's own name as Host, so Vite's allowed hosts take the tunnel's
+//     requests; it learns the public name from X-Forwarded-Host;
+//   - the dev server's own requests (hot reload, its scripts) get the site's own name as Origin
+//     too, so Next.js's cross-site checks take them. The app's requests keep theirs, which matches
+//     X-Forwarded-Host, as Next.js's Server Actions check;
+//   - forwarded headers are set as for PHP (see shareBlock).
+func devServerShare(s Share) string {
+	var b strings.Builder
+	b.WriteString("\t@secret path */.env* */.git */.git/*\n\trespond @secret 404\n")
+	b.WriteString("\t@devtools expression `path(" + devToolPaths + ") || header({'Upgrade': 'websocket'})`\n")
+	// Replaces the scheme and host of an Origin the browser sent; a request without one gets none.
+	fmt.Fprintf(&b, "\trequest_header @devtools Origin %s %s\n", quote("^https?://[^/]+"), quote("http://"+s.Domain))
+	fmt.Fprintf(&b, "\treverse_proxy %s {\n", quote(s.DevServer))
+	for _, h := range [][2]string{
+		{"Host", s.Domain},
+		{"X-Forwarded-Proto", "https"},
+		{"X-Forwarded-Host", "{host}"},
+		{"X-Forwarded-For", "{http.request.header.CF-Connecting-IP}"},
+	} {
+		fmt.Fprintf(&b, "\t\theader_up %s %s\n", h[0], quote(h[1]))
+	}
+	b.WriteString("\t}\n}\n")
+	return b.String()
+}
+
+// devToolPaths are where Next.js and Vite serve their own dev resources: hot reload, the client
+// scripts, the error overlay's source lookups (as a CEL path() argument list).
+const devToolPaths = `'/_next/*', '/__nextjs*', '/@vite/*', '/@id/*', '/@fs/*', '/@react-refresh', '/__vite_ping'`
 
 func init() {
 	caddy.RegisterModule(shareHandler{})

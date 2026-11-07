@@ -193,12 +193,14 @@ type siteInfo struct {
 	PHP       versionInfo `json:"php"`
 	Node      versionInfo `json:"node"`
 	Root      rootInfo    `json:"document_root"`
-	// Server is "fastcgi" (PHP-FPM; php-cgi on Windows) or "frankenphp"; Worker "octane" in worker mode.
-	Server     string `json:"server"`
-	Worker     string `json:"worker,omitempty"`
-	FrankenPHP string `json:"frankenphp_state,omitempty"`
-	Octane     bool   `json:"octane_installed,omitempty"`
-	Parked     bool   `json:"parked,omitempty"`
+	// Server is "fastcgi" (PHP-FPM; php-cgi on Windows), "frankenphp", or "node" (a Node.js app whose
+	// npm run dev Flock runs: DevServer); Worker "octane" in worker mode.
+	Server     string              `json:"server"`
+	DevServer  *api.SiteNodeServer `json:"dev_server,omitempty"`
+	Worker     string              `json:"worker,omitempty"`
+	FrankenPHP string              `json:"frankenphp_state,omitempty"`
+	Octane     bool                `json:"octane_installed,omitempty"`
+	Parked     bool                `json:"parked,omitempty"`
 	// WorktreeOf is set on a git worktree: the site whose settings it uses; Branch is its branch.
 	WorktreeOf string `json:"worktree_of,omitempty"`
 	Branch     string `json:"branch,omitempty"`
@@ -209,7 +211,7 @@ type siteInfo struct {
 func siteInfoOf(st api.SiteStatus) siteInfo {
 	info := siteInfo{
 		Name: st.Name, URL: st.URL, Path: st.Path, HTTPS: st.Secured, Server: st.Server, Worker: st.Worker,
-		Octane: st.OctaneAvailable, Parked: st.Parked, WorktreeOf: st.Parent, Branch: st.Branch, Problem: st.Problem, Notice: st.Notice,
+		Octane: st.OctaneAvailable, Parked: st.Parked, DevServer: st.NodeServer, WorktreeOf: st.Parent, Branch: st.Branch, Problem: st.Problem, Notice: st.Notice,
 		PHP:  versionInfo{Version: st.PHP, Source: st.PHPSource, File: st.PHPFile},
 		Node: versionInfo{Version: st.Node, Source: st.NodeSource, File: st.NodeFile},
 		Root: rootInfo{Path: st.Root, Source: st.RootSource, File: st.RootFile, Suggestions: st.RootSuggestions},

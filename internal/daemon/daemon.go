@@ -611,8 +611,9 @@ func (d *daemon) reload() error {
 		return debugPools[version]
 	}
 
-	// shareable are the served sites a share can serve: their document root and PHP version.
-	type shareable struct{ root, version string }
+	// shareable are the served sites a share can serve: their document root and PHP version, or
+	// a Node.js app's dev server and domain.
+	type shareable struct{ root, version, devServer, domain string }
 	shareables := map[string]shareable{}
 
 	sites := cfg.AllSites()
@@ -647,6 +648,34 @@ func (d *daemon) reload() error {
 				}
 			}
 			status.Domains = append(status.Domains, sd)
+		}
+
+		if site.RunsNode() {
+			// A Node.js app: Flock runs its dev server and passes the site's requests to it; PHP
+			// and the document root don't matter. The page for a site that isn't secured still
+			// offers the app's Secure button (Root set: see web.Site.proxied).
+			status.Server = config.ServerNode
+			ns := d.nodeSite(cfg, site, nodeVersion.Version, append([]string{domain}, served...))
+			status.NodeServer = &ns.status
+			ws := web.Site{Domain: domain, Aliases: aliases, Root: site.Path, Proxy: ns.upstream}
+			if ns.spec != nil {
+				d.procs.Ensure(*ns.spec)
+				keep[ns.spec.Name] = true
+				shareables[site.Name] = shareable{devServer: ns.upstream, domain: domain}
+			} else {
+				// Whatever else answers on the port (another app, if it's taken) is never served.
+				status.Problem, ws.Down = ns.status.Problem, ns.status.Problem
+			}
+			if site.Secured {
+				if ws.CertFile, ws.KeyFile, err = ca.SiteCert(domain); err != nil {
+					return fmt.Errorf("certificate for %s: %w", domain, err)
+				}
+			}
+			status.URL = scheme + "://" + domain + portSuffix(scheme, cfg)
+			webSites = append(webSites, ws)
+			domains = append(append(domains, domain), served...)
+			statuses = append(statuses, status)
+			continue
 		}
 
 		root := project.RootFor(&site)
@@ -764,7 +793,8 @@ func (d *daemon) reload() error {
 	}
 
 	// Shares always go through the version's normal FastCGI pool, also for FrankenPHP sites: only
-	// FastCGI takes the per-request settings that keep a share safe (see web.Share).
+	// FastCGI takes the per-request settings that keep a share safe (see web.Share). A Node.js
+	// app's share goes to its dev server, which is the app.
 	var shares []web.Share
 	if d.shares != nil {
 		keep := map[string]bool{}
@@ -775,6 +805,10 @@ func (d *daemon) reload() error {
 		for _, s := range d.shares.Serving() {
 			info, ok := shareables[s.Site]
 			if !ok {
+				continue
+			}
+			if info.devServer != "" {
+				shares = append(shares, web.Share{Port: s.Port, DevServer: info.devServer, Domain: info.domain})
 				continue
 			}
 			upstreams, err := pool(info.version)
@@ -1030,14 +1064,16 @@ func (s pgService) Live() bool { return true }
 
 func (s pgService) Reload() error { return s.d.reload() }
 
-// Status implements api.Backend.
+// Status implements api.Backend. What answers at proxies and Node.js sites is probed outside the
+// lock: a dev server that doesn't answer takes a moment to say so.
 func (d *daemon) Status() api.Status {
-	// Probed outside the lock: a dev server that doesn't answer takes a moment to say so.
-	d.mu.Lock()
-	served := d.proxies
-	d.mu.Unlock()
-	proxies := d.probe.live(d.root, served)
+	st := d.status()
+	st.Sites = d.liveNodeServers(st.Sites)
+	st.Proxies = d.probe.live(d.root, st.Proxies)
+	return st
+}
 
+func (d *daemon) status() api.Status {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 
@@ -1046,7 +1082,7 @@ func (d *daemon) Status() api.Status {
 		PID:       os.Getpid(),
 		StartedAt: d.startedAt,
 		Sites:     d.withWorktrees(d.withShares(withBoost(d.liveSites()))),
-		Proxies:   proxies,
+		Proxies:   d.proxies,
 		Processes: d.procs.Status(),
 		Warnings:  d.warnings,
 	}

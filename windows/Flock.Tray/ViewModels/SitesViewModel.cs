@@ -190,6 +190,9 @@ public sealed partial class SiteRowViewModel : ObservableObject
     public Status.SiteFrankenPhp? FrankenPhp => Snapshot.FrankenPhp;
     public string Boost => Snapshot.Boost;
     public bool IsFrankenPhp => Server == Status.SiteServer.FrankenPhp;
+    /// <summary>A Node.js app, served from its npm run dev.</summary>
+    public bool IsNode => Server == Status.SiteServer.Node;
+    public Status.SiteNodeServer? NodeServer => Snapshot.NodeServer;
     public bool PhpPinnedHere => Snapshot.PhpPinnedHere;
     public bool NodePinnedHere => Snapshot.NodePinnedHere;
     public bool IsShared => Snapshot.IsShared;
@@ -271,7 +274,7 @@ public sealed partial class SiteRowViewModel : ObservableObject
                 Domains.Insert(index, row);
             }
         }
-        foreach (var property in new[] { nameof(Name), nameof(Domain), nameof(Path), nameof(Url), nameof(Secured), nameof(Php), nameof(Node), nameof(Server), nameof(Worker), nameof(Parked), nameof(PhpSource), nameof(PhpPinned), nameof(PhpFile), nameof(NodeSource), nameof(NodePinned), nameof(NodeFile), nameof(NodeShadowed), nameof(Problem), nameof(OctaneAvailable), nameof(FrankenPhp), nameof(Boost), nameof(IsFrankenPhp), nameof(PhpPinnedHere), nameof(NodePinnedHere), nameof(IsShared), nameof(ListTitle), nameof(ListMargin), nameof(IsSettingUp), nameof(SetupStep), nameof(HasOwnDatabase), nameof(DatabaseLabel), nameof(DatabaseTooltip) })
+        foreach (var property in new[] { nameof(Name), nameof(Domain), nameof(Path), nameof(Url), nameof(Secured), nameof(Php), nameof(Node), nameof(Server), nameof(Worker), nameof(Parked), nameof(PhpSource), nameof(PhpPinned), nameof(PhpFile), nameof(NodeSource), nameof(NodePinned), nameof(NodeFile), nameof(NodeShadowed), nameof(Problem), nameof(OctaneAvailable), nameof(FrankenPhp), nameof(Boost), nameof(IsFrankenPhp), nameof(IsNode), nameof(NodeServer), nameof(PhpPinnedHere), nameof(NodePinnedHere), nameof(IsShared), nameof(ListTitle), nameof(ListMargin), nameof(IsSettingUp), nameof(SetupStep), nameof(HasOwnDatabase), nameof(DatabaseLabel), nameof(DatabaseTooltip) })
         {
             OnPropertyChanged(property);
         }
@@ -284,7 +287,8 @@ public sealed partial class SiteRowViewModel : ObservableObject
                ?? (site.Worktree is { IsFailed: true, Error.Length: > 0 } setup ? setup.Error : null)
                ?? site.Notice
                ?? site.Domains.Select(domain => domain.Problem is { } problem ? $"{domain.Host}: {problem}" : null).FirstOrDefault(problem => problem is not null)
-               ?? (site.IsFrankenPhp && site.FrankenPhp is { IsRunning: false, IsInstalling: false, Problem.Length: > 0 } frankenPhp ? frankenPhp.Problem : null);
+               ?? (site.IsFrankenPhp && site.FrankenPhp is { IsRunning: false, IsInstalling: false, Problem.Length: > 0 } frankenPhp ? frankenPhp.Problem : null)
+               ?? (site.IsNode && site.NodeServer is { IsFailed: true, Problem.Length: > 0 } nodeServer ? nodeServer.Problem : null);
     }
 
     private static bool RenderedFieldsChanged(Status.Site previous, Status.Site current)
@@ -317,6 +321,7 @@ public sealed partial class SiteRowViewModel : ObservableObject
                || previous.Worker != current.Worker
                || previous.OctaneAvailable != current.OctaneAvailable
                || !FrankenPhpEqual(previous.FrankenPhp, current.FrankenPhp)
+               || !NodeServerEqual(previous.NodeServer, current.NodeServer)
                || previous.Boost != current.Boost
                || !ShareEqual(previous.Share, current.Share)
                || previous.Parent != current.Parent
@@ -343,6 +348,14 @@ public sealed partial class SiteRowViewModel : ObservableObject
         return previous is null && current is null || previous is not null && current is not null &&
             previous.State == current.State && previous.Version == current.Version && previous.PhpVersion == current.PhpVersion &&
             previous.Port == current.Port && previous.Progress == current.Progress && previous.Problem == current.Problem && previous.Log == current.Log;
+    }
+
+    private static bool NodeServerEqual(Status.SiteNodeServer? previous, Status.SiteNodeServer? current)
+    {
+        return previous is null && current is null || previous is not null && current is not null &&
+            previous.State == current.State && previous.Version == current.Version && previous.Script == current.Script &&
+            previous.Port == current.Port && previous.Problem == current.Problem && previous.Log == current.Log &&
+            previous.Command == current.Command && previous.Custom == current.Custom && previous.Configured == current.Configured;
     }
 
     private static bool ShareEqual(Status.SiteShare? previous, Status.SiteShare? current)

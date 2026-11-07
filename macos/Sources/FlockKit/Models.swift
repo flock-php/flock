@@ -149,6 +149,8 @@ public struct Status: Decodable, Sendable, Equatable {
         public var octaneAvailable: Bool
         /// The site's FrankenPHP process, when `server` is FrankenPHP. Until it runs, PHP-FPM serves the site.
         public var frankenPHP: SiteFrankenPHP?
+        /// The site's dev server, when `server` is Node.js.
+        public var nodeServer: SiteNodeServer?
         /// Whether the project uses Laravel Boost and has Flock's guideline.
         public var boost: Boost
         /// The site's tunnel (`flock share`), while there is one.
@@ -200,6 +202,7 @@ public struct Status: Decodable, Sendable, Equatable {
             case secured, parked, url, problem, notice, root, rootSource, rootPinned, rootFile, rootState, rootSuggestions
             case domains, debugging, server, worker, octaneAvailable, boost, share, parent, branch, worktree
             case frankenPHP = "frankenphp"
+            case nodeServer
         }
 
         public init(from decoder: Decoder) throws {
@@ -233,6 +236,7 @@ public struct Status: Decodable, Sendable, Equatable {
             worker = try c.decodeIfPresent(Worker.self, forKey: .worker) ?? .classic
             octaneAvailable = try c.decodeIfPresent(Bool.self, forKey: .octaneAvailable) ?? false
             frankenPHP = try c.decodeIfPresent(SiteFrankenPHP.self, forKey: .frankenPHP)
+            nodeServer = try c.decodeIfPresent(SiteNodeServer.self, forKey: .nodeServer)
             boost = try c.decodeIfPresent(Boost.self, forKey: .boost) ?? .none
             share = try c.decodeIfPresent(ShareStatus.self, forKey: .share)
             parent = try c.decodeIfPresent(String.self, forKey: .parent).flatMap { $0.isEmpty ? nil : $0 }
@@ -274,10 +278,61 @@ public struct Status: Decodable, Sendable, Equatable {
     }
 
     /// What runs a site's PHP; the raw values are the API's.
+    /// The dev server of a Node.js site: the project's `npm run <script>`, which Flock runs with the
+    /// site's Node.js on `port` and serves the site from.
+    public struct SiteNodeServer: Decodable, Sendable, Equatable {
+        public var state: State
+        /// The Node.js it runs on, e.g. "22.23.4"; empty when none matches.
+        public var version: String
+        /// The package.json script it runs; empty for a command of the site's own.
+        public var script: String
+        /// What runs, e.g. "npm run dev -- --port 21000"; `custom` when it's the site's own command.
+        public var command: String
+        public var custom: Bool
+        /// The site's own command as set, {port} and all, for editing.
+        public var configured: String
+        public var port: Int
+        public var problem: String
+        /// The name of its service log.
+        public var log: String
+
+        public enum State: String, Decodable, Sendable {
+            /// Started, compiling; it doesn't answer yet.
+            case starting
+            case running
+            /// It exited, or can't start; see `problem`.
+            case failed
+            /// Its Node.js isn't installed; see `problem`.
+            case unavailable
+            case unknown
+
+            public init(from decoder: Decoder) throws {
+                self = State(rawValue: try decoder.singleValueContainer().decode(String.self)) ?? .unknown
+            }
+        }
+
+        enum CodingKeys: String, CodingKey { case state, version, script, command, custom, configured, port, problem, log }
+
+        public init(from decoder: Decoder) throws {
+            let c = try decoder.container(keyedBy: CodingKeys.self)
+            state = try c.decodeIfPresent(State.self, forKey: .state) ?? .unknown
+            version = try c.decodeIfPresent(String.self, forKey: .version) ?? ""
+            script = try c.decodeIfPresent(String.self, forKey: .script) ?? ""
+            command = try c.decodeIfPresent(String.self, forKey: .command) ?? ""
+            custom = try c.decodeIfPresent(Bool.self, forKey: .custom) ?? false
+            configured = try c.decodeIfPresent(String.self, forKey: .configured) ?? ""
+            port = try c.decodeIfPresent(Int.self, forKey: .port) ?? 0
+            problem = try c.decodeIfPresent(String.self, forKey: .problem) ?? ""
+            log = try c.decodeIfPresent(String.self, forKey: .log) ?? ""
+        }
+    }
+
     public enum Server: String, Decodable, Sendable, Hashable {
         /// The PHP version's PHP-FPM pool (php-cgi on Windows).
         case fastcgi
         case frankenphp
+        /// A Node.js app: Flock runs its `npm run dev` (see `Site.nodeServer`).
+        case node
 
         public init(from decoder: Decoder) throws {
             self = Server(rawValue: try decoder.singleValueContainer().decode(String.self)) ?? .fastcgi
