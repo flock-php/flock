@@ -1065,8 +1065,10 @@ impl Inner {
         }
         row.add_suffix(&entry);
         let apply: Rc<dyn Fn()> = Rc::new({
-            let (this, name, entry) = (self.clone(), site.name.clone(), entry.clone());
+            // Weak: the entry owns its activate handler, which owns this closure.
+            let (this, name, entry) = (self.clone(), site.name.clone(), entry.downgrade());
             move || {
+                let Some(entry) = entry.upgrade() else { return };
                 let command = entry.text().trim().to_owned();
                 this.command_drafts.borrow_mut().remove(&name);
                 if command != custom {
