@@ -500,7 +500,9 @@ func stopDaemon() error {
 	}
 	_ = exec.Command("schtasks", "/End", "/TN", taskName).Run()
 	stopDaemonProcess()
-	waitDaemonGone(root)
+	if !waitDaemonGone(root) {
+		return fmt.Errorf("the daemon still answers after 10s — see `flock logs daemon`")
+	}
 	return nil
 }
 
@@ -529,15 +531,17 @@ func restartService() error {
 // waitDaemonGone waits (up to 10 s) until no daemon answers on the socket any more. Ending the task
 // or the process returns before Windows has ended it, and a daemon started meanwhile finds the old
 // one still answering, exits as "already running", and its watchdog doesn't retry: nothing runs.
-func waitDaemonGone(root string) {
+// It reports whether the daemon is gone.
+func waitDaemonGone(root string) bool {
 	socket := paths.Socket(root)
 	for deadline := time.Now().Add(10 * time.Second); time.Now().Before(deadline); time.Sleep(100 * time.Millisecond) {
 		conn, err := net.DialTimeout("unix", socket, 500*time.Millisecond)
 		if err != nil {
-			return
+			return true
 		}
 		_ = conn.Close()
 	}
+	return false
 }
 
 // privilegedFirst: `flock install` runs ensurePrivileged before it replaces anything, so declining

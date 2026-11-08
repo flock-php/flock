@@ -166,8 +166,12 @@ func installService(root, bin string) error {
 
 	domain := "gui/" + strconv.Itoa(os.Getuid())
 	stopService(domain)
+	return bootstrapService(domain, path)
+}
 
-	// bootout returns before launchd has fully released the job, so bootstrap can briefly fail with EIO.
+// bootstrapService loads the agent. bootout returns before launchd has fully released the job, so
+// bootstrap can briefly fail with EIO right after it.
+func bootstrapService(domain, path string) error {
 	var lastErr error
 	for range 20 {
 		out, err := exec.Command("launchctl", "bootstrap", domain, path).CombinedOutput()
@@ -490,7 +494,11 @@ func appDirs() []string {
 // stopDaemon unloads the agent, which stops the daemon and everything it runs, until restartService
 // or the next login loads it again.
 func stopDaemon() error {
+	target := "gui/" + strconv.Itoa(os.Getuid()) + "/" + launchLabel
 	stopService("gui/" + strconv.Itoa(os.Getuid()))
+	if exec.Command("launchctl", "print", target).Run() == nil {
+		return fmt.Errorf("launchd did not unload %s — see `flock logs daemon`", launchLabel)
+	}
 	return nil
 }
 
@@ -503,10 +511,7 @@ func restartService() error {
 		if !serviceInstalled() {
 			return fmt.Errorf("the background daemon is not installed — run `flock install`")
 		}
-		if out, err := exec.Command("launchctl", "bootstrap", domain, path).CombinedOutput(); err != nil {
-			return fmt.Errorf("launchctl bootstrap: %v: %s", err, out)
-		}
-		return nil
+		return bootstrapService(domain, path)
 	}
 	if out, err := exec.Command("launchctl", "kickstart", "-k", target).CombinedOutput(); err != nil {
 		return fmt.Errorf("launchctl kickstart: %v: %s", err, out)

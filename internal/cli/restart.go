@@ -22,9 +22,15 @@ func newRestartCommand() *cobra.Command {
 			}
 
 			before, err := s.client().Status(cmd.Context())
-			if err == nil && cmd.Name() == "start" {
-				cmd.Printf("already running (pid %d)\n", before.PID)
-				return nil
+			if cmd.Name() == "start" {
+				// A daemon that is busy (a request timed out) runs: starting it again would restart it.
+				if err == nil {
+					cmd.Printf("already running (pid %d)\n", before.PID)
+					return nil
+				}
+				if !errors.Is(err, api.ErrDaemonNotRunning) {
+					return err
+				}
 			}
 			if err := restartService(); err != nil {
 				return err
