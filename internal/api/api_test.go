@@ -584,6 +584,12 @@ func TestProxyEndpoints(t *testing.T) {
 	if resp, _ := call(t, "PATCH", srv.URL+"/v1/proxies/soft-pack", "", `{"command":"npm run dev","dir":"relative"}`); resp.StatusCode != http.StatusBadRequest {
 		t.Errorf("a relative folder, got %d", resp.StatusCode)
 	}
+	if resp, _ := call(t, "PATCH", srv.URL+"/v1/proxies/soft-pack", "", `{"command":"","stop_command":"docker compose stop"}`); resp.StatusCode != http.StatusOK {
+		t.Errorf("removing the command removes its stop command, got %d", resp.StatusCode)
+	}
+	if resp, _ := call(t, "PATCH", srv.URL+"/v1/proxies/soft-pack", "", `{"stop_command":"docker compose stop"}`); resp.StatusCode != http.StatusBadRequest {
+		t.Errorf("a stop command without a command, got %d", resp.StatusCode)
+	}
 	if resp, body := call(t, "PATCH", srv.URL+"/v1/proxies/soft-pack", "", `{"command":""}`); resp.StatusCode != http.StatusOK {
 		t.Fatalf("no command: %d %s", resp.StatusCode, body)
 	}

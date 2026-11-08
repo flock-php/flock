@@ -103,7 +103,7 @@ Requests pass to the server with their `Host` header, so the app sees `softpack.
 
 A proxy can have a command that starts its server, such as `npm run dev`, run in a folder of your choice. Flock runs it only when you start the proxy, through the shell, with Flock's PHP and Node.js first on `PATH` (so the project's versions are used) and `PORT` set to the upstream's port. It keeps the command running and restarts it if it exits, until you stop the proxy, and the command's output goes to the proxy's log. When Flock quits, the command stops too.
 
-For a command that starts a server in the background and exits, such as `docker compose up -d`, also give a stop command (`docker compose stop`). Starting runs the command once, and stopping runs the stop command. Running or not, the proxy's state is then whatever answers at the upstream.
+For a command that starts a server in the background and exits, such as `docker compose up -d`, also give a stop command (`docker compose stop`). Starting runs the command once, and stopping runs the stop command; stopping while it still starts ends the start first. If the stop command fails, the proxy stays started, so you can stop it again. Removing a started proxy, removing its command, or quitting Flock runs the stop command too. Running or not, the proxy's state is then whatever answers at the upstream.
 
 :::app
 On macOS, select the proxy in **Settings → Sites** and set its **Command** (and, under it, the folder and an optional stop command). **Start** and **Stop** run it, and **Output** shows what it prints, with **Clear** and **Open Log**.

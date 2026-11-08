@@ -201,3 +201,97 @@ func TestAProxysCommandSaysWhyItFailed(t *testing.T) {
 		t.Errorf("why: %q", p.Command.Problem)
 	}
 }
+
+// backgroundProxy is a proxy s3 whose command starts the fake server in the background after
+// delay, and whose stop command stops it when stopIf (a shell test) passes.
+func backgroundProxy(t *testing.T, delay, stopIf string) (root, project string, port int, client *api.Client) {
+	t.Helper()
+	project, port = t.TempDir(), freePort(t)
+	root, cfg := testRoot(t, func(c *config.Config) {})
+	server := fakeServer(t, root)
+	if err := cfg.UpsertProxy(config.Proxy{
+		Name: "s3", Upstream: "http://127.0.0.1:" + strconv.Itoa(port), Dir: project,
+		Command:     "sleep " + delay + "; " + server + " serve >/dev/null 2>&1 & echo $! > server.pid",
+		StopCommand: stopIf + ` && kill "$(cat server.pid)"`,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := cfg.Save(root); err != nil {
+		t.Fatal(err)
+	}
+	return root, project, port, startDaemon(t, root)
+}
+
+// waitForPortFree waits until nothing listens on port.
+func waitForPortFree(t *testing.T, port int, why string) {
+	t.Helper()
+	deadline := time.Now().Add(5 * time.Second)
+	for !portFree(port) {
+		if time.Now().After(deadline) {
+			t.Fatalf("port %d is still taken %s", port, why)
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+}
+
+func TestStoppingAProxyWhileItStartsEndsTheStart(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("the commands run through /bin/sh here")
+	}
+	_, project, port, client := backgroundProxy(t, "1", "true")
+	if _, err := client.StartProxy(context.Background(), "s3"); err != nil {
+		t.Fatal(err)
+	}
+	// Still sleeping: Stop ends the start, so the server never comes up after it.
+	if _, err := client.StopProxy(context.Background(), "s3"); err == nil {
+		t.Log("the stop command ran without a server.pid") // kill finds no pid: it may fail, that's fine
+	}
+	time.Sleep(1500 * time.Millisecond)
+	if _, err := os.Stat(filepath.Join(project, "server.pid")); err == nil || !portFree(port) {
+		t.Fatalf("the start went on after Stop (port %d free: %v)", port, portFree(port))
+	}
+}
+
+func TestAProxyStaysStartedWhenItsStopCommandFails(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("the commands run through /bin/sh here")
+	}
+	_, project, port, client := backgroundProxy(t, "0", "test -f stop-ok")
+	if _, err := client.StartProxy(context.Background(), "s3"); err != nil {
+		t.Fatal(err)
+	}
+	waitForProxy(t, client, "s3", api.ProxyRunning)
+
+	if _, err := client.StopProxy(context.Background(), "s3"); err == nil {
+		t.Fatal("the stop command failed, but Stop didn't say so")
+	}
+	if p := proxyStatus(t, client, "s3"); p.Command.State != api.ProxyRunning {
+		t.Fatalf("the server runs on, so it can be stopped again: %+v", p.Command)
+	}
+
+	if err := os.WriteFile(filepath.Join(project, "stop-ok"), nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := client.StopProxy(context.Background(), "s3"); err != nil {
+		t.Fatal(err)
+	}
+	waitForPortFree(t, port, "once stopped")
+	if p := proxyStatus(t, client, "s3"); p.Command.State != api.ProxyStopped {
+		t.Errorf("stopped: %+v", p.Command)
+	}
+}
+
+func TestRemovingAStartedBackgroundProxyStopsItsServer(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("the commands run through /bin/sh here")
+	}
+	_, _, port, client := backgroundProxy(t, "0", "true")
+	if _, err := client.StartProxy(context.Background(), "s3"); err != nil {
+		t.Fatal(err)
+	}
+	waitForProxy(t, client, "s3", api.ProxyRunning)
+	if _, err := client.RemoveProxy(context.Background(), "s3"); err != nil {
+		t.Fatal(err)
+	}
+	waitForPortFree(t, port, "once the proxy is removed")
+}

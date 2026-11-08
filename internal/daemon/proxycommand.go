@@ -3,12 +3,14 @@ package daemon
 import (
 	"context"
 	"fmt"
+	"log"
 	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -25,8 +27,12 @@ const stopCommandTimeout = time.Minute
 // proxyRun is a started proxy's command. A foreground one is a supervised process (see
 // proxySpec); a background one's command runs once, and running is set until it exits.
 type proxyRun struct {
-	running bool
-	problem string // why the background command failed
+	proxy    config.Proxy // as it was started: its stop command is the one that stops it
+	running  bool
+	stopping bool
+	problem  string             // why the background command failed
+	cancel   context.CancelFunc // ends a background command still starting
+	done     chan struct{}      // closed once the background command ended
 }
 
 // StartProxy implements api.Backend: it runs the proxy's command, and keeps a foreground one
@@ -41,12 +47,19 @@ func (d *daemon) StartProxy(name string) error {
 	}
 
 	d.mu.Lock()
-	if run, ok := d.proxyRuns[name]; ok && run.running {
+	if run, ok := d.proxyRuns[name]; ok && (run.running || run.stopping) {
 		d.mu.Unlock()
+		if run.stopping {
+			return fmt.Errorf("%s is stopping — start it once it stopped", name)
+		}
 		return nil
 	}
 	defer d.probe.forget(p.Upstream)
-	run := &proxyRun{running: p.StopCommand != ""}
+	run := &proxyRun{proxy: p, running: p.StopCommand != ""}
+	ctx, cancel := context.WithCancel(context.Background())
+	if run.running {
+		run.cancel, run.done = cancel, make(chan struct{})
+	}
 	if d.proxyRuns == nil {
 		d.proxyRuns = map[string]*proxyRun{}
 	}
@@ -54,39 +67,101 @@ func (d *daemon) StartProxy(name string) error {
 	d.mu.Unlock()
 
 	if p.StopCommand == "" {
+		cancel()
 		return d.reload()
 	}
 	go func() {
-		problem := ""
-		if err := d.runProxyCommand(context.Background(), p, p.Command); err != nil {
-			problem = err.Error()
-		}
+		defer close(run.done)
+		defer cancel()
+		err := d.runProxyCommand(ctx, p, p.Command)
 		d.mu.Lock()
-		run.running, run.problem = false, problem
+		run.running = false
+		if err != nil && ctx.Err() == nil {
+			run.problem = err.Error()
+		}
 		d.mu.Unlock()
 	}()
 	return nil
 }
 
 // StopProxy implements api.Backend: it stops a foreground command, or runs the stop command of
-// a background one.
+// a background one. A background proxy stays started when its stop command fails, so it can be
+// stopped again.
 func (d *daemon) StopProxy(name string) error {
 	p, err := d.commandProxy(name)
 	if err != nil {
 		return err
 	}
-	defer d.probe.forget(p.Upstream)
 	d.mu.Lock()
-	delete(d.proxyRuns, name)
+	run := d.proxyRuns[name]
+	if run != nil {
+		if run.stopping {
+			d.mu.Unlock()
+			return fmt.Errorf("%s is stopping already", name)
+		}
+		run.stopping = true
+		p = run.proxy
+	}
 	d.mu.Unlock()
+	defer d.probe.forget(p.Upstream)
 
+	// Under reloadMu, so a reload doesn't start the foreground command again as it stops.
+	d.reloadMu.Lock()
+	if p.StopCommand == "" {
+		d.forgetProxyRun(name, run)
+	}
 	d.procs.Stop(config.ProxyLog(name))
+	d.reloadMu.Unlock()
 	if p.StopCommand == "" {
 		return nil
+	}
+
+	err = d.stopInBackground(run, p)
+	if err == nil {
+		d.forgetProxyRun(name, run)
+		return nil
+	}
+	if run != nil {
+		d.mu.Lock()
+		run.stopping, run.problem = false, err.Error()
+		d.mu.Unlock()
+	}
+	return err
+}
+
+// forgetProxyRun drops run, unless the proxy was started again since.
+func (d *daemon) forgetProxyRun(name string, run *proxyRun) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	if d.proxyRuns[name] == run {
+		delete(d.proxyRuns, name)
+	}
+}
+
+// stopInBackground runs p's stop command, once run's command, if still starting, was ended: else
+// the server could start after it stopped.
+func (d *daemon) stopInBackground(run *proxyRun, p config.Proxy) error {
+	if run != nil && run.done != nil {
+		run.cancel()
+		<-run.done
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), stopCommandTimeout)
 	defer cancel()
 	return d.runProxyCommand(ctx, p, p.StopCommand)
+}
+
+// stopProxyRuns runs the stop commands of runs, the background proxies that were removed, lost
+// their command, or are started as the daemon shuts down.
+func (d *daemon) stopProxyRuns(runs []*proxyRun) {
+	var wg sync.WaitGroup
+	for _, run := range runs {
+		wg.Go(func() {
+			if err := d.stopInBackground(run, run.proxy); err != nil {
+				log.Printf("proxy %s: %v", run.proxy.Name, err)
+			}
+		})
+	}
+	wg.Wait()
 }
 
 // commandProxy is the proxy named name, which must have a command.
@@ -125,25 +200,34 @@ func (d *daemon) proxySpec(p config.Proxy) supervisor.Spec {
 // runProxyCommand runs one of a background proxy's commands to its end, appending its output to
 // the proxy's log.
 func (d *daemon) runProxyCommand(ctx context.Context, p config.Proxy, command string) error {
-	log, err := os.OpenFile(d.proxyLogFile(p.Name), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
+	if runningAsRoot() {
+		return fmt.Errorf("Flock runs as root here, so it doesn't run %s's commands — run Flock as your own user", p.Name)
+	}
+	out, err := os.OpenFile(d.proxyLogFile(p.Name), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
 	if err != nil {
 		return err
 	}
-	defer log.Close()
+	defer out.Close()
 
 	path, args := shellCommand(command)
 	cmd := exec.CommandContext(ctx, path, args...)
 	cmd.Dir = p.Dir
 	cmd.Env = envutil.Merge(os.Environ(), d.proxyEnv(p))
-	cmd.Stdout, cmd.Stderr = log, log
+	cmd.Stdout, cmd.Stderr = out, out
 	supervisor.Configure(cmd)
-	fmt.Fprintf(log, "\n[flock] %s running %s\n", time.Now().Format(time.RFC3339), command)
+	// Ended early (a timeout, or Stop while it starts), the whole command goes, not only the shell:
+	// docker compose would go on. Once it finished, what it started in the background is left be.
+	cmd.Cancel = func() error {
+		supervisor.KillGroup(cmd)
+		return nil
+	}
+	fmt.Fprintf(out, "\n[flock] %s running %s\n", time.Now().Format(time.RFC3339), command)
 	err = cmd.Run()
 	if err != nil {
-		fmt.Fprintf(log, "[flock] %s failed: %v\n", command, err)
+		fmt.Fprintf(out, "[flock] %s failed: %v\n", command, err)
 		return fmt.Errorf("`%s` failed: %v — see `flock logs %s`", command, err, config.ProxyLog(p.Name))
 	}
-	fmt.Fprintf(log, "[flock] %s finished\n", command)
+	fmt.Fprintf(out, "[flock] %s finished\n", command)
 	return nil
 }
 

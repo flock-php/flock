@@ -672,8 +672,8 @@ func (o ProxyOptions) apply(p *config.Proxy) {
 	if o.StopCommand != nil {
 		p.StopCommand = *o.StopCommand
 	}
-	if strings.TrimSpace(p.Command) == "" {
-		p.StopCommand = ""
+	if o.Command != nil && strings.TrimSpace(*o.Command) == "" {
+		p.StopCommand = "" // the command removed: its stop command goes too
 	}
 }
 

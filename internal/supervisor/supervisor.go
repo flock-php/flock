@@ -323,3 +323,6 @@ func Configure(cmd *exec.Cmd) { configure(cmd) }
 // Started ties a started command to the daemon like the supervisor's children: on Windows it
 // joins the job object that kills it when the daemon exits.
 func Started(cmd *exec.Cmd) { started(cmd) }
+
+// KillGroup kills cmd with its whole group (its tree on Windows); cmd was set up with Configure.
+func KillGroup(cmd *exec.Cmd) { kill(cmd, true) }

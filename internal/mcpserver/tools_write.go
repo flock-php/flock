@@ -677,7 +677,8 @@ func (s *server) proxySite(ctx context.Context, _ *mcp.CallToolRequest, in proxy
 		return nil, proxySiteOut{}, errors.New("give the proxy's name and its upstream, e.g. name softpack and upstream 3000")
 	}
 	opts := api.ProxyOptions{Secured: in.Secure, Command: in.Command, StopCommand: in.StopCommand}
-	if in.Command != nil && *in.Command != "" {
+	// A folder given is set as is; a new command without one runs in the project.
+	if in.Dir != "" || (in.Command != nil && *in.Command != "") {
 		dir := cmpOr(in.Dir, s.Dir)
 		if dir == "" || !filepath.IsAbs(dir) {
 			return nil, proxySiteOut{}, errors.New("give the folder the command runs in as an absolute path")

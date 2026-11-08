@@ -563,6 +563,13 @@ func TestProxySite(t *testing.T) {
 	if want := `proxy ["softpack","3000",{"command":"npm run dev","dir":` + string(quoted) + `}]`; d.changes[0] != want {
 		t.Fatalf("a command: %q, want %q", d.changes, want)
 	}
+	d.changes = nil
+	if e := callTool(t, cs, "proxy_site", map[string]any{"name": "softpack", "upstream": "3000", "dir": dir}, nil); e != "" {
+		t.Fatal(e)
+	}
+	if want := `proxy ["softpack","3000",{"dir":` + string(quoted) + `}]`; d.changes[0] != want {
+		t.Fatalf("only a folder: %q, want %q", d.changes, want)
+	}
 
 	d.changes = nil
 	callTool(t, cs, "proxy_server", map[string]any{"name": "softpack", "action": "start"}, nil)

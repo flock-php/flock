@@ -121,6 +121,18 @@ func (d *daemon) shutdown() {
 	if d.worktrees != nil {
 		d.worktrees.StopAll()
 	}
+	// Background servers go too, as a foreground command does with StopAll.
+	d.mu.Lock()
+	var background []*proxyRun
+	for name, run := range d.proxyRuns {
+		if run.proxy.StopCommand != "" && !run.stopping {
+			background = append(background, run)
+		}
+		delete(d.proxyRuns, name)
+	}
+	d.mu.Unlock()
+	d.stopProxyRuns(background)
+
 	d.reloadMu.Lock()
 	defer d.reloadMu.Unlock()
 
@@ -813,12 +825,21 @@ func (d *daemon) reload() error {
 	}
 	var proxies []api.ProxyStatus
 	d.mu.Lock()
-	for name := range d.proxyRuns {
+	var unwanted []*proxyRun
+	for name, run := range d.proxyRuns {
 		if p, ok := cfg.FindProxy(name); !ok || p.Command == "" {
-			delete(d.proxyRuns, name) // removed, or its command was: Retain stops what ran
+			// Removed, or its command was: Retain stops a foreground one, a background one is
+			// stopped with its stop command.
+			delete(d.proxyRuns, name)
+			if run.proxy.StopCommand != "" && !run.stopping {
+				unwanted = append(unwanted, run)
+			}
 		}
 	}
 	d.mu.Unlock()
+	if len(unwanted) > 0 {
+		go d.stopProxyRuns(unwanted)
+	}
 	for _, p := range cfg.Proxies {
 		domain := cfg.ProxyDomain(p)
 		status := api.ProxyStatus{Name: p.Name, Domain: domain, Upstream: p.Upstream, Secured: p.Secured}
