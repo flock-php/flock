@@ -101,7 +101,7 @@ Stop that program and run `flock restart`.
 Quitting the menu bar or tray app leaves Flock running, so your sites keep working. To stop Flock and everything it runs, for example to free memory, or ports 80 and 443 for another local environment:
 
 :::app
-On macOS, switch off the switch at the top of the Flock panel. Switch it on to start Flock again.
+Switch off the switch at the top of the Flock panel, and switch it on to start Flock again. On Windows, **Stop Flock** and **Start Flock** are also in the tray icon's right-click menu. On Linux, the switch is at the top of the Flock window's sidebar, and **Stop Flock** and **Start Flock** are in the menu of Flock's icon in the top bar.
 :::
 
 :::cli

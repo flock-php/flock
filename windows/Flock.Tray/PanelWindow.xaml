@@ -19,12 +19,12 @@
                         <TextBlock Text="{Binding Headline}" Style="{StaticResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                     </StackPanel>
                 </StackPanel>
-                <ProgressRing
-                    Grid.Column="1"
-                    Width="16"
-                    Height="16"
-                    IsActive="True"
-                    Visibility="{Binding RestartVisibility}" />
+                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                    <ProgressRing Width="16" Height="16" IsActive="True" Visibility="{Binding RestartVisibility}" />
+                    <!-- Flock's on/off switch: off stops the daemon and everything it runs. -->
+                    <ToggleSwitch IsOn="{Binding FlockOn, Mode=TwoWay}" IsEnabled="{Binding FlockSwitchEnabled}" Visibility="{Binding FlockSwitchVisibility}"
+                                  OnContent="" OffContent="" MinWidth="0" ToolTipService.ToolTip="Turn Flock on or off" />
+                </StackPanel>
             </Grid>
 
             <Grid Visibility="{Binding UpdateVisibility}" ColumnSpacing="12">
@@ -340,10 +340,6 @@
                 <StackPanel Spacing="8" Visibility="{Binding UpdatingVisibility}">
                     <TextBlock Text="Updating Flock…" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                     <ProgressBar IsIndeterminate="True" />
-                </StackPanel>
-                <StackPanel Spacing="8" Visibility="{Binding StoppedVisibility}">
-                    <TextBlock Text="{Binding NotRunningMessage}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
-                    <Button Content="Start Flock" Command="{Binding RestartCommand}" Style="{StaticResource AccentButtonStyle}" IsEnabled="{Binding StartEnabled}" />
                 </StackPanel>
             </StackPanel>
 

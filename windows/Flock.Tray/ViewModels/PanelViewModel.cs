@@ -17,6 +17,7 @@ public sealed class PanelViewModel : ObservableObject, IDisposable
     private readonly CollectionSynchronizer<string, PanelProxyRow> proxySynchronizer = new();
     private readonly DaemonSwitch xdebug;
     private readonly DaemonSwitch dumps;
+    private readonly DaemonSwitch flock;
     private HashSet<string>? expanded;
     private bool released;
 
@@ -25,10 +26,12 @@ public sealed class PanelViewModel : ObservableObject, IDisposable
         this.model = model;
         xdebug = new DaemonSwitch(() => OnPropertyChanged(nameof(Xdebug)));
         dumps = new DaemonSwitch(() => OnPropertyChanged(nameof(Dumps)));
+        flock = new DaemonSwitch(() => OnPropertyChanged(nameof(FlockOn)));
         model.Changed += ModelChanged;
         model.Dumps.Changed += DumpsChanged;
         ToggleDumpsCommand = new AsyncRelayCommand<bool>(SetDumpsAsync, _ => !model.Dumps.IsCaptureBusy);
         ToggleXdebugCommand = new AsyncRelayCommand<bool>(SetXdebugAsync);
+        ToggleFlockCommand = new AsyncRelayCommand<bool>(SetFlockAsync);
         RestartCommand = new AsyncRelayCommand(model.RestartAsync, () => !IsRestarting);
         InstallUpdateCommand = new RelayCommand(() => App.Current.InstallUpdate(), () => CanInstallUpdate);
         OpenMailCommand = new RelayCommand(() => App.Current.Open(WindowKind.Mail));
@@ -69,6 +72,19 @@ public sealed class PanelViewModel : ObservableObject, IDisposable
             }
         }
     }
+    /// <summary>Flock's on/off switch, bound two-way like <see cref="Xdebug" />: off stops the daemon and everything it runs.</summary>
+    public bool FlockOn
+    {
+        get => flock.Show(IsRunning);
+        set
+        {
+            if (value != FlockOn)
+            {
+                ToggleFlockCommand.Execute(value);
+            }
+        }
+    }
+
     public string? ActionError => model.RuntimeError ?? model.ActionError ?? model.Dumps.ActionError;
     public bool IsRunning => model.IsRunning;
     public bool IsDegraded => model.IsDegraded;
@@ -82,7 +98,6 @@ public sealed class PanelViewModel : ObservableObject, IDisposable
     public Features.Update.UpdatePhase UpdateState => model.UpdateService.State;
     public bool HasStatusContent => Status is not null && !NeedsSetup;
     public bool HasSites => HasStatusContent && (Sites.Count > 0 || Proxies.Count > 0);
-    public string NotRunningMessage => model.Error ?? "Flock is not running";
     public bool HasActionError => ActionError is not null;
     public bool HasUpdate => AvailableUpdate is not null;
     public bool IsUpdateBusy => model.UpdateService.IsBusy;
@@ -99,12 +114,12 @@ public sealed class PanelViewModel : ObservableObject, IDisposable
     public Visibility NotRunningVisibility => HasStatusContent ? Visibility.Collapsed : Visibility.Visible;
     public Visibility SetupVisibility => NeedsSetup ? Visibility.Visible : Visibility.Collapsed;
     public Visibility UpdatingVisibility => !NeedsSetup && IsUpdating ? Visibility.Visible : Visibility.Collapsed;
-    public Visibility StoppedVisibility => !NeedsSetup && !IsUpdating ? Visibility.Visible : Visibility.Collapsed;
+    public Visibility FlockSwitchVisibility => NeedsSetup ? Visibility.Collapsed : Visibility.Visible;
     public Visibility FooterVisibility => HasStatusContent ? Visibility.Visible : Visibility.Collapsed;
     public Visibility MailCountVisibility => MailCount > 0 ? Visibility.Visible : Visibility.Collapsed;
     public Visibility DumpCountVisibility => DumpCount > 0 ? Visibility.Visible : Visibility.Collapsed;
     public bool CaptureEnabled => !IsCaptureBusy;
-    public bool StartEnabled => !IsRestarting;
+    public bool FlockSwitchEnabled => !IsRestarting && !IsUpdating;
     public bool RestartEnabled => IsRunning && !IsRestarting;
     public ObservableCollection<PanelSiteRow> Sites { get; } = [];
     public ObservableCollection<PanelServiceRow> Services { get; } = [];
@@ -112,6 +127,7 @@ public sealed class PanelViewModel : ObservableObject, IDisposable
     public ObservableCollection<PanelProxyRow> Proxies { get; } = [];
     public IAsyncRelayCommand<bool> ToggleDumpsCommand { get; }
     public IAsyncRelayCommand<bool> ToggleXdebugCommand { get; }
+    public IAsyncRelayCommand<bool> ToggleFlockCommand { get; }
     public IAsyncRelayCommand RestartCommand { get; }
     public IRelayCommand InstallUpdateCommand { get; }
     public IRelayCommand OpenMailCommand { get; }
@@ -124,6 +140,8 @@ public sealed class PanelViewModel : ObservableObject, IDisposable
     public Task SetDumpsAsync(bool enabled) => dumps.ChangeAsync(enabled, model.SetDumpsAsync);
 
     public Task SetXdebugAsync(bool enabled) => xdebug.ChangeAsync(enabled, model.SetXdebugAsync);
+
+    public Task SetFlockAsync(bool on) => flock.ChangeAsync(on, value => value ? model.StartAsync() : model.StopAsync());
 
     public void OpenSite(string url) => model.Open(url);
 
@@ -186,6 +204,7 @@ public sealed class PanelViewModel : ObservableObject, IDisposable
         OnPropertyChanged(nameof(Status));
         OnPropertyChanged(nameof(Xdebug));
         OnPropertyChanged(nameof(Dumps));
+        OnPropertyChanged(nameof(FlockOn));
         OnPropertyChanged(nameof(Error));
         OnPropertyChanged(nameof(ActionError));
         OnPropertyChanged(nameof(IsRunning));
@@ -200,7 +219,6 @@ public sealed class PanelViewModel : ObservableObject, IDisposable
         OnPropertyChanged(nameof(UpdateState));
         OnPropertyChanged(nameof(HasStatusContent));
         OnPropertyChanged(nameof(HasSites));
-        OnPropertyChanged(nameof(NotRunningMessage));
         OnPropertyChanged(nameof(HasActionError));
         OnPropertyChanged(nameof(HasUpdate));
         OnPropertyChanged(nameof(IsUpdateBusy));
@@ -217,12 +235,12 @@ public sealed class PanelViewModel : ObservableObject, IDisposable
         OnPropertyChanged(nameof(NotRunningVisibility));
         OnPropertyChanged(nameof(SetupVisibility));
         OnPropertyChanged(nameof(UpdatingVisibility));
-        OnPropertyChanged(nameof(StoppedVisibility));
+        OnPropertyChanged(nameof(FlockSwitchVisibility));
         OnPropertyChanged(nameof(FooterVisibility));
         OnPropertyChanged(nameof(MailCountVisibility));
         OnPropertyChanged(nameof(DumpCountVisibility));
         OnPropertyChanged(nameof(CaptureEnabled));
-        OnPropertyChanged(nameof(StartEnabled));
+        OnPropertyChanged(nameof(FlockSwitchEnabled));
         OnPropertyChanged(nameof(RestartEnabled));
         RestartCommand.NotifyCanExecuteChanged();
         ToggleDumpsCommand.NotifyCanExecuteChanged();
@@ -235,7 +253,6 @@ public sealed class PanelViewModel : ObservableObject, IDisposable
         OnPropertyChanged(nameof(IsCaptureBusy));
         OnPropertyChanged(nameof(HasActionError));
         OnPropertyChanged(nameof(UpdatingVisibility));
-        OnPropertyChanged(nameof(StoppedVisibility));
         OnPropertyChanged(nameof(CaptureEnabled));
         ToggleDumpsCommand.NotifyCanExecuteChanged();
     }
