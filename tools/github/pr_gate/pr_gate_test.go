@@ -83,24 +83,58 @@ func TestRunBypassesMaintainersWithoutCheckingIssuesOrFiles(t *testing.T) {
 	if _, err := Run(api, "flock-php", "flock", Event{Action: "opened", Number: 87}); err != nil {
 		t.Fatal(err)
 	}
-	if api.issueCalls != 0 || api.filesCalls != 0 {
-		t.Fatalf("Issue() calls = %d, Files() calls = %d, want 0", api.issueCalls, api.filesCalls)
+	if api.issueCalls != 0 || api.filesCalls != 0 || api.permissionCalls != 0 {
+		t.Fatalf("Issue() calls = %d, Files() calls = %d, Permission() calls = %d, want 0", api.issueCalls, api.filesCalls, api.permissionCalls)
+	}
+}
+
+func TestRunBypassesPrivateMembersWithWriteAccess(t *testing.T) {
+	for _, permission := range []string{"admin", "write"} {
+		t.Run(permission, func(t *testing.T) {
+			pr := pullRequest("open", "")
+			pr.AuthorAssociation = new("CONTRIBUTOR")
+			api := &fakeService{pullRequest: pr, permission: permission, files: []*github.CommitFile{{Filename: new("internal/site.go")}}}
+			if _, err := Run(api, "flock-php", "flock", Event{Action: "opened", Number: 87}); err != nil {
+				t.Fatal(err)
+			}
+			if api.state != "" || api.commented {
+				t.Fatalf("state = %q, commented = %t, want untouched", api.state, api.commented)
+			}
+		})
+	}
+}
+
+func TestRunGatesContributorsWithReadAccess(t *testing.T) {
+	pr := pullRequest("open", "")
+	pr.AuthorAssociation = new("CONTRIBUTOR")
+	api := &fakeService{pullRequest: pr, permission: "read", files: []*github.CommitFile{{Filename: new("internal/site.go")}}}
+	if _, err := Run(api, "flock-php", "flock", Event{Action: "synchronize", Number: 87}); err != nil {
+		t.Fatal(err)
+	}
+	if api.state != "closed" {
+		t.Fatalf("state = %q, want closed", api.state)
 	}
 }
 
 type fakeService struct {
-	pullRequest *github.PullRequest
-	files       []*github.CommitFile
-	issue       *github.Issue
-	gateClosed  bool
-	state       string
-	commented   bool
-	filesCalls  int
-	issueCalls  int
+	pullRequest     *github.PullRequest
+	permission      string
+	files           []*github.CommitFile
+	issue           *github.Issue
+	gateClosed      bool
+	state           string
+	commented       bool
+	filesCalls      int
+	issueCalls      int
+	permissionCalls int
 }
 
 func (f *fakeService) PullRequest(string, string, int) (*github.PullRequest, error) {
 	return f.pullRequest, nil
+}
+func (f *fakeService) Permission(string, string, string) (string, error) {
+	f.permissionCalls++
+	return f.permission, nil
 }
 func (f *fakeService) Files(string, string, int) ([]*github.CommitFile, error) {
 	f.filesCalls++

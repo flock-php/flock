@@ -15,6 +15,7 @@ const openToAnyone = "help wanted"
 
 type Service interface {
 	PullRequest(owner, repository string, number int) (*github.PullRequest, error)
+	Permission(owner, repository, username string) (string, error)
 	Files(owner, repository string, number int) ([]*github.CommitFile, error)
 	Issue(owner, repository string, number int) (*github.Issue, error)
 	GateClosed(owner, repository string, number int) (bool, error)
@@ -47,8 +48,9 @@ func Run(api Service, owner, repository string, event Event) (Result, error) {
 		if err != nil {
 			return Result{}, err
 		}
-		if bypassesGate(pr.GetUser(), pr.GetAuthorAssociation()) {
-			return Result{}, nil
+		bypass, err := bypassesGate(api, owner, repository, pr)
+		if err != nil || bypass {
+			return Result{}, err
 		}
 		if pr.GetState() == "closed" {
 			if !event.BodyEdited || pr.GetMerged() || pr.GetBase().GetRef() != "main" {
@@ -134,8 +136,21 @@ func closePullRequest(api Service, owner, repository string, pr *github.PullRequ
 	return api.SetPullRequestState(owner, repository, pr.GetNumber(), "closed")
 }
 
-func bypassesGate(user *github.User, authorAssociation string) bool {
-	return user.GetType() == "Bot" || authorAssociation == "OWNER" || authorAssociation == "MEMBER" || authorAssociation == "COLLABORATOR"
+// bypassesGate falls back to the author's repository permission because the workflow token sees
+// private organization members as CONTRIBUTOR.
+func bypassesGate(api Service, owner, repository string, pr *github.PullRequest) (bool, error) {
+	switch pr.GetAuthorAssociation() {
+	case "OWNER", "MEMBER", "COLLABORATOR":
+		return true, nil
+	}
+	if pr.GetUser().GetType() == "Bot" {
+		return true, nil
+	}
+	permission, err := api.Permission(owner, repository, pr.GetUser().GetLogin())
+	if err != nil {
+		return false, err
+	}
+	return permission == "admin" || permission == "write", nil
 }
 
 func docsOnly(files []*github.CommitFile) bool {
