@@ -2,6 +2,7 @@ package catalog
 
 import (
 	"bufio"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net"
@@ -9,6 +10,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strings"
 	"syscall"
 	"time"
@@ -78,7 +80,18 @@ func sqlSpec(goos string, p Paths, port int, server, admin string, initialise fu
 			return supervisor.Spec{}, fmt.Errorf("initialise the data directory: %w", err)
 		}
 	}
-	args := []string{"--no-defaults", "--basedir=" + p.Dir, "--datadir=" + p.Data,
+	options, err := ensureOptionFile(p.Data)
+	if err != nil {
+		return supervisor.Spec{}, err
+	}
+	if err := checkPersisted(p.Data); err != nil {
+		return supervisor.Spec{}, err
+	}
+	// --defaults-file must come first. It reads only the data directory's option file, so a
+	// my.cnf elsewhere (Homebrew's, /etc/my.cnf, ~/.my.cnf) still has no effect, and MySQL loads
+	// SET PERSIST values from mysqld-auto.cnf. The flags after it win over my.cnf, though not
+	// over mysqld-auto.cnf: checkPersisted keeps Flock's own settings out of that one.
+	args := []string{"--defaults-file=" + options, "--basedir=" + p.Dir, "--datadir=" + p.Data,
 		"--bind-address=127.0.0.1", fmt.Sprintf("--port=%d", port)}
 	if goos != "windows" {
 		run, err := paths.EnsureRun(p.Root)
@@ -100,6 +113,66 @@ func sqlSpec(goos string, p Paths, port int, server, admin string, initialise fu
 		}
 	}
 	return spec, nil
+}
+
+// optionFileTemplate is the my.cnf Flock writes into a new MySQL or MariaDB data directory.
+const optionFileTemplate = `# Server settings for this MySQL or MariaDB data directory. Flock reads this file when it
+# starts the server and never overwrites it. Restart Flock (flock restart) after changing it.
+#
+# Flock sets the port, socket, bind address and directories itself, so those are ignored here.
+
+[mysqld]
+# sql_mode = STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO
+# max_allowed_packet = 256M
+`
+
+// ensureOptionFile returns the data directory's my.cnf, creating it from the template when it
+// doesn't exist. An existing one, edited or not, is left as it is.
+func ensureOptionFile(data string) (string, error) {
+	path := filepath.Join(data, "my.cnf")
+	f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
+	if errors.Is(err, os.ErrExist) {
+		return path, nil
+	}
+	if err != nil {
+		return "", fmt.Errorf("create %s: %w", path, err)
+	}
+	_, err = f.WriteString(optionFileTemplate)
+	return path, errors.Join(err, f.Close())
+}
+
+// flockManaged are the server settings Flock passes as flags. MySQL refuses to SET PERSIST them,
+// but one written into mysqld-auto.cnf by hand would still win over the flag on the next start.
+var flockManaged = []string{"port", "bind_address", "socket", "datadir", "basedir"}
+
+// checkPersisted returns an error when the data directory's mysqld-auto.cnf (MySQL's SET PERSIST
+// file; MariaDB has none) holds a setting Flock manages, so the server doesn't start somewhere
+// Flock doesn't expect. A file MySQL can't read either is left for mysqld to report.
+func checkPersisted(data string) error {
+	path := filepath.Join(data, "mysqld-auto.cnf")
+	raw, err := os.ReadFile(path)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	var sections map[string]json.RawMessage
+	if json.Unmarshal(raw, &sections) != nil {
+		return nil
+	}
+	for _, section := range sections {
+		var variables map[string]json.RawMessage
+		if json.Unmarshal(section, &variables) != nil {
+			continue // "Version" is a number
+		}
+		for name := range variables {
+			if slices.Contains(flockManaged, strings.ReplaceAll(strings.ToLower(name), "-", "_")) {
+				return fmt.Errorf("%s persists %s, which Flock sets itself: remove it from that file, then start the service again", path, name)
+			}
+		}
+	}
+	return nil
 }
 
 // ---------------------------------------------------------------------------------------------

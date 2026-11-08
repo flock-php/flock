@@ -7,6 +7,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -477,6 +478,77 @@ func TestSQLSpecInitialisesOnce(t *testing.T) {
 	}
 	if _, err := os.Stat(other.Data); !os.IsNotExist(err) {
 		t.Fatal("half-made data kept")
+	}
+}
+
+func TestSQLSpecReadsTheDataDirectorysOptionFile(t *testing.T) {
+	root := t.TempDir()
+	p := Paths{Root: root, Dir: filepath.Join(root, "services", "mysql", "8.4.13"), Data: DataDir(root, "mysql", "8.4")}
+	options := filepath.Join(p.Data, "my.cnf")
+	// mysqld --initialize refuses a data directory with anything in it, so the file comes after.
+	initialise := func() error {
+		if _, err := os.Stat(options); err == nil {
+			return errors.New("my.cnf written before initialising")
+		}
+		_ = os.MkdirAll(p.Data, 0o700)
+		return os.WriteFile(filepath.Join(p.Data, "ibdata1"), nil, 0o600)
+	}
+	spec, err := sqlSpec("darwin", p, 3306, "mysqld", "mysqladmin", initialise, "--mysqlx=OFF")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The server only accepts --defaults-file as its first option.
+	if spec.Args[0] != "--defaults-file="+options || slices.Contains(spec.Args, "--no-defaults") {
+		t.Fatalf("args: %v", spec.Args)
+	}
+	written, err := os.ReadFile(options)
+	if err != nil || !strings.Contains(string(written), "[mysqld]") {
+		t.Fatalf("my.cnf: %q, %v", written, err)
+	}
+
+	// An edited file survives the next start.
+	edited := "[mysqld]\nngram_token_size = 3\n"
+	_ = os.WriteFile(options, []byte(edited), 0o600)
+	if _, err := sqlSpec("darwin", p, 3306, "mysqld", "mysqladmin", initialise, "--mysqlx=OFF"); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := os.ReadFile(options); string(got) != edited {
+		t.Fatalf("my.cnf overwritten: %q", got)
+	}
+}
+
+func TestSQLSpecRefusesPersistedSettingsFlockManages(t *testing.T) {
+	root := t.TempDir()
+	p := Paths{Root: root, Dir: filepath.Join(root, "services", "mysql", "8.4.13"), Data: DataDir(root, "mysql", "8.4")}
+	_ = os.MkdirAll(p.Data, 0o700)
+	_ = os.WriteFile(filepath.Join(p.Data, "ibdata1"), nil, 0o600)
+	auto := filepath.Join(p.Data, "mysqld-auto.cnf")
+	spec := func() error {
+		_, err := sqlSpec("darwin", p, 3306, "mysqld", "mysqladmin", func() error { return nil }, "--mysqlx=OFF")
+		return err
+	}
+	persisted := func(section, name string) string {
+		return fmt.Sprintf(`{"Version": 2, %q: {%q: {"Value": "1", "Metadata": {"Host": "localhost", "User": "root", "Timestamp": 1}}}}`, section, name)
+	}
+
+	// No file (MariaDB, or MySQL before any SET PERSIST), or only settings Flock doesn't set.
+	for _, content := range []string{"", `{"Version": 2}`, persisted("mysql_dynamic_variables", "max_allowed_packet"),
+		persisted("mysql_static_variables", "ngram_token_size"), "not json"} {
+		_ = os.Remove(auto)
+		if content != "" {
+			_ = os.WriteFile(auto, []byte(content), 0o600)
+		}
+		if err := spec(); err != nil {
+			t.Fatalf("%q: %v", content, err)
+		}
+	}
+
+	// A port written by hand would win over --port: refuse, and say where and what.
+	for _, name := range []string{"port", "bind_address", "bind-address", "socket", "datadir", "basedir"} {
+		_ = os.WriteFile(auto, []byte(persisted("mysql_static_variables", name)), 0o600)
+		if err := spec(); err == nil || !strings.Contains(err.Error(), auto) || !strings.Contains(err.Error(), name) {
+			t.Fatalf("%s: %v", name, err)
+		}
 	}
 }
 

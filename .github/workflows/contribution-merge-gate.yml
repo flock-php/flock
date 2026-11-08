@@ -1,0 +1,42 @@
+# Only repository admins and maintainers can merge into main. Org owners are admins on every repo,
+# and the "All-repository maintain" org role grants maintain everywhere, so no names live here.
+# Anyone with write access can add a PR to the merge queue, but this required check fails unless
+# whoever queued it (or enabled auto-merge) has the admin or maintain role. The PR is then taken
+# out of the queue with a comment, the group's other runs are cancelled, and a maintainer can queue
+# it again with "Merge when ready".
+name: Merge gate
+
+on:
+  # The check is required, so it has to pass on PRs too, or nothing could enter the queue.
+  pull_request:
+  merge_group:
+
+permissions:
+  contents: read
+
+jobs:
+  gate:
+    name: Maintainer merge
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: write
+      pull-requests: write
+    steps:
+      - name: Pull request
+        if: github.event_name == 'pull_request'
+        run: echo "Checked when the pull request enters the merge queue."
+
+      - uses: actions/checkout@v7
+        if: github.event_name == 'merge_group'
+
+      - uses: actions/setup-go@v7
+        if: github.event_name == 'merge_group'
+        with:
+          go-version-file: go.mod
+
+      - name: Evaluate
+        if: github.event_name == 'merge_group'
+        run: go run ./tools/github merge
+        env:
+          GITHUB_TOKEN: ${{ github.token }}

@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/caddyserver/caddy/v2/caddyconfig"
 	"github.com/caddyserver/caddy/v2/modules/caddyhttp"
@@ -288,5 +289,56 @@ func TestCaddyfileTurnsDebugModeOnWhenAShareAsksForIt(t *testing.T) {
 	// The dev tools stay blocked, so Debugbar's toolbar would only break the page.
 	if !strings.Contains(block, `env DEBUGBAR_ENABLED "false"`) {
 		t.Errorf("a debug share turns Debugbar on:\n%s", block)
+	}
+}
+
+// lazyHeaderWriter sends the headers with the first write, as encode does, and like net/http's
+// response, Header reads what sending them sets.
+type lazyHeaderWriter struct {
+	http.ResponseWriter
+	status int
+	sent   bool
+}
+
+func (w *lazyHeaderWriter) Header() http.Header {
+	_ = w.sent
+	return w.ResponseWriter.Header()
+}
+
+func (w *lazyHeaderWriter) WriteHeader(status int) { w.status = status }
+
+func (w *lazyHeaderWriter) Write(p []byte) (int, error) {
+	if !w.sent {
+		w.sent = true
+		w.ResponseWriter.WriteHeader(w.status)
+	}
+	return w.ResponseWriter.Write(p)
+}
+
+// The headers go out on the rewriting goroutine, so the handler's later changes (reverse_proxy
+// sets trailers once the body is copied) must not touch them there (run with -race), and its
+// trailers, declared or prefixed, still go out.
+func TestShareHandlerKeepsTheHandlersHeadersApartWhileRewriting(t *testing.T) {
+	public := viteProject(t, "http://localhost:5173")
+	page := `<script type="module" src="http://localhost:5173/resources/js/app.js"></script>`
+	next := caddyhttp.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) error {
+		w.Header().Set("Content-Type", "text/html")
+		w.Header().Set("Trailer", "X-Declared")
+		w.WriteHeader(http.StatusOK)
+		_, _ = io.WriteString(w, page)
+		// Long enough for the rewriting goroutine to send the page while the handler still runs.
+		time.Sleep(50 * time.Millisecond)
+		// reverse_proxy sets the upstream's trailers either way.
+		w.Header().Set("X-Declared", "yes")
+		w.Header().Set(http.TrailerPrefix+"X-Done", "yes")
+		return nil
+	})
+	rec := httptest.NewRecorder()
+	if err := (shareHandler{Public: public}).ServeHTTP(&lazyHeaderWriter{ResponseWriter: rec}, httptest.NewRequest(http.MethodGet, "/", nil), next); err != nil {
+		t.Fatal(err)
+	}
+	res := rec.Result()
+	if !strings.Contains(rec.Body.String(), "/build/assets/app-1a2b.js") || res.Trailer.Get("X-Done") != "yes" || res.Trailer.Get("X-Declared") != "yes" {
+		t.Fatalf("body %q, trailers %v", rec.Body.String(), res.Trailer)
 	}
 }

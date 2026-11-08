@@ -1,0 +1,148 @@
+name: Linux build
+
+on:
+    workflow_call:
+        inputs:
+            ref:
+                type: string
+                required: true
+            version:
+                type: string
+                required: true
+            code:
+                type: string
+                required: true
+
+jobs:
+    linux-app:
+        name: Linux app
+        runs-on: ubuntu-24.04
+        env:
+            CODE: ${{ inputs.code }}
+        steps:
+            -   uses: actions/checkout@v7
+                if: env.CODE == 'true'
+                with:
+                    ref: ${{ inputs.ref }}
+
+            -   name: GTK, libadwaita and WebKitGTK
+                if: env.CODE == 'true'
+                run: sudo apt-get update -qq && sudo apt-get install -y --no-install-recommends libgtk-4-dev libadwaita-1-dev libwebkitgtk-6.0-dev
+
+            -   name: Format
+                if: env.CODE == 'true'
+                run: cargo fmt --manifest-path linux/Cargo.toml --check
+
+            -   name: Clippy
+                if: env.CODE == 'true'
+                run: cargo clippy --manifest-path linux/Cargo.toml --all-targets --all-features --locked -- -D warnings
+
+            -   name: Test
+                if: env.CODE == 'true'
+                run: cargo test --manifest-path linux/Cargo.toml --all-features --locked
+
+    linux:
+        name: Linux (${{ matrix.arch }})
+        strategy:
+            fail-fast: false
+            matrix:
+                include:
+                    -   arch: amd64
+                        os: ubuntu-24.04
+                    -   arch: arm64
+                        os: ubuntu-24.04-arm
+        runs-on: ${{ matrix.os }}
+        env:
+            VERSION: ${{ inputs.version }}
+        steps:
+            -   uses: actions/checkout@v7
+                with:
+                    ref: ${{ inputs.ref }}
+
+            -   uses: actions/setup-go@v7
+                with:
+                    go-version-file: go.mod
+
+            -   name: GTK, libadwaita and WebKitGTK
+                run: sudo apt-get update -qq && sudo apt-get install -y --no-install-recommends libgtk-4-dev libadwaita-1-dev libwebkitgtk-6.0-dev
+
+            -   name: Build packages
+                run: linux/build-packages.sh "${{ matrix.arch }}"
+
+            -   uses: actions/upload-artifact@v7
+                with:
+                    name: flock-linux-${{ matrix.arch }}
+                    path: |
+                        build/linux/flockphp*.deb
+                        build/linux/flockphp*.rpm
+                    if-no-files-found: error
+
+    linux-package-validation:
+        name: Linux package validation (${{ matrix.name }})
+        needs: linux
+        strategy:
+            fail-fast: false
+            matrix:
+                include:
+                    -   name: Ubuntu 24.04
+                        arch: amd64
+                        runner: ubuntu-24.04
+                        image: ubuntu:24.04
+                        package: deb
+                    -   name: Ubuntu 26.04
+                        arch: amd64
+                        runner: ubuntu-24.04
+                        image: ubuntu:26.04
+                        package: deb
+                    -   name: Fedora
+                        arch: amd64
+                        runner: ubuntu-24.04
+                        image: fedora:latest
+                        package: rpm
+                    -   name: Ubuntu 24.04 ARM64
+                        arch: arm64
+                        runner: ubuntu-24.04-arm
+                        image: ubuntu:24.04
+                        package: deb
+                    -   name: Ubuntu 26.04 ARM64
+                        arch: arm64
+                        runner: ubuntu-24.04-arm
+                        image: ubuntu:26.04
+                        package: deb
+                    -   name: Fedora ARM64
+                        arch: arm64
+                        runner: ubuntu-24.04-arm
+                        image: fedora:latest
+                        package: rpm
+        runs-on: ${{ matrix.runner }}
+        steps:
+            -   uses: actions/checkout@v7
+                with:
+                    ref: ${{ inputs.ref }}
+
+            -   uses: actions/download-artifact@v8
+                with:
+                    name: flock-linux-${{ matrix.arch }}
+                    path: build/linux
+
+            -   name: Install, run and remove
+                run: bash linux/validate-package.sh "${{ matrix.package }}" "${{ matrix.image }}" build/linux
+
+    linux-aur-validation:
+        name: Linux AUR validation
+        needs: linux
+        runs-on: ubuntu-24.04
+        env:
+            VERSION: ${{ inputs.version }}
+        steps:
+            -   uses: actions/checkout@v7
+                with:
+                    ref: ${{ inputs.ref }}
+
+            -   uses: actions/download-artifact@v8
+                with:
+                    name: flock-linux-amd64
+                    path: build/linux
+
+            -   name: Build, install, run and remove
+                run: bash linux/validate-package.sh aur archlinux:latest build/linux

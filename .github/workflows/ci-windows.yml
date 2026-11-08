@@ -1,0 +1,129 @@
+name: Windows build
+
+on:
+    workflow_call:
+        inputs:
+            ref:
+                type: string
+                required: true
+            version:
+                type: string
+                required: true
+            code:
+                type: string
+                required: true
+
+jobs:
+    windows-check:
+        name: Windows app (${{ matrix.name }})
+        if: github.event_name == 'pull_request' && inputs.code == 'true'
+        strategy:
+            fail-fast: false
+            matrix:
+                include:
+                    -   name: Kit tests
+                        command: 'dotnet test windows/Flock.Kit.Tests'
+                    -   name: Tray build
+                        command: 'dotnet build windows/Flock.Tray -c Release -p:Platform=x64'
+                    # FlockScreenshots compiles the app's sources with SCREENSHOTS defined, so a change can break
+                    # it without touching it.
+                    -   name: Screenshot build
+                        command: 'dotnet build windows/Flock.Screenshots -c Release -p:Platform=x64'
+        runs-on: windows-2025
+        steps:
+            -   uses: actions/checkout@v7
+                with:
+                    ref: ${{ inputs.ref }}
+
+            -   uses: actions/setup-dotnet@v6
+                with:
+                    dotnet-version: 10.0.x
+
+            -   name: ${{ matrix.name }}
+                run: ${{ matrix.command }}
+
+    windows:
+        name: Windows (x64)
+        if: github.event_name != 'pull_request'
+        runs-on: windows-2025
+        environment: ${{ (github.event_name == 'merge_group' || inputs.version != '') && 'release' || '' }}
+        permissions:
+            contents: read
+            id-token: write
+        env:
+            FLOCK_VERSION: ${{ inputs.version }}
+            SIGNING: ${{ vars.ARTIFACT_SIGNING_ACCOUNT != '' }}
+        steps:
+            -   uses: actions/checkout@v7
+                with:
+                    ref: ${{ inputs.ref }}
+
+            -   uses: actions/setup-go@v7
+                with:
+                    go-version-file: go.mod
+
+            -   uses: actions/setup-dotnet@v6
+                with:
+                    dotnet-version: 10.0.x
+
+            -   name: Install Inno Setup
+                #language=powershell
+                run: |
+                    if (-not (Test-Path "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe")) {
+                      choco install innosetup --no-progress -y
+                    }
+
+            -   name: Require signing
+                if: env.SIGNING != 'true' && (github.event_name == 'merge_group' || inputs.version != '')
+                run: echo "::error::the ARTIFACT_SIGNING_* variables are not set" && exit 1
+
+            -   uses: azure/login@a641126d1b8aa4d1fa005f4f92df94a3a4c4c906 # v3.1.0
+                if: env.SIGNING == 'true'
+                with:
+                    client-id: ${{ vars.AZURE_CLIENT_ID }}
+                    tenant-id: ${{ vars.AZURE_TENANT_ID }}
+                    allow-no-subscriptions: true
+
+            -   name: Set up signing
+                if: env.SIGNING == 'true'
+                env:
+                    ENDPOINT: ${{ vars.ARTIFACT_SIGNING_ENDPOINT }}
+                    ACCOUNT: ${{ vars.ARTIFACT_SIGNING_ACCOUNT }}
+                    PROFILE: ${{ vars.ARTIFACT_SIGNING_PROFILE }}
+                #language=powershell
+                run: |
+                    $client = "$env:RUNNER_TEMP\artifact-signing"
+                    Invoke-WebRequest https://api.nuget.org/v3-flatcontainer/microsoft.artifactsigning.client/1.0.146/microsoft.artifactsigning.client.1.0.146.nupkg -OutFile "$client.zip"
+                    if ((Get-FileHash "$client.zip" -Algorithm SHA256).Hash -ne "7761E5D8F31E54B764DA21D33CD8B0A2940E1B05526C7DFCB5E94B0431426F70") {
+                      throw "unexpected Microsoft.ArtifactSigning.Client package"
+                    }
+                    Expand-Archive "$client.zip" $client
+                    @{
+                      Endpoint = $env:ENDPOINT; CodeSigningAccountName = $env:ACCOUNT; CertificateProfileName = $env:PROFILE
+                      ExcludeCredentials = @("EnvironmentCredential", "ManagedIdentityCredential", "WorkloadIdentityCredential",
+                        "SharedTokenCacheCredential", "VisualStudioCredential", "VisualStudioCodeCredential",
+                        "AzurePowerShellCredential", "AzureDeveloperCliCredential", "InteractiveBrowserCredential")
+                    } | ConvertTo-Json | Set-Content "$client\metadata.json"
+                    az account get-access-token --resource https://codesigning.azure.net --output none
+                    if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+                    "SIGN_DLIB=$client\bin\x64\Azure.CodeSigning.Dlib.dll" >> $env:GITHUB_ENV
+                    "SIGN_METADATA=$client\metadata.json" >> $env:GITHUB_ENV
+
+            -   name: Build installer
+                #language=powershell
+                run: |
+                    ./windows/build-installer.ps1
+                    Move-Item windows/dist/Flock-Setup-x64.exe "windows/dist/Flock-Setup-$env:FLOCK_VERSION-x64.exe"
+
+            -   name: Verify signature
+                if: env.SIGNING == 'true'
+                run: |
+                    $signature = Get-AuthenticodeSignature windows/dist/Flock-Setup-*-x64.exe
+                    $signature | Format-List Status, StatusMessage, SignerCertificate, TimeStamperCertificate
+                    if ($signature.Status -ne "Valid") { throw "the installer's signature is $($signature.Status)" }
+
+            -   uses: actions/upload-artifact@v7
+                with:
+                    name: flock-windows
+                    path: windows/dist/Flock-Setup-*-x64.exe
+                    if-no-files-found: error

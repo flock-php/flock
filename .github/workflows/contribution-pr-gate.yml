@@ -9,34 +9,34 @@
 name: PR gate
 
 on:
-    # pull_request_target, so the token can comment on and close PRs from forks. It never checks
-    # out or runs the PR's code.
-    pull_request_target:
-        # "edited": a PR's base can change after it opens, and a gate-closed PR can add an approved
-        # issue to its description. "synchronize": a docs-only PR can get other changes pushed to it.
-        types: [ opened, reopened, edited, synchronize ]
+  # pull_request_target, so the token can comment on and close PRs from forks. It never checks
+  # out or runs the PR's code.
+  pull_request_target:
+    # "edited": a PR's base can change after it opens, and a gate-closed PR can add an approved
+    # issue to its description. "synchronize": a docs-only PR can get other changes pushed to it.
+    types: [ opened, reopened, edited, synchronize ]
 
 permissions:
-    contents: read
-    issues: read
-    pull-requests: write
+  contents: read
+  issues: write
+  pull-requests: write
 
 jobs:
-    gate:
-        name: Approved issue
-        runs-on: ubuntu-latest
-        steps:
-            # pull_request_target runs from the default branch. Check out the same trusted ref; never
-            # check out or run pull request code here.
-            -   uses: actions/checkout@v7
-                with:
-                    ref: ${{ github.event.repository.default_branch }}
+  gate:
+    name: Approved issue
+    runs-on: ubuntu-latest
+    steps:
+      # pull_request_target runs from the default branch. Check out the same trusted ref; never
+      # check out or run pull request code here.
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.repository.default_branch }}
 
-            -   uses: actions/setup-go@v7
-                with:
-                    go-version-file: go.mod
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
 
-            -   name: Evaluate
-                run: go run ./tools/github-gate pr
-                env:
-                    GITHUB_TOKEN: ${{ github.token }}
+      - name: Evaluate
+        run: go run ./tools/github pr
+        env:
+          GITHUB_TOKEN: ${{ github.token }}

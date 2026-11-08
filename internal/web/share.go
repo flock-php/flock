@@ -241,6 +241,16 @@ type rewriteWriter struct {
 	wroteHeader bool
 	chunks      chan []byte // to the rewriting goroutine, when rewriting
 	done        chan struct{}
+	// header is the handler's copy of the headers while rewriting: the response's own are the
+	// rewriting goroutine's, since encode sends them with the first write.
+	header http.Header
+}
+
+func (w *rewriteWriter) Header() http.Header {
+	if w.header != nil {
+		return w.header
+	}
+	return w.ResponseWriter.Header()
 }
 
 // rewrites reports whether a response is a page to rewrite: a complete, uncompressed HTML 200.
@@ -260,6 +270,7 @@ func (w *rewriteWriter) WriteHeader(status int) {
 	if !w.head && rewrites(status, w.Header()) {
 		w.Header().Del("Content-Length")
 		w.Header().Del("ETag")
+		w.header = w.Header().Clone()
 		w.chunks, w.done = make(chan []byte, 16), make(chan struct{})
 		w.ResponseWriter.WriteHeader(status)
 		go w.rewrite()
@@ -307,6 +318,22 @@ func (w *rewriteWriter) finish() {
 	if w.chunks != nil {
 		close(w.chunks)
 		<-w.done
+		// Trailers the handler set (reverse_proxy passes the upstream's) still go out: those with
+		// http.TrailerPrefix, and those it declared in Trailer before the headers went out.
+		h := w.ResponseWriter.Header()
+		for k, v := range w.header {
+			if strings.HasPrefix(k, http.TrailerPrefix) {
+				h[k] = v
+			}
+		}
+		for _, names := range w.header.Values("Trailer") {
+			for name := range strings.SplitSeq(names, ",") {
+				k := http.CanonicalHeaderKey(strings.TrimSpace(name))
+				if v, ok := w.header[k]; ok {
+					h[k] = v
+				}
+			}
+		}
 	}
 }
 

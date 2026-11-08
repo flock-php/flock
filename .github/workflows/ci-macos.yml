@@ -1,0 +1,118 @@
+name: macOS build
+
+on:
+    workflow_call:
+        inputs:
+            ref:
+                type: string
+                required: true
+            version:
+                type: string
+                required: true
+            code:
+                type: string
+                required: true
+
+jobs:
+    macos-check:
+        name: macOS app
+        if: github.event_name == 'pull_request' && inputs.code == 'true'
+        runs-on: macos-26
+        steps:
+            -   uses: actions/checkout@v7
+                with:
+                    ref: ${{ inputs.ref }}
+
+            # Every target, FlockScreenshots too: it reaches the app's views through @testable import.
+            -   name: Build
+                run: swift build --package-path macos
+
+            -   name: Test
+                run: swift test --package-path macos
+
+    macos:
+        name: macOS (Apple silicon)
+        if: github.event_name != 'pull_request'
+        runs-on: macos-26
+        # Holds the signing secrets; only what may be released runs in it (builds by hand stay unsigned).
+        environment: ${{ (github.event_name == 'merge_group' || inputs.version != '') && 'release' || '' }}
+        env:
+            VERSION: ${{ inputs.version }}
+            SIGNING: ${{ secrets.MACOS_CERTIFICATE_P12 != '' }}
+            # build-app.sh builds it in as SUPublicEDKey; Sparkle installs only updates signed with its
+            # private half (SPARKLE_PRIVATE_KEY, used by tools/release).
+            SPARKLE_PUBLIC_KEY: ${{ vars.SPARKLE_PUBLIC_KEY }}
+        steps:
+            -   uses: actions/checkout@v7
+                with:
+                    ref: ${{ inputs.ref }}
+
+            -   uses: actions/setup-go@v7
+                with:
+                    go-version-file: go.mod
+
+            -   name: Test
+                run: swift test --package-path macos
+
+            # Builds by hand may be ad-hoc signed; what gets released may not.
+            -   name: Require signing
+                if: env.SIGNING != 'true' && (github.event_name == 'merge_group' || inputs.version != '')
+                run: echo "::error::the MACOS_* signing secrets are not set" && exit 1
+
+            # Without the key, the app would never update itself.
+            -   name: Require the update key
+                if: env.SPARKLE_PUBLIC_KEY == '' && (github.event_name == 'merge_group' || inputs.version != '')
+                run: echo "::error::the SPARKLE_PUBLIC_KEY variable is not set (go run ./tools/release keygen)" && exit 1
+
+            # Into a keychain of its own; build-app.sh signs with $SIGN_IDENTITY and notarizes with the
+            # API key at $NOTARY_KEY_PATH.
+            -   name: Set up signing
+                if: env.SIGNING == 'true'
+                env:
+                    CERTIFICATE_P12: ${{ secrets.MACOS_CERTIFICATE_P12 }}
+                    CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+                    NOTARY_KEY: ${{ secrets.MACOS_NOTARY_KEY }}
+                    NOTARY_KEY_ID: ${{ secrets.MACOS_NOTARY_KEY_ID }}
+                    NOTARY_ISSUER_ID: ${{ secrets.MACOS_NOTARY_ISSUER_ID }}
+                #language=bash
+                run: |
+                    keychain="$RUNNER_TEMP/signing.keychain-db"
+                    password=$(uuidgen)
+                    security create-keychain -p "$password" "$keychain"
+                    security set-keychain-settings -lut 21600 "$keychain"
+                    security unlock-keychain -p "$password" "$keychain"
+                    echo "$CERTIFICATE_P12" | base64 --decode > "$RUNNER_TEMP/certificate.p12"
+                    security import "$RUNNER_TEMP/certificate.p12" -k "$keychain" -P "$CERTIFICATE_PASSWORD" -T /usr/bin/codesign
+                    rm "$RUNNER_TEMP/certificate.p12"
+                    curl -fsSL https://www.apple.com/certificateauthority/DeveloperIDG2CA.cer -o "$RUNNER_TEMP/DeveloperIDG2CA.cer"
+                    security import "$RUNNER_TEMP/DeveloperIDG2CA.cer" -k "$keychain" || true
+                    security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$password" "$keychain" > /dev/null
+                    security list-keychains -d user -s "$keychain" $(security list-keychains -d user | tr -d '"')
+                    identity=$(security find-identity -v -p codesigning "$keychain" | grep -o '"Developer ID Application: [^"]*"' | head -1 | tr -d '"')
+                    [ -n "$identity" ] || { echo "::error::no Developer ID Application identity in MACOS_CERTIFICATE_P12"; exit 1; }
+                    echo "SIGN_IDENTITY=$identity" >> "$GITHUB_ENV"
+                    printf '%s\n' "$NOTARY_KEY" > "$RUNNER_TEMP/notary-key.p8"
+                    {
+                      echo "NOTARY_KEY_PATH=$RUNNER_TEMP/notary-key.p8"
+                      echo "NOTARY_KEY_ID=$NOTARY_KEY_ID"
+                      echo "NOTARY_ISSUER_ID=$NOTARY_ISSUER_ID"
+                    } >> "$GITHUB_ENV"
+
+            -   name: Build app and disk image
+                #language=bash
+                run: |
+                    macos/build-app.sh
+                    mv build/macos/Flock.dmg "build/macos/Flock-$VERSION-macOS.dmg"
+
+            -   uses: actions/upload-artifact@v7
+                with:
+                    name: flock-macos
+                    path: build/macos/Flock-*-macOS.dmg
+                    if-no-files-found: error
+
+            -   name: Clean up signing
+                if: always() && env.SIGNING == 'true'
+                #language=bash
+                run: |
+                    security delete-keychain "$RUNNER_TEMP/signing.keychain-db" || true
+                    rm -f "$RUNNER_TEMP/notary-key.p8"

@@ -19,6 +19,7 @@ import (
 	"flock/internal/binaries"
 	"flock/internal/config"
 	"flock/internal/paths"
+	"flock/internal/web"
 	"flock/internal/worktree"
 )
 
@@ -360,6 +361,58 @@ func TestFoldersInParkedPathsAreFollowed(t *testing.T) {
 		t.Fatal(err)
 	}
 	waitFor(false)
+}
+
+func TestProjectFilesFollowsTheConfiguredCaddyfile(t *testing.T) {
+	site := t.TempDir()
+	d := daemon{cfg: &config.Config{Sites: []config.Site{{Name: "app", Path: site}}}}
+	before := d.projectFiles()
+
+	// A project's own Caddyfile isn't Flock's.
+	writeFile(t, filepath.Join(site, "Caddyfile"), "example.com {\n}\n")
+	if d.projectFiles() != before {
+		t.Fatal("a Caddyfile nobody configured changed the project fingerprint")
+	}
+
+	writeFile(t, filepath.Join(site, "flock.yml"), "caddyfile: ops/local.caddy\n")
+	named := d.projectFiles()
+	if named == before {
+		t.Fatal("flock.yml did not change the project fingerprint")
+	}
+	configured := filepath.Join(site, "ops", "local.caddy")
+	if err := os.MkdirAll(filepath.Dir(configured), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeFile(t, configured, "header X-Configured yes\n")
+	if created := d.projectFiles(); created == named || !strings.Contains(created, configured) {
+		t.Fatalf("creating the configured file did not change the project fingerprint: %q", created)
+	}
+}
+
+func TestSiteHandlersProblemsLeaveTheSiteServedWithoutThem(t *testing.T) {
+	dir := t.TempDir()
+	cfg := &config.Config{}
+	site := config.Site{Name: "app", Path: dir}
+	ws := web.Site{Domain: "app.test", Root: dir, FPM: []string{"127.0.0.1:1"}}
+
+	if handlers, problem := siteHandlers(cfg, site, ws); handlers != "" || problem != "" {
+		t.Fatalf("without settings: got %q, %q", handlers, problem)
+	}
+
+	writeFile(t, filepath.Join(dir, "flock.yml"), "caddyfile: local.caddy\n")
+	if _, problem := siteHandlers(cfg, site, ws); !strings.Contains(problem, "doesn't exist") {
+		t.Fatalf("missing file: got %q", problem)
+	}
+
+	writeFile(t, filepath.Join(dir, "local.caddy"), "header X-A b\n}\n:9999 {\n")
+	if handlers, problem := siteHandlers(cfg, site, ws); handlers != "" || !strings.Contains(problem, "local.caddy:2") {
+		t.Fatalf("breakout: got %q, %q", handlers, problem)
+	}
+
+	writeFile(t, filepath.Join(dir, "local.caddy"), "header X-A b\n")
+	if handlers, problem := siteHandlers(cfg, site, ws); handlers != "header X-A b\n" || problem != "" {
+		t.Fatalf("valid file: got %q, %q", handlers, problem)
+	}
 }
 
 func TestGitWorktreesAreServedUnderTheirSite(t *testing.T) {

@@ -57,6 +57,29 @@ flock services uninstall mysql --delete-data
 `create-db` works for PostgreSQL, MySQL and MariaDB while the service is running. `--port` doesn't apply to PostgreSQL.
 :::
 
+## MySQL and MariaDB settings
+
+To match a server setting your production database uses, such as `sql_mode` or `max_allowed_packet`, add it to `my.cnf` in the version's data directory, for example `services/mysql/data/8.4/my.cnf` in [Flock's data directory](configuration.md). Flock creates the file the first time it starts the server, never overwrites it, and ignores every other `my.cnf` on your machine.
+
+```ini
+[mysqld]
+sql_mode = STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO
+max_allowed_packet = 256M
+```
+
+MySQL and MariaDB don't share every setting, and the server doesn't start when the file names one it doesn't know. For example, MySQL's full-text n-gram parser settings are MySQL only:
+
+```ini
+# MySQL only
+[mysqld]
+ngram_token_size = 3
+innodb_ft_enable_stopword = 0
+```
+
+Restart Flock (`flock restart`) to apply a change. Each version has its own data directory, so it has its own file. Flock sets the port, socket, bind address and directories itself, so those are ignored in the file.
+
+On MySQL, `SET PERSIST` also keeps a setting across restarts, in `mysqld-auto.cnf` next to `my.cnf`. MySQL doesn't persist the settings Flock manages. If one of them is added to that file by hand, Flock doesn't start the server, and names the file and setting to remove.
+
 ## Connecting from Laravel
 
 :::app
