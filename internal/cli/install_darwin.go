@@ -487,11 +487,26 @@ func appDirs() []string {
 	}
 }
 
-// restartService makes launchd kill and relaunch the daemon.
+// stopDaemon unloads the agent, which stops the daemon and everything it runs, until restartService
+// or the next login loads it again.
+func stopDaemon() error {
+	stopService("gui/" + strconv.Itoa(os.Getuid()))
+	return nil
+}
+
+// restartService makes launchd kill and relaunch the daemon, or loads the agent after `flock stop`.
 func restartService() error {
-	target := "gui/" + strconv.Itoa(os.Getuid()) + "/" + launchLabel
+	domain := "gui/" + strconv.Itoa(os.Getuid())
+	target := domain + "/" + launchLabel
 	if err := exec.Command("launchctl", "print", target).Run(); err != nil {
-		return fmt.Errorf("the background daemon is not installed — run `flock install`")
+		path, _ := plistPath()
+		if !serviceInstalled() {
+			return fmt.Errorf("the background daemon is not installed — run `flock install`")
+		}
+		if out, err := exec.Command("launchctl", "bootstrap", domain, path).CombinedOutput(); err != nil {
+			return fmt.Errorf("launchctl bootstrap: %v: %s", err, out)
+		}
+		return nil
 	}
 	if out, err := exec.Command("launchctl", "kickstart", "-k", target).CombinedOutput(); err != nil {
 		return fmt.Errorf("launchctl kickstart: %v: %s", err, out)

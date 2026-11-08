@@ -95,3 +95,17 @@ Stop that program, then click **Restart** at the bottom of the Flock panel. On L
 :::cli
 Stop that program and run `flock restart`.
 :::
+
+## Stopping Flock
+
+Quitting the menu bar or tray app leaves Flock running, so your sites keep working. To stop Flock and everything it runs, for example to free memory, or ports 80 and 443 for another local environment:
+
+:::app
+On macOS, switch off the switch at the top of the Flock panel. Switch it on to start Flock again.
+:::
+
+:::cli
+Run `flock stop`, and `flock start` to start Flock again.
+:::
+
+Flock starts again at your next login.

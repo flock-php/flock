@@ -492,6 +492,18 @@ func stopDaemonProcess() {
 	_ = exec.Command("taskkill", "/F", "/IM", "flockd.exe").Run()
 }
 
+// stopDaemon ends the scheduled task and the daemon, until restartService or the next login starts it.
+func stopDaemon() error {
+	root, err := paths.Root()
+	if err != nil {
+		return err
+	}
+	_ = exec.Command("schtasks", "/End", "/TN", taskName).Run()
+	stopDaemonProcess()
+	waitDaemonGone(root)
+	return nil
+}
+
 // restartService ends the scheduled task (killing the daemon and everything it runs) and starts it again.
 func restartService() error {
 	root, err := paths.Root()
