@@ -40,3 +40,9 @@ func groupAlive(cmd *exec.Cmd) bool {
 
 // started is a no-op on unix: children live in their own process group, stopped by terminate.
 func started(*exec.Cmd) {}
+
+// ownTree and endTree are no-ops on unix: a group's process group is found from its leader's pid,
+// even once the leader exited (see endGroup).
+func ownTree(*exec.Cmd) {}
+
+func endTree(*exec.Cmd) {}

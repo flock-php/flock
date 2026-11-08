@@ -25,10 +25,14 @@ func terminate(cmd *exec.Cmd, _ os.Signal, group bool) {
 	kill(cmd, group)
 }
 
-// kill ends a process, with group its whole tree: taskkill /T follows the parent links, so npm's
-// dev server goes too (it would keep its port until the daemon exits, see started).
+// kill ends a process, with group its whole tree: its job (see ownTree), else taskkill /T, which
+// follows the parent links, so npm's dev server goes too (it would keep its port until the daemon
+// exits, see started).
 func kill(cmd *exec.Cmd, group bool) {
 	if group {
+		if endTree(cmd) {
+			return
+		}
 		tree := exec.Command("taskkill", "/T", "/F", "/PID", strconv.Itoa(cmd.Process.Pid))
 		configure(tree)
 		if tree.Run() == nil {
@@ -38,8 +42,7 @@ func kill(cmd *exec.Cmd, group bool) {
 	_ = cmd.Process.Kill()
 }
 
-// groupAlive is false on Windows: kill takes the whole tree at once, and a child that outlives its
-// parent can't be found from it there.
+// groupAlive is false on Windows: kill takes the whole tree at once, through its job.
 func groupAlive(*exec.Cmd) bool { return false }
 
 var (
@@ -75,4 +78,40 @@ func started(cmd *exec.Cmd) {
 	}
 	defer windows.CloseHandle(p)
 	_ = windows.AssignProcessToJobObject(job, p)
+}
+
+// trees are the jobs of the running groups (see ownTree), by pid.
+var trees sync.Map
+
+// ownTree puts a group's launcher in a job of its own, which its children join as they start.
+// Unlike taskkill /T, the job still finds them once the launcher exited, as npm can while its dev
+// server holds the port.
+func ownTree(cmd *exec.Cmd) {
+	h, err := windows.CreateJobObject(nil, nil)
+	if err != nil {
+		return
+	}
+	p, err := windows.OpenProcess(windows.PROCESS_SET_QUOTA|windows.PROCESS_TERMINATE, false, uint32(cmd.Process.Pid))
+	if err != nil {
+		_ = windows.CloseHandle(h)
+		return
+	}
+	defer windows.CloseHandle(p)
+	if windows.AssignProcessToJobObject(h, p) != nil {
+		_ = windows.CloseHandle(h)
+		return
+	}
+	trees.Store(cmd.Process.Pid, h)
+}
+
+// endTree kills what's left of a group's tree through its job, and reports whether it had one.
+func endTree(cmd *exec.Cmd) bool {
+	v, ok := trees.LoadAndDelete(cmd.Process.Pid)
+	if !ok {
+		return false
+	}
+	h := v.(windows.Handle)
+	_ = windows.TerminateJobObject(h, 1)
+	_ = windows.CloseHandle(h)
+	return true
 }

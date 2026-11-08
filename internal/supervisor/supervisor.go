@@ -210,6 +210,9 @@ func (p *proc) once() error {
 		return err
 	}
 	started(cmd)
+	if p.spec.Group {
+		ownTree(cmd)
+	}
 
 	exited := make(chan error, 1)
 	go func() { exited <- cmd.Wait() }()
@@ -225,20 +228,24 @@ func (p *proc) once() error {
 			// What it started (a dev server, holding the port) goes too, before it starts again.
 			terminate(cmd, p.spec.StopSignal, true)
 			endGroup(cmd, time.After(stopGrace))
+			endTree(cmd)
 		}
 		return err
 	case <-p.stop:
 		p.terminate(cmd, log)
-		grace := time.After(stopGrace)
+		deadline := time.After(stopGrace)
 		select {
 		case <-exited:
-		case <-grace:
+		case <-deadline:
 			kill(cmd, p.spec.Group)
 			<-exited
+			// The grace is used up: what's left of the group gets a moment more, not forever.
+			deadline = time.After(time.Second)
 		}
 		if p.spec.Group {
 			// The launcher may exit on the signal while a child it started ignores it.
-			endGroup(cmd, grace)
+			endGroup(cmd, deadline)
+			endTree(cmd)
 		}
 		fmt.Fprintf(log, "[flock] %s stopped\n", p.spec.Name)
 		return errStopped
