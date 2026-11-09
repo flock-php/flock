@@ -387,6 +387,8 @@ internal static class Ui
             // The accent button style, recolored through the resources its template looks up (the
             // same red in both themes, so white text stays readable).
             dialog.PrimaryButtonStyle = Resource<Style>("AccentButtonStyle");
+            // Keep Cancel gray: do not let the close button pick up the accent's red overrides.
+            dialog.CloseButtonStyle = Resource<Style>("ButtonStyle");
             var white = new SolidColorBrush(Colors.White);
             foreach (var (state, red) in new[] { ("", Rgb(196, 43, 28)), ("PointerOver", Rgb(178, 38, 25)), ("Pressed", Rgb(160, 34, 22)) })
             {
