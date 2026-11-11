@@ -37,6 +37,9 @@ type Share struct {
 	Proxy  string
 	Domain string
 	Origin string
+	// Node is the Node.js site's name: its visitors start its dev server like the site's own do
+	// (see Site.Node), e.g. after it was stopped while the share ran.
+	Node string
 }
 
 // nodeShareBlock serves a Node.js app's share from its dev server, with the same forwarded headers
@@ -50,6 +53,9 @@ func nodeShareBlock(s Share) string {
 		fmt.Fprintf(&b, "\trequest_header -%s\n", h)
 	}
 	b.WriteString("\tflock_share * \"\"\n")
+	if s.Node != "" {
+		fmt.Fprintf(&b, "\tflock_wake %s\n", quote(s.Node))
+	}
 	fmt.Fprintf(&b, "\treverse_proxy %s {\n", quote(s.Proxy))
 	for _, h := range [][2]string{
 		{"Host", s.Domain},

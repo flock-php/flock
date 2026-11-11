@@ -700,7 +700,7 @@ func (d *daemon) reload() error {
 			// Served by its dev server, which the first request starts (see wakeNode).
 			port := d.nodePort(site.Name, takenPorts)
 			takenPorts[port] = true
-			spec := d.nodeSpec(cfg, site, port, aliases)
+			spec := d.nodeSpec(cfg, site, port, nodeVersion.Version)
 			nodeSpecs[site.Name], nodePorts[site.Name] = spec, port
 			status.Server, status.Worker, status.OctaneAvailable, status.PHP = "", "", false, ""
 			status.NodeServer = &api.SiteNodeServer{State: api.NodeSleeping, Port: port, Command: spec.Shell, Log: spec.Name, Problem: nodeSiteProblem(site)}
@@ -870,7 +870,7 @@ func (d *daemon) reload() error {
 				continue
 			}
 			if info.node != "" {
-				shares = append(shares, web.Share{Port: s.Port, Proxy: info.node, Domain: info.domain, Origin: info.origin})
+				shares = append(shares, web.Share{Port: s.Port, Proxy: info.node, Domain: info.domain, Origin: info.origin, Node: s.Site})
 				continue
 			}
 			upstreams, err := pool(info.version)

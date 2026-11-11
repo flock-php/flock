@@ -9,6 +9,8 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"reflect"
+	"slices"
 	"runtime"
 	"strconv"
 	"strings"
@@ -144,7 +146,7 @@ func TestANodeSiteWhoseDevServerExitsSaysWhy(t *testing.T) {
 	}
 
 	code, page, body := getPage(t, cfg, "app.test")
-	if code != http.StatusServiceUnavailable || page != "node-starting" || !strings.Contains(body, "Cannot find module") {
+	if code != http.StatusServiceUnavailable || page != "node-failed" || !strings.Contains(body, "Cannot find module") || !strings.Contains(body, `data-page="node-failed"`) {
 		t.Fatalf("the page doesn't say why: %d %q\n%s", code, page, body)
 	}
 }
@@ -309,6 +311,34 @@ func TestANodeSitesWorktreeRunsADevServerOfItsOwn(t *testing.T) {
 	// Only the worktree's dev server runs: the site's own sleeps until it's visited.
 	if s := siteStatus(t, client, "app").NodeServer.State; s != api.NodeSleeping {
 		t.Fatalf("the site's dev server: %s", s)
+	}
+}
+
+func TestNextJSListensOnLoopbackAndANewNodeVersionRestarts(t *testing.T) {
+	for script, next := range map[string]bool{
+		"next dev": true, "next dev --turbopack": true, "prisma generate && next dev": true,
+		"vite": false, "nuxt dev": false, "nextra dev": false, "astro dev": false,
+	} {
+		if nextDev.MatchString(script) != next {
+			t.Errorf("%q: next dev %v", script, !next)
+		}
+	}
+
+	dir := t.TempDir()
+	writeFile(t, filepath.Join(dir, "package.json"), `{"scripts": {"dev": "next dev --turbopack"}}`)
+	d := &daemon{root: t.TempDir(), restarts: map[string]int{}}
+	cfg := config.Default()
+	site := config.Site{Name: "web", Path: dir, Type: config.TypeNode}
+	spec := d.nodeSpec(cfg, site, 22001, "22")
+	if !strings.HasSuffix(spec.Shell, "--port 22001 --hostname 127.0.0.1") {
+		t.Errorf("next dev isn't bound to loopback: %q", spec.Shell)
+	}
+	if other := d.nodeSpec(cfg, site, 22001, "24"); reflect.DeepEqual(spec.Env, other.Env) {
+		t.Error("another Node.js version gives the same spec, so the server wouldn't restart")
+	}
+	// Only the site's own domain: Vite before 8 takes the variable as one name.
+	if !slices.Contains(spec.Env, "__VITE_ADDITIONAL_SERVER_ALLOWED_HOSTS=.web.test") {
+		t.Errorf("env: %v", spec.Env)
 	}
 }
 

@@ -340,7 +340,7 @@ footer code { font-family: var(--mono); font-size: 0.75rem; color: var(--ink-sof
                 Flock runs <code>npm run dev</code> for <strong>{{html $nodeSite}}</strong>, but it exited{{if $nodeProblem}}: {{html $nodeProblem}}{{end}}.
                 Its output is in Flock, or <code>flock logs {{html $nodeSite}}</code>. Flock tries again in a moment.
             </p>
-            <p class="waiting" data-wait>Your app shows here as soon as it answers&hellip;</p>
+            <p class="waiting" data-wait data-page="node-{{html $nodeState}}">Your app shows here as soon as it answers&hellip;</p>
 {{else if $nodeSite}}
             <div class="eyebrow">Starting</div>
             <h1>Starting the dev server&hellip;</h1>
@@ -349,7 +349,7 @@ footer code { font-family: var(--mono); font-size: 0.75rem; color: var(--ink-sof
                 <strong>{{html $nodeSite}}</strong> is a Node.js app. Flock starts its dev server when it&rsquo;s visited,
                 and this page shows the app as soon as it answers.
             </p>
-            <p class="waiting" data-wait>Waiting for the dev server&hellip;</p>
+            <p class="waiting" data-wait data-page="node-{{html $nodeState}}">Waiting for the dev server&hellip;</p>
 {{else if $downSite}}
             <div class="eyebrow">Not running</div>
             <h1>Nothing answers at {{html $downUpstream}} yet.</h1>
@@ -578,18 +578,23 @@ document.querySelectorAll('.code-block button').forEach(function (button) {
 
 // Check every 2 seconds (for up to 10 minutes) whether the site answers instead of this page, and
 // show it once it does: right away while PHP is being installed or the site has no document root,
-// after a click on a button that opens the app (Secure in Flock, Install PHP).
+// after a click on a button that opens the app (Secure in Flock, Install PHP). A page that names
+// its state (data-page: a dev server starting or failed) reloads when that changes too, to say so.
 var waiting = false;
 var wait = function () {
     if (waiting) return;
     waiting = true;
     var tries = 0;
+    var marked = document.querySelector('[data-page]');
+    var shown = marked ? marked.getAttribute('data-page') : null;
     var again = function () {
         if (++tries < 300) setTimeout(check, 2000);
     };
     var check = function () {
         fetch(location.href, { method: 'HEAD', cache: 'no-store' }).then(function (response) {
-            if (response.headers.get('X-Flock-Page')) return again();
+            var page = response.headers.get('X-Flock-Page');
+            // A dev server that keeps failing starts again in between: only a failure is news.
+            if (page && (shown === null || page === shown || page === 'node-starting')) return again();
             location.reload();
         }, again);
     };

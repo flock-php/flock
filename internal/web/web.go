@@ -255,7 +255,8 @@ func upstreamDown(s Site, cfg Config) string {
 	if s.Node != "" {
 		// A Node.js site's dev server is starting (flock_wake sets its state and problem).
 		return fmt.Sprintf("\thandle_errors 502 {\n\t\tvars flock_node_site %s\n"+
-			"\t\troot * %s\n\t\trewrite * /unlinked.html\n\t\theader Cache-Control no-store\n\t\theader X-Flock-Page node-starting\n"+
+			// The state in X-Flock-Page, so the waiting page reloads once it changes (to say why it failed).
+			"\t\troot * %s\n\t\trewrite * /unlinked.html\n\t\theader Cache-Control no-store\n\t\theader X-Flock-Page node-{http.vars.flock_node_state}\n"+
 			"\t\ttemplates\n\t\tfile_server {\n\t\t\tstatus 503\n\t\t}\n\t}\n",
 			quote(s.Node), quote(pagesDir(cfg)))
 	}

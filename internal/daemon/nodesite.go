@@ -7,6 +7,7 @@ import (
 	"hash/fnv"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"sync"
@@ -92,33 +93,52 @@ func (d *daemon) nodePort(site string, taken map[int]bool) int {
 	return start
 }
 
-// nodeSpec is a Node.js site's dev server. Its whole tree is stopped with it: npm's child holds
-// the port. The shims on PATH pick the site's Node.js version for npm.
-func (d *daemon) nodeSpec(cfg *config.Config, site config.Site, port int, aliases []string) supervisor.Spec {
+// nodeSpec is a Node.js site's dev server, on the Node.js version the site uses (node). Its whole
+// tree is stopped with it: npm's child holds the port. The shims on PATH pick that version for npm.
+func (d *daemon) nodeSpec(cfg *config.Config, site config.Site, port int, node string) supervisor.Spec {
 	d.mu.Lock()
 	restart := d.restarts[site.Name]
 	d.mu.Unlock()
-	env := d.commandEnv(append([]string{cfg.Domain(site)}, aliases...), "http://localhost:"+strconv.Itoa(port))
+	// Only the site's own domain (and its subdomains) for Vite's allowed hosts: Vite before 8 takes
+	// the variable as one name, so a list would match none. An alias needs server.allowedHosts.
+	env := d.commandEnv([]string{cfg.Domain(site)}, "http://localhost:"+strconv.Itoa(port))
+	// The version the shims pick, so a new one makes a new spec and restarts the server.
+	env = append(env, "FLOCK_NODE="+node)
 	if restart > 0 {
 		env = append(env, "FLOCK_RESTART="+strconv.Itoa(restart)) // a new spec, so Ensure restarts it
 	}
+	command := nodeCommand + strconv.Itoa(port)
+	// next dev listens on every interface unless told otherwise: past the web server's local-only
+	// guard and a share's protections, to the whole network.
+	if nextDev.MatchString(devScript(site.Path)) {
+		command += " --hostname 127.0.0.1"
+	}
 	return supervisor.Spec{
-		Name: nodeProcess(site.Name), Shell: nodeCommand + strconv.Itoa(port), Dir: site.Path, Tree: true, Env: env,
+		Name: nodeProcess(site.Name), Shell: command, Dir: site.Path, Tree: true, Env: env,
 		LogFile: filepath.Join(d.root, "log", nodeProcess(site.Name)+".log"),
 	}
 }
 
-// hasDevScript reports whether the project's package.json has a dev script.
-func hasDevScript(dir string) bool {
+// nextDev matches a dev script that runs Next.js's dev server.
+var nextDev = regexp.MustCompile(`(^|[\s;&|(])next\s+dev\b`)
+
+// devScript is the project's dev script, "" when it has none.
+func devScript(dir string) string {
 	data, err := os.ReadFile(filepath.Join(dir, "package.json"))
 	if err != nil {
-		return false
+		return ""
 	}
 	var pkg struct {
 		Scripts map[string]string `json:"scripts"`
 	}
-	return json.Unmarshal(data, &pkg) == nil && pkg.Scripts["dev"] != ""
+	if json.Unmarshal(data, &pkg) != nil {
+		return ""
+	}
+	return pkg.Scripts["dev"]
 }
+
+// hasDevScript reports whether the project's package.json has a dev script.
+func hasDevScript(dir string) bool { return devScript(dir) != "" }
 
 // keepNodeSites records the reload's Node.js sites, forgetting those that are gone.
 func (r *nodeRuns) keep(specs map[string]supervisor.Spec, ports map[string]int) {

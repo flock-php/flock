@@ -33,7 +33,7 @@ func TestServesANodeSharesThroughCaddy(t *testing.T) {
 		}))
 	}()
 
-	share := Share{Port: freePort(t), Proxy: ln.Addr().String(), Domain: "app.test", Origin: "https://app.test"}
+	share := Share{Port: freePort(t), Proxy: ln.Addr().String(), Domain: "app.test", Origin: "https://app.test", Node: "app"}
 	cfg := Config{
 		StorageDir: filepath.Join(dir, "caddy"), LogFile: filepath.Join(dir, "web.log"),
 		HTTPPort: freePort(t), HTTPSPort: freePort(t), Bind: "127.0.0.1", TLD: "test", Shares: []Share{share},

@@ -78,7 +78,7 @@ flock logs my-app        # the dev server's output
 
 If the dev server stops, the page says why, for example that `node_modules` is missing (run `npm install` in the project).
 
-Flock tells Vite the app's domains, so Vite answers them. Next.js may block its hot reload from a domain other than `localhost`; allow it in `next.config` with `allowedDevOrigins: ['my-app.test', '*.my-app.test']`. Server-side requests to other `.test` sites over HTTPS work too: Node.js trusts Flock's certificates.
+Flock tells Vite the app's domain and its subdomains, so Vite answers them; for an extra domain (an alias), add it to `server.allowedHosts` in the Vite config. Next.js's dev server only listens on your own computer, not the network, and may block its hot reload from a domain other than `localhost`; allow it in `next.config` with `allowedDevOrigins: ['my-app.test', '*.my-app.test']`. Server-side requests to other `.test` sites over HTTPS work too: Node.js trusts Flock's certificates.
 
 A Node.js app's git worktrees each run a dev server of their own, at their own address (see [Worktrees](worktrees.md)). Sharing one shows its dev server (see [Sharing](sharing.md)).
 
