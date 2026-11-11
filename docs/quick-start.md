@@ -18,7 +18,7 @@ Either **park** your code folder, so every subfolder becomes a site, or **link**
 :::app
 To park a folder, open **Settings…** from the Flock panel, go to **General**, and click **+** under **Project folders**. Pick `~/Code`.
 
-To link a single project instead, go to **Sites**, click **Add Site…** and pick `~/Code/acme`.
+To link a single project instead, go to **Sites**, click **Add Site…**, pick `~/Code/acme` and click **Add**.
 
 ![Project folders in Settings → General](screenshot:settings-general-project-folders)
 :::

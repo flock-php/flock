@@ -38,7 +38,7 @@ flock unpark ~/Work
 A linked site is a single project folder, wherever it lives. The site name defaults to the folder name.
 
 :::app
-In **Settings → Sites**, click **Add Site…** and choose the project folder. Then select the site to set its HTTPS in the **Site** section and its PHP version under **Versions**.
+In **Settings → Sites**, click **Add Site…** and choose the project folder. Flock then asks which domain to serve it as: leave the field empty and click **Add** to serve it as `<folder>.test`, or type a domain of your own, such as `filament.ui-playground` (the `.test` is optional). Then select the site to set its HTTPS in the **Site** section and its PHP version under **Versions**.
 
 ![Settings → Sites](screenshot:settings-sites)
 
@@ -64,6 +64,17 @@ flock link shop --php 8.4 --secure
 | --- | --- |
 | `--php <version>` | Use this PHP version for the site |
 | `--secure` | Serve it over HTTPS right away |
+| `--domain <domain>` | Serve it as this domain instead of `<name>.test` |
+
+A name is a single label, so `shop.app` would become `shop-app.test`. To serve a site as a domain with more labels, use `--domain`. The site is then named after the domain:
+
+```bash
+cd ~/Developer/ui/playground/filament
+flock link --domain filament.ui-playground
+# linked ~/Developer/ui/playground/filament → http://filament.ui-playground.test
+```
+
+The site's name is `filament-ui-playground`; use it in commands like `flock secure filament-ui-playground`. A domain can sit under another site's domain: `filament.ui-playground.test` still goes to this site when there's also a `ui-playground.test`. It can't be another site's domain or alias.
 
 Remove a link with `flock unlink [name]`.
 :::

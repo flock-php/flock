@@ -148,3 +148,74 @@ func TestDomainsBySiteServesAnAliasUnderAnotherSiteOverItsSubdomain(t *testing.T
 		t.Errorf("shop's tenant1: got %q", p)
 	}
 }
+
+func TestSetDomainNamesTheSiteAndKeepsADomainOfMoreLabels(t *testing.T) {
+	cfg := domainsConfig()
+
+	for in, want := range map[string]Site{
+		"filament":                    {Name: "filament"},
+		" Filament.test. ":            {Name: "filament"},
+		"filament.ui-playground":      {Name: "filament-ui-playground", Domain: "filament.ui-playground.test"},
+		"filament.ui-playground.test": {Name: "filament-ui-playground", Domain: "filament.ui-playground.test"},
+		"admin.app":                   {Name: "admin-app", Domain: "admin.app.test"},
+		"v2.store.test":               {Name: "v2-store", Domain: "v2.store.test"},
+		"a.b.c.d.e.f":                 {Name: "a-b-c-d-e-f", Domain: "a.b.c.d.e.f.test"},
+	} {
+		site := Site{Path: "/code/filament", Domain: "old.test"}
+		if err := cfg.SetDomain(&site, in); err != nil {
+			t.Errorf("SetDomain(%q): %v", in, err)
+			continue
+		}
+		want.Path = "/code/filament"
+		if site.Name != want.Name || site.Domain != want.Domain || site.Path != want.Path {
+			t.Errorf("SetDomain(%q) = %+v; want %+v", in, site, want)
+		}
+		if got := cfg.Domain(site); want.Domain != "" && got != want.Domain {
+			t.Errorf("Domain after SetDomain(%q) = %q", in, got)
+		}
+	}
+}
+
+func TestSetDomainRejectsTakenAndInvalidNames(t *testing.T) {
+	cfg := domainsConfig()
+	cfg.Upsert(Site{Name: "filament-ui-playground", Path: "/code/other"})
+
+	for in, want := range map[string]string{
+		"":                                 "empty",
+		".test":                            "empty",
+		"*.app":                            "wildcards aren't needed",
+		"https://x.test":                   "not a domain name",
+		"x.test:443":                       "not a domain name",
+		"under_score.app":                  "not a valid domain name",
+		"-dash":                            "not a valid domain name",
+		"a..b":                             "not a valid domain name",
+		"shop":                             "already named shop",
+		"filament.ui-playground":           "already named filament-ui-playground",
+		"store":                            "store.test is already served by shop",
+		"app-2.test":                       "app-2.test is already served by app",
+		"tenant1.app":                      "tenant1.app.test is already served by app",
+		strings.Repeat("a.", 130) + "test": "too long",
+	} {
+		site := Site{Path: "/code/filament"}
+		err := cfg.SetDomain(&site, in)
+		if err == nil || !strings.Contains(err.Error(), want) {
+			t.Errorf("SetDomain(%q) = %v; want an error with %q", in, err, want)
+		}
+		if site.Name != "" {
+			t.Errorf("SetDomain(%q) changed the site to %+v", in, site)
+		}
+	}
+}
+
+func TestSetDomainLinksTheSameSiteAgainAndGoesUnderAnotherSitesDomain(t *testing.T) {
+	cfg := domainsConfig()
+
+	site := Site{Path: "/code/app"}
+	if err := cfg.SetDomain(&site, "app"); err != nil || site.Name != "app" {
+		t.Errorf("SetDomain of the same site again = %+v, %v", site, err)
+	}
+	site = Site{Path: "/code/admin"}
+	if err := cfg.SetDomain(&site, "admin.shop"); err != nil || cfg.Domain(site) != "admin.shop.test" {
+		t.Errorf("SetDomain under another site's domain = %+v, %v", site, err)
+	}
+}

@@ -6,6 +6,7 @@
 package web
 
 import (
+	"cmp"
 	"crypto/tls"
 	_ "embed"
 	"errors"
@@ -27,6 +28,7 @@ import (
 
 // Site is one served application.
 type Site struct {
+	Name    string   // the site's name; empty: the name the domain gives (see siteName)
 	Domain  string   // e.g. watchtower.test
 	Aliases []string // other names served like Domain, e.g. watchtower-2.test
 	Root    string   // document root, e.g. <path>/public
@@ -164,9 +166,10 @@ func Caddyfile(cfg Config) string {
 			fmt.Fprintf(&b, "\n%s {\n\timport flock_site\n%s%s}\n", addresses("http", hosts, cfg), app(s), upstreamDown(s, cfg))
 			// Over HTTPS, a site that isn't secured names itself, so the page asks to secure it rather than link it.
 			// A proxy says so too: the apps can't secure one yet, so the page offers only the command.
-			vars := fmt.Sprintf("\tvars flock_site %s\n", quote(siteName(s.Domain, cfg.TLD)))
+			name := quote(cmp.Or(s.Name, siteName(s.Domain, cfg.TLD)))
+			vars := fmt.Sprintf("\tvars flock_site %s\n", name)
 			if s.proxied() {
-				vars = fmt.Sprintf("\tvars {\n\t\tflock_site %s\n\t\tflock_proxy \"1\"\n\t}\n", quote(siteName(s.Domain, cfg.TLD)))
+				vars = fmt.Sprintf("\tvars {\n\t\tflock_site %s\n\t\tflock_proxy \"1\"\n\t}\n", name)
 			}
 			fmt.Fprintf(&b, "\n%s {\n\timport flock_site\n%s%s%s}\n", addresses("https", hosts, cfg), tlsBlock, vars, unlinked(cfg))
 		}

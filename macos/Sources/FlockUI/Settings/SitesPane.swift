@@ -27,6 +27,13 @@ struct SitesPane: View {
         nonmutating set { addingState.wrappedValue = newValue }
     }
     private let newDomainState = State<String>(initialValue: "")
+    /// The folder chosen with Add Site…, while its domain is asked for, and the domain typed so far.
+    private let linkingState = State<URL?>(initialValue: nil)
+    private var linking: URL? {
+        get { linkingState.wrappedValue }
+        nonmutating set { linkingState.wrappedValue = newValue }
+    }
+    private let siteDomainState = State<String>(initialValue: "")
     /// The site whose PHP extensions are shown.
     private let extensionsState = State<Status.Site?>(initialValue: nil)
     /// The site whose FrankenPHP is restarting.
@@ -68,9 +75,7 @@ struct SitesPane: View {
                     .help("Serve a server of its own, e.g. a Node.js dev server on a port, at a .\(model.status?.dns.tld ?? "test") domain")
                     .padding(.bottom, 6)
                 Button("Add Site…") {
-                    for url in SettingsStore.chooseDirectories(prompt: "Add", multiple: false) {
-                        Task { await store.perform { _ = try await $0.linkSite(path: url.path) } }
-                    }
+                    linking = SettingsStore.chooseDirectories(prompt: "Add", multiple: false).first
                 }
                 .padding(.trailing, 20)
                 .padding(.bottom, 6)
@@ -178,6 +183,21 @@ struct SitesPane: View {
         } message: {
             Text(domainHelp)
         }
+        // Left empty, the site is served as <folder>.test, as `flock link` does.
+        .alert("Add \(linking?.lastPathComponent ?? "")", isPresented: Binding(get: { linking != nil }, set: { if !$0 { linking = nil } })) {
+            TextField(defaultDomain(linking), text: siteDomainState.projectedValue)
+            Button("Add") {
+                let path = linking?.path ?? ""
+                let domain = siteDomainState.wrappedValue.trimmingCharacters(in: .whitespaces)
+                siteDomainState.wrappedValue = ""
+                if !path.isEmpty {
+                    Task { await store.perform { _ = try await $0.linkSite(path: path, domain: domain.isEmpty ? nil : domain) } }
+                }
+            }
+            Button("Cancel", role: .cancel) { siteDomainState.wrappedValue = "" }
+        } message: {
+            Text("Serve it as \(defaultDomain(linking)), or as a domain of your choosing, like \(linking?.lastPathComponent.lowercased() ?? "app").my-project.\(model.status?.dns.tld ?? "test").")
+        }
         .alert("Add a proxy", isPresented: addingProxyState.projectedValue) {
             TextField("Name, e.g. my-app", text: newProxyNameState.projectedValue)
             TextField("Port, host:port or URL, e.g. 3000", text: newProxyUpstreamState.projectedValue)
@@ -230,6 +250,14 @@ struct SitesPane: View {
     /// What a pending flock://secure link asks for, once the sites are loaded.
     private var linkRequest: SecureLink.Resolution? {
         model.pendingSecure?.resolve(sites: model.status?.sites)
+    }
+
+    /// The domain a folder is served as by default: its name as a hostname label (config.SiteName).
+    private func defaultDomain(_ folder: URL?) -> String {
+        let label = (folder?.lastPathComponent ?? "app").lowercased().map { c -> String in
+            c.isASCII && (c.isLetter || c.isNumber || c == "-") ? String(c) : "-"
+        }.joined().trimmingCharacters(in: CharacterSet(charactersIn: "-"))
+        return "\(label.isEmpty ? "app" : label).\(model.status?.dns.tld ?? "test")"
     }
 
     /// What adding a domain does on this machine.

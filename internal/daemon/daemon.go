@@ -721,7 +721,7 @@ func (d *daemon) reload() error {
 			continue
 		}
 
-		ws := web.Site{Domain: domain, Aliases: aliases, Root: root.Dir}
+		ws := web.Site{Name: site.Name, Domain: domain, Aliases: aliases, Root: root.Dir}
 		if cfg.Xdebug {
 			ws.DebugFPM = debugPool(version)
 		}

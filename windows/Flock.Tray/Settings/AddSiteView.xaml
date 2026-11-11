@@ -1,0 +1,10 @@
+<UserControl
+    x:Class="Flock.Tray.Settings.AddSiteView"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <StackPanel Spacing="12">
+        <TextBox x:Name="DomainBox" Header="Domain" TextChanged="DomainChanged" />
+        <TextBlock x:Name="ExplanationText" Style="{StaticResource CaptionTextBlockStyle}"
+                   Foreground="{ThemeResource TextFillColorTertiaryBrush}" TextWrapping="Wrap" />
+    </StackPanel>
+</UserControl>
