@@ -38,21 +38,25 @@ type CA struct {
 }
 
 // Ensure loads the CA from dir, creating it on first use.
-// A stored root that does not permit tld is replaced, so the CA always constrains
-// names to the TLD the user selected.
+// A stored root that does not permit tld, or whose key has stopped pairing with its
+// certificate, is replaced, so the CA always constrains names to the TLD the user
+// selected and always signs with a usable key.
 func Ensure(dir, tld string) (*CA, error) {
 	ca := &CA{dir: dir}
 
 	if err := ca.load(); err == nil {
-		if ca.serves(tld) {
+		if ca.serves(tld) && ca.pairs() {
 			return ca, nil
 		}
 
-		// A root permitted only for the previous TLD cannot sign certificates any verifier
-		// accepts for the new one, so it is recreated here. Nothing needs invalidating: the
-		// Leaves cache keys on the CA fingerprint, so the new root is a separate entry, and
-		// SiteCert re-issues a file certificate as soon as CheckSignatureFrom rejects the
-		// old root's signature.
+		// Two stored roots are unusable and get recreated. One is permitted only for the
+		// previous TLD: no verifier accepts a certificate it signs for the new one. The other
+		// pairs the certificate of one root with the key of another, which a create interrupted
+		// between writing ca.key and ca.crt leaves on disk; keeping it would sign every leaf
+		// with a key the issuer certificate cannot vouch for, and only a recreate repairs it.
+		// Nothing needs invalidating: the Leaves cache keys on the CA fingerprint, so a new root
+		// is a separate entry, and SiteCert re-issues a file certificate as soon as
+		// CheckSignatureFrom rejects the old root's signature.
 		if err := ca.create(tld); err != nil {
 			return nil, err
 		}
@@ -72,6 +76,14 @@ func Ensure(dir, tld string) (*CA, error) {
 // serves reports whether ca's root is name-constrained to tld, the way create writes it.
 func (ca *CA) serves(tld string) bool {
 	return slices.Contains(ca.cert.PermittedDNSDomains, "."+tld)
+}
+
+// pairs reports whether ca.key is the private half of ca.cert.
+// load reads the two files independently, so a half-written create can leave them
+// from different roots.
+func (ca *CA) pairs() bool {
+	pub, ok := ca.cert.PublicKey.(*ecdsa.PublicKey)
+	return ok && pub.Curve == ca.key.Curve && pub.X.Cmp(ca.key.X) == 0 && pub.Y.Cmp(ca.key.Y) == 0
 }
 
 // CertPath is the PEM file of the root certificate (what gets trusted by the OS).

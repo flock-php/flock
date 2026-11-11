@@ -88,6 +88,48 @@ func TestEnsureRecreatesRootWhenTLDChanges(t *testing.T) {
 	}
 }
 
+// A create interrupted between writing ca.key and ca.crt leaves the certificate of one root
+// next to the key of another. Ensure must replace that pair, not keep signing with it.
+func TestEnsureRecreatesRootWhenStoredKeyDoesNotPairWithCert(t *testing.T) {
+	dir := t.TempDir()
+
+	stored, err := Ensure(dir, "test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	other, err := Ensure(t.TempDir(), "test") // same TLD, so pairing is the only reason to replace
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	keyPEM, err := os.ReadFile(other.keyPath())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(stored.keyPath(), keyPEM, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	fixed, err := Ensure(dir, "test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if fixed.Fingerprint() == stored.Fingerprint() {
+		t.Fatal("root whose key stopped pairing with its cert was kept")
+	}
+	if !fixed.pairs() {
+		t.Fatal("recreated root does not pair its key with its cert")
+	}
+
+	certPath, _, err := fixed.SiteCert("app.test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := verify(t, fixed, certPath, "app.test"); err != nil {
+		t.Fatalf("app.test: %v", err)
+	}
+}
+
 func TestRootIsNameConstrainedToTheTLD(t *testing.T) {
 	ca, _ := Ensure(t.TempDir(), "test")
 
