@@ -300,4 +300,14 @@ func TestCaddyfileSendsReverbRequestsFirst(t *testing.T) {
 	if strings.Contains(Caddyfile(testConfig()), "@reverb") {
 		t.Error("a site without Reverb has its route")
 	}
+
+	// With custom handlers the site is a route, which keeps the written order: Reverb comes first.
+	cfg.Sites[0].Handlers = "handle /app/* {\n\trespond custom 200\n}\n"
+	cf = Caddyfile(cfg)
+	if _, _, err := caddyconfig.GetAdapter("caddyfile").Adapt([]byte(cf), nil); err != nil {
+		t.Fatalf("%v\n%s", err, cf)
+	}
+	if r, c := strings.Index(cf, "\t\thandle @reverb"), strings.Index(cf, "\t\thandle /app/*"); r < 0 || c < 0 || r > c {
+		t.Errorf("Reverb's route isn't ahead of the custom handlers in the route:\n%s", cf)
+	}
 }

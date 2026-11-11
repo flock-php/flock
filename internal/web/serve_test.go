@@ -669,9 +669,10 @@ func TestSendsReverbRequestsToReverb(t *testing.T) {
 	}}
 	for path, want := range map[string]string{
 		"/apps/1/events?auth_key=k&auth_timestamp=1&auth_signature=s": "reverb /apps/1/events", // a broadcast
-		"/app/key?protocol=7": "reverb /app/key", // a WebSocket over HTTP/2 has no Upgrade header
-		"/app/dashboard":      "",                // the app's pages: PHP, a 502 here
-		"/apps/list":          "",
+		"/app/key?protocol=7&client=js": "reverb /app/key", // a WebSocket over HTTP/2 has no Upgrade header
+		"/app/dashboard":                "",                // the app's pages: PHP, a 502 here
+		"/app/servers?protocol=ssh":     "",                // with a ?protocol= filter of the app's own
+		"/apps/list":                    "",
 	} {
 		resp, err := client.Post(base+path, "application/json", strings.NewReader("{}"))
 		if err != nil {
