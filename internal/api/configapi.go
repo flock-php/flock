@@ -356,7 +356,14 @@ func registerConfig(mux *http.ServeMux, b Backend) {
 			if name == "" {
 				name = filepath.Base(body.Path)
 			}
-			if err := cfg.Upsert(config.Site{Name: config.SiteName(name), Path: filepath.Clean(body.Path), PHP: body.PHP, Secured: body.Secured, TLD: tld}); err != nil {
+			site := config.Site{Name: config.SiteName(name), Path: filepath.Clean(body.Path), PHP: body.PHP, Secured: body.Secured, TLD: tld}
+			// Create-time parity with PATCH (Goal 4): a suffix picked at create lands
+			// the site's domain on a host Flock may already serve — the same landing
+			// check the patch runs, refused with the config untouched (the closure).
+			if err := siteHostClash(cfg, site); err != nil {
+				return err
+			}
+			if err := cfg.Upsert(site); err != nil {
 				return invalid("%v", err)
 			}
 			return nil

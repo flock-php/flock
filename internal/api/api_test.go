@@ -699,6 +699,15 @@ func TestSiteTLDPatchAndCreate(t *testing.T) {
 	if err := cfg.Upsert(config.Site{Name: "demo", Path: t.TempDir()}); err != nil {
 		t.Fatal(err)
 	}
+	// A second site pins the alias "plain.loc", and a proxy owns "api.test": hosts a
+	// create may collide with, for the POST collision rows below (create-time parity
+	// with PATCH, Goal 4).
+	if err := cfg.Upsert(config.Site{Name: "holder", Path: t.TempDir(), Domains: []config.Domain{
+		{Label: "plain", TLD: "loc", Alias: true},
+	}}); err != nil {
+		t.Fatal(err)
+	}
+	cfg.Proxies = append(cfg.Proxies, config.Proxy{Name: "api", Upstream: "http://127.0.0.1:3000"})
 	if err := cfg.Save(b.root); err != nil {
 		t.Fatal(err)
 	}
@@ -758,6 +767,17 @@ func TestSiteTLDPatchAndCreate(t *testing.T) {
 		t.Fatalf("tld null must keep the override: %+v", site)
 	}
 
+	// A non-string tld is the 400 that names the shape (the raw-JSON decode of the
+	// patch), with config.json byte-identical.
+	before = configBytes(t, b)
+	resp, body = call(t, "PATCH", srv.URL+"/v1/sites/demo", "", `{"tld":123}`)
+	if resp.StatusCode != http.StatusBadRequest || !strings.Contains(body, "tld must be a string") {
+		t.Fatalf(`tld 123: %d %s`, resp.StatusCode, body)
+	}
+	if !bytes.Equal(before, configBytes(t, b)) {
+		t.Fatal(`{"tld":123} changed config.json`)
+	}
+
 	// A public suffix is refused on create too, and creates nothing.
 	project := t.TempDir()
 	if resp, body := call(t, "POST", srv.URL+"/v1/sites", "", `{"path":`+jsonString(project)+`,"name":"bad","tld":"dev"}`); resp.StatusCode != http.StatusBadRequest || !strings.Contains(body, "public TLD") {
@@ -779,6 +799,26 @@ func TestSiteTLDPatchAndCreate(t *testing.T) {
 	}
 	if site, _ := b.config(t).FindSite("plain"); site.TLD != "" {
 		t.Fatalf("an absent tld must inherit: %+v", site)
+	}
+
+	// Create-time collision parity with PATCH (Goal 4): a new site whose effective
+	// host is already served — a site's pinned alias, a proxy's host — is refused
+	// with 400, config.json byte-identical.
+	collide := t.TempDir()
+	before = configBytes(t, b)
+	resp, body = call(t, "POST", srv.URL+"/v1/sites", "", `{"path":`+jsonString(collide)+`,"name":"plain","tld":"loc"}`)
+	if resp.StatusCode != http.StatusBadRequest || !strings.Contains(body, "plain.loc is already served by site holder") {
+		t.Fatalf("create onto a site alias: %d %s", resp.StatusCode, body)
+	}
+	if !bytes.Equal(before, configBytes(t, b)) {
+		t.Fatal("the rejected create changed config.json")
+	}
+	resp, body = call(t, "POST", srv.URL+"/v1/sites", "", `{"path":`+jsonString(collide)+`,"name":"api"}`)
+	if resp.StatusCode != http.StatusBadRequest || !strings.Contains(body, "api.test is already served by proxy api") {
+		t.Fatalf("create onto a proxy host: %d %s", resp.StatusCode, body)
+	}
+	if !bytes.Equal(before, configBytes(t, b)) {
+		t.Fatal("the rejected create changed config.json")
 	}
 }
 
