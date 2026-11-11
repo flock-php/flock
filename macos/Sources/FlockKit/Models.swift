@@ -49,17 +49,48 @@ public struct Status: Decodable, Sendable, Equatable {
         public var wildcardProblem: String
         /// Subdomain levels below a site (and its aliases) that are served.
         public var maxDepth: Int
+        /// The wildcard health of every active suffix (the global TLD included, whose row
+        /// duplicates the fields above); empty on a daemon from before the list.
+        public var suffixes: [SuffixStatus]
 
-        public init(tld: String, addr: String, wildcard: Bool = false, wildcardProblem: String = "", maxDepth: Int = 4) {
+        public init(tld: String, addr: String, wildcard: Bool = false, wildcardProblem: String = "", maxDepth: Int = 4,
+                    suffixes: [SuffixStatus] = []) {
             self.tld = tld
             self.addr = addr
             self.wildcard = wildcard
             self.wildcardProblem = wildcardProblem
             self.maxDepth = maxDepth
+            self.suffixes = suffixes
+        }
+
+        /// One active suffix's DNS health: whether every name under it resolves to Flock, and
+        /// when it doesn't, why.
+        public struct SuffixStatus: Decodable, Sendable, Equatable {
+            public var tld: String
+            public var wildcard: Bool
+            /// Why names under this suffix don't resolve (see `DNSStatus.wildcardProblem`);
+            /// empty when they do.
+            public var problem: String
+
+            public init(tld: String = "", wildcard: Bool = false, problem: String = "") {
+                self.tld = tld
+                self.wildcard = wildcard
+                self.problem = problem
+            }
+
+            enum CodingKeys: String, CodingKey { case tld, wildcard, problem }
+
+            public init(from decoder: Decoder) throws {
+                // The daemon omits problem when it is empty (Go's omitempty).
+                let c = try decoder.container(keyedBy: CodingKeys.self)
+                tld = try c.decodeIfPresent(String.self, forKey: .tld) ?? ""
+                wildcard = try c.decodeIfPresent(Bool.self, forKey: .wildcard) ?? false
+                problem = try c.decodeIfPresent(String.self, forKey: .problem) ?? ""
+            }
         }
 
         enum CodingKeys: String, CodingKey {
-            case tld, addr, wildcard, wildcardProblem, maxDepth
+            case tld, addr, wildcard, wildcardProblem, maxDepth, suffixes
         }
 
         public init(from decoder: Decoder) throws {
@@ -69,6 +100,7 @@ public struct Status: Decodable, Sendable, Equatable {
             wildcard = try c.decodeIfPresent(Bool.self, forKey: .wildcard) ?? !addr.isEmpty
             wildcardProblem = try c.decodeIfPresent(String.self, forKey: .wildcardProblem) ?? ""
             maxDepth = try c.decodeIfPresent(Int.self, forKey: .maxDepth) ?? 4
+            suffixes = try c.decodeIfPresent([SuffixStatus].self, forKey: .suffixes) ?? []
         }
     }
 
@@ -109,6 +141,11 @@ public struct Status: Decodable, Sendable, Equatable {
         public var name: String
         public var domain: String
         public var path: String
+        /// The suffix the site is served under: `siteTld` when set, the global one otherwise;
+        /// empty on a daemon from before per-site suffixes.
+        public var tld: String
+        /// The site's own suffix override ("" = inherit the global one).
+        public var siteTld: String
         /// The PHP version the site uses; `phpSource` says why.
         public var php: String
         public var phpSource: VersionSource
@@ -196,7 +233,7 @@ public struct Status: Decodable, Sendable, Equatable {
         }
 
         enum CodingKeys: String, CodingKey {
-            case name, domain, path, php, phpSource, phpPinned, phpFile, node, nodeSource, nodePinned, nodeFile, nodeShadowed
+            case name, domain, path, tld, siteTld, php, phpSource, phpPinned, phpFile, node, nodeSource, nodePinned, nodeFile, nodeShadowed
             case secured, parked, url, problem, notice, root, rootSource, rootPinned, rootFile, rootState, rootSuggestions
             case domains, debugging, server, worker, octaneAvailable, boost, share, parent, branch, worktree
             case frankenPHP = "frankenphp"
@@ -207,6 +244,8 @@ public struct Status: Decodable, Sendable, Equatable {
             name = try c.decode(String.self, forKey: .name)
             domain = try c.decodeIfPresent(String.self, forKey: .domain) ?? ""
             path = try c.decodeIfPresent(String.self, forKey: .path) ?? ""
+            tld = try c.decodeIfPresent(String.self, forKey: .tld) ?? ""
+            siteTld = try c.decodeIfPresent(String.self, forKey: .siteTld) ?? ""
             php = try c.decodeIfPresent(String.self, forKey: .php) ?? ""
             phpSource = try c.decodeIfPresent(VersionSource.self, forKey: .phpSource) ?? .default
             phpPinned = try c.decodeIfPresent(String.self, forKey: .phpPinned) ?? ""

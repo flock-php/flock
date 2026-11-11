@@ -75,6 +75,37 @@ private func decode<T: Decodable>(_ type: T.Type, _ json: String) throws -> T {
     #expect(status.sites[1].domains.isEmpty)
 }
 
+@Test func decodesTheSitesSuffixOverride() throws {
+    // The wire carries the effective suffix in "tld" and the raw override in "site_tld" ("" = inherit).
+    let pinned = try decode(Status.Site.self,
+        #"{"name":"app","domain":"app.loc","path":"/code/app","php":"8.5","tld":"loc","site_tld":"loc"}"#)
+    #expect(pinned.tld == "loc" && pinned.siteTld == "loc")
+    let inherited = try decode(Status.Site.self,
+        #"{"name":"app","domain":"app.test","path":"/code/app","php":"8.5","tld":"test","site_tld":""}"#)
+    #expect(inherited.tld == "test" && inherited.siteTld.isEmpty)
+    // A daemon from before per-site suffixes sends neither key.
+    let legacy = try decode(Status.Site.self, #"{"name":"app","path":"/code/app"}"#)
+    #expect(legacy.tld.isEmpty && legacy.siteTld.isEmpty)
+}
+
+@Test func decodesTheWildcardHealthOfEverySuffix() throws {
+    let status = try decode(Status.self, """
+    {"version":"dev","pid":1,"started_at":"2026-10-13T14:10:01Z",
+     "dns":{"tld":"test","addr":"127.0.0.1:53535","wildcard":true,"max_depth":4,
+            "suffixes":[{"tld":"test","wildcard":true},{"tld":"loc","wildcard":false,"problem":"the resolver file for loc is missing"}]}}
+    """)
+    #expect(status.dns.suffixes.map(\.tld) == ["test", "loc"])
+    // problem is omitempty: a healthy suffix sends none.
+    #expect(status.dns.suffixes[0].wildcard && status.dns.suffixes[0].problem.isEmpty)
+    #expect(!status.dns.suffixes[1].wildcard && status.dns.suffixes[1].problem == "the resolver file for loc is missing")
+
+    // A daemon from before the per-suffix list: only the global fields above.
+    let old = try decode(Status.self, """
+    {"version":"dev","pid":1,"started_at":"2026-10-13T14:10:01Z","dns":{"tld":"test","addr":"","wildcard":false}}
+    """)
+    #expect(old.dns.suffixes.isEmpty)
+}
+
 @Test func decodesTheDocumentRoot() throws {
     let status = try decode(Status.self, """
     {"version":"dev","pid":1,"started_at":"2026-10-13T14:10:01Z","processes":[],

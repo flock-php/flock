@@ -147,8 +147,15 @@ public actor FlockClient {
     }
 
     /// Adds an extra domain: a subdomain ("tenant1", "a.b") or an alias ("my-app-2.test").
-    public func addDomain(site: String, domain: String) async throws -> Status {
-        try await decode(Status.self, "POST", "/v1/sites/\(escape(site))/domains", body: try JSONEncoder().encode(["domain": domain]))
+    /// With `suffix` the domain is a single label and the suffix decides the alias: "inherit"
+    /// follows the site, "loc" pins it to a suffix of its own; empty (the default) sends no
+    /// suffix, so the daemon reads the domain as a full entry as before.
+    public func addDomain(site: String, domain: String, suffix: String = "") async throws -> Status {
+        var body: [String: String] = ["domain": domain]
+        if !suffix.isEmpty {
+            body["suffix"] = suffix
+        }
+        return try await decode(Status.self, "POST", "/v1/sites/\(escape(site))/domains", body: try JSONEncoder().encode(body))
     }
 
     /// Removes an extra domain, given as `SiteDomain.entry` (or its full name).

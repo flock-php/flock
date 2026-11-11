@@ -65,6 +65,11 @@ private func decode<T: Decodable>(_ type: T.Type, _ json: String) throws -> T {
 
     let site = String(decoding: try encoder.encode(SiteChange(php: "")), as: UTF8.self)
     #expect(site == #"{"php":""}"#)
+
+    // A tld override: nil keeps, "" (inherit) is sent.
+    #expect(String(decoding: try encoder.encode(SiteChange(tld: "loc")), as: UTF8.self) == #"{"tld":"loc"}"#)
+    #expect(String(decoding: try encoder.encode(SiteChange(tld: "")), as: UTF8.self) == #"{"tld":""}"#)
+    #expect(!String(decoding: try encoder.encode(SiteChange(root: ".")), as: UTF8.self).contains("tld"))
 }
 
 @Test func decodesServiceProblems() throws {

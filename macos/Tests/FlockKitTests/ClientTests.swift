@@ -162,6 +162,40 @@ struct ClientTests {
         #expect(requests[2].body == #"{"secured":false}"#)
     }
 
+    @Test func addsDomainsWithAndWithoutASuffix() async throws {
+        StubProtocol.reset { _ in (200, #"{"version":"dev","pid":1,"started_at":"2026-10-13T14:10:01Z"}"#) }
+        let client = client(try apiJSON(token: "t"))
+
+        _ = try await client.addDomain(site: "app", domain: "crm", suffix: "loc")
+        _ = try await client.addDomain(site: "app", domain: "tenant1")
+        _ = try await client.addDomain(site: "app", domain: "app-2", suffix: "inherit")
+
+        let requests = StubProtocol.requests
+        #expect(requests.map(\.method) == ["POST", "POST", "POST"])
+        #expect(Set(requests.map { URL(string: $0.url)?.path ?? "" }) == ["/v1/sites/app/domains"])
+        let pinned = try JSONSerialization.jsonObject(with: Data(requests[0].body.utf8)) as? [String: Any]
+        #expect(pinned?["domain"] as? String == "crm" && pinned?["suffix"] as? String == "loc")
+        // The default call leaves the suffix key out: the daemon reads the entry as before.
+        let plain = try JSONSerialization.jsonObject(with: Data(requests[1].body.utf8)) as? [String: Any]
+        #expect(plain?.keys.sorted() == ["domain"])
+        let inherited = try JSONSerialization.jsonObject(with: Data(requests[2].body.utf8)) as? [String: Any]
+        #expect(inherited?["domain"] as? String == "app-2" && inherited?["suffix"] as? String == "inherit")
+    }
+
+    @Test func sendsSiteTLDChanges() async throws {
+        StubProtocol.reset { _ in (200, #"{"version":"dev","pid":1,"started_at":"2026-10-13T14:10:01Z"}"#) }
+        let client = client(try apiJSON(token: "t"))
+
+        _ = try await client.updateSite("app", SiteChange(tld: "loc"))
+        _ = try await client.updateSite("app", SiteChange(tld: ""))
+        _ = try await client.updateSite("app", SiteChange(secured: true))
+
+        // nil leaves the key out (keep), "" is sent (inherit).
+        #expect(StubProtocol.requests[0].body == #"{"tld":"loc"}"#)
+        #expect(StubProtocol.requests[1].body == #"{"tld":""}"#)
+        #expect(StubProtocol.requests[2].body == #"{"secured":true}"#)
+    }
+
     @Test func givesSlowEndpointsLongerThanTheDefault() async throws {
         StubProtocol.reset { request in
             request.url.contains("/php/") ? (200, #"{"versions":[]}"#) : request.url.contains("/node/") ? (200, #"{"versions":[]}"#)
