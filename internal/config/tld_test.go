@@ -1,6 +1,7 @@
 package config
 
 import (
+	"slices"
 	"strings"
 	"testing"
 )
@@ -64,6 +65,30 @@ func TestValidateTLDRejectsReservedAndPublic(t *testing.T) {
 		if _, err := ValidateTLD(tld); err == nil || !strings.Contains(err.Error(), "public TLD") {
 			t.Errorf("ValidateTLD(%q): want an error mentioning the public TLD, got %v", tld, err)
 		}
+	}
+}
+
+func TestSetTLDMigratesStoredAliases(t *testing.T) {
+	cfg := Default()
+	cfg.Upsert(Site{Name: "app", Path: "/code/app", Domains: []string{"tenant1", "a.b", "app-2.test", "x.example"}})
+
+	if old := cfg.SetTLD("loc"); old != "test" {
+		t.Fatalf("SetTLD(\"loc\") returned old %q, want \"test\"", old)
+	}
+	if cfg.TLD != "loc" {
+		t.Errorf("c.TLD = %q, want \"loc\"", cfg.TLD)
+	}
+	app, _ := cfg.FindSite("app")
+	want := []string{"tenant1", "a.b", "app-2.loc", "x.example"}
+	if !slices.Equal(app.Domains, want) {
+		t.Errorf("after SetTLD(\"loc\"): got %v, want %v", app.Domains, want)
+	}
+
+	if old := cfg.SetTLD("test"); old != "loc" {
+		t.Fatalf("SetTLD(\"test\") returned old %q, want \"loc\"", old)
+	}
+	if app, _ = cfg.FindSite("app"); !slices.Equal(app.Domains, []string{"tenant1", "a.b", "app-2.test", "x.example"}) {
+		t.Errorf("after the round-trip: got %v, want the original domains back", app.Domains)
 	}
 }
 
