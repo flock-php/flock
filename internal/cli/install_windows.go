@@ -816,8 +816,9 @@ var fingerprintHex = regexp.MustCompile(`^[0-9A-Fa-f]{8,128}$`)
 // caPath plus the per-suffix ones at roots), the store entries of suffixes that left the set
 // removed by fingerprint, and the hosts helper configured for the set. --roots entries are
 // validated to Flock's own store layout (roots\<suffix>\ca.crt with <suffix> a valid label)
-// before certutil sees them, the way --tlds is validated: this process runs elevated, so
-// every argument is input.
+// before certutil sees them, the way --tlds is validated, and --ca is validated to the
+// global root's layout (certs\ca.crt, validGlobalCAPath) by the same rule: this process
+// runs elevated, so every argument is input.
 func privilegedSetup(tlds []string, caPath, source string, roots, untrust []string, remove, noHelper bool) error {
 	if !windows.GetCurrentProcessToken().IsElevated() {
 		return errors.New("must run as administrator")
@@ -826,6 +827,9 @@ func privilegedSetup(tlds []string, caPath, source string, roots, untrust []stri
 	if remove {
 		err := errors.Join(hosts.RemoveHelper(), dns.RemoveNRPT())
 		if caPath != "" {
+			if !validGlobalCAPath(caPath) {
+				return fmt.Errorf("invalid --ca entry %q", caPath)
+			}
 			if fp, ferr := certs.FileFingerprint(caPath); ferr == nil {
 				_ = exec.Command("certutil", "-delstore", "Root", fp).Run()
 			}
@@ -855,6 +859,9 @@ func privilegedSetup(tlds []string, caPath, source string, roots, untrust []stri
 		if !fingerprintHex.MatchString(fingerprint) {
 			return fmt.Errorf("invalid --untrust entry %q", fingerprint)
 		}
+	}
+	if !validGlobalCAPath(caPath) {
+		return fmt.Errorf("invalid --ca entry %q", caPath)
 	}
 	if !filepath.IsAbs(source) || filepath.Base(source) != "hosts.txt" {
 		return fmt.Errorf("invalid --source %q", source)

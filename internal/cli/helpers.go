@@ -66,6 +66,38 @@ func suffixRootCerts(root string) []string {
 	return paths
 }
 
+// untrustStoreRoots hands the OS untrust function every root certificate in Flock's store:
+// the global CA first (certs/ca.crt — never in suffixRootCerts, so every root is untrusted
+// exactly once), then every per-suffix root on disk, sorted: the whole disk set, active
+// suffixes and stale ones alike, the uninstall scope macOS and Windows already loop. Best
+// effort per certificate — one stubborn keychain entry or locked database doesn't stop the
+// rest — and every result is printed to out where the user can act on it.
+func untrustStoreRoots(root string, untrust func(string) error, out io.Writer) {
+	if err := untrust(filepath.Join(root, "certs", "ca.crt")); err != nil {
+		fmt.Fprintf(out, "! could not remove the global root's trust: %v\n", err)
+	} else {
+		fmt.Fprintln(out, "✓ the global root is no longer trusted")
+	}
+	for _, cert := range suffixRootCerts(root) {
+		suffix := filepath.Base(filepath.Dir(cert))
+		if err := untrust(cert); err != nil {
+			fmt.Fprintf(out, "! could not remove the .%s root's trust: %v\n", suffix, err)
+			continue
+		}
+		fmt.Fprintf(out, "✓ the .%s root is no longer trusted\n", suffix)
+	}
+}
+
+// validGlobalCAPath is the root-run argv guard for a privileged-setup --ca: the certificate
+// that goes into the OS trust store must be Flock's global root in its store layout — an
+// absolute path, named ca.crt, in a directory named certs. Per-suffix roots ride --roots,
+// which carries its own guard; anything not shaped like the store's global CA is refused
+// before certutil sees it, the way every other argument of the elevated process is.
+func validGlobalCAPath(caPath string) bool {
+	return filepath.IsAbs(caPath) && filepath.Base(caPath) == "ca.crt" &&
+		filepath.Base(filepath.Dir(caPath)) == "certs"
+}
+
 // state is the loaded config plus where it lives.
 type state struct {
 	root string

@@ -870,9 +870,11 @@ func newUninstallCommand() *cobra.Command {
 				return err
 			}
 			cmd.Println("✓ background daemon removed")
-			if err := certs.UntrustInBrowsers(filepath.Join(s.root, "certs", "ca.crt")); err != nil {
-				cmd.Printf("! could not remove the Flock CA from your browsers: %v\n", err)
-			}
+			// `flock site tld` and install trust every suffix's root in the browsers' NSS
+			// databases; uninstall takes every one of them out — the whole disk set, active
+			// suffixes and stale ones alike, as macOS' keychain loop and Windows' delstore
+			// loop do, best effort per certificate.
+			untrustStoreRoots(s.root, certs.UntrustInBrowsers, cmd.OutOrStdout())
 			cmd.Printf("✓ removed Flock's *.%s DNS setup and the Flock CA's trust\n", s.cfg.TLD)
 
 			switch removed, err := removeFromShellProfiles(); {
