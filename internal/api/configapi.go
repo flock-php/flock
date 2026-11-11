@@ -221,6 +221,28 @@ func registerConfig(mux *http.ServeMux, b Backend) {
 		writeJSON(w, http.StatusOK, configView(b.Root(), cfg))
 	})
 
+	// TLD validation for the apps' settings, run while the user types. It only reports:
+	// normalize, validate, answer; there is no b.Mutate here and every answer is HTTP 200
+	// (an invalid TLD is a fact to show, not a bad request).
+	mux.HandleFunc("POST /v1/tld/check", func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			TLD string `json:"tld"`
+		}
+		out := TLDCheck{}
+		if err := decodeBody(r, &body); err != nil {
+			out.Error = err.Error()
+		} else {
+			out.Normalized = config.NormalizeTLD(body.TLD)
+			warning, err := config.ValidateTLD(out.Normalized)
+			out.OK = err == nil
+			out.Warning = warning
+			if err != nil {
+				out.Error = err.Error()
+			}
+		}
+		writeJSON(w, http.StatusOK, out)
+	})
+
 	mux.HandleFunc("POST /v1/sites", func(w http.ResponseWriter, r *http.Request) {
 		var body struct {
 			Path    string `json:"path"`

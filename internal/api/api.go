@@ -229,6 +229,17 @@ type Settings struct {
 	TLD *string `json:"tld"`
 }
 
+// TLDCheck is the answer of POST /v1/tld/check: the result of normalizing and validating a
+// TLD (see config.NormalizeTLD and config.ValidateTLD) without applying it, for the apps'
+// settings to preview while the user types. Normalized is always the label the daemon would
+// store; Warning and Error are empty (and dropped from the JSON) when there is none.
+type TLDCheck struct {
+	OK         bool   `json:"ok"`
+	Normalized string `json:"normalized"`
+	Warning    string `json:"warning,omitempty"`
+	Error      string `json:"error,omitempty"`
+}
+
 // Backend is what the API needs from the daemon.
 type Backend interface {
 	Status() Status

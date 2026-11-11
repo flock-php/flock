@@ -211,6 +211,78 @@ func TestSettingsTLD(t *testing.T) {
 	}
 }
 
+// TestTLDCheck covers the dry-run preview the apps show while the user types: it reports
+// through the same normalization and validation as POST /v1/settings, answers HTTP 200 in
+// every case (it reports, it is not an action), and must never touch config.json.
+func TestTLDCheck(t *testing.T) {
+	b := &fakeBackend{root: t.TempDir()}
+	srv := serve(t, b, "")
+
+	// configuredTLD reads the TLD through GET /v1/config, as the apps see it.
+	configuredTLD := func() string {
+		resp, body := call(t, "GET", srv.URL+"/v1/config", "", "")
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("GET /v1/config: %d %s", resp.StatusCode, body)
+		}
+		var view ConfigView
+		if err := json.Unmarshal([]byte(body), &view); err != nil {
+			t.Fatal(err)
+		}
+		return view.TLD
+	}
+	before := configuredTLD()
+
+	for _, tc := range []struct {
+		in         string // the raw "tld" JSON value
+		ok         bool
+		normalized string
+		warning    string // substring; "" means no warning
+		err        string // substring; "" means no error
+	}{
+		{in: `"loc"`, ok: true, normalized: "loc"},
+		{in: `"LOC "`, ok: true, normalized: "loc"},
+		{in: `"dev"`, ok: false, normalized: "dev", err: "public TLD"},
+		{in: `"local"`, ok: true, normalized: "local", warning: "mDNS"},
+		{in: `""`, ok: false, normalized: "", err: "empty"},
+	} {
+		resp, body := call(t, "POST", srv.URL+"/v1/tld/check", "", `{"tld":`+tc.in+`}`)
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("tld %s: HTTP %d, want 200: %s", tc.in, resp.StatusCode, body)
+		}
+		var got struct {
+			OK         bool   `json:"ok"`
+			Normalized string `json:"normalized"`
+			Warning    string `json:"warning"`
+			Error      string `json:"error"`
+		}
+		if err := json.Unmarshal([]byte(body), &got); err != nil {
+			t.Fatalf("tld %s: %v: %s", tc.in, err, body)
+		}
+		if got.OK != tc.ok {
+			t.Errorf("tld %s: ok = %v, want %v: %s", tc.in, got.OK, tc.ok, body)
+		}
+		if got.Normalized != tc.normalized {
+			t.Errorf("tld %s: normalized = %q, want %q", tc.in, got.Normalized, tc.normalized)
+		}
+		if tc.warning != "" && !strings.Contains(got.Warning, tc.warning) {
+			t.Errorf("tld %s: warning = %q, want it to contain %q", tc.in, got.Warning, tc.warning)
+		}
+		if tc.warning == "" && got.Warning != "" {
+			t.Errorf("tld %s: unexpected warning %q", tc.in, got.Warning)
+		}
+		if tc.err != "" && !strings.Contains(got.Error, tc.err) {
+			t.Errorf("tld %s: error = %q, want it to contain %q", tc.in, got.Error, tc.err)
+		}
+		if tc.err == "" && got.Error != "" {
+			t.Errorf("tld %s: unexpected error %q", tc.in, got.Error)
+		}
+		// The dry-run promise: a check never changes the stored TLD.
+		if after := configuredTLD(); after != before {
+			t.Fatalf("tld %s: check changed the configured TLD from %q to %q", tc.in, before, after)
+		}
+	}
+}
+
 func TestMailEndpoints(t *testing.T) {
 	root := t.TempDir()
 	path := filepath.Join(root, "mail", "app", "1-000001.eml")
