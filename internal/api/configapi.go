@@ -181,6 +181,17 @@ func applySettings(root string, cfg *config.Config, s Settings) error {
 		}
 		cfg.DefaultNode = *s.DefaultNode
 	}
+	if s.TLD != nil {
+		// Validate before SetTLD: a rejected TLD must not migrate the sites' aliases
+		// either, and this closure runs inside b.Mutate — returning the error here is
+		// what leaves config.json untouched. ValidateTLD's warning (for "local") is
+		// dropped: the daemon reports the mDNS caveat through Status.Warnings.
+		tld := config.NormalizeTLD(*s.TLD)
+		if _, err := config.ValidateTLD(tld); err != nil {
+			return invalid("%v", err)
+		}
+		cfg.SetTLD(tld)
+	}
 	return nil
 }
 

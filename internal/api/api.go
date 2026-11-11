@@ -224,6 +224,9 @@ type Settings struct {
 	DefaultNode *string   `json:"default_node"`
 	// Channel is "stable", "beta" or "experimental" (see config.Config.Channel).
 	Channel *string `json:"channel"`
+	// TLD is the local suffix sites are served under (see config.Config.TLD). It is
+	// normalized and validated by the daemon; a rejected one changes nothing.
+	TLD *string `json:"tld"`
 }
 
 // Backend is what the API needs from the daemon.

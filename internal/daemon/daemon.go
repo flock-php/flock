@@ -563,6 +563,10 @@ func (d *daemon) reload() error {
 	}
 
 	var warnings []string
+	// macOS resolves .local itself (mDNS/Bonjour), so choosing it as the TLD is a known trap.
+	if cfg.TLD == "local" {
+		warnings = append(warnings, ".local is owned by mDNS (Bonjour, RFC 6767): macOS keeps resolving it in the OS and browsers special-case it, so *.local requests may not reach Flock — .loc is the usual choice")
+	}
 	// Linux browsers keep their own trust stores, and one installed since `flock install` lacks the CA.
 	if err := trustInBrowsers(ca.CertPath()); err != nil {
 		warnings = append(warnings, "browsers don't trust Flock's HTTPS certificates: "+err.Error())

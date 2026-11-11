@@ -166,6 +166,51 @@ func TestChannelSetting(t *testing.T) {
 	}
 }
 
+func TestSettingsTLD(t *testing.T) {
+	b := &fakeBackend{root: t.TempDir()}
+	cfg := config.Default()
+	// Three stored forms: a subdomain label (no suffix to move), an alias under the default
+	// TLD (moves with it), and an alias of its own (must not move).
+	cfg.Upsert(config.Site{Name: "app", Path: t.TempDir(), Domains: []string{"tenant1", "app-2.test", "crm.example"}})
+	if err := cfg.Save(b.root); err != nil {
+		t.Fatal(err)
+	}
+	srv := serve(t, b, "")
+	domains := func() string {
+		site, _ := b.config(t).FindSite("app")
+		return strings.Join(site.Domains, ",")
+	}
+
+	if resp, body := call(t, "POST", srv.URL+"/v1/settings", "", `{"tld":"LOC "}`); resp.StatusCode != http.StatusOK {
+		t.Fatalf("tld LOC: %d %s", resp.StatusCode, body)
+	}
+	if cfg := b.config(t); cfg.TLD != "loc" || domains() != "tenant1,app-2.loc,crm.example" {
+		t.Fatalf("tld LOC: stored %+v, domains %s", cfg, domains())
+	}
+
+	// A rejected TLD must leave everything untouched: applySettings validates before
+	// mutating, so a 400 means no TLD change and no alias migration.
+	if resp, body := call(t, "POST", srv.URL+"/v1/settings", "", `{"tld":"dev"}`); resp.StatusCode != http.StatusBadRequest || !strings.Contains(body, "public TLD") {
+		t.Fatalf("tld dev: %d %s", resp.StatusCode, body)
+	}
+	if cfg := b.config(t); cfg.TLD != "loc" || domains() != "tenant1,app-2.loc,crm.example" {
+		t.Fatalf("config untouched after a rejected tld: %+v, domains %s", cfg, domains())
+	}
+
+	if resp, _ := call(t, "POST", srv.URL+"/v1/settings", "", `{"tld":""}`); resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("an empty tld must be rejected, got %d", resp.StatusCode)
+	}
+
+	// "local" is accepted (the API ignores ValidateTLD's warning; the daemon carries the
+	// mDNS caveat into Status.Warnings, checked in daemon_test).
+	if resp, body := call(t, "POST", srv.URL+"/v1/settings", "", `{"tld":"local"}`); resp.StatusCode != http.StatusOK {
+		t.Fatalf("tld local: %d %s", resp.StatusCode, body)
+	}
+	if cfg := b.config(t); cfg.TLD != "local" || domains() != "tenant1,app-2.local,crm.example" {
+		t.Fatalf("tld local: stored %+v, domains %s", cfg, domains())
+	}
+}
+
 func TestMailEndpoints(t *testing.T) {
 	root := t.TempDir()
 	path := filepath.Join(root, "mail", "app", "1-000001.eml")

@@ -302,6 +302,33 @@ func TestBusyPortsBecomeWarningsAndRecover(t *testing.T) {
 	}
 }
 
+// TestLocalTLDIsAWarning: mDNS (Bonjour, RFC 6767) owns .local, so browsers on macOS may keep
+// resolving *.local names themselves and never reach Flock. The daemon says so once on every
+// reload; any other TLD gets no such warning.
+func TestLocalTLDIsAWarning(t *testing.T) {
+	root, _ := testRoot(t, func(cfg *config.Config) { cfg.TLD = "local" })
+	client := startDaemon(t, root)
+
+	status, err := client.Status(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !containsText(status.Warnings, ".local is owned by mDNS") {
+		t.Fatalf("no mDNS warning for TLD local: %v", status.Warnings)
+	}
+
+	root, _ = testRoot(t, func(cfg *config.Config) { cfg.TLD = "loc" })
+	client = startDaemon(t, root)
+
+	status, err = client.Status(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if containsText(status.Warnings, "mDNS") {
+		t.Fatalf("unexpected mDNS warning for TLD loc: %v", status.Warnings)
+	}
+}
+
 func TestReloadMovesServicesToNewPorts(t *testing.T) {
 	root, cfg := testRoot(t, nil)
 	client := startDaemon(t, root)
