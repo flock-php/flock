@@ -60,6 +60,16 @@ final class SettingsStore {
         }
     }
 
+    /// The daemon's verdict on a TLD, for the General pane's domain picker. A refused domain comes
+    /// back as ok=false; a failure here is transport, which is the pane's note.
+    func checkTLD(_ tld: String) async -> Result<TLDCheck, Error> {
+        do {
+            return .success(try await client.checkTLD(tld))
+        } catch {
+            return .failure(error)
+        }
+    }
+
     /// Runs a change against the daemon, then reloads everything that may depend on it.
     func perform(_ change: @Sendable (FlockClient) async throws -> Void) async {
         isBusy = true
