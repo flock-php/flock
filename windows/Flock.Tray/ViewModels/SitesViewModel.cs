@@ -313,7 +313,8 @@ public sealed partial class SiteRowViewModel : ObservableObject
                ?? (site.Worktree is { IsFailed: true, Error.Length: > 0 } setup ? setup.Error : null)
                ?? site.Notice
                ?? site.Domains.Select(domain => domain.Problem is { } problem ? $"{domain.Host}: {problem}" : null).FirstOrDefault(problem => problem is not null)
-               ?? (site.IsFrankenPhp && site.FrankenPhp is { IsRunning: false, IsInstalling: false, Problem.Length: > 0 } frankenPhp ? frankenPhp.Problem : null);
+               ?? (site.IsFrankenPhp && site.FrankenPhp is { IsRunning: false, IsInstalling: false, Problem.Length: > 0 } frankenPhp ? frankenPhp.Problem : null)
+               ?? (site.Reverb is { State: Status.ReverbState.Failed or Status.ReverbState.Unavailable, Problem.Length: > 0 } reverb ? reverb.Problem : null);
     }
 
     private static bool RenderedFieldsChanged(Status.Site previous, Status.Site current)
@@ -346,6 +347,8 @@ public sealed partial class SiteRowViewModel : ObservableObject
                || previous.Worker != current.Worker
                || previous.OctaneAvailable != current.OctaneAvailable
                || !FrankenPhpEqual(previous.FrankenPhp, current.FrankenPhp)
+               || previous.ReverbAvailable != current.ReverbAvailable
+               || !ReverbEqual(previous.Reverb, current.Reverb)
                || previous.Boost != current.Boost
                || !ShareEqual(previous.Share, current.Share)
                || previous.Parent != current.Parent
@@ -381,6 +384,13 @@ public sealed partial class SiteRowViewModel : ObservableObject
         return previous is null && current is null || previous is not null && current is not null &&
             previous.State == current.State && previous.Version == current.Version && previous.PhpVersion == current.PhpVersion &&
             previous.Port == current.Port && previous.Progress == current.Progress && previous.Problem == current.Problem && previous.Log == current.Log;
+    }
+
+    private static bool ReverbEqual(Status.SiteReverb? previous, Status.SiteReverb? current)
+    {
+        return previous is null && current is null || previous is not null && current is not null &&
+            previous.State == current.State && previous.Port == current.Port && previous.Env.SequenceEqual(current.Env) &&
+            previous.Problem == current.Problem && previous.Log == current.Log;
     }
 
     private static bool ShareEqual(Status.SiteShare? previous, Status.SiteShare? current)

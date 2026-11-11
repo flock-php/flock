@@ -558,6 +558,10 @@ internal sealed partial class SitesPane : UserControl, ISettingsPane
         panel.Children.Add(versions);
 
         panel.Children.Add(site.IsNode ? DevServer(site) : Server(site, row));
+        if (!site.IsNode)
+        {
+            panel.Children.Add(Reverb(site, row));
+        }
 
         if (!site.IsNode && Boost(site) is { } boost)
         {

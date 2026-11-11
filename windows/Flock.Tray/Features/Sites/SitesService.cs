@@ -47,6 +47,9 @@ public sealed class SitesService : IAsyncDisposable
     public Task<OperationOutcome> RestartAsync(string site, CancellationToken token = default) =>
         MutateAsync(Key(site), site, (_, cancellationToken) => client.RestartSiteAsync(site, cancellationToken), token);
 
+    public Task<OperationOutcome> RestartReverbAsync(string site, CancellationToken token = default) =>
+        MutateAsync(Key(site), site, (_, cancellationToken) => client.RestartReverbAsync(site, cancellationToken), token);
+
     /// <summary>Adds a proxy, or changes its upstream (a port, host:port or URL). Site and proxy names never clash, so they share the site keys.</summary>
     public Task<OperationOutcome> ProxyAsync(string name, string upstream, CancellationToken token = default) =>
         ProxyAsync(name, upstream, null, token);
