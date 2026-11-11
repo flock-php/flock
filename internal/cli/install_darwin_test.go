@@ -7,6 +7,8 @@ import (
 	"slices"
 	"strings"
 	"testing"
+
+	"flock/internal/certs"
 )
 
 // Uninstalling leaves the shell profiles as they were before `flock install`.
@@ -90,6 +92,89 @@ func TestInstalledAppsChecksTheBundleID(t *testing.T) {
 
 	if got := installedApps(); !slices.Equal(got, []string{flock}) {
 		t.Fatalf("installedApps() = %v", got)
+	}
+}
+
+// macOS `flock uninstall` untrusts every Flock root, not just the global one: the loop's
+// scope is suffixRootCerts' whole disk set — every certs/roots/<suffix>/ca.crt sorted, the
+// global root (untrusted by its own fatal call above the loop) never in it, so every root
+// is untrusted exactly once — and each certificate's `security` argv is the pinned
+// untrustCAArgs list, user-level, never executed here.
+func TestUninstallUntrustsEveryRoot(t *testing.T) {
+	root := t.TempDir()
+	global := filepath.Join(root, "certs", "ca.crt")
+	loc := filepath.Join(root, "certs", "roots", "loc", "ca.crt")
+	old := filepath.Join(root, "certs", "roots", "old", "ca.crt")
+	for _, c := range []struct{ dir, tld string }{
+		{filepath.Dir(global), "test"}, {filepath.Dir(loc), "loc"}, {filepath.Dir(old), "old"},
+	} {
+		if _, err := certs.Ensure(c.dir, c.tld); err != nil {
+			t.Fatal(err)
+		}
+	}
+	keychain := "/Users/u/Library/Keychains/login.keychain-db"
+	fingerprint := func(path string) string {
+		sum, err := certs.FileFingerprint(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return sum
+	}
+
+	// The loop's scope: the suffix roots sorted; the global root is not among them.
+	suffixes := suffixRootCerts(root)
+	if want := []string{loc, old}; !slices.Equal(suffixes, want) {
+		t.Fatalf("suffixRootCerts: got %v, want %v", suffixes, want)
+	}
+	if slices.Contains(suffixes, global) {
+		t.Fatal("the global root must stay out of the per-suffix loop: untrusted once, by its own call")
+	}
+
+	// Each cert's untrust argv, as uninstall runs it: only the domains that trust are
+	// asked, and the certificate leaves the login keychain by fingerprint in any case.
+	for _, tc := range []struct {
+		name        string
+		path        string
+		admin, user bool
+		want        [][]string
+	}{
+		{
+			name:  "global root, trusted by an elevated install",
+			path:  global,
+			admin: true,
+			want: [][]string{
+				{"security", "remove-trusted-cert", "-d", global},
+				{"security", "delete-certificate", "-Z", fingerprint(global), keychain},
+			},
+		},
+		{
+			name: "suffix root, trusted in the user's settings by flock site tld",
+			path: loc,
+			user: true,
+			want: [][]string{
+				{"security", "remove-trusted-cert", loc},
+				{"security", "delete-certificate", "-Z", fingerprint(loc), keychain},
+			},
+		},
+		{
+			name: "suffix root nothing trusts: only the keychain cleanup runs",
+			path: old,
+			want: [][]string{
+				{"security", "delete-certificate", "-Z", fingerprint(old), keychain},
+			},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			got := untrustCAArgs(tc.path, fingerprint(tc.path), tc.admin, tc.user, keychain)
+			if len(got) != len(tc.want) {
+				t.Fatalf("got %d commands, want %d: %v", len(got), len(tc.want), got)
+			}
+			for i := range tc.want {
+				if !slices.Equal(got[i], tc.want[i]) {
+					t.Errorf("command %d: got %v, want %v", i, got[i], tc.want[i])
+				}
+			}
+		})
 	}
 }
 

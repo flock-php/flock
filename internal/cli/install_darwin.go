@@ -270,26 +270,40 @@ func trustCA(caPath string) error {
 	return securityError(err, out)
 }
 
+// untrustCAArgs is the pure argv layer of untrustCA's work on one certificate, pinned by
+// tests and never executed there: the trust decisions go first — the admin domain (-d)
+// only when that domain trusts the fingerprint, then the user's the same way — and last
+// comes the certificate itself out of the login keychain by SHA-1 fingerprint.
+func untrustCAArgs(caPath, fingerprint string, adminTrusted, userTrusted bool, keychain string) [][]string {
+	var args [][]string
+	if adminTrusted {
+		args = append(args, []string{"security", "remove-trusted-cert", "-d", caPath})
+	}
+	if userTrusted {
+		args = append(args, []string{"security", "remove-trusted-cert", caPath})
+	}
+	return append(args, []string{"security", "delete-certificate", "-Z", fingerprint, keychain})
+}
+
 // untrustCA removes the CA's trust from the user's settings and, for installs made before trustCA,
 // the admin settings, then the CA itself from the login keychain. macOS asks for the password.
+// The trust removals are fatal; the keychain delete (the last command) is best-effort: a
+// keychain that never held the certificate has nothing to delete.
 func untrustCA(caPath string) error {
 	fingerprint, err := certs.FileFingerprint(caPath)
 	if err != nil {
 		return nil // no CA, nothing trusted
 	}
-	if certs.TrustedByAdmin(fingerprint) {
-		out, err := exec.Command("security", "remove-trusted-cert", "-d", caPath).CombinedOutput()
+	args := untrustCAArgs(caPath, fingerprint,
+		certs.TrustedByAdmin(fingerprint), certs.TrustedByUser(fingerprint), loginKeychain())
+	for _, argv := range args[:len(args)-1] {
+		out, err := exec.Command(argv[0], argv[1:]...).CombinedOutput()
 		if err := securityError(err, out); err != nil {
 			return err
 		}
 	}
-	if certs.TrustedByUser(fingerprint) {
-		out, err := exec.Command("security", "remove-trusted-cert", caPath).CombinedOutput()
-		if err := securityError(err, out); err != nil {
-			return err
-		}
-	}
-	_ = exec.Command("security", "delete-certificate", "-Z", fingerprint, loginKeychain()).Run()
+	del := args[len(args)-1]
+	_ = exec.Command(del[0], del[1:]...).Run()
 	return nil
 }
 
@@ -454,6 +468,19 @@ func newUninstallCommand() *cobra.Command {
 				return fmt.Errorf("remove CA trust: %w", err)
 			}
 			cmd.Println("✓ removed the Flock CA's trust")
+			// `flock site tld` and install trust each suffix's root in the same login keychain;
+			// uninstall takes every one of them out too — the whole disk set, active suffixes
+			// and stale ones alike (suffixRootCerts), each untrusted exactly once (the global
+			// root is never in that set, its untrust is the call above). Best-effort per cert,
+			// as Windows' delstore loop is: one stubborn certificate doesn't stop the rest.
+			for _, cert := range suffixRootCerts(s.root) {
+				suffix := filepath.Base(filepath.Dir(cert))
+				if err := untrustCA(cert); err != nil {
+					cmd.Printf("! could not remove the .%s root's trust (%v) — delete it in Keychain Access\n", suffix, err)
+					continue
+				}
+				cmd.Printf("✓ the .%s root certificate is no longer trusted\n", suffix)
+			}
 
 			// The app runs this command with --keep-app, shows the result and then removes itself.
 			if !keepApp {
