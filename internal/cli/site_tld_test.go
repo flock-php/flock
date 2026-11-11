@@ -337,6 +337,44 @@ func TestChangeSiteTLDinheritSwitchesBackAndKeepsExplicitAliases(t *testing.T) {
 	}
 }
 
+// TestChangeSiteTLDInheritOnGlobalPinnedSite: handing back a site pinned to the *global*
+// suffix with --inherit changes the stored state (the override clears, the site follows
+// again) while its effective suffix stays the same, so the run takes the no-move branch.
+// That branch's message must say the site follows the global suffix now: "now pins .
+// (it stops following the global suffix)" states the opposite of what was stored.
+func TestChangeSiteTLDInheritOnGlobalPinnedSite(t *testing.T) {
+	s, _, _, _ := siteTLDFixture(t)
+	if _, _, err := s.changeSiteTLD("test", "demo", false, io.Discard); err != nil {
+		t.Fatalf("pin demo to .test: %v", err)
+	}
+
+	var out strings.Builder
+	old, _, err := s.changeSiteTLD("", "demo", true, &out)
+	if err != nil {
+		t.Fatalf("inherit: %v\n%s", err, out.String())
+	}
+	if old != "" {
+		t.Errorf("the no-move inherit provisions nothing: old suffix reported as %q, want \"\"", old)
+	}
+	msg := out.String()
+	if strings.Contains(msg, "pins") || strings.Contains(msg, "stops following") {
+		t.Errorf("inherit must not report pinning, got:\n%s", msg)
+	}
+	if !strings.Contains(msg, "follows") || !strings.Contains(msg, ".test") {
+		t.Errorf("the message must say demo now follows the global .test, got:\n%s", msg)
+	}
+
+	reloaded, err := config.Load(s.root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, site := range reloaded.Sites {
+		if site.Name == "demo" && site.TLD != "" {
+			t.Errorf("the inherit must clear the site's override, got TLD %q", site.TLD)
+		}
+	}
+}
+
 // TestAddDomainWithSuffix covers the flag's forms: a suffix pins the alias, the "inherit"
 // keyword stores the inherited marker (an empty Domain.TLD with Alias), and a public suffix
 // is refused by ValidateTLD.

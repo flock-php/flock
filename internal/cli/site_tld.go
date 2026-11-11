@@ -164,8 +164,10 @@ func (s *state) changeSiteTLD(raw, siteName string, inherit bool, out io.Writer)
 	}
 
 	if newSuffix == oldSuffix {
-		// Pinning the global suffix: no host moves and the active-suffix set is unchanged,
-		// but the site stops following future global changes — a real, storable choice.
+		// The effective suffix does not move, and the active-suffix set is unchanged; the
+		// stored choice is real either way. Pinning the global suffix: the site stops
+		// following future global changes. --inherit on a site already pinned to the
+		// global suffix: the reverse — the override clears and the site follows again.
 		site.TLD, site.Parked = suffix, false
 		if err := s.cfg.Upsert(site); err != nil {
 			return "", "", err
@@ -173,7 +175,11 @@ func (s *state) changeSiteTLD(raw, siteName string, inherit bool, out io.Writer)
 		if err := s.commit(context.Background(), out); err != nil {
 			return "", "", err
 		}
-		fmt.Fprintf(out, "%s now pins .%s (it stops following the global suffix)\n", site.Name, suffix)
+		if suffix == "" {
+			fmt.Fprintf(out, "%s now follows the global suffix (.%s)\n", site.Name, s.cfg.TLD)
+		} else {
+			fmt.Fprintf(out, "%s now pins .%s (it stops following the global suffix)\n", site.Name, suffix)
+		}
 		// RunE's success half is skipped for this branch (nothing to provision), so ValidateTLD's
 		// warning is heard here — and only where the daemon does not already relay it.
 		if warning != "" && (s.cfg.TLD != "local" || !s.daemonRunning(context.Background())) {
