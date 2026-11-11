@@ -196,8 +196,10 @@ type SiteStatus struct {
 	// FrankenPHP is the state of the site's FrankenPHP process, when Server is "frankenphp". Until
 	// it runs, the site is served through FastCGI.
 	FrankenPHP *SiteFrankenPHP `json:"frankenphp,omitempty"`
+	// Reverb is the state of the site's Laravel Reverb server, when it's turned on.
+	Reverb *SiteReverb `json:"reverb,omitempty"`
 	// Type is what the site is: "php" or "node" (see config.Site.Type). A Node.js site has
-	// NodeServer instead of the PHP settings (PHP, Root, Server, FrankenPHP).
+	// NodeServer instead of the PHP settings (PHP, Root, Server, FrankenPHP, Reverb).
 	Type       string          `json:"type"`
 	NodeServer *SiteNodeServer `json:"node_server,omitempty"`
 	// Boost is whether the project uses Laravel Boost and has Flock's guideline (see package boost):
@@ -242,6 +244,22 @@ type SiteFrankenPHP struct {
 	Progress   float64 `json:"progress"`              // while installing: 0..1, or -1 when unknown
 	Problem    string  `json:"problem,omitempty"`
 	Log        string  `json:"log"` // name for /v1/logs/services/{name}
+}
+
+// Reverb states of a site.
+const (
+	ReverbRunning     = "running"
+	ReverbFailed      = "failed"      // see Problem
+	ReverbUnavailable = "unavailable" // the project has no Laravel Reverb; see Problem
+)
+
+// SiteReverb is a site's Laravel Reverb server.
+type SiteReverb struct {
+	State   string   `json:"state"`
+	Port    int      `json:"port"`          // loopback port the web server proxies to
+	Env     []string `json:"env,omitempty"` // the app's .env lines for reaching it through the web server
+	Problem string   `json:"problem,omitempty"`
+	Log     string   `json:"log"` // name for /v1/logs/services/{name}
 }
 
 // SiteDomain is one of a site's extra domains.
@@ -301,7 +319,7 @@ type Backend interface {
 	FrankenPHP() *frankenphp.Manager
 	// Binaries is the package manifest of the configured channel (nil when there is none).
 	Binaries() *binaries.Catalog
-	// RestartSite restarts a FrankenPHP site's process, e.g. so Octane's workers load changed code.
+	// RestartSite restarts a site's FrankenPHP and Reverb processes, e.g. so they load changed code.
 	RestartSite(name string) error
 	// StopSite puts a Node.js site's dev server to sleep until the site's next request.
 	StopSite(name string) error
@@ -427,10 +445,11 @@ func (c *Client) Status(ctx context.Context) (Status, error) {
 	return status, err
 }
 
-// Reload asks the daemon to apply config.json and returns the resulting status.
+// Reload asks the daemon to apply config.json and returns the resulting status. It may start a
+// site's FrankenPHP or Reverb and wait for it (Octane up to 20 s), so it gets UpdateSite's minute.
 func (c *Client) Reload(ctx context.Context) (Status, error) {
 	var status Status
-	err := c.do(ctx, http.MethodPost, "/v1/reload", &status)
+	err := c.timeout(time.Minute).do(ctx, http.MethodPost, "/v1/reload", &status)
 
 	return status, err
 }
