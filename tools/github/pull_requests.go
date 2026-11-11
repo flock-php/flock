@@ -38,9 +38,6 @@ func (s PullRequestEventService) Run(owner, repository string, data []byte) erro
 			return nil
 		}
 		approvedIssue := *result.ApprovedIssue
-		if result.ClaimedBy != "" {
-			return pr_gate.CloseClaimedIssue(s.Gate.PullRequests, owner, repository, event.Number, approvedIssue, result.ClaimedBy)
-		}
 		assignment, err := pr_assignment.Execute(s.Assignment, owner, approvedIssue, event.Author)
 		if err != nil {
 			return err

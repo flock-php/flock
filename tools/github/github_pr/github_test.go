@@ -8,7 +8,6 @@ import (
 	"testing"
 
 	"flock/tools/github/github_client"
-	"flock/tools/github/issue_reference"
 )
 
 func TestServiceTransfersMilestone(t *testing.T) {
@@ -45,7 +44,7 @@ func TestServiceTransfersMilestone(t *testing.T) {
 	}
 }
 
-func TestServiceListsDevelopmentLinkedIssues(t *testing.T) {
+func TestServiceListsPaginatedClosingIssuesReferences(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost || r.URL.Path != "/graphql" {
 			t.Errorf("request = %s %s", r.Method, r.URL.Path)
@@ -53,10 +52,17 @@ func TestServiceListsDevelopmentLinkedIssues(t *testing.T) {
 			return
 		}
 		body, _ := io.ReadAll(r.Body)
-		if !strings.Contains(string(body), "closingIssuesReferences(first: 100)") || strings.Contains(string(body), "userLinkedOnly") {
+		if !strings.Contains(string(body), "closingIssuesReferences(first: 100, after: $cursor)") || strings.Contains(string(body), "excludeUserLinked") {
 			t.Fatalf("query does not request all Development links: %s", body)
 		}
-		_, _ = io.WriteString(w, `{"data":{"repository":{"pullRequest":{"closingIssuesReferences":{"nodes":[{"number":73,"milestone":{"number":3}},{"number":74,"milestone":null}]}}}}}`)
+		if strings.Contains(string(body), `"cursor":null`) {
+			_, _ = io.WriteString(w, `{"data":{"repository":{"pullRequest":{"closingIssuesReferences":{"nodes":[{"number":73,"milestone":{"number":3},"repository":{"name":"flock","owner":{"login":"flock-php"}}}],"pageInfo":{"hasNextPage":true,"endCursor":"next-page"}}}}}}`)
+			return
+		}
+		if !strings.Contains(string(body), `"cursor":"next-page"`) {
+			t.Fatalf("second request cursor = %s", body)
+		}
+		_, _ = io.WriteString(w, `{"data":{"repository":{"pullRequest":{"closingIssuesReferences":{"nodes":[{"number":74,"milestone":null,"repository":{"name":"flock","owner":{"login":"flock-php"}}}],"pageInfo":{"hasNextPage":false,"endCursor":""}}}}}}`)
 	}))
 	defer server.Close()
 
@@ -68,7 +74,8 @@ func TestServiceListsDevelopmentLinkedIssues(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(issues) != 2 || issues[0].Number != 73 || issues[0].MilestoneNumber == nil || *issues[0].MilestoneNumber != 3 || issues[1].MilestoneNumber != nil {
+	if len(issues) != 2 || issues[0].Owner != "flock-php" || issues[0].Repository != "flock" || issues[0].Number != 73 ||
+		issues[0].MilestoneNumber == nil || *issues[0].MilestoneNumber != 3 || issues[1].MilestoneNumber != nil {
 		t.Fatalf("ListLinkedIssues() = %+v", issues)
 	}
 }
@@ -114,33 +121,6 @@ func TestServiceGetsPullRequestsFilesAndUpdates(t *testing.T) {
 	}
 	if err := service.SetState("flock-php", "flock", 87, "closed"); err != nil {
 		t.Fatal(err)
-	}
-}
-
-func TestServiceFindsLowestOpenReferencedPullRequestAcrossPages(t *testing.T) {
-	var server *httptest.Server
-	server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodGet || r.URL.Path != "/repos/flock-php/flock/pulls" || (r.URL.Query().Get("page") == "" && r.URL.Query().Get("state") != "open") {
-			t.Errorf("request = %s", r.URL.String())
-			w.WriteHeader(http.StatusNotFound)
-			return
-		}
-		if r.URL.Query().Get("page") == "2" {
-			_, _ = io.WriteString(w, `[{"number":86,"body":"Fixes #73","user":{"login":"first"}}]`)
-			return
-		}
-		w.Header().Set("Link", "<"+server.URL+"/repos/flock-php/flock/pulls?page=2>; rel=\"next\"")
-		_, _ = io.WriteString(w, `[{"number":87,"body":"Fixes #73","user":{"login":"second"}},{"number":85,"body":"Fixes #72","user":{"login":"other"}}]`)
-	}))
-	defer server.Close()
-
-	client, err := github_client.New(server.URL, "token")
-	if err != nil {
-		t.Fatal(err)
-	}
-	winner, err := New(client).LowestOpenReference("flock-php", "flock", issue_reference.Reference{Repository: "flock", Number: 73})
-	if err != nil || winner == nil || winner.Number != 86 || winner.Author.Login != "first" {
-		t.Fatalf("LowestOpenReference() = %+v, %v", winner, err)
 	}
 }
 

@@ -1,7 +1,7 @@
 # Outside contributors open an issue first; a PR from them stays open only when it targets main
-# and references an open issue in this repository that a maintainer has approved for it.
+# and links an open issue in this repository with a closing keyword or the Development sidebar that a maintainer has approved for it.
 # An assigned issue accepts only its assignees. An unassigned `help wanted` issue accepts the
-# lowest-numbered referenced PR, which receives durable `claimed` after the issue claim and milestone transfer succeed.
+# first processed referenced PR, which receives durable `claimed` after the issue claim and milestone transfer succeeds.
 # A PR that changes only files in docs/ needs no issue; it's checked again on every push, so it
 # can't pick up other changes later.
 # Every other PR from a non-collaborator is closed with a comment pointing at CONTRIBUTING.md.
@@ -9,8 +9,8 @@
 name: PR gate
 
 concurrency:
-  group: contribution-pr-gate-${{ github.repository }}
-  queue: max
+    group: contribution-pr-gate-${{ github.repository }}
+    queue: max
 
 on:
   # pull_request_target, so the token can comment on and close PRs from forks. It never checks

@@ -11,10 +11,10 @@ To make sure work goes into changes that fit the project, every pull request sta
 2. **Wait for approval.** New issues are marked **`needs triage`** while they are reviewed. An approved issue is either
     - labeled **`help wanted`**, or
     - **assigned to you**.
-3. **Open a pull request** against `main` that references the issue, e.g. `Fixes #123`.
+3. **Open a pull request** against `main` that links the issue with a closing keyword, such as `Fixes #123`, or in the Development sidebar.
 
 An issue assigned to someone else isn't available, even if it still has the `help wanted` label. If an unassigned
-`help wanted` issue receives more than one pull request, the pull request with the lowest number claims it. Flock adds
+`help wanted` issue receives more than one pull request, the first pull request Flock processes claims it. Flock adds
 the **`claimed`** label to the issue and pull request, removes `help wanted`, and closes the other pull requests.
 
 Pull requests that don't reference an approved issue are closed automatically, with a note explaining why. Once the

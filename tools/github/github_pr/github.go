@@ -5,14 +5,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"slices"
 	"strings"
 	"time"
 
 	"github.com/google/go-github/v93/github"
 
 	"flock/tools/github/github_issue"
-	"flock/tools/github/issue_reference"
 )
 
 const GateMarker = "<!-- pr-gate:closed -->"
@@ -22,6 +20,8 @@ type Service struct {
 }
 
 type LinkedIssue struct {
+	Owner           string
+	Repository      string
 	Number          int
 	MilestoneNumber *int
 }
@@ -122,31 +122,6 @@ func (s *Service) ListFiles(owner, repository string, number int) ([]File, error
 	}
 }
 
-// LowestOpenReference returns the open pull request with the smallest number that references issue.
-func (s *Service) LowestOpenReference(owner, repository string, issue issue_reference.Reference) (*PullRequest, error) {
-	options := &github.PullRequestListOptions{State: "open", PerPage: 100}
-	var winner *PullRequest
-	for {
-		pullRequests, response, err := s.client.PullRequests.List(context.Background(), owner, repository, options)
-		if err != nil {
-			return nil, err
-		}
-		for _, pullRequest := range pullRequests {
-			candidate := pullRequestFromGitHub(pullRequest)
-			if !references(candidate.Body, repository, issue) {
-				continue
-			}
-			if winner == nil || candidate.Number < winner.Number {
-				winner = candidate
-			}
-		}
-		if response.NextPage == 0 {
-			return winner, nil
-		}
-		options.Page = response.NextPage
-	}
-}
-
 // ParseEvent parses a pull request webhook payload into owned workflow data.
 func ParseEvent(data []byte) (Event, error) {
 	var event github.PullRequestEvent
@@ -180,10 +155,6 @@ func pullRequestFromGitHub(source *github.PullRequest) *PullRequest {
 	}
 }
 
-func references(body, repository string, issue issue_reference.Reference) bool {
-	return slices.Contains(issue_reference.Parse(body, repository), issue)
-}
-
 func labelsFromGitHub(sources []*github.Label) []github_issue.Label {
 	labels := make([]github_issue.Label, 0, len(sources))
 	for _, source := range sources {
@@ -205,51 +176,70 @@ func HasLabel(pullRequest *PullRequest, name string) bool {
 }
 
 func (s *Service) ListLinkedIssues(owner, repository string, pullRequestNumber int) ([]LinkedIssue, error) {
-	request, err := s.client.NewRequest(context.Background(), "POST", "graphql", map[string]any{
-		"query": `query($owner: String!, $repository: String!, $pullRequest: Int!) {
+	var cursor *string
+	var issues []LinkedIssue
+	for {
+		request, err := s.client.NewRequest(context.Background(), "POST", "graphql", map[string]any{
+			"query": `query($owner: String!, $repository: String!, $pullRequest: Int!, $cursor: String) {
   repository(owner: $owner, name: $repository) {
     pullRequest(number: $pullRequest) {
-      closingIssuesReferences(first: 100) {
-        nodes { number milestone { number } }
+      closingIssuesReferences(first: 100, after: $cursor) {
+        nodes { number milestone { number } repository { name owner { login } } }
+        pageInfo { hasNextPage endCursor }
       }
     }
   }
 }`,
-		"variables": map[string]any{
-			"owner":       owner,
-			"repository":  repository,
-			"pullRequest": pullRequestNumber,
-		},
-	})
-	if err != nil {
-		return nil, err
-	}
-	var response struct {
-		Data struct {
-			Repository struct {
-				PullRequest struct {
-					ClosingIssuesReferences struct {
-						Nodes []struct {
-							Number    int
-							Milestone *struct{ Number int }
+			"variables": map[string]any{
+				"owner":       owner,
+				"repository":  repository,
+				"pullRequest": pullRequestNumber,
+				"cursor":      cursor,
+			},
+		})
+		if err != nil {
+			return nil, err
+		}
+
+		var response struct {
+			Data struct {
+				Repository struct {
+					PullRequest struct {
+						ClosingIssuesReferences struct {
+							Nodes []struct {
+								Number     int
+								Milestone  *struct{ Number int }
+								Repository struct {
+									Name  string
+									Owner struct{ Login string }
+								}
+							}
+							PageInfo struct {
+								HasNextPage bool
+								EndCursor   string
+							}
 						}
 					}
 				}
 			}
 		}
-	}
-	if _, err := s.client.Do(request, &response); err != nil {
-		return nil, err
-	}
-	issues := make([]LinkedIssue, 0, len(response.Data.Repository.PullRequest.ClosingIssuesReferences.Nodes))
-	for _, issue := range response.Data.Repository.PullRequest.ClosingIssuesReferences.Nodes {
-		linkedIssue := LinkedIssue{Number: issue.Number}
-		if issue.Milestone != nil {
-			linkedIssue.MilestoneNumber = &issue.Milestone.Number
+		if _, err := s.client.Do(request, &response); err != nil {
+			return nil, err
 		}
-		issues = append(issues, linkedIssue)
+
+		for _, issue := range response.Data.Repository.PullRequest.ClosingIssuesReferences.Nodes {
+			linkedIssue := LinkedIssue{Owner: issue.Repository.Owner.Login, Repository: issue.Repository.Name, Number: issue.Number}
+			if issue.Milestone != nil {
+				linkedIssue.MilestoneNumber = &issue.Milestone.Number
+			}
+			issues = append(issues, linkedIssue)
+		}
+		page := response.Data.Repository.PullRequest.ClosingIssuesReferences.PageInfo
+		if !page.HasNextPage {
+			return issues, nil
+		}
+		cursor = &page.EndCursor
 	}
-	return issues, nil
 }
 
 func (s *Service) GateClosed(owner, repository string, number int) (bool, error) {

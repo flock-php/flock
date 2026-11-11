@@ -8,7 +8,6 @@ import (
 
 	"flock/tools/github/github_issue"
 	"flock/tools/github/github_pr"
-	"flock/tools/github/issue_reference"
 	"flock/tools/github/pr_assignment"
 	"flock/tools/github/pr_gate"
 )
@@ -32,7 +31,7 @@ func TestRunPullRequestEventClaimsApprovedIssue(t *testing.T) {
 	milestone := 3
 	pullRequests := &pullRequestEventFake{pullRequest: &github_pr.PullRequest{
 		Number: 87, State: "open", BaseRef: "main", Body: "Fixes #73", Author: github_issue.User{Login: "contributor", Type: "User"},
-	}, linkedIssues: []github_pr.LinkedIssue{{Number: 73, MilestoneNumber: &milestone}}, calls: &calls}
+	}, linkedIssues: []github_pr.LinkedIssue{linkedIssue(73, &milestone)}, calls: &calls}
 	issues := &pullRequestIssueFake{issue: &github_issue.Issue{Number: 73, State: "open", Labels: []github_issue.Label{{Name: "help wanted"}}}, calls: &calls}
 	if err := newPullRequestEventService(pullRequests, issues).Run("flock-php", "flock", []byte(`{"action":"opened","pull_request":{"number":87,"user":{"login":"contributor"}}}`)); err != nil {
 		t.Fatal(err)
@@ -40,7 +39,7 @@ func TestRunPullRequestEventClaimsApprovedIssue(t *testing.T) {
 	if issues.assignee != "contributor" || !issues.claimed || !issues.removed {
 		t.Fatalf("assignee = %q, claimed = %t, removed = %t", issues.assignee, issues.claimed, issues.removed)
 	}
-	want := []string{"pr:get", "pr:list-files", "issue:get", "pr:lowest-reference", "issue:get", "issue:assign", "repository:role", "issue:add-label", "issue:remove-help-wanted", "pr:get", "pr:list-linked-issues", "pr:transfer-milestone", "issue:ensure-claimed-label", "issue:add-label"}
+	want := []string{"pr:get", "pr:list-files", "pr:list-linked-issues", "issue:get", "issue:get", "issue:assign", "repository:role", "issue:add-label", "issue:remove-help-wanted", "pr:get", "pr:list-linked-issues", "pr:transfer-milestone", "issue:ensure-claimed-label", "issue:add-label"}
 	if !reflect.DeepEqual(calls, want) {
 		t.Fatalf("calls = %v, want %v", calls, want)
 	}
@@ -50,12 +49,12 @@ func TestRunPullRequestEventSkipsCrossRepositoryAssignmentAndMilestoneTransfer(t
 	calls := []string{}
 	pullRequests := &pullRequestEventFake{pullRequest: &github_pr.PullRequest{
 		Number: 87, State: "open", BaseRef: "main", Body: "Fixes flock-php/binaries#73", Author: github_issue.User{Login: "contributor", Type: "User"},
-	}, calls: &calls}
+	}, linkedIssues: []github_pr.LinkedIssue{{Owner: "flock-php", Repository: "binaries", Number: 73}}, calls: &calls}
 	issues := &pullRequestIssueFake{issue: &github_issue.Issue{Number: 73, State: "open", Labels: []github_issue.Label{{Name: "help wanted"}}}, calls: &calls}
 	if err := newPullRequestEventService(pullRequests, issues).Run("flock-php", "flock", []byte(`{"action":"opened","pull_request":{"number":87,"user":{"login":"contributor"}}}`)); err != nil {
 		t.Fatal(err)
 	}
-	want := []string{"pr:get", "pr:list-files"}
+	want := []string{"pr:get", "pr:list-files", "pr:list-linked-issues"}
 	if !reflect.DeepEqual(calls, want) {
 		t.Fatalf("calls = %v, want %v", calls, want)
 	}
@@ -65,14 +64,14 @@ func TestRunPullRequestEventClosesIssueClaimedByAnotherContributor(t *testing.T)
 	calls := []string{}
 	pullRequests := &pullRequestEventFake{pullRequest: &github_pr.PullRequest{
 		Number: 87, State: "open", BaseRef: "main", Body: "Fixes #73", Author: github_issue.User{Login: "contributor", Type: "User"},
-	}, calls: &calls}
+	}, linkedIssues: []github_pr.LinkedIssue{linkedIssue(73, nil)}, calls: &calls}
 	issues := &pullRequestIssueFake{issue: &github_issue.Issue{
 		Number: 73, State: "open", Assignees: []github_issue.User{{Login: "other-contributor"}}, Labels: []github_issue.Label{{Name: "help wanted"}},
 	}, calls: &calls}
 	if err := newPullRequestEventService(pullRequests, issues).Run("flock-php", "flock", []byte(`{"action":"opened","pull_request":{"number":87,"user":{"login":"contributor"}}}`)); err != nil {
 		t.Fatal(err)
 	}
-	want := []string{"pr:get", "pr:list-files", "issue:get", "issue:get", "repository:role", "pr:get", "pr:create-comment", "pr:set-state"}
+	want := []string{"pr:get", "pr:list-files", "pr:list-linked-issues", "issue:get", "issue:get", "repository:role", "pr:get", "pr:create-comment", "pr:set-state"}
 	if !reflect.DeepEqual(calls, want) {
 		t.Fatalf("calls = %v, want %v", calls, want)
 	}
@@ -99,14 +98,12 @@ func TestRunPullRequestEventKeepsClaimedPullRequestOpen(t *testing.T) {
 
 func TestRunPullRequestEventAllowsDocsOnlyPullRequestsWithConflictingReferences(t *testing.T) {
 	for _, tt := range []struct {
-		name   string
-		issue  *github_issue.Issue
-		winner *github_pr.PullRequest
+		name  string
+		issue *github_issue.Issue
 	}{
 		{
-			name:   "lower-numbered pull request",
-			issue:  &github_issue.Issue{Number: 73, State: "open", Labels: []github_issue.Label{{Name: github_issue.HelpWanted}}},
-			winner: &github_pr.PullRequest{Number: 86, State: "open", Body: "Fixes #73", Author: github_issue.User{Login: "other-contributor", Type: "User"}},
+			name:  "lower-numbered pull request",
+			issue: &github_issue.Issue{Number: 73, State: "open", Labels: []github_issue.Label{{Name: github_issue.HelpWanted}}},
 		},
 		{
 			name:  "issue assigned to another contributor",
@@ -117,7 +114,7 @@ func TestRunPullRequestEventAllowsDocsOnlyPullRequestsWithConflictingReferences(
 			calls := []string{}
 			pullRequests := &pullRequestEventFake{pullRequest: &github_pr.PullRequest{
 				Number: 87, State: "open", BaseRef: "main", Body: "Fixes #73", Author: github_issue.User{Login: "contributor", Type: "User"},
-			}, files: []github_pr.File{{Filename: "docs/contributing.md"}}, winner: tt.winner, calls: &calls}
+			}, files: []github_pr.File{{Filename: "docs/contributing.md"}}, linkedIssues: []github_pr.LinkedIssue{linkedIssue(73, nil)}, calls: &calls}
 			issues := &pullRequestIssueFake{issue: tt.issue, calls: &calls}
 
 			if err := newPullRequestEventService(pullRequests, issues).Run("flock-php", "flock", []byte(`{"action":"opened","pull_request":{"number":87,"user":{"login":"contributor"}}}`)); err != nil {
@@ -134,7 +131,7 @@ func TestRunPullRequestEventCompletesClaimAfterAssignmentRetry(t *testing.T) {
 	calls := []string{}
 	pullRequests := &pullRequestEventFake{pullRequest: &github_pr.PullRequest{
 		Number: 87, State: "open", BaseRef: "main", Body: "Fixes #73", Author: github_issue.User{Login: "contributor", Type: "User"},
-	}, calls: &calls}
+	}, linkedIssues: []github_pr.LinkedIssue{linkedIssue(73, nil)}, calls: &calls}
 	issues := &pullRequestIssueFake{
 		issue:     &github_issue.Issue{Number: 73, State: "open", Labels: []github_issue.Label{{Name: github_issue.HelpWanted}}},
 		calls:     &calls,
@@ -162,7 +159,7 @@ func TestRunPullRequestEventRetriesMilestoneTransferBeforeCompletingClaim(t *tes
 	milestone := 3
 	pullRequests := &pullRequestEventFake{pullRequest: &github_pr.PullRequest{
 		Number: 87, State: "open", BaseRef: "main", Body: "Fixes #73", Author: github_issue.User{Login: "contributor", Type: "User"},
-	}, linkedIssues: []github_pr.LinkedIssue{{Number: 73, MilestoneNumber: &milestone}}, transferErr: errors.New("transfer"), calls: &calls}
+	}, linkedIssues: []github_pr.LinkedIssue{linkedIssue(73, &milestone)}, transferErr: errors.New("transfer"), calls: &calls}
 	issues := &pullRequestIssueFake{issue: &github_issue.Issue{Number: 73, State: "open", Labels: []github_issue.Label{{Name: github_issue.HelpWanted}}}, calls: &calls}
 	service := newPullRequestEventService(pullRequests, issues)
 	event := []byte(`{"action":"opened","pull_request":{"number":87,"user":{"login":"contributor"}}}`)
@@ -188,7 +185,7 @@ func TestRunPullRequestEventClosesAssignedIssueForAnotherAuthor(t *testing.T) {
 	calls := []string{}
 	pullRequests := &pullRequestEventFake{pullRequest: &github_pr.PullRequest{
 		Number: 87, State: "open", BaseRef: "main", Body: "Fixes #73", Author: github_issue.User{Login: "contributor", Type: "User"},
-	}, calls: &calls}
+	}, linkedIssues: []github_pr.LinkedIssue{linkedIssue(73, nil)}, calls: &calls}
 	issues := &pullRequestIssueFake{
 		issue: &github_issue.Issue{Number: 73, State: "open", Assignees: []github_issue.User{{Login: "other"}}, Labels: []github_issue.Label{{Name: "help wanted"}}},
 		calls: &calls,
@@ -196,7 +193,7 @@ func TestRunPullRequestEventClosesAssignedIssueForAnotherAuthor(t *testing.T) {
 	if err := newPullRequestEventService(pullRequests, issues).Run("flock-php", "flock", []byte(`{"action":"opened","pull_request":{"number":87,"user":{"login":"contributor"}}}`)); err != nil {
 		t.Fatal(err)
 	}
-	want := []string{"pr:get", "pr:list-files", "issue:get", "issue:get", "repository:role", "pr:get", "pr:create-comment", "pr:set-state"}
+	want := []string{"pr:get", "pr:list-files", "pr:list-linked-issues", "issue:get", "issue:get", "repository:role", "pr:get", "pr:create-comment", "pr:set-state"}
 	if !reflect.DeepEqual(calls, want) {
 		t.Fatalf("calls = %v, want %v", calls, want)
 	}
@@ -206,7 +203,7 @@ func TestRunPullRequestEventReevaluatesWhenIssueApprovalIsWithdrawn(t *testing.T
 	calls := []string{}
 	pullRequests := &pullRequestEventFake{pullRequest: &github_pr.PullRequest{
 		Number: 87, State: "closed", BaseRef: "main", Body: "Fixes #73", Author: github_issue.User{Login: "contributor", Type: "User"},
-	}, gateClosed: true, files: []github_pr.File{{Filename: "tools/github/main.go"}}, calls: &calls}
+	}, gateClosed: true, files: []github_pr.File{{Filename: "tools/github/main.go"}}, linkedIssues: []github_pr.LinkedIssue{linkedIssue(73, nil)}, calls: &calls}
 	issues := &pullRequestIssueFake{
 		issue: &github_issue.Issue{Number: 74, State: "open", Labels: []github_issue.Label{{Name: "help wanted"}}},
 		issueReads: []*github_issue.Issue{
@@ -222,7 +219,7 @@ func TestRunPullRequestEventReevaluatesWhenIssueApprovalIsWithdrawn(t *testing.T
 	if !strings.Contains(pullRequests.comment, "Flock takes pull requests only for issues a maintainer has approved") {
 		t.Fatalf("re-evaluation comment = %q", pullRequests.comment)
 	}
-	want := []string{"pr:get", "pr:gate-closed", "issue:get", "pr:lowest-reference", "pr:set-state", "pr:create-comment", "issue:get", "pr:get", "pr:list-files", "issue:get", "pr:create-comment", "pr:set-state"}
+	want := []string{"pr:get", "pr:gate-closed", "pr:list-linked-issues", "issue:get", "pr:set-state", "pr:create-comment", "issue:get", "pr:get", "pr:list-files", "pr:list-linked-issues", "issue:get", "pr:create-comment", "pr:set-state"}
 	if !reflect.DeepEqual(calls, want) {
 		t.Fatalf("calls = %v, want %v", calls, want)
 	}
@@ -236,7 +233,7 @@ func TestRunPullRequestEventProcessesReplacementApprovedIssue(t *testing.T) {
 	milestone := 4
 	pullRequests := &pullRequestEventFake{pullRequest: &github_pr.PullRequest{
 		Number: 87, State: "open", BaseRef: "main", Body: "Fixes #73\nFixes #74", Author: github_issue.User{Login: "contributor", Type: "User"},
-	}, linkedIssues: []github_pr.LinkedIssue{{Number: 74, MilestoneNumber: &milestone}}, calls: &calls}
+	}, linkedIssues: []github_pr.LinkedIssue{linkedIssue(73, nil), linkedIssue(74, &milestone)}, calls: &calls}
 	issues := &pullRequestIssueFake{
 		issue: &github_issue.Issue{Number: 74, State: "open", Labels: []github_issue.Label{{Name: "help wanted"}}},
 		issueReads: []*github_issue.Issue{
@@ -252,7 +249,7 @@ func TestRunPullRequestEventProcessesReplacementApprovedIssue(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := []string{
-		"pr:get", "pr:list-files", "issue:get", "pr:lowest-reference", "issue:get", "pr:get", "pr:list-files", "issue:get", "issue:get", "pr:lowest-reference",
+		"pr:get", "pr:list-files", "pr:list-linked-issues", "issue:get", "issue:get", "pr:get", "pr:list-files", "pr:list-linked-issues", "issue:get", "issue:get",
 		"issue:get", "issue:assign", "repository:role", "issue:add-label", "issue:remove-help-wanted", "pr:get", "pr:list-linked-issues", "pr:transfer-milestone", "issue:ensure-claimed-label", "issue:add-label",
 	}
 	if !reflect.DeepEqual(calls, want) {
@@ -267,7 +264,7 @@ func TestRunPullRequestEventBoundsApprovalRetries(t *testing.T) {
 	calls := []string{}
 	pullRequests := &pullRequestEventFake{pullRequest: &github_pr.PullRequest{
 		Number: 87, State: "open", BaseRef: "main", Body: "Fixes #73", Author: github_issue.User{Login: "contributor", Type: "User"},
-	}, calls: &calls}
+	}, linkedIssues: []github_pr.LinkedIssue{linkedIssue(73, nil)}, calls: &calls}
 	approved := &github_issue.Issue{Number: 73, State: "open", Labels: []github_issue.Label{{Name: "help wanted"}}}
 	withdrawn := &github_issue.Issue{Number: 73, State: "closed", Labels: []github_issue.Label{{Name: "help wanted"}}}
 	issues := &pullRequestIssueFake{
@@ -295,7 +292,7 @@ func TestRunPullRequestEventStopsOnErrors(t *testing.T) {
 	}{
 		{name: "invalid payload", pullRequests: &pullRequestEventFake{}, issues: &pullRequestIssueFake{}, data: `{`},
 		{name: "gate", pullRequests: &pullRequestEventFake{getErr: errors.New("get")}, issues: &pullRequestIssueFake{}, data: `{"action":"opened","pull_request":{"number":87}}`},
-		{name: "assignment", pullRequests: &pullRequestEventFake{pullRequest: &github_pr.PullRequest{Number: 87, State: "open", BaseRef: "main", Body: "Fixes #73"}}, issues: &pullRequestIssueFake{issue: &github_issue.Issue{Number: 73, State: "open", Labels: []github_issue.Label{{Name: "help wanted"}}}, assignErr: errors.New("assign")}, data: `{"action":"opened","pull_request":{"number":87,"user":{"login":"contributor"}}}`},
+		{name: "assignment", pullRequests: &pullRequestEventFake{pullRequest: &github_pr.PullRequest{Number: 87, State: "open", BaseRef: "main", Body: "Fixes #73"}, linkedIssues: []github_pr.LinkedIssue{linkedIssue(73, nil)}}, issues: &pullRequestIssueFake{issue: &github_issue.Issue{Number: 73, State: "open", Labels: []github_issue.Label{{Name: "help wanted"}}}, assignErr: errors.New("assign")}, data: `{"action":"opened","pull_request":{"number":87,"user":{"login":"contributor"}}}`},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -319,7 +316,6 @@ func TestAPIURLUsesEnvironmentOverride(t *testing.T) {
 
 type pullRequestEventFake struct {
 	pullRequest      *github_pr.PullRequest
-	winner           *github_pr.PullRequest
 	linkedIssues     []github_pr.LinkedIssue
 	files            []github_pr.File
 	calls            *[]string
@@ -348,13 +344,6 @@ func newPullRequestEventService(pullRequests *pullRequestEventFake, issues *pull
 func (f *pullRequestEventFake) Get(string, string, int) (*github_pr.PullRequest, error) {
 	f.record("pr:get")
 	return f.pullRequest, f.getErr
-}
-func (f *pullRequestEventFake) LowestOpenReference(string, string, issue_reference.Reference) (*github_pr.PullRequest, error) {
-	f.record("pr:lowest-reference")
-	if f.winner != nil {
-		return f.winner, nil
-	}
-	return f.pullRequest, nil
 }
 func (f *pullRequestEventFake) ListFiles(string, string, int) ([]github_pr.File, error) {
 	f.record("pr:list-files")
@@ -387,6 +376,10 @@ func (f *pullRequestEventFake) record(call string) {
 	if f.calls != nil {
 		*f.calls = append(*f.calls, call)
 	}
+}
+
+func linkedIssue(number int, milestone *int) github_pr.LinkedIssue {
+	return github_pr.LinkedIssue{Owner: "flock-php", Repository: "flock", Number: number, MilestoneNumber: milestone}
 }
 
 type pullRequestIssueFake struct {
