@@ -5,6 +5,10 @@ Two parts: **A** is sandboxed to a temp home (safe any time, proves the app pick
 
 ## Part A — global TLD + app picker (Plans 1–2), temp home, zero production impact
 
+**App under test:** `build/macos/Flock.app` — build from 431c666, 2026-11-11. The website's
+`settings-sites-add-domain` screenshot is stale: the PNGs show the old alert, shot before the
+Label + Suffix sheet — regen deferred to the website import (human).
+
 ```bash
 cd ~/DEV/flock
 export FLOCK_HOME=/tmp/flock-tld-test
@@ -30,11 +34,25 @@ Checklist in the app (Settings → General → Network → Domain):
 - [ ] decline a password mid-Apply → sheet keeps CLI lines, footer names `flock install`, config switched
 - [ ] back to `test` → `/etc/resolver/test` restored (port 53535 — matches production), production Flock fine
 
+Per-site Domain row + Add Domain sheet (Plan 3b), Settings → Sites → select `demo`.
+Run **h → i → j → g → k → l** — the suffix state matters: (i) needs `.loc` new to the machine, (j) needs `.loc` active.
+- [ ] (h) Domain row → Custom `dev` → red `"dev" is a public TLD…`, Apply disabled
+- [ ] (i) Domains → Add Domain… → Label `api2`, Suffix `.loc` → Add → `.loc` is new, so a **`Provisioning .loc…`** sheet chains over it (CLI lines stream) → accept the password → both sheets close; `curl -sI https://api2.loc:8443` 200 **with no `-k`** (the chain installed the `.loc` root — trusted, browser clean)
+- [ ] (j) Add Domain… → Label `api3`, Suffix `.loc` → Add → **no chain sheet** (the suffix is active — the alias lands at once, sheet closes); `curl -sI https://api3.loc:8443` answers, no `-k`
+- [ ] (g) Domain row → `loc` + Apply → `Switching demo to .loc…` streams, no password prompt (`.loc` was provisioned by (i)) → row and address link show `demo.loc`; `curl -skI https://demo.loc:8443` answers; `flock domain list` (temp home): the inherited alias moved along — `demo-2.loc` (the list shows extra domains; the primary `demo.loc` is the row's, and `flock site tld loc demo` echoes `✓ demo → demo.loc`)
+- [ ] (k) Domain row → Custom `lab` + Apply → `Switching demo to .lab…` streams → **decline** the password → failed headline, footer names `flock install` ("config is on .lab") → Close → row shows `demo.lab` within the 2 s poll (the config switched); in a tab with `export FLOCK_HOME=/tmp/flock-tld-test`: `./bin/flock install` → accept → `curl -sI https://demo.lab:8443` trusted, no `-k`
+- [ ] (l) Domain row → `Inherit (.test)` + Apply → `Switching demo to .test…` → row back to `demo.test` = `<site>.<global>`; `flock site tld --inherit demo` clears the site's pin, the site follows the global suffix again
+
 Teardown (order matters — never `flock uninstall` on a temp home):
 ```bash
 security remove-trusted-cert -d /tmp/flock-tld-test/certs/ca.crt
 security delete-certificate -Z "$(openssl x509 -in /tmp/flock-tld-test/certs/ca.crt -noout -fingerprint -sha1 | cut -d= -f2 | tr -d :)"
-sudo rm -f /etc/resolver/loc
+# per-suffix roots, one pair of lines per extra root the matrix provisioned (loc, lab):
+security remove-trusted-cert -d /tmp/flock-tld-test/certs/roots/loc/ca.crt
+security delete-certificate -Z "$(openssl x509 -in /tmp/flock-tld-test/certs/roots/loc/ca.crt -noout -fingerprint -sha1 | cut -d= -f2 | tr -d :)"
+security remove-trusted-cert -d /tmp/flock-tld-test/certs/roots/lab/ca.crt
+security delete-certificate -Z "$(openssl x509 -in /tmp/flock-tld-test/certs/roots/lab/ca.crt -noout -fingerprint -sha1 | cut -d= -f2 | tr -d :)"
+sudo rm -f /etc/resolver/loc /etc/resolver/lab
 rm -rf /tmp/flock-tld-test /tmp/flock-demo
 ```
 
