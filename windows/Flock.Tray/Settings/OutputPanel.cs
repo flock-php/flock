@@ -145,7 +145,8 @@ internal sealed class OutputPanel
 
     private async Task ClearAsync()
     {
-        if (log is { } name && await sites.ClearServiceLogAsync(name))
+        // Only for the log still shown: another may have been selected while it was cleared.
+        if (log is { } name && await sites.ClearServiceLogAsync(name) && name == log)
         {
             text.Text = "No output yet.";
         }
