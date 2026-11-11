@@ -811,10 +811,66 @@ func TestSiteTLDPatchRefusesSelfCollision(t *testing.T) {
 	}
 }
 
+// TestSettingsTLDRefusesSelfCollision pins the global switch's landing probe at the API:
+// a site whose following alias would ride onto its own pinned host makes the switch refuse,
+// config.json byte-identical — the same refusal the CLI `flock tld` gives.
+func TestSettingsTLDRefusesSelfCollision(t *testing.T) {
+	b := &fakeBackend{root: t.TempDir()}
+	cfg := config.Default()
+	if err := cfg.Upsert(config.Site{Name: "demo", Path: t.TempDir(), Domains: []config.Domain{
+		{Label: "demo2", TLD: "loc", Alias: true},
+		{Label: "demo2", Alias: true},
+	}}); err != nil {
+		t.Fatal(err)
+	}
+	if err := cfg.Save(b.root); err != nil {
+		t.Fatal(err)
+	}
+	srv := serve(t, b, "")
+	before := configBytes(t, b)
+
+	resp, body := call(t, "POST", srv.URL+"/v1/settings", "", `{"tld":"loc"}`)
+	if resp.StatusCode != http.StatusBadRequest || !strings.Contains(body, "demo2.loc") || !strings.Contains(body, "claimed twice") {
+		t.Fatalf("global tld loc with a self pair: %d %s", resp.StatusCode, body)
+	}
+	if !bytes.Equal(before, configBytes(t, b)) {
+		t.Fatal("the refused switch changed config.json")
+	}
+}
+
+// TestSettingsTLDRefusesProxyCollision: a proxy's domain derives from the global suffix and
+// rides with it, so a site's following alias moving onto it is a collision the switch
+// creates: refused with config.json byte-identical.
+func TestSettingsTLDRefusesProxyCollision(t *testing.T) {
+	b := &fakeBackend{root: t.TempDir()}
+	cfg := config.Default()
+	if err := cfg.Upsert(config.Site{Name: "demo", Path: t.TempDir(), Domains: []config.Domain{
+		{Label: "api", Alias: true},
+	}}); err != nil {
+		t.Fatal(err)
+	}
+	cfg.Proxies = append(cfg.Proxies, config.Proxy{Name: "api", Upstream: "http://127.0.0.1:3000"})
+	if err := cfg.Save(b.root); err != nil {
+		t.Fatal(err)
+	}
+	srv := serve(t, b, "")
+	before := configBytes(t, b)
+
+	resp, body := call(t, "POST", srv.URL+"/v1/settings", "", `{"tld":"loc"}`)
+	if resp.StatusCode != http.StatusBadRequest || !strings.Contains(body, "api.loc") {
+		t.Fatalf("global tld loc onto a proxy's moved host: %d %s", resp.StatusCode, body)
+	}
+	if !bytes.Equal(before, configBytes(t, b)) {
+		t.Fatal("the refused switch changed config.json")
+	}
+}
+
 // TestAddDomainSuffix pins the structured domain add (ruling R7: the suffix parameter is only
 // a suffix, the domain is label-only): suffix "loc" stores an explicit alias, "inherit" an
-// inherited one, and the Q2 sequence demo2+loc / demo2+inherit survives a global test→loc with
-// demo2.loc untouched and demo2.test following. A suffix equal to the site's effective one
+// inherited one, and the Q2 sequence demo2+loc / demo3+inherit survives a global test→loc
+// with demo2.loc untouched and demo3.test following. (The demo2+loc / demo2+inherit pair from
+// the add-time checks cannot survive a global move — the switch to .loc is refused, pinned
+// by TestSettingsTLDRefusesSelfCollision.) A suffix equal to the site's effective one
 // (demo5+test) is pinned as an explicit alias too. An absent suffix keeps today's full-host
 // semantics exactly — including R6: a new x.example on a .test site becomes alias x.example.
 func TestAddDomainSuffix(t *testing.T) {
@@ -834,14 +890,14 @@ func TestAddDomainSuffix(t *testing.T) {
 		}
 	}
 
-	// (c) The R7 sequence: demo2 pinned to loc, demo2 marked inherit.
+	// (c) The Q2 sequence: demo2 pinned to loc, demo3 marked inherit.
 	add(`{"domain":"demo2","suffix":"loc"}`)
 	if e := domainEntry(t, b, "demo", "demo2", "loc"); !e.Alias {
 		t.Fatalf("demo2 on loc: %+v, want an explicit alias", e)
 	}
-	add(`{"domain":"demo2","suffix":"inherit"}`)
-	if e := domainEntry(t, b, "demo", "demo2", ""); !e.Alias {
-		t.Fatalf("demo2 inherit: %+v, want an inherited alias", e)
+	add(`{"domain":"demo3","suffix":"inherit"}`)
+	if e := domainEntry(t, b, "demo", "demo3", ""); !e.Alias {
+		t.Fatalf("demo3 inherit: %+v, want an inherited alias", e)
 	}
 
 	// "LOC " is stored sanitized, as "loc".
@@ -869,24 +925,24 @@ func TestAddDomainSuffix(t *testing.T) {
 	if e := domainEntry(t, b, "demo", "x", "example"); !e.Alias {
 		t.Fatalf("x.example: %+v, want the alias x.example (R6)", e)
 	}
-	if got := storedHosts(t, b, "demo"); got != "demo2.loc,demo2.test,demo4.loc,demo5.test,app-2.test,x.example" {
+	if got := storedHosts(t, b, "demo"); got != "demo2.loc,demo3.test,demo4.loc,demo5.test,app-2.test,x.example" {
 		t.Fatalf("hosts before the global change: %s", got)
 	}
 
-	// The Q2 trap at API level: global test→loc follows the inherited names (demo2→demo2.loc,
+	// The Q2 trap at API level: global test→loc follows the inherited names (demo3→demo3.loc,
 	// app-2→app-2.loc) and leaves the explicit ones (demo2.loc, demo4.loc, demo5.test,
 	// x.example) byte-identical.
 	if resp, body := call(t, "POST", srv.URL+"/v1/settings", "", `{"tld":"loc"}`); resp.StatusCode != http.StatusOK {
 		t.Fatalf("global tld loc: %d %s", resp.StatusCode, body)
 	}
-	if got := storedHosts(t, b, "demo"); got != "demo2.loc,demo2.loc,demo4.loc,demo5.test,app-2.loc,x.example" {
+	if got := storedHosts(t, b, "demo"); got != "demo2.loc,demo3.loc,demo4.loc,demo5.test,app-2.loc,x.example" {
 		t.Fatalf("hosts after the global change: %s", got)
 	}
 	if e := domainEntry(t, b, "demo", "demo2", "loc"); !e.Alias {
 		t.Fatalf("the explicit demo2.loc changed: %+v", e)
 	}
-	if e := domainEntry(t, b, "demo", "demo2", ""); !e.Alias {
-		t.Fatalf("the inherited demo2 changed: %+v", e)
+	if e := domainEntry(t, b, "demo", "demo3", ""); !e.Alias {
+		t.Fatalf("the inherited demo3 changed: %+v", e)
 	}
 	if e := domainEntry(t, b, "demo", "demo5", "test"); !e.Alias {
 		t.Fatalf("the explicit demo5.test changed: %+v", e)

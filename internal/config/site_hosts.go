@@ -77,3 +77,101 @@ func (c *Config) SiteSelfCollision(site Site) (host, pinned, moved string) {
 	}
 	return "", "", ""
 }
+
+// TLDMove names the first collision a global suffix switch to newTLD creates. For a self
+// pair Self is the site claiming one host twice and Moved the label of the alias that
+// followed it; for a cross claim Holder owns the host and Mover lands on it (in the
+// SiteHostCollision style: "site shop", "proxy api").
+type TLDMove struct {
+	Host   string
+	Self   string
+	Moved  string
+	Holder string
+	Mover  string
+}
+
+// TLDMoveCollision is the landing probe of the global switch, run before anything is
+// touched. Every site inheriting the global suffix rides onto newTLD together with its
+// inherited aliases, its subdomains riding with its domain; every proxy's derived domain
+// rides with the global suffix too; sites and aliases pinned to a suffix of their own stay
+// where they were put. The switch is refused when a host ends up claimed twice and at
+// least one of the claims is a moving one:
+//
+//   - a self pair inside one site (SiteSelfCollision on the site's prospective state):
+//     the site would serve one host twice, and `domain remove` would report success while
+//     the surviving entry keeps serving it;
+//   - a moving name landing on a host a pinned site, any site's alias, a pinned alias,
+//     the site's own domain, or any proxy holds — SiteHostCollision's taken-set, mirrored
+//     at the set level because every site and every proxy moves at once.
+//
+// A pair that collides identically before and after the switch (both claims pinned)
+// predates it — status rows already flag it — and must not block an unrelated move. Sites
+// are probed in name order and each site's primary before its aliases, as SiteHostCollision
+// builds its maps, so the refusal is deterministic.
+func (c *Config) TLDMoveCollision(newTLD string) *TLDMove {
+	for _, site := range c.AllSites() {
+		if site.TLD == "" {
+			probe := site
+			probe.TLD = newTLD
+			if host, _, moved := c.SiteSelfCollision(probe); host != "" {
+				return &TLDMove{Host: host, Self: site.Name, Moved: moved}
+			}
+		}
+	}
+
+	type claim struct {
+		owner string
+		moved bool
+	}
+	claims := map[string]claim{}
+	report := func(host, owner string, moved bool) *TLDMove {
+		prev, seen := claims[host]
+		if !seen {
+			claims[host] = claim{owner, moved}
+			return nil
+		}
+		switch {
+		case !prev.moved && !moved:
+			return nil // a pinned pair as it was: the switch creates nothing here
+		case prev.moved && !moved:
+			return &TLDMove{Host: host, Holder: owner, Mover: prev.owner}
+		default:
+			return &TLDMove{Host: host, Holder: prev.owner, Mover: owner}
+		}
+	}
+
+	for _, site := range c.AllSites() {
+		moves := site.TLD == ""
+		suffix := site.TLD
+		if moves {
+			suffix = newTLD
+		}
+		owner := "site " + site.Name
+		primary := site.Name + "." + suffix
+		if col := report(primary, owner, moves); col != nil {
+			return col
+		}
+		for _, d := range site.Domains {
+			if !d.Alias {
+				continue // a subdomain rides on its site's domain: the primary covers it
+			}
+			s := suffix
+			if d.TLD != "" {
+				s = d.TLD
+			}
+			h := d.Label + "." + s
+			if h == primary {
+				continue // domain-vs-alias is the model's own shape: see SiteSelfCollision
+			}
+			if col := report(h, owner, moves && d.TLD == ""); col != nil {
+				return col
+			}
+		}
+	}
+	for _, p := range c.Proxies {
+		if col := report(p.Name+"."+newTLD, "proxy "+p.Name, true); col != nil {
+			return col
+		}
+	}
+	return nil
+}

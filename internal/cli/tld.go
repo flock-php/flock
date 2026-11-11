@@ -86,6 +86,20 @@ func (s *state) changeTLD(raw string, out io.Writer) (old string, warning string
 		return "", "", nil
 	}
 
+	// The landing probe before anything is touched (the plan's rule: a rejected TLD
+	// changes nothing): every site inheriting the global suffix rides onto .%s with its
+	// inherited aliases, and every proxy's derived domain rides with it — a host claimed
+	// twice by claims the switch creates is refused, self pair first (config.
+	// TLDMoveCollision, the same family siteHostsFree runs for a site switch).
+	if col := s.cfg.TLDMoveCollision(tld); col != nil {
+		if col.Self != "" {
+			return "", "", fmt.Errorf("%s is claimed twice on .%s by %s: the pinned alias %s and the alias %s that follows the site — remove one first (flock domain remove %s %s)",
+				col.Host, tld, col.Self, col.Host, col.Moved, col.Host, col.Self)
+		}
+		return "", "", fmt.Errorf("%s is already served by %s: the switch to .%s can't move %s there — give one of them its own suffix (flock site tld) or rename",
+			col.Host, col.Holder, tld, col.Mover)
+	}
+
 	// The .env files come first: their app URLs, cookie domains and mail senders name hosts
 	// under the old suffix, and TLDHostSwaps derives both sides from its arguments, so listing
 	// the swaps while the old TLD is still the config's keeps the old side's suffix honest.

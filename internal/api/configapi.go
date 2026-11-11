@@ -192,6 +192,16 @@ func applySettings(root string, cfg *config.Config, s Settings) error {
 		if _, err := config.ValidateTLD(tld); err != nil {
 			return invalid("%v", err)
 		}
+		// The landing probe before SetTLD, the CLI's `flock tld` rule (config.
+		// TLDMoveCollision): a global move is refused when a host ends up claimed twice
+		// by claims the switch creates. This closure runs inside b.Mutate, so returning
+		// the error leaves config.json untouched.
+		if col := cfg.TLDMoveCollision(tld); col != nil {
+			if col.Self != "" {
+				return invalid("%s is claimed twice by %s: the alias %s that follows the site lands on the pinned alias %s — remove one first", col.Host, col.Self, col.Moved, col.Host)
+			}
+			return invalid("%s is already served by %s: the switch to .%s can't move %s there", col.Host, col.Holder, tld, col.Mover)
+		}
 		cfg.SetTLD(tld)
 	}
 	return nil

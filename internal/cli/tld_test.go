@@ -119,6 +119,82 @@ func TestChangeTLDsavesConfigRewritesAliasesAndEnvFiles(t *testing.T) {
 	}
 }
 
+// TestChangeTLDRefusesSelfCollision: the global switch runs the landing probe before
+// touching anything. A site's following alias riding onto its own pinned host would make
+// the site serve one host twice — `domain remove` then reports success while the name
+// stays served — so the switch is refused, and a refused TLD changes nothing: config.json
+// and both .env files stay byte-identical.
+func TestChangeTLDRefusesSelfCollision(t *testing.T) {
+	s, siteDir, wtDir := tldFixture(t)
+	site, ok := s.cfg.FindSite("app-2")
+	if !ok {
+		t.Fatal("fixture lost app-2")
+	}
+	site.Domains = append(site.Domains,
+		config.Domain{Label: "demo2", TLD: "loc", Alias: true},
+		config.Domain{Label: "demo2", Alias: true})
+	if err := s.cfg.Upsert(site); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.cfg.Save(s.root); err != nil {
+		t.Fatal(err)
+	}
+	cfgBefore, err := os.ReadFile(filepath.Join(s.root, "config.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	siteBefore, err := os.ReadFile(filepath.Join(siteDir, ".env"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	wtBefore, err := os.ReadFile(filepath.Join(wtDir, ".env"))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var out strings.Builder
+	old, _, err := s.changeTLD("loc", &out)
+	if err == nil {
+		t.Fatalf("the move must be refused, output:\n%s", out.String())
+	}
+	if msg := err.Error(); !strings.Contains(msg, "demo2.loc") || !strings.Contains(msg, "claimed twice") {
+		t.Errorf("the refusal must name the host and the double claim, got: %v", err)
+	}
+	if old != "" {
+		t.Errorf("a refused switch reports no old suffix, got %q", old)
+	}
+	if cfgAfter, _ := os.ReadFile(filepath.Join(s.root, "config.json")); string(cfgAfter) != string(cfgBefore) {
+		t.Errorf("config.json rewritten by the refused switch")
+	}
+	if siteAfter, _ := os.ReadFile(filepath.Join(siteDir, ".env")); string(siteAfter) != string(siteBefore) {
+		t.Errorf("the site .env was retargeted by the refused switch")
+	}
+	if wtAfter, _ := os.ReadFile(filepath.Join(wtDir, ".env")); string(wtAfter) != string(wtBefore) {
+		t.Errorf("the worktree .env was retargeted by the refused switch")
+	}
+}
+
+// TestChangeTLDRefusesProxyCollision: a proxy's derived domain rides on the global suffix,
+// so a site's following alias moving onto it is a collision the switch creates: refused,
+// nothing touched.
+func TestChangeTLDRefusesProxyCollision(t *testing.T) {
+	s, _, _ := tldFixture(t)
+	if err := s.cfg.Upsert(config.Site{Name: "api", Path: t.TempDir()}); err != nil {
+		t.Fatal(err)
+	}
+	s.cfg.Proxies = append(s.cfg.Proxies, config.Proxy{Name: "api", Upstream: "http://127.0.0.1:3000"})
+	if err := s.cfg.Save(s.root); err != nil {
+		t.Fatal(err)
+	}
+
+	var out strings.Builder
+	if _, _, err := s.changeTLD("loc", &out); err == nil {
+		t.Fatalf("the move must be refused, output:\n%s", out.String())
+	} else if msg := err.Error(); !strings.Contains(msg, "api.loc") {
+		t.Errorf("the refusal must name api.loc, got: %v", err)
+	}
+}
+
 func TestChangeTLDrejectsPublicTLDWithoutTouchingAnything(t *testing.T) {
 	s, siteDir, wtDir := tldFixture(t)
 	configBefore, err := os.ReadFile(filepath.Join(s.root, "config.json"))
