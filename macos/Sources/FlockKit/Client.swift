@@ -121,6 +121,11 @@ public actor FlockClient {
         try await decode(Status.self, "POST", "/v1/sites/\(escape(name))/restart", timeout: Self.siteRestartTimeout)
     }
 
+    /// Restarts only a site's Reverb server, e.g. so it loads changed code.
+    public func restartReverb(_ name: String) async throws -> Status {
+        try await decode(Status.self, "POST", "/v1/sites/\(escape(name))/reverb/restart", timeout: Self.siteRestartTimeout)
+    }
+
     /// Puts a Node.js site's dev server to sleep until the site's next request.
     public func stopSite(_ name: String) async throws -> Status {
         try await decode(Status.self, "POST", "/v1/sites/\(escape(name))/stop", timeout: Self.siteRestartTimeout)
