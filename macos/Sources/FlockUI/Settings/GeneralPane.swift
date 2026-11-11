@@ -3,6 +3,7 @@ import SwiftUI
 
 struct GeneralPane: View {
     @Environment(AppModel.self) private var model
+    @AppStorage(DockIcon.key) private var showInDock = false
     private let loginErrorState = State<String?>(initialValue: nil)
     private var loginError: String? {
         get { loginErrorState.wrappedValue }
@@ -85,6 +86,10 @@ struct GeneralPane: View {
                     if let loginError {
                         Text(loginError).font(.caption).foregroundStyle(.orange)
                     }
+                    Toggle("Show Flock in the Dock", isOn: Binding(get: { showInDock }, set: {
+                        showInDock = $0
+                        DockIcon.apply($0)
+                    }))
                 }
 
                 Section {

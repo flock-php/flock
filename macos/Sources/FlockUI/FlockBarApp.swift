@@ -78,6 +78,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// The launch's Apple event only arrives by now; in applicationWillFinishLaunching it is nil.
     /// The login item's launch carries 'prdt':'lgit' and stays quiet.
     func applicationDidFinishLaunching(_ notification: Notification) {
+        DockIcon.apply(UserDefaults.standard.bool(forKey: DockIcon.key))
         let event = NSAppleEventManager.shared().currentAppleEvent
         let launchedAtLogin = event?.eventID == kAEOpenApplication
             && event?.paramDescriptor(forKeyword: keyAEPropData)?.enumCodeValue == keyAELaunchedAsLogInItem

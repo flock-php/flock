@@ -1,4 +1,16 @@
+import AppKit
 import ServiceManagement
+
+/// Whether Flock also has a Dock icon (Settings → General); otherwise it lives in the menu bar
+/// only, as Info.plist's LSUIElement starts it. A click on the Dock icon reopens the main window.
+@MainActor
+enum DockIcon {
+    static let key = "general.showInDock"
+
+    static func apply(_ show: Bool) {
+        NSApp.setActivationPolicy(show ? .regular : .accessory)
+    }
+}
 
 /// Flock's menu bar app as a login item: the setup's checkbox and Settings → General.
 enum LoginItem {
