@@ -3,6 +3,7 @@ package cli
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -37,7 +38,11 @@ func tldFixture(t *testing.T) (*state, string, string) {
 
 	cfg := withDefaults()
 	cfg.TLD = "test"
-	cfg.Sites = []config.Site{{Name: "app-2", Path: siteDir, Domains: []string{"app-2.test", "tenant1", "x.example"}}}
+	// A subdomain label, an inherited alias (its host follows the global suffix: the .env
+	// swaps below move it), and a multi-label subdomain ("x.example", served under the site).
+	cfg.Sites = []config.Site{{Name: "app-2", Path: siteDir, Domains: []config.Domain{
+		{Label: "app-2", Alias: true}, {Label: "tenant1"}, {Label: "x.example"},
+	}}}
 	cfg.Worktrees = []config.WorktreeEntry{{Path: wtDir, Site: "app-2", Slug: "feature-x"}}
 	if err := cfg.Save(root); err != nil {
 		t.Fatal(err)
@@ -67,10 +72,11 @@ func TestChangeTLDsavesConfigRewritesAliasesAndEnvFiles(t *testing.T) {
 	if reloaded.TLD != "loc" {
 		t.Errorf("config TLD: got %q, want %q", reloaded.TLD, "loc")
 	}
-	// The old-TLD alias moved; the subdomain label and the foreign alias stayed: SetTLD's rule.
-	want := []string{"app-2.loc", "tenant1", "x.example"}
-	if got := reloaded.Sites[0].Domains; strings.Join(got, ",") != strings.Join(want, ",") {
-		t.Errorf("site domains: got %q, want %q", got, want)
+	// SetTLD stores the suffix and nothing else (ruling R5): the entries are byte-stable,
+	// the inherited alias follows at use time — visible in the .env swaps below.
+	want := []config.Domain{{Label: "app-2", Alias: true}, {Label: "tenant1"}, {Label: "x.example"}}
+	if got := reloaded.Sites[0].Domains; !slices.Equal(got, want) {
+		t.Errorf("site domains: got %+v, want %+v", got, want)
 	}
 
 	siteData, err := os.ReadFile(filepath.Join(siteDir, ".env"))
@@ -137,8 +143,8 @@ func TestChangeTLDrejectsPublicTLDWithoutTouchingAnything(t *testing.T) {
 		t.Errorf("no change happened, old: got %q", old)
 	}
 	// Validation runs before any mutation: config, aliases and .env files are exactly as they were.
-	if s.cfg.TLD != "test" || s.cfg.Sites[0].Domains[0] != "app-2.test" {
-		t.Errorf("in-memory config touched: TLD %q, domains %q", s.cfg.TLD, s.cfg.Sites[0].Domains)
+	if s.cfg.TLD != "test" || s.cfg.Sites[0].Domains[0] != (config.Domain{Label: "app-2", Alias: true}) {
+		t.Errorf("in-memory config touched: TLD %q, domains %+v", s.cfg.TLD, s.cfg.Sites[0].Domains)
 	}
 	configAfter, err := os.ReadFile(filepath.Join(s.root, "config.json"))
 	if err != nil {

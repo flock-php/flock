@@ -61,7 +61,7 @@ func waitStatus(t *testing.T, client *api.Client, ok func(api.Status) bool) api.
 
 func TestStatusListsExtraDomainsAndTheirProblems(t *testing.T) {
 	root, _ := testRoot(t, func(cfg *config.Config) {
-		cfg.Upsert(config.Site{Name: "app", Path: t.TempDir(), Secured: true, Domains: []string{"tenant1", "a.b", "app-2.test", "taken.test"}})
+		cfg.Upsert(config.Site{Name: "app", Path: t.TempDir(), Secured: true, Domains: []config.Domain{{Label: "tenant1"}, {Label: "a.b"}, {Label: "app-2", Alias: true}, {Label: "taken", Alias: true}}})
 		cfg.Upsert(config.Site{Name: "taken", Path: t.TempDir()})
 	})
 	client := startDaemon(t, root)

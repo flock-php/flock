@@ -115,17 +115,22 @@ func (s *Services) SetRunning(id string, on bool) {
 	}
 }
 
-// Site is a directory served as <name>.<tld> and its subdomains (up to MaxDepth levels).
+// Site is a directory served as <name>.<suffix> (its own TLD override, or the global one)
+// and its subdomains (up to MaxDepth levels).
 type Site struct {
 	Name    string `json:"name"`
 	Path    string `json:"path"`
 	PHP     string `json:"php,omitempty"`  // "8.5"; empty means Config.DefaultPHP
 	Node    string `json:"node,omitempty"` // major, e.g. "22"; empty means Config.DefaultNode
 	Secured bool   `json:"secured"`
-	// Domains are extra names for the site (see NormalizeDomain): subdomains ("tenant1") and
-	// aliases ("my-app-2.test"). On Windows they go into the hosts file, so they also work where
-	// wildcard DNS doesn't.
-	Domains []string `json:"domains,omitempty"`
+	// TLD is the site's own domain suffix ("loc" → served as <name>.loc); empty means the
+	// global Config.TLD. Set with `flock site tld` / the apps; sanitized at Load.
+	TLD string `json:"tld,omitempty"`
+	// Domains are extra names for the site (see NormalizeDomain and Domain): subdomains
+	// ("tenant1") and aliases — inherited (following the site's suffix) or pinned to a
+	// suffix of their own. On Windows subdomains go into the hosts file, so they also work
+	// where wildcard DNS doesn't.
+	Domains []Domain `json:"domains,omitempty"`
 	Parked  bool     `json:"-"` // discovered from a parked directory rather than linked
 
 	// Parent is set on a git worktree of another site (see Worktrees): it is served as
@@ -251,7 +256,26 @@ func Load(root string) (*Config, error) {
 	}
 	cfg.TLD = tld
 
+	// The same reasoning covers what the sites store: legacy string domains are migrated to
+	// structured entries (see Domain.migrate), and every hand-typed Site.TLD / Domain.TLD is
+	// sanitized with Plan 1's rules — an override nobody screened falls back to inherit, so
+	// no downstream caller (CA, DNS, web routing) ever sees a suffix ValidateTLD refuses.
+	cfg.migrateDomains()
+
 	return cfg, nil
+}
+
+// migrateDomains runs the one-time legacy migration and suffix sanitization over every site
+// (see Domain.migrate and sanitizeSuffix), against the already-sanitized global TLD: the
+// global value decides how a stored string's suffix is classified, so it has to be final
+// before the entries are read.
+func (c *Config) migrateDomains() {
+	for i := range c.Sites {
+		c.Sites[i].TLD = sanitizeSuffix(c.Sites[i].TLD)
+		for j := range c.Sites[i].Domains {
+			c.Sites[i].Domains[j].migrate(c.TLD)
+		}
+	}
 }
 
 // UsedPorts maps every port a Flock service is configured for to that service's id, leaving out
@@ -296,9 +320,10 @@ func (c *Config) Save(root string) error {
 	return replaceFile(tmp, file(root))
 }
 
-// Domain is the primary hostname of a site.
+// Domain is the primary hostname of a site: <name>.<the suffix it is served under> — its
+// own TLD override, the global one when it inherits (see Site.Suffix).
 func (c *Config) Domain(s Site) string {
-	return s.Name + "." + c.TLD
+	return s.Name + "." + s.Suffix(c)
 }
 
 // PHPFor returns the PHP version a site runs on.

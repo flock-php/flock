@@ -89,7 +89,7 @@ func TestAllSitesServesWorktreesUnderTheirSite(t *testing.T) {
 	if err := cfg.Upsert(Site{Name: "spike", Path: linked}); err != nil {
 		t.Fatal(err)
 	}
-	if err := cfg.Upsert(Site{Name: "acme", Path: repo, PHP: "8.4", Secured: true, Domains: []string{"tenant1"}}); err != nil {
+	if err := cfg.Upsert(Site{Name: "acme", Path: repo, PHP: "8.4", Secured: true, Domains: []Domain{sub("tenant1")}}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -118,13 +118,31 @@ func TestAllSitesServesWorktreesUnderTheirSite(t *testing.T) {
 	}
 }
 
+// TestWorktreeFollowsTheSiteTLDOverride: a worktree of a site on its own suffix is served
+// at <slug>.<parent>.<the site's suffix> — the override rides the parent's settings.
+func TestWorktreeFollowsTheSiteTLDOverride(t *testing.T) {
+	parked := t.TempDir()
+	repo := filepath.Join(parked, "acme")
+	addWorktree(t, repo, filepath.Join(parked, "acme-f"), "acme-f", "ref: refs/heads/f")
+
+	cfg := Default()
+	cfg.Upsert(Site{Name: "acme", Path: repo, TLD: "loc"})
+	wt, ok := cfg.FindSite("f.acme")
+	if !ok {
+		t.Fatal("worktree not served")
+	}
+	if got := cfg.Domain(wt); got != "f.acme.loc" {
+		t.Errorf("worktree domain: %q, want f.acme.loc", got)
+	}
+}
+
 func TestAWorktreeWinsOverTheSameSubdomainOfItsSite(t *testing.T) {
 	dir := t.TempDir()
 	repo := filepath.Join(dir, "acme")
 	addWorktree(t, repo, filepath.Join(dir, "acme-api"), "acme-api", "ref: refs/heads/api")
 
 	cfg := Default()
-	if err := cfg.Upsert(Site{Name: "acme", Path: repo, Domains: []string{"api", "tenant1"}}); err != nil {
+	if err := cfg.Upsert(Site{Name: "acme", Path: repo, Domains: []Domain{sub("api"), sub("tenant1")}}); err != nil {
 		t.Fatal(err)
 	}
 	sites := cfg.AllSites()

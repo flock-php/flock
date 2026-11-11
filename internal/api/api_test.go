@@ -87,6 +87,19 @@ func (f *fakeBackend) config(t *testing.T) *config.Config {
 	return cfg
 }
 
+// storedEntries lists a site's extra domains as the API shows them: the bare label for a
+// subdomain, the full host for an alias (inherited or pinned).
+func storedEntries(t *testing.T, b *fakeBackend, siteName string) string {
+	t.Helper()
+	cfg := b.config(t)
+	site, _ := cfg.FindSite(siteName)
+	var entries []string
+	for _, e := range cfg.ExtraDomains(site) {
+		entries = append(entries, e.Entry)
+	}
+	return strings.Join(entries, ",")
+}
+
 func serve(t *testing.T, b Backend, token string) *httptest.Server {
 	t.Helper()
 	srv := httptest.NewServer(NewHandler(b, token))
@@ -169,31 +182,39 @@ func TestChannelSetting(t *testing.T) {
 func TestSettingsTLD(t *testing.T) {
 	b := &fakeBackend{root: t.TempDir()}
 	cfg := config.Default()
-	// Three stored forms: a subdomain label (no suffix to move), an alias under the default
-	// TLD (moves with it), and an alias of its own (must not move).
-	cfg.Upsert(config.Site{Name: "app", Path: t.TempDir(), Domains: []string{"tenant1", "app-2.test", "crm.example"}})
+	// Three stored forms: a subdomain label, an inherited alias (it follows the global
+	// suffix at use time), and a multi-label subdomain ("crm.example", host under the site).
+	// SetTLD never touches the stored entries (ruling R5): the markers carry the follow.
+	cfg.Upsert(config.Site{Name: "app", Path: t.TempDir(), Domains: []config.Domain{
+		{Label: "tenant1"}, {Label: "app-2", Alias: true}, {Label: "crm.example"},
+	}})
 	if err := cfg.Save(b.root); err != nil {
 		t.Fatal(err)
 	}
 	srv := serve(t, b, "")
 	domains := func() string {
-		site, _ := b.config(t).FindSite("app")
-		return strings.Join(site.Domains, ",")
+		cfg := b.config(t)
+		site, _ := cfg.FindSite("app")
+		var hosts []string
+		for _, e := range cfg.ExtraDomains(site) {
+			hosts = append(hosts, e.Host)
+		}
+		return strings.Join(hosts, ",")
 	}
 
 	if resp, body := call(t, "POST", srv.URL+"/v1/settings", "", `{"tld":"LOC "}`); resp.StatusCode != http.StatusOK {
 		t.Fatalf("tld LOC: %d %s", resp.StatusCode, body)
 	}
-	if cfg := b.config(t); cfg.TLD != "loc" || domains() != "tenant1,app-2.loc,crm.example" {
+	if cfg := b.config(t); cfg.TLD != "loc" || domains() != "tenant1.app.loc,app-2.loc,crm.example.app.loc" {
 		t.Fatalf("tld LOC: stored %+v, domains %s", cfg, domains())
 	}
 
 	// A rejected TLD must leave everything untouched: applySettings validates before
-	// mutating, so a 400 means no TLD change and no alias migration.
+	// mutating, so a 400 means no TLD change and nothing moves.
 	if resp, body := call(t, "POST", srv.URL+"/v1/settings", "", `{"tld":"dev"}`); resp.StatusCode != http.StatusBadRequest || !strings.Contains(body, "public TLD") {
 		t.Fatalf("tld dev: %d %s", resp.StatusCode, body)
 	}
-	if cfg := b.config(t); cfg.TLD != "loc" || domains() != "tenant1,app-2.loc,crm.example" {
+	if cfg := b.config(t); cfg.TLD != "loc" || domains() != "tenant1.app.loc,app-2.loc,crm.example.app.loc" {
 		t.Fatalf("config untouched after a rejected tld: %+v, domains %s", cfg, domains())
 	}
 
@@ -206,7 +227,7 @@ func TestSettingsTLD(t *testing.T) {
 	if resp, body := call(t, "POST", srv.URL+"/v1/settings", "", `{"tld":"local"}`); resp.StatusCode != http.StatusOK {
 		t.Fatalf("tld local: %d %s", resp.StatusCode, body)
 	}
-	if cfg := b.config(t); cfg.TLD != "local" || domains() != "tenant1,app-2.local,crm.example" {
+	if cfg := b.config(t); cfg.TLD != "local" || domains() != "tenant1.app.local,app-2.local,crm.example.app.local" {
 		t.Fatalf("tld local: stored %+v, domains %s", cfg, domains())
 	}
 }
@@ -494,8 +515,8 @@ func TestSiteDomainEndpoints(t *testing.T) {
 			t.Fatalf("add %s: %d %s", d, resp.StatusCode, body)
 		}
 	}
-	if site, _ := b.config(t).FindSite("app"); strings.Join(site.Domains, ",") != "tenant1,a.b,app-2.test" {
-		t.Fatalf("domains not stored as expected: %v", site.Domains)
+	if got := storedEntries(t, b, "app"); got != "tenant1,a.b,app-2.test" {
+		t.Fatalf("domains not stored as expected: %s", got)
 	}
 
 	for d, want := range map[string]string{"tenant1": "already", "shop.test": "shop", "a.b.c.d.e": "levels"} {
@@ -515,8 +536,8 @@ func TestSiteDomainEndpoints(t *testing.T) {
 	if resp, _ := call(t, "DELETE", srv.URL+"/v1/sites/app/domains/tenant1", "", ""); resp.StatusCode != http.StatusBadRequest {
 		t.Fatalf("removing a missing domain must fail, got %d", resp.StatusCode)
 	}
-	if site, _ := b.config(t).FindSite("app"); strings.Join(site.Domains, ",") != "app-2.test" {
-		t.Fatalf("domains after removal: %v", site.Domains)
+	if got := storedEntries(t, b, "app"); got != "app-2.test" {
+		t.Fatalf("domains after removal: %s", got)
 	}
 }
 

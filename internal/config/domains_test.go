@@ -7,8 +7,8 @@ import (
 
 func domainsConfig() *Config {
 	cfg := Default()
-	cfg.Upsert(Site{Name: "app", Path: "/code/app", Domains: []string{"tenant1", "app-2.test"}})
-	cfg.Upsert(Site{Name: "shop", Path: "/code/shop", Domains: []string{"store.test"}})
+	cfg.Upsert(Site{Name: "app", Path: "/code/app", Domains: []Domain{sub("tenant1"), inherited("app-2")}})
+	cfg.Upsert(Site{Name: "shop", Path: "/code/shop", Domains: []Domain{inherited("store")}})
 	return cfg
 }
 
@@ -16,25 +16,25 @@ func TestNormalizeDomainStoresSubdomainsRelativeAndAliasesInFull(t *testing.T) {
 	cfg := domainsConfig()
 	app, _ := cfg.FindSite("app")
 
-	for in, want := range map[string]string{
-		"tenant2":              "tenant2",
-		" A.B ":                "a.b",
-		"tenant3.app.test":     "tenant3",
-		"a.b.c.d":              "a.b.c.d",
-		"my-app-3.test.":       "my-app-3.test",
-		"deep.alias.test":      "deep.alias.test",
-		"x.y.z.w.app.test":     "x.y.z.w",
-		"tenant-with-dash-9":   "tenant-with-dash-9",
-		"test":                 "test",
-		"api.v2.store-x.test":  "api.v2.store-x.test",
-		"tenant1.app-3.test":   "tenant1.app-3.test",
-		"Upper.Case.App.Test.": "upper.case",
-		"api.shop.test":        "api.shop.test",
-		"v1.store.test":        "v1.store.test",
+	for in, want := range map[string]Domain{
+		"tenant2":              sub("tenant2"),
+		" A.B ":                sub("a.b"),
+		"tenant3.app.test":     sub("tenant3"),
+		"a.b.c.d":              sub("a.b.c.d"),
+		"my-app-3.test.":       inherited("my-app-3"),
+		"deep.alias.test":      inherited("deep.alias"),
+		"x.y.z.w.app.test":     sub("x.y.z.w"),
+		"tenant-with-dash-9":   sub("tenant-with-dash-9"),
+		"test":                 sub("test"),
+		"api.v2.store-x.test":  inherited("api.v2.store-x"),
+		"tenant1.app-3.test":   inherited("tenant1.app-3"),
+		"Upper.Case.App.Test.": sub("upper.case"),
+		"api.shop.test":        inherited("api.shop"),
+		"v1.store.test":        inherited("v1.store"),
 	} {
 		got, err := cfg.NormalizeDomain(app, in)
 		if err != nil || got != want {
-			t.Errorf("NormalizeDomain(%q) = %q, %v; want %q", in, got, err, want)
+			t.Errorf("NormalizeDomain(%q) = %+v, %v; want %+v", in, got, err, want)
 		}
 	}
 }
@@ -60,7 +60,7 @@ func TestNormalizeDomainRejectsConflictsAndInvalidNames(t *testing.T) {
 	} {
 		got, err := cfg.NormalizeDomain(app, in)
 		if err == nil || !strings.Contains(err.Error(), want) {
-			t.Errorf("NormalizeDomain(%q) = %q, %v; want an error containing %q", in, got, err, want)
+			t.Errorf("NormalizeDomain(%q) = %+v, %v; want an error containing %q", in, got, err, want)
 		}
 	}
 }
@@ -68,7 +68,7 @@ func TestNormalizeDomainRejectsConflictsAndInvalidNames(t *testing.T) {
 func TestNormalizeDomainAllowsNamesAboveAndBelowAnotherSitesNames(t *testing.T) {
 	cfg := Default()
 	cfg.Upsert(Site{Name: "app", Path: "/code/app"})
-	cfg.Upsert(Site{Name: "shop", Path: "/code/shop", Domains: []string{"eu.store.test", "admin"}})
+	cfg.Upsert(Site{Name: "shop", Path: "/code/shop", Domains: []Domain{inherited("eu.store"), sub("admin")}})
 	app, _ := cfg.FindSite("app")
 
 	for _, in := range []string{"store.test", "x.eu.store.test", "accounts.shop.test", "x.admin.shop.test"} {
@@ -85,7 +85,7 @@ func TestNormalizeDomainAllowsNamesAboveAndBelowAnotherSitesNames(t *testing.T) 
 func TestNormalizeDomainRejectsASubdomainAnotherSiteHasAsItsAlias(t *testing.T) {
 	cfg := Default()
 	cfg.Upsert(Site{Name: "shop", Path: "/code/shop"})
-	cfg.Upsert(Site{Name: "accounts", Path: "/code/accounts", Domains: []string{"accounts.shop.test"}})
+	cfg.Upsert(Site{Name: "accounts", Path: "/code/accounts", Domains: []Domain{inherited("accounts.shop")}})
 	shop, _ := cfg.FindSite("shop")
 
 	if _, err := cfg.NormalizeDomain(shop, "accounts"); err == nil || !strings.Contains(err.Error(), "accounts.shop.test is already served by accounts") {
@@ -112,8 +112,8 @@ func TestDomainsBySiteMarksAliasesOtherSitesServe(t *testing.T) {
 	cfg := Default()
 	// A parked directory named "promo" appears after app took promo.test as an alias,
 	// and two sites claim the same alias.
-	cfg.Upsert(Site{Name: "app", Path: "/code/app", Domains: []string{"promo.test", "shared.test"}})
-	cfg.Upsert(Site{Name: "blog", Path: "/code/blog", Domains: []string{"shared.test"}})
+	cfg.Upsert(Site{Name: "app", Path: "/code/app", Domains: []Domain{inherited("promo"), inherited("shared")}})
+	cfg.Upsert(Site{Name: "blog", Path: "/code/blog", Domains: []Domain{inherited("shared")}})
 	cfg.Upsert(Site{Name: "promo", Path: "/code/promo"})
 
 	by := cfg.DomainsBySite(cfg.AllSites())
@@ -131,8 +131,8 @@ func TestDomainsBySiteMarksAliasesOtherSitesServe(t *testing.T) {
 func TestDomainsBySiteServesAnAliasUnderAnotherSiteOverItsSubdomain(t *testing.T) {
 	cfg := Default()
 	// accounts.shop.test was linked before the shop project, and shop lists it as a subdomain too.
-	cfg.Upsert(Site{Name: "accounts", Path: "/code/accounts", Domains: []string{"accounts.shop.test", "x.promo.test"}})
-	cfg.Upsert(Site{Name: "shop", Path: "/code/shop", Domains: []string{"accounts", "tenant1"}})
+	cfg.Upsert(Site{Name: "accounts", Path: "/code/accounts", Domains: []Domain{inherited("accounts.shop"), inherited("x.promo")}})
+	cfg.Upsert(Site{Name: "shop", Path: "/code/shop", Domains: []Domain{sub("accounts"), sub("tenant1")}})
 	cfg.Upsert(Site{Name: "promo", Path: "/code/promo"})
 
 	by := cfg.DomainsBySite(cfg.AllSites())
@@ -146,5 +146,22 @@ func TestDomainsBySiteServesAnAliasUnderAnotherSiteOverItsSubdomain(t *testing.T
 	}
 	if p := by["shop"][1].Problem; p != "" {
 		t.Errorf("shop's tenant1: got %q", p)
+	}
+}
+
+// TestDomainsBySiteConflictsAcrossSiteSuffixes: an explicit alias collides with a site that
+// carries that host as its own domain (its override makes it primary), and an inherited alias
+// under one site collides with the primary domain of a site that overrides to the same suffix.
+func TestDomainsBySiteConflictsAcrossSiteSuffixes(t *testing.T) {
+	cfg := Default()
+	cfg.Upsert(Site{Name: "shop", Path: "/code/shop", TLD: "loc"})
+	cfg.Upsert(Site{Name: "app", Path: "/code/app", Domains: []Domain{pinned("shop", "loc"), inherited("media")}})
+
+	by := cfg.DomainsBySite(cfg.AllSites())
+	if p := by["app"][0].Problem; !strings.Contains(p, "shop") {
+		t.Errorf("shop.loc: want a problem naming shop, got %q", p)
+	}
+	if p := by["app"][1].Problem; p != "" {
+		t.Errorf("media.test: app inherits .test, want it served, got %q", p)
 	}
 }

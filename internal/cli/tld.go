@@ -97,7 +97,7 @@ func (s *state) changeTLD(raw string, out io.Writer) (old string, warning string
 	// under the old suffix, and TLDHostSwaps derives both sides from its arguments, so listing
 	// the swaps while the old TLD is still the config's keeps the old side's suffix honest.
 	swaps := worktree.TLDHostSwaps(s.cfg, s.cfg.TLD, tld)
-	old = s.cfg.SetTLD(tld) // migrates site aliases; derives nothing else
+	old = s.cfg.SetTLD(tld) // stores the suffix; inherited names follow it at use time
 	for _, swap := range swaps {
 		changed, err := worktree.RetargetDotenv(swap.Path, swap.Old, swap.New)
 		if err != nil {

@@ -196,26 +196,45 @@ type HostSwap struct {
 	New  string // the host to write in its place
 }
 
-// TLDHostSwaps lists the .env files a TLD change from oldTLD to newTLD retargets: every linked
-// site (the .env under its Path, served at <name>.<TLD>) and every stored worktree entry (its
-// .env, served at <slug>.<parent>.<TLD>). Every host is derived from the arguments, never from
-// c.TLD: callers may compute the list after Config.SetTLD has already stored the new TLD, and
-// reading c.TLD for the old side would then give both sides the new suffix. Sites without a
-// .env are listed as well: RetargetDotenv treats a missing file as a no-op. (A free function,
-// not a method: Go forbids defining methods on a type from another package, and the worktree
-// package is where the .env rewriting lives.)
+// TLDHostSwaps lists the .env files a global TLD change from oldTLD to newTLD retargets:
+// every linked site that inherits the global suffix (the .env under its Path, served at
+// <name>.<suffix>), the inherited aliases of those sites (their hosts ride the site's
+// effective suffix, so their .env entries move too: <alias-label>.<old-effective> →
+// <alias-label>.<new-effective>), and every stored worktree entry of an inheriting site
+// (its .env, served at <slug>.<parent>.<suffix>). A site with its own Site.TLD override —
+// and its worktrees, and its aliases, inherited included — is not moved by a global change
+// (override wins, unchanged); an alias pinned to a suffix of its own never appears (the Q2
+// rule). Every host is derived from the arguments, never from c.TLD: callers may compute the
+// list after Config.SetTLD has already stored the new TLD, and reading c.TLD for the old
+// side would then give both sides the new suffix. Sites without a .env are listed as well:
+// RetargetDotenv treats a missing file as a no-op. Subdomain hosts move with their site:
+// RetargetDotenv swaps hosts deeper than the site's, so no separate entry is needed. (A
+// free function, not a method: Go forbids defining methods on a type from another package,
+// and the worktree package is where the .env rewriting lives.)
 func TLDHostSwaps(c *config.Config, oldTLD, newTLD string) []HostSwap {
+	byName := map[string]config.Site{}
+	for _, s := range c.Sites {
+		byName[s.Name] = s
+	}
 	var swaps []HostSwap
 	for _, s := range c.Sites {
-		swaps = append(swaps, HostSwap{
-			Path: filepath.Join(s.Path, ".env"),
-			Old:  s.Name + "." + oldTLD,
-			New:  s.Name + "." + newTLD,
-		})
+		if s.TLD != "" {
+			continue // a global TLD change leaves this site's hosts at <name>.<its own suffix>
+		}
+		path := filepath.Join(s.Path, ".env")
+		swaps = append(swaps, HostSwap{Path: path, Old: s.Name + "." + oldTLD, New: s.Name + "." + newTLD})
+		for _, d := range s.Domains {
+			if d.Alias && d.TLD == "" {
+				swaps = append(swaps, HostSwap{Path: path, Old: d.Label + "." + oldTLD, New: d.Label + "." + newTLD})
+			}
+		}
 	}
 	for _, e := range c.Worktrees {
 		if e.Slug == "" || e.Site == "" {
 			continue // no stored slug and parent: no host named it
+		}
+		if parent, ok := byName[e.Site]; ok && parent.TLD != "" {
+			continue // its host rides the parent's override, which a global change leaves alone
 		}
 		swaps = append(swaps, HostSwap{
 			Path: filepath.Join(e.Path, ".env"),

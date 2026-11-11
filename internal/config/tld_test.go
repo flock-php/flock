@@ -68,9 +68,14 @@ func TestValidateTLDRejectsReservedAndPublic(t *testing.T) {
 	}
 }
 
-func TestSetTLDMigratesStoredAliases(t *testing.T) {
+// TestSetTLDOnlySetsTheTLD: after the Load migration nothing is stored with a suffix baked in
+// that the global change may move — inherited aliases resolve at use time and follow,
+// subdomain labels carry no suffix, sites with a Site.TLD override and pinned aliases don't
+// move. SetTLD itself touches nothing but c.TLD (ledger ruling R5: the string rewrite dies).
+func TestSetTLDOnlySetsTheTLD(t *testing.T) {
 	cfg := Default()
-	cfg.Upsert(Site{Name: "app", Path: "/code/app", Domains: []string{"tenant1", "a.b", "app-2.test", "x.example"}})
+	cfg.Upsert(Site{Name: "app", Path: "/code/app", Domains: []Domain{sub("tenant1"), sub("a.b"), inherited("app-2"), sub("x.example")}})
+	cfg.Upsert(Site{Name: "over", Path: "/code/over", TLD: "loc", Domains: []Domain{pinned("p", "dev2"), inherited("i")}})
 
 	if old := cfg.SetTLD("loc"); old != "test" {
 		t.Fatalf("SetTLD(\"loc\") returned old %q, want \"test\"", old)
@@ -79,16 +84,26 @@ func TestSetTLDMigratesStoredAliases(t *testing.T) {
 		t.Errorf("c.TLD = %q, want \"loc\"", cfg.TLD)
 	}
 	app, _ := cfg.FindSite("app")
-	want := []string{"tenant1", "a.b", "app-2.loc", "x.example"}
-	if !slices.Equal(app.Domains, want) {
-		t.Errorf("after SetTLD(\"loc\"): got %v, want %v", app.Domains, want)
+	wantEntries := []Domain{sub("tenant1"), sub("a.b"), inherited("app-2"), sub("x.example")}
+	if !slices.Equal(app.Domains, wantEntries) {
+		t.Errorf("after SetTLD(\"loc\"): got %+v, want the entries untouched", app.Domains)
+	}
+	if got := hostsOf(cfg, app); !slices.Equal(got, []string{"tenant1.app.loc", "a.b.app.loc", "app-2.loc", "x.example.app.loc"}) {
+		t.Errorf("hosts under .loc: %v", got)
+	}
+	over, _ := cfg.FindSite("over")
+	if got := hostsOf(cfg, over); !slices.Equal(got, []string{"p.dev2", "i.loc"}) {
+		t.Errorf("override site's hosts under global .loc: %v, want unchanged (its suffix is its own)", got)
 	}
 
 	if old := cfg.SetTLD("test"); old != "loc" {
 		t.Fatalf("SetTLD(\"test\") returned old %q, want \"loc\"", old)
 	}
-	if app, _ = cfg.FindSite("app"); !slices.Equal(app.Domains, []string{"tenant1", "a.b", "app-2.test", "x.example"}) {
-		t.Errorf("after the round-trip: got %v, want the original domains back", app.Domains)
+	if app, _ = cfg.FindSite("app"); !slices.Equal(app.Domains, wantEntries) {
+		t.Errorf("after the round-trip: got %+v, want the original entries back", app.Domains)
+	}
+	if got := hostsOf(cfg, app); !slices.Equal(got, []string{"tenant1.app.test", "a.b.app.test", "app-2.test", "x.example.app.test"}) {
+		t.Errorf("hosts after the round-trip: %v, want the original hosts back", got)
 	}
 }
 

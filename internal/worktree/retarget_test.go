@@ -148,3 +148,50 @@ func TestTLDHostSwapsListsEverySiteAndWorktree(t *testing.T) {
 		t.Errorf("site .env: %q", got)
 	}
 }
+
+// TestTLDHostSwapsSiteAware: a global TLD change moves only what inherits — sites without a
+// Site.TLD override, their inherited aliases (which ride the site's effective suffix), and
+// worktrees of inheriting sites. Sites on their own suffix, their worktrees, and pinned
+// aliases never appear; the old side is derived from the arguments, never from c.TLD.
+func TestTLDHostSwapsSiteAware(t *testing.T) {
+	cfg := &config.Config{
+		TLD: "loc", // already set: TLDHostSwaps must derive the old side from oldTLD
+		Sites: []config.Site{
+			{Name: "plain", Path: "/code/plain", Domains: []config.Domain{
+				{Label: "tenant1"},
+				{Label: "app-2", Alias: true},
+				{Label: "pinned", TLD: "dev2", Alias: true},
+			}},
+			{Name: "over", Path: "/code/over", TLD: "loc", Domains: []config.Domain{{Label: "i", Alias: true}}},
+		},
+		Worktrees: []config.WorktreeEntry{
+			{Path: "/wt/f-x", Site: "plain", Slug: "f-x"},
+			{Path: "/wt/g-y", Site: "over", Slug: "g-y"},
+		},
+	}
+	swaps := TLDHostSwaps(cfg, "test", "loc")
+	want := []HostSwap{
+		{Path: filepath.Join("/code/plain", ".env"), Old: "plain.test", New: "plain.loc"},
+		{Path: filepath.Join("/code/plain", ".env"), Old: "app-2.test", New: "app-2.loc"},
+		{Path: filepath.Join("/wt/f-x", ".env"), Old: "f-x.plain.test", New: "f-x.plain.loc"},
+	}
+	if !slices.Equal(swaps, want) {
+		t.Errorf("got %+v\nwant %+v", swaps, want)
+	}
+
+	// The alias swap reaches the site's .env: the alias host itself, as a URL host and in a list.
+	dir := t.TempDir()
+	site := cfg.Sites[0]
+	site.Path = dir
+	cfg.Sites[0] = site
+	env := filepath.Join(dir, ".env")
+	write(t, env, "APP_URL=http://app-2.test\nSANCTUM_STATEFUL_DOMAINS=app-2.test,plain.test\nMAIL_FROM=a@pinned.dev2\n")
+	for _, sw := range TLDHostSwaps(cfg, "test", "loc") {
+		if _, err := RetargetDotenv(sw.Path, sw.Old, sw.New); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if got := read(t, env); got != "APP_URL=http://app-2.loc\nSANCTUM_STATEFUL_DOMAINS=app-2.loc,plain.loc\nMAIL_FROM=a@pinned.dev2\n" {
+		t.Errorf("site .env after the swaps:\n%s", got)
+	}
+}

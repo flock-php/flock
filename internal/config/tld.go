@@ -50,25 +50,16 @@ func ValidateTLD(tld string) (string, error) {
 }
 
 // SetTLD points the whole config at a new TLD and returns the old one, which callers validate
-// (see ValidateTLD) before calling. Site extra domains are stored in two forms (see
-// Site.Domains): subdomain labels ("tenant1"), which carry no suffix and resolve under the new
-// TLD as they are, and full-host aliases ("my-app-2.test"), which were typed with the old suffix
-// baked in. SetTLD rewrites only the aliases ending in "."+old; it deliberately leaves subdomain
-// labels alone and aliases under any other suffix ("x.example") alone too, because those name
-// domains of their own the user attached to the site and a TLD change must not break them. Proxy
-// domains derive "<name>.<TLD>" at read time (see ProxyDomain), so they need no migration.
+// (see ValidateTLD) before calling. It touches c.TLD and nothing else: everything that follows
+// the global suffix — proxy domains, sites without a Site.TLD override, aliases marked
+// inherited (Domain.Alias with an empty TLD) — resolves against c.TLD at use time, so it
+// moves by construction; sites on their own suffix, aliases pinned to one of their own (the
+// Q2 rule: a global change follows only what inherits), and subdomain labels carry no global
+// suffix to rewrite. The stored entries never change here: Load's migration turned every
+// legacy string into a marker-carrying entry, so the suffix-baked strings Plan 1 rewrote no
+// longer exist (ledger ruling R5).
 func (c *Config) SetTLD(new string) (old string) {
 	old = c.TLD
-	if old == new {
-		return old
-	}
 	c.TLD = new
-	for i := range c.Sites {
-		for j, d := range c.Sites[i].Domains {
-			if strings.HasSuffix(d, "."+old) {
-				c.Sites[i].Domains[j] = strings.TrimSuffix(d, old) + new
-			}
-		}
-	}
 	return old
 }
