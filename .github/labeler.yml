@@ -1,5 +1,18 @@
 # Labels for pull requests by the files they change; contribution-pr-labels.yml applies them.
-# "documentation" only when every changed file is in docs/.
+# "documentation" only when every changed file is in docs/; an "os:" label when any changed file
+# is in that platform's app.
 documentation:
     -   changed-files:
             -   all-globs-to-all-files: docs/**
+
+"os: mac":
+    -   changed-files:
+            -   any-glob-to-any-file: macos/**
+
+"os: windows":
+    -   changed-files:
+            -   any-glob-to-any-file: windows/**
+
+"os: linux":
+    -   changed-files:
+            -   any-glob-to-any-file: linux/**

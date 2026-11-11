@@ -2,6 +2,7 @@ package main
 
 import (
 	"errors"
+	"slices"
 	"testing"
 
 	"flock/tools/github/github_issue"
@@ -43,6 +44,17 @@ func TestIssuePolicies(t *testing.T) {
 	}
 }
 
+func TestIssuePoliciesLabelsPlatforms(t *testing.T) {
+	api := &issueEventFakeService{permission: "admin"}
+	data := []byte(`{"action":"opened","issue":{"number":73,"user":{"login":"maintainer","type":"User"},"body":"### Platform\n\nmacOS, Linux\n\n### Flock version\n\n1.0.0"}}`)
+	if err := newIssueEventService(api).Run("flock-php", "flock", data); err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(api.labels, []string{"os: mac", "os: linux"}) {
+		t.Fatalf("labels = %v, want [os: mac os: linux]", api.labels)
+	}
+}
+
 func TestIssueEventStopsOnParseAndServiceErrors(t *testing.T) {
 	tests := []struct {
 		name string
@@ -69,6 +81,7 @@ type issueEventFakeService struct {
 	currentIssue                       *github_issue.Issue
 	permission                         string
 	permissionErr, labelErr, removeErr error
+	labels                             []string
 }
 
 func newIssueEventService(issues *issueEventFakeService) IssueEventService {
@@ -83,8 +96,9 @@ func (f *issueEventFakeService) GetUserPermission(string, string, string) (strin
 	}
 	return f.permission, f.permissionErr
 }
-func (f *issueEventFakeService) AddLabel(string, string, int, string) error {
-	f.triaged = true
+func (f *issueEventFakeService) AddLabel(_ string, _ string, _ int, label string) error {
+	f.labels = append(f.labels, label)
+	f.triaged = label == "needs triage"
 	return f.labelErr
 }
 func (f *issueEventFakeService) RemoveHelpWanted(string, string, *github_issue.Issue) error {

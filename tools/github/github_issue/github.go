@@ -29,6 +29,7 @@ type Issue struct {
 	Number            int
 	State             string
 	IsPullRequest     bool
+	Body              string
 	User              User
 	AuthorAssociation string
 	Assignees         []User
@@ -166,6 +167,7 @@ func issueFromGitHub(source *github.Issue) *Issue {
 		Number:            source.GetNumber(),
 		State:             source.GetState(),
 		IsPullRequest:     source.IsPullRequest(),
+		Body:              source.GetBody(),
 		User:              userFromGitHub(source.GetUser()),
 		AuthorAssociation: source.GetAuthorAssociation(),
 		Assignees:         usersFromGitHub(source.Assignees),

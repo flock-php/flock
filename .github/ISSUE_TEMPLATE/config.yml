@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+    -   name: Ask a question
+        url: https://github.com/flock-php/flock/discussions
+        about: Questions and help with using Flock.
+    -   name: Chat on Discord
+        url: https://discord.flockphp.com
+        about: Talk with the community and the maintainers.
+    -   name: Report a security vulnerability
+        url: https://github.com/flock-php/flock/security/advisories/new
+        about: Please report security issues privately, not as a public issue.
