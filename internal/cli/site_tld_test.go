@@ -337,6 +337,55 @@ func TestChangeSiteTLDinheritSwitchesBackAndKeepsExplicitAliases(t *testing.T) {
 	}
 }
 
+// TestChangeSiteTLDRefusesSelfCollision: a site that pins alias demo2.loc and follows an
+// alias demo2 must not be moved onto .loc: the following alias would land on the pinned
+// host, and the site would serve one host twice — `flock domain remove demo2.loc` then
+// reports success while the name stays served by the surviving entry. The refusal touches
+// nothing: config.json and the .env stay byte-identical.
+func TestChangeSiteTLDRefusesSelfCollision(t *testing.T) {
+	s, demoDir, _, _ := siteTLDFixture(t)
+	site, ok := s.cfg.FindSite("demo")
+	if !ok {
+		t.Fatal("fixture lost demo")
+	}
+	site.Domains = append(site.Domains,
+		config.Domain{Label: "demo2", TLD: "loc", Alias: true},
+		config.Domain{Label: "demo2", Alias: true})
+	if err := s.cfg.Upsert(site); err != nil {
+		t.Fatal(err)
+	}
+	cfgBefore, err := os.ReadFile(filepath.Join(s.root, "config.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	envBefore, err := os.ReadFile(filepath.Join(demoDir, ".env"))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var out strings.Builder
+	if _, _, err := s.changeSiteTLD("loc", "demo", false, &out); err == nil {
+		t.Fatalf("the move must be refused, output:\n%s", out.String())
+	} else if msg := err.Error(); !strings.Contains(msg, "demo2.loc") || !strings.Contains(msg, "claimed twice") {
+		t.Errorf("the refusal must name the host and the double claim, got: %v", err)
+	}
+
+	cfgAfter, err := os.ReadFile(filepath.Join(s.root, "config.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(cfgAfter) != string(cfgBefore) {
+		t.Errorf("config.json rewritten by the refused move")
+	}
+	envAfter, err := os.ReadFile(filepath.Join(demoDir, ".env"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(envAfter) != string(envBefore) {
+		t.Errorf("the .env was retargeted by the refused move:\n%s", envAfter)
+	}
+}
+
 // TestChangeSiteTLDInheritOnGlobalPinnedSite: handing back a site pinned to the *global*
 // suffix with --inherit changes the stored state (the override clears, the site follows
 // again) while its effective suffix stays the same, so the run takes the no-move branch.

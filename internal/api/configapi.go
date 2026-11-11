@@ -235,6 +235,9 @@ func siteHostClash(cfg *config.Config, s config.Site) error {
 	if host, owner := cfg.SiteHostCollision(s); host != "" {
 		return invalid("%s is already served by %s", host, owner)
 	}
+	if host, _, moved := cfg.SiteSelfCollision(s); host != "" {
+		return invalid("%s is claimed twice by %s: the alias %s that follows the site lands on the pinned alias %s — remove one first", host, s.Name, moved, host)
+	}
 	return nil
 }
 

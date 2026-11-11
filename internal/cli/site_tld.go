@@ -226,7 +226,10 @@ func (s *state) changeSiteTLD(raw, siteName string, inherit bool, out io.Writer)
 
 // siteHostsFree refuses a suffix that would move site onto a host Flock already serves
 // under newSuffix: another site's domain, any site's alias (pinned hosts included), or a
-// proxy's domain. The site's own inherited aliases move with it, onto the same suffix, and
+// proxy's domain — and, on the self side, the site's own following alias landing on a host
+// the site pins (config.SiteSelfCollision: the collision is created by the move, and it
+// breaks `domain remove` into a command that reports success while the name stays served).
+// The site's own inherited aliases move with it, onto the same suffix, and
 // are checked against the other owners too. The config-side check (config.
 // SiteHostCollision) is the one the API's site TLD patch runs on the same proposal, so CLI
 // and API refuse exactly the same collisions.
@@ -235,6 +238,10 @@ func (s *state) siteHostsFree(site config.Site, newSuffix string) error {
 	probe.TLD = newSuffix
 	if host, owner := s.cfg.SiteHostCollision(probe); host != "" {
 		return fmt.Errorf("%s is already served by %s: %s can't move to .%s", host, owner, site.Name, newSuffix)
+	}
+	if host, _, moved := s.cfg.SiteSelfCollision(probe); host != "" {
+		return fmt.Errorf("%s is claimed twice on .%s by %s: the pinned alias %s and the alias %s that follows the site — remove one first (flock domain remove %s %s)",
+			host, newSuffix, site.Name, host, moved, host, site.Name)
 	}
 	return nil
 }

@@ -782,6 +782,35 @@ func TestSiteTLDPatchAndCreate(t *testing.T) {
 	}
 }
 
+// TestSiteTLDPatchRefusesSelfCollision pins the self half of the landing check at the API:
+// a site that pins alias demo2.loc and follows an alias demo2 must not be PATCHed onto
+// .loc — the following alias would land on the pinned host, and `domain remove` would then
+// report success while the name stays served by the surviving entry. The refusal leaves
+// config.json byte-identical, like every rejected patch.
+func TestSiteTLDPatchRefusesSelfCollision(t *testing.T) {
+	b := &fakeBackend{root: t.TempDir()}
+	cfg := config.Default()
+	if err := cfg.Upsert(config.Site{Name: "demo", Path: t.TempDir(), Domains: []config.Domain{
+		{Label: "demo2", TLD: "loc", Alias: true},
+		{Label: "demo2", Alias: true},
+	}}); err != nil {
+		t.Fatal(err)
+	}
+	if err := cfg.Save(b.root); err != nil {
+		t.Fatal(err)
+	}
+	srv := serve(t, b, "")
+	before := configBytes(t, b)
+
+	resp, body := call(t, "PATCH", srv.URL+"/v1/sites/demo", "", `{"tld":"loc"}`)
+	if resp.StatusCode != http.StatusBadRequest || !strings.Contains(body, "demo2.loc") || !strings.Contains(body, "claimed twice") {
+		t.Fatalf("tld loc with a self pair: %d %s", resp.StatusCode, body)
+	}
+	if !bytes.Equal(before, configBytes(t, b)) {
+		t.Fatal("the refused patch changed config.json")
+	}
+}
+
 // TestAddDomainSuffix pins the structured domain add (ruling R7: the suffix parameter is only
 // a suffix, the domain is label-only): suffix "loc" stores an explicit alias, "inherit" an
 // inherited one, and the Q2 sequence demo2+loc / demo2+inherit survives a global test→loc with
