@@ -160,7 +160,9 @@ struct GeneralPane: View {
                                 checkNote = nil
                             case .failure:
                                 if Task.isCancelled { return }
-                                checkNote = "Couldn’t check with the daemon; the verdict shown is the last one."
+                                checkNote = check == nil
+                                    ? "Couldn’t check with the daemon; Apply stays disabled until the daemon answers."
+                                    : "Couldn’t check with the daemon; the verdict shown is the last one."
                             }
                         }
                     } header: {
@@ -434,7 +436,7 @@ private struct ApplyTLDSheet: View {
                 .onChange(of: lines) { proxy.scrollTo("end", anchor: .bottom) }
             }
             if declined {
-                Text("You declined the password. Flock’s config is on .\(tld); finish the switch by running `flock tld \(tld)` in a terminal.")
+                Text("You declined the password. Flock’s config is on .\(tld); finish the switch by running `flock install` in a terminal.")
                     .font(.caption)
                     .foregroundStyle(.orange)
                     .fixedSize(horizontal: false, vertical: true)
