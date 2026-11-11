@@ -4,59 +4,62 @@
 
 ## Intent
 
-Today every site's domain is `<folder>.<global TLD>` and a custom suffix is only reachable by making the TLD global. The user wants domain choice **per site**: inherit the global TLD (default, current behavior) or pick their own suffix — `<folder>.<suffix>` with the same picker/validator as the global setting — and the same for extra domains: a label input plus a suffix control. A site on a custom suffix must genuinely open in browsers: DNS and valid HTTPS for that suffix, provisioned automatically.
+Today every site's domain is `<folder>.<global TLD>`; a custom suffix is only reachable by changing the global TLD. The user wants the choice **per site**: inherit (default, current) or their own suffix — `<folder>.<suffix>` picked with the same control/validator as the global picker — and the same for extra domains (label + suffix). A site on a custom suffix must genuinely open in browsers: DNS and valid HTTPS provisioned automatically (user confirmed).
+
+## Q2 trap (why the model is explicit, not heuristic)
+
+With string-suffix inference: site `demo` inherits `.test`, gets alias `demo2.loc` (explicit); global `.test→.loc` makes `.loc` the site's effective suffix, so the *next* global change would drag the explicit alias along. Inference is unsound. The alias carries an explicit inherit/override marker; the global switch follows only what inherits.
+
+## Model
+
+`Site.Domains` migrates from `[]string` to structured entries; JSON keeps the legacy string form on the wire where noted:
+
+```json
+{ "label": "tenant1" }                        // subdomain → tenant1.<site domain>
+{ "label": "app-2",  "tld": "",    "alias": true }   // inherited alias → follows the site's effective suffix
+{ "label": "demo2", "tld": "loc", "alias": true }   // explicit alias → never rewritten
+```
+
+- `Site.TLD string` ("" = inherit): effective site domain = `<name>.<Site.TLD || global TLD>`; aliases with `tld:""` resolve against the effective suffix at use time; `tld:"loc"` is absolute.
+- **Migration** (on Load, in-place): string entry ending in `"."+global TLD` → `{label: <entry minus suffix>, tld:"", alias:true}` (preserves Plan 1's follow-the-global behavior exactly); every other string (e.g. `"a.b"`, `"x.example"`) → `{label: entry}` subdomain (same host as today). `Site.TLD`/`Domain.TLD` sanitized with Plan 1's rules (bad → inherit).
+- Classification (code-anchored, domains.go:30 / NormalizeDomain): alias ⟺ `alias:true` (new) / ends in the site's effective suffix (legacy wire). Aliases under public TLDs: **out of scope** — the code has never had them; no CA root is ever created for a public suffix.
+- Worktrees: `<slug>.<effective site domain>` — automatic.
+- Proxies: inherit the global TLD only (non-goal: per-proxy suffix).
 
 ## Goals
 
-1. **Model:** `Site.TLD string` (json `"tld"`, `""` = inherit). Effective site domain = `<name>.<Site.TLD || global TLD>`. Aliases keep storing the full host (`api.shop.loc`); their suffix is what the UI decomposes. Worktrees derive `<slug>.<effective site domain>` automatically.
-2. **API:** site create/patch accept `tld` (validated via Plan 1's `ValidateTLD`; the `/v1/tld/check` dry-run powers live UI validation). The alias endpoint stays full-host.
-3. **Active suffix set** = global TLD ∪ every site override ∪ suffixes of every alias host. Flock provisions and monitors **all** of them:
-   - **macOS:** `/etc/resolver/<suffix>` per active suffix (privileged-setup gains multi-suffix sync: write missing, remove stale — files carrying only Flock's marker).
-   - **Linux:** the resolved drop-in lists every active suffix (`Domains=a b c`).
-   - **Windows:** an NRPT rule per active suffix; the hosts-helper block is regenerated wholesale from config (all site hosts), no fixed-TLD filtering.
-   - **CA:** a root per active suffix (same name-constrained shape as Plan 1) under `certs/roots/<suffix>/`; leaf issuance and `SiteCert` pick the root by host suffix; PHP/Node CA bundle concatenates all roots; OS trust installs/trusts each root (keychain/certutil/system store).
-4. **CLI:** `flock site tld <suffix>|--inherit [site]` (default: current site) sets `Site.TLD`; `flock domain add <label>.<suffix>` / `flock domain add <label> --suffix <suffix>`; applying a suffix change runs the provisioning sync (the Plan 1 privileged machinery, per suffix) with the same decline semantics (config switched, guidance to `flock install`).
-5. **Daemon health:** wildcard status per active suffix (existing check generalized: sample `<rand>.<suffix>` → loopback); services/warnings name the broken suffix; `flock status` lists all.
-6. **macOS app:** Sites pane — per-site Domain control (Inherit / Custom + suffix picker like the global one, live `/v1/tld/check`), Add Domain sheet gains the suffix control (label input + suffix), Apply runs the bundled CLI provisioning sync; global picker (Plan 2) stays.
+1. **API:** `POST /v1/sites` / `PATCH /v1/sites/{name}` accept `"tld"` (validated via Plan 1's `ValidateTLD`, 400 on reject; "" = inherit). Domain add accepts the structured entry (and the legacy full-host string, decomposed: suffix == site effective → inherited alias; else → subdomain label, matching today). `SiteStatus`/`ConfigView` carry raw override + effective domain for the UI.
+2. **Active suffix set** = global TLD ∪ site overrides ∪ explicit alias TLDs (all validated, non-public). Provisioning sync (privileged, CLI-run) reconciles **all** of them:
+   - macOS: `/etc/resolver/<suffix>` per active suffix — write missing, remove stale (Flock-marker-guarded, per-suffix).
+   - Linux: one resolved drop-in listing every active suffix.
+   - Windows: NRPT rule per suffix; hosts-helper block regenerated wholesale from config.
+   - **CA:** one root per active suffix, each name-constrained to that suffix + localhost, under `certs/roots/<suffix>/` (the existing global root stays at `certs/ca.crt`); leaf issuance and `SiteCert` pick the root by host suffix; PHP/Node bundle concatenates all roots; OS trust installs/trusts each (keychain/certutil/browsers); roots for suffixes leaving the set get removed + untrusted.
+3. **CLI:** `flock site tld <suffix>|--inherit [site]`, `flock domain add <label> [--suffix <suffix>|--inherit]` (alias), `flock domain add <sublabel>` (subdomain, as today); apply runs the sync (Plan 1 machinery, set-diffed) with Plan 1 decline semantics; site-suffix changes retarget that site's + its worktrees' `.env` (mirror of Plan 1's `TLDHostSwaps`, site-scoped) and rewrite the site's **inherited** aliases (explicit ones never move — the Q2 trap rule).
+4. **Removals stay unprivileged** (`unlink`/`unpark`/`domain remove`): the daemon detects stale suffixes (Flock-marked resolver files / NRPT rules / trusted roots outside the active set) → warning "…stale .loc setup: run `flock install`"; the next sync repairs. No password prompts on routine cleanup (user-confirmed).
+5. **Daemon health:** wildcard resolution check per active suffix; status/services rows per suffix; `flock status` lists all.
+6. **macOS app (3b):** Sites pane — per-site Domain control (Inherit / Custom, the Plan 2 picker component) with Apply (bundled CLI `flock site tld`, streaming sheet, decline footer → `flock install`); Add Domain sheet — label + suffix picker (Inherit / presets / Custom, live `/v1/tld/check`); inherited aliases follow, explicit stay (picker shows the state).
 
 ## Non-goals
 
-- Windows/Linux app UIs (follow-up plans, same API).
-- Per-proxy suffixes — proxies keep inheriting the global TLD.
-- Multi-label site names (`my.shop.loc` as a site's own domain — site names stay one label; multi-label belongs to aliases).
-- IDN/punycode suffixes (ASCII label rule as in Plan 1).
+Windows/Linux app UIs (follow-ups); per-proxy suffixes; multi-label site names; IDN suffixes; aliases under public TLDs (absent from the code, security).
 
 ## Anti-goals
 
-- A site on a custom suffix that routes correctly in Caddy but doesn't resolve, or resolves with an untrusted cert.
-- Stale system files: a suffix dropped from the active set must have its resolver file/NRPT rule/root trust removed.
-- A site override silently changing other sites' domains (global TLD edits keep Plans 1's semantics).
+- Explicit aliases dragged by global/site suffix changes (the Q2 trap).
+- Custom-suffix sites that route in Caddy but don't resolve or serve untrusted TLS.
+- Stale resolver files/NRPT rules/trusted roots surviving past a sync.
+- Global TLD changes altering sites that carry overrides (override wins, unchanged).
 
 ## Constraints
 
-- Daemon stays unprivileged: provisioning runs via the CLI (sync command), the daemon only reports per-suffix health.
-- Root per suffix stays name-constrained (one suffix + localhost); no root may sign for a public TLD (suffix validation as in Plan 1).
-- Plan 1's single-root layout migrates cleanly: the existing `certs/ca.crt` root for the global TLD is kept in place; additional roots live under `certs/roots/<suffix>/`.
-- Go stdlib only; SwiftPM `--disable-sandbox` rule; Swift tests + Go race suite + docslint green per commit; Conventional Commits.
+Daemon unprivileged (provisioning = CLI sync); stdlib-only Go; `--disable-sandbox` SwiftPM rule; Go race + swift tests + docslint green per commit; Conventional Commits; legacy string wire form for Domains stays accepted (old CLIs/apps), storage is structured; one plan each for backend (3a) and macOS UI (3b), 3b consumes 3a's API.
 
 ## Approaches considered
 
-- **A. Suffix override per site (`Site.TLD`), full system provisioning per active suffix, one CA root per suffix.** The user's chosen shape (inherit = folder+global; custom = folder+suffix; aliases = label+suffix). Chosen.
-- **B. Free full hostname per site** (rejected by the user — names stay folder-based; aliases cover free-form names).
-- **C. Custom suffixes that only resolve when set globally** (rejected: a half-working feature — the confirmed UX is auto-provisioning).
-
-## Decided shape (how)
-
-- `config.Site.TLD` + `func (s Site) DomainSuffix(c *Config) string`; `Domain(site)` (config.go:287) uses the override. Sites discovered from parked dirs inherit.
-- API: `POST /v1/sites` and `PATCH /v1/sites/{name}` take `"tld"`; validation error → 400 (same `invalid()` shape as settings); `ConfigView`/`SiteStatus` carry the effective `tld` for the UI.
-- `dns` package: `Sync(suffixes []string, port)` on the privileged helper (darwin resolver files, linux drop-in content, windows NRPT) replacing the single-TLD calls in `privileged-setup`; CA: `certs.Store(rootDir, tlds)` → map suffix→CA; `web/certsource.go` picks by suffix; `ca.WriteBundle` concatenates.
-- CLI `flock site tld`: mutate + `flock tld`-style sync (`provisionSuffixes(cfg)`: retire stale, add new, trust new roots, daemon reload); decline keeps Plan 1's guidance shape.
-- Alias UI: label field + suffix menu (`Inherit` + presets + Custom…) composed into the full host client-side; server keeps full-host semantics.
+- **A. Explicit inherit/override markers (`Site.TLD`, `Domain.TLD`/`alias`) + per-suffix provisioning and CA roots.** User-chosen (their Q2 answer: store the marker; inherited follows, overridden stays).
+- **B. Suffix-inference from stored strings.** Rejected — the Q2 trap proves it unsound.
+- **C. Free full hostname per site.** Rejected earlier by the user (names stay folder-based).
 
 ## Left to the builder
 
-The plan splits into: **3a backend** (model, API, CA store, dns sync, CLI, daemon health, docs) and **3b macOS UI** (Sites pane controls, Add Domain sheet, provisioning apply). Within each: exact function signatures, test tables, migration test for the existing root layout, and the smoke matrix.
-
-## Plan-3 → Plan split note
-
-writing-plans will produce two plans (3a, 3b) because the UI depends on 3a's shipped API and each must land as working, testable software on its own.
+Plan 3a (backend: model + migration, API, CA store, dns/hosts sync generalization, CLI, daemon health, `.env` site-scope, docs) and Plan 3b (macOS UI: site Domain control, Add Domain sheet with suffix picker, reuse of the Plan 2 picker + streaming sheet). Exact signatures, test tables (incl. the Q2 trap sequence as a pinned test), and the smoke matrix.
