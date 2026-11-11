@@ -29,7 +29,7 @@ func TestNRPTSetScriptOneRulePerSuffix(t *testing.T) {
 		t.Fatalf("the adds come before the removal:\n%s", script)
 	}
 
-	for _, tlds := range [][]string{{}, {"test", "not valid"}, {"test", "a.b"}} {
+	for _, tlds := range [][]string{{}, {"test", "not valid"}, {"test", "a.b"}, {"test", "-x"}, {"test", "x-"}} {
 		if _, err := nrptSetScript(tlds); err == nil {
 			t.Errorf("%q: accepted", tlds)
 		}

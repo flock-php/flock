@@ -23,7 +23,7 @@ func nrptSetScript(tlds []string) (string, error) {
 	var b strings.Builder
 	b.WriteString(removeRulesScript)
 	for _, tld := range tlds {
-		if !validTLD(tld) {
+		if !ValidTLD(tld) {
 			return "", fmt.Errorf("invalid TLD %q", tld)
 		}
 		fmt.Fprintf(&b, `Add-DnsClientNrptRule -Namespace '.%s' -NameServers '127.0.0.1' -Comment '%s'; `, tld, nrptComment)
@@ -50,9 +50,14 @@ func nrptRuleNamespaces(out string) map[string]bool {
 	return set
 }
 
-// validTLD accepts what a NRPT namespace and a resolver filename can both carry.
-func validTLD(tld string) bool {
+// ValidTLD accepts what a NRPT namespace, a resolver file name and a resolved Domains= word can
+// all carry: one DNS label — 1 to 63 characters of [a-z0-9-], not starting or ending with a
+// hyphen (an edge hyphen names nothing resolvable). It is the allowlist behind parseTLDList.
+func ValidTLD(tld string) bool {
 	if tld == "" || len(tld) > 63 {
+		return false
+	}
+	if tld[0] == '-' || tld[len(tld)-1] == '-' {
 		return false
 	}
 	for _, r := range tld {

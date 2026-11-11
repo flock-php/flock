@@ -11,13 +11,15 @@ import (
 	"flock/internal/api"
 	"flock/internal/binaries"
 	"flock/internal/config"
+	"flock/internal/dns"
 	"flock/internal/paths"
 )
 
 // parseTLDList reads a privileged-setup --tlds comma list into the suffixes it names: trimmed,
-// lower-case, deduplicated. It is the guard the root-only setup runs on its input: an entry with
-// a path, dot or space (the characters a resolver file name, a resolved Domains= word and a NRPT
-// namespace can't carry) is refused, and an empty list provisions nothing.
+// lower-case, deduplicated. It is the root-run argv guard: every entry must pass dns.ValidTLD,
+// the allowlist of what a resolved Domains= word, a resolver file name and a NRPT namespace can
+// carry (one DNS label of [a-z0-9-], no edge hyphens, ≤63) — anything else is refused before a
+// root process writes it. An empty list provisions nothing.
 func parseTLDList(list string) ([]string, error) {
 	var out []string
 	for _, s := range strings.Split(list, ",") {
@@ -25,7 +27,7 @@ func parseTLDList(list string) ([]string, error) {
 		if s == "" {
 			continue
 		}
-		if strings.ContainsAny(s, "/. ") || len(s) > 63 {
+		if !dns.ValidTLD(s) {
 			return nil, fmt.Errorf("invalid --tlds entry %q", s)
 		}
 		if !slices.Contains(out, s) {
