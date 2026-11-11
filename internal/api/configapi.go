@@ -10,7 +10,9 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"regexp"
 	"slices"
+	"strings"
 	"time"
 
 	"flock/internal/binaries"
@@ -202,6 +204,81 @@ func decodeBody(r *http.Request, v any) error {
 	return nil
 }
 
+// domainLabel is the shape of a single DNS label: with the suffix parameter a domain add is
+// label-only (ruling R7), so its domain must match — the same shape config's hostLabel checks.
+var domainLabel = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$`)
+
+// siteTLD normalizes a requested site suffix: "" is inherit (stored as ""), anything else is
+// validated and stored sanitized. A rejected one is an invalid() error: callers run it inside
+// b.Mutate, so returning it leaves config.json untouched.
+func siteTLD(raw string) (string, error) {
+	tld := config.NormalizeTLD(raw)
+	if tld == "" {
+		return "", nil // "" (like an absent suffix) is inherit
+	}
+	if _, err := config.ValidateTLD(tld); err != nil {
+		return "", invalid("%v", err)
+	}
+	return tld, nil
+}
+
+// siteProxyClash reports why the hosts site is served at (its domain and extra domains)
+// collide with a proxy's host: a suffix override moves the site's domain and its inherited
+// aliases, and one of them can land on the <name>.<global TLD> a proxy serves. The proxy's
+// own handlers check the same hosts in the other direction (config.UpsertProxy); this covers
+// the site-side mutations. The shape mirrors NormalizeDomain's proxy conflicts: an
+// invalid() with the host and its owner.
+func siteProxyClash(cfg *config.Config, s config.Site) error {
+	hosts := []string{cfg.Domain(s)}
+	for _, e := range cfg.ExtraDomains(s) {
+		hosts = append(hosts, e.Host)
+	}
+	for _, p := range cfg.Proxies {
+		domain := cfg.ProxyDomain(p)
+		for _, h := range hosts {
+			if h == domain {
+				return invalid("%s is already served by proxy %s", domain, p.Name)
+			}
+		}
+	}
+	return nil
+}
+
+// addDomainSuffix builds an alias entry from a label and a suffix (ruling R7: the suffix
+// parameter is only a suffix, so domain is label-only and mutually exclusive with the
+// full-host input). suffix "inherit" marks the alias inherited — it follows the site's
+// effective suffix; any other suffix is normalized and validated (a public or refused one
+// is a 400) and pins the alias: the entry carries its own suffix, and no global or site
+// suffix change ever moves it (the Q2 rule). The resolved host goes through NormalizeDomain's
+// checks — no site, proxy, or extra domain of the site may serve it.
+func addDomainSuffix(cfg *config.Config, s *config.Site, domain, suffix string) (config.Domain, error) {
+	label := strings.ToLower(strings.TrimSpace(domain))
+	if !domainLabel.MatchString(label) {
+		return config.Domain{}, invalid("%q is not a domain label: with a suffix the domain is a single label of a-z, 0-9 and inner hyphens", domain)
+	}
+	suffix = strings.ToLower(strings.TrimSpace(suffix))
+	tld := ""
+	if suffix != "inherit" {
+		tld = config.NormalizeTLD(suffix)
+		if _, err := config.ValidateTLD(tld); err != nil {
+			return config.Domain{}, invalid("%v", err)
+		}
+	}
+	target := label + "." + s.Suffix(cfg) // inherit: the site's effective suffix
+	if tld != "" {
+		target = label + "." + tld
+	}
+	entry, err := cfg.NormalizeDomain(*s, target)
+	if err != nil {
+		return config.Domain{}, invalid("%v", err)
+	}
+	if !entry.Alias { // can't happen: a validated single-label suffix always reads as an alias
+		return config.Domain{}, invalid("%s is not a suffix %s can use", suffix, s.Name)
+	}
+	entry.TLD = tld // force the marker: "inherit" → inherited, a suffix → pinned
+	return entry, nil
+}
+
 func registerConfig(mux *http.ServeMux, b Backend) {
 	// mutate runs change through the backend and answers with the new status.
 	mutate := func(w http.ResponseWriter, change func(*config.Config) error) {
@@ -249,6 +326,9 @@ func registerConfig(mux *http.ServeMux, b Backend) {
 			Name    string `json:"name"`
 			PHP     string `json:"php"`
 			Secured bool   `json:"secured"`
+			// TLD is the site's own suffix ("loc" → served at <name>.loc); "" (like an
+			// absent key) inherits the global one.
+			TLD string `json:"tld"`
 		}
 		if err := decodeBody(r, &body); err != nil {
 			writeError(w, http.StatusBadRequest, err)
@@ -261,11 +341,15 @@ func registerConfig(mux *http.ServeMux, b Backend) {
 			if info, err := os.Stat(body.Path); err != nil || !info.IsDir() {
 				return invalid("%s is not a directory", body.Path)
 			}
+			tld, err := siteTLD(body.TLD)
+			if err != nil {
+				return err
+			}
 			name := body.Name
 			if name == "" {
 				name = filepath.Base(body.Path)
 			}
-			if err := cfg.Upsert(config.Site{Name: config.SiteName(name), Path: filepath.Clean(body.Path), PHP: body.PHP, Secured: body.Secured}); err != nil {
+			if err := cfg.Upsert(config.Site{Name: config.SiteName(name), Path: filepath.Clean(body.Path), PHP: body.PHP, Secured: body.Secured, TLD: tld}); err != nil {
 				return invalid("%v", err)
 			}
 			return nil
@@ -283,6 +367,10 @@ func registerConfig(mux *http.ServeMux, b Backend) {
 			// Root is the document root on this machine, relative to the project ("" lets the
 			// project's .flockrc or detection decide again).
 			Root *string `json:"root"`
+			// TLD is the site's own suffix (ruling R7): absent or null keeps what it is,
+			// "" is inherit, a value is normalized and validated (400 on reject, with the
+			// config untouched). Raw JSON decides between absent and null.
+			TLD json.RawMessage `json:"tld"`
 		}
 		if err := decodeBody(r, &body); err != nil {
 			writeError(w, http.StatusBadRequest, err)
@@ -295,6 +383,22 @@ func registerConfig(mux *http.ServeMux, b Backend) {
 			}
 			if body.Secured != nil {
 				site.Secured = *body.Secured
+			}
+			if len(body.TLD) > 0 && string(body.TLD) != "null" {
+				var raw string
+				if err := json.Unmarshal(body.TLD, &raw); err != nil {
+					return invalid("tld must be a string (a suffix like loc, or \"\" for inherit), not %s", body.TLD)
+				}
+				tld, err := siteTLD(raw)
+				if err != nil {
+					return err
+				}
+				site.TLD = tld
+				// The new suffix moves the site's domain and its inherited aliases:
+				// none may land on a proxy's host.
+				if err := siteProxyClash(cfg, site); err != nil {
+					return err
+				}
 			}
 			if body.PHP != nil {
 				installed, _ := php.Installed(b.Root())
@@ -343,9 +447,12 @@ func registerConfig(mux *http.ServeMux, b Backend) {
 	})
 
 	// Extra domains: a subdomain ("tenant1") or an alias ("my-app-2.test"), see config.NormalizeDomain.
+	// With suffix (ruling R7) the domain is a single label and the suffix decides the alias:
+	// "inherit" marks it inherited, "loc" (normalized+validated) pins it to a suffix of its own.
 	mux.HandleFunc("POST /v1/sites/{name}/domains", func(w http.ResponseWriter, r *http.Request) {
 		var body struct {
 			Domain string `json:"domain"`
+			Suffix string `json:"suffix"`
 		}
 		if err := decodeBody(r, &body); err != nil {
 			writeError(w, http.StatusBadRequest, err)
@@ -356,8 +463,16 @@ func registerConfig(mux *http.ServeMux, b Backend) {
 			if !ok {
 				return invalid("no site named %s", r.PathValue("name"))
 			}
-			if _, err := cfg.AddDomain(&site, body.Domain); err != nil {
-				return invalid("%v", err)
+			if body.Suffix == "" {
+				if _, err := cfg.AddDomain(&site, body.Domain); err != nil {
+					return invalid("%v", err)
+				}
+			} else {
+				entry, err := addDomainSuffix(cfg, &site, body.Domain, body.Suffix)
+				if err != nil {
+					return err
+				}
+				site.Domains = append(site.Domains, entry)
 			}
 			site.Parked = false // a parked site becomes linked so the domain can be stored
 			if err := cfg.Upsert(site); err != nil {
@@ -629,6 +744,9 @@ type SiteChange struct {
 	Server  *string `json:"server,omitempty"`
 	Worker  *string `json:"worker,omitempty"`
 	Root    *string `json:"root,omitempty"`
+	// TLD is the site's own suffix (ruling R7): nil leaves it alone, "" is inherit, a
+	// value is normalized and validated (400 on reject, the config untouched).
+	TLD *string `json:"tld,omitempty"`
 }
 
 // Config fetches config.json plus the installed versions.
@@ -696,10 +814,17 @@ func (c *Client) UpdateSite(ctx context.Context, name string, change SiteChange)
 	return out, err
 }
 
-// AddDomain adds an extra domain to a site: a subdomain ("tenant1") or an alias ("my-app-2.test").
-func (c *Client) AddDomain(ctx context.Context, name, domain string) (Status, error) {
+// AddDomain adds an extra domain to a site: a subdomain ("tenant1") or an alias
+// ("my-app-2.test"). With suffix (ruling R7) the domain is a single label and the suffix
+// decides the alias: "inherit" marks it inherited, "loc" pins it to a suffix of its own.
+// An empty suffix keeps the legacy full-host semantics.
+func (c *Client) AddDomain(ctx context.Context, name, domain, suffix string) (Status, error) {
 	var out Status
-	err := c.send(ctx, http.MethodPost, "/v1/sites/"+url.PathEscape(name)+"/domains", map[string]string{"domain": domain}, &out)
+	body := map[string]string{"domain": domain}
+	if suffix != "" {
+		body["suffix"] = suffix
+	}
+	err := c.send(ctx, http.MethodPost, "/v1/sites/"+url.PathEscape(name)+"/domains", body, &out)
 	return out, err
 }
 

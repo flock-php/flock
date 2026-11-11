@@ -43,7 +43,7 @@ type Daemon interface {
 	LinkSite(ctx context.Context, dir, name string) (api.Status, error)
 	Proxy(ctx context.Context, name, upstream string, secured *bool) (api.Status, error)
 	UpdateSite(ctx context.Context, name string, change api.SiteChange) (api.Status, error)
-	AddDomain(ctx context.Context, name, domain string) (api.Status, error)
+	AddDomain(ctx context.Context, name, domain, suffix string) (api.Status, error)
 	PinSite(ctx context.Context, name, tool, version string) (api.Status, error)
 	CreateWorktree(ctx context.Context, req api.WorktreeCreate) (api.WorktreeCreated, error)
 	SetupWorktree(ctx context.Context, path string, again bool, db string) (api.WorktreeStatus, error)

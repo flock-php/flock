@@ -1,6 +1,7 @@
 package api
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"io"
@@ -98,6 +99,92 @@ func storedEntries(t *testing.T, b *fakeBackend, siteName string) string {
 		entries = append(entries, e.Entry)
 	}
 	return strings.Join(entries, ",")
+}
+
+// storedHosts lists a site's extra domains as the hosts they are served at.
+func storedHosts(t *testing.T, b *fakeBackend, siteName string) string {
+	t.Helper()
+	cfg := b.config(t)
+	site, _ := cfg.FindSite(siteName)
+	var hosts []string
+	for _, e := range cfg.ExtraDomains(site) {
+		hosts = append(hosts, e.Host)
+	}
+	return strings.Join(hosts, ",")
+}
+
+// domainEntry finds a site's stored extra domain entry by label and suffix marker (tld "" =
+// inherit), to pin its markers. An explicit and an inherited alias can share a label.
+func domainEntry(t *testing.T, b *fakeBackend, siteName, label, tld string) config.Domain {
+	t.Helper()
+	cfg := b.config(t)
+	site, ok := cfg.FindSite(siteName)
+	if !ok {
+		t.Fatalf("no site %q", siteName)
+	}
+	for _, d := range site.Domains {
+		if d.Label == label && d.TLD == tld {
+			return d
+		}
+	}
+	t.Fatalf("site %s has no stored domain %q with tld %q: %+v", siteName, label, tld, site.Domains)
+	return config.Domain{}
+}
+
+// statusRowsFromConfig mirrors the daemon's row assembly (daemon.go) into fakeBackend's static
+// sites, so a test can pin what SiteStatus shows after a mutation: the effective domain and
+// suffix, the raw site_tld override, and the resolved extra domains.
+func statusRowsFromConfig(t *testing.T, b *fakeBackend) {
+	t.Helper()
+	cfg := b.config(t)
+	rows := []SiteStatus{}
+	for _, site := range cfg.AllSites() {
+		row := SiteStatus{
+			Name: site.Name, Domain: cfg.Domain(site), Path: site.Path, Secured: site.Secured,
+			TLD: site.Suffix(cfg), SiteTLD: site.TLD, Domains: []SiteDomain{},
+		}
+		for _, e := range cfg.ExtraDomains(site) {
+			row.Domains = append(row.Domains, SiteDomain{Entry: e.Entry, Host: e.Host, Alias: e.Alias, Problem: e.Problem})
+		}
+		rows = append(rows, row)
+	}
+	b.sites = rows
+}
+
+// statusRows GETs /v1/status and decodes it.
+func statusRows(t *testing.T, srv *httptest.Server) Status {
+	t.Helper()
+	resp, body := call(t, "GET", srv.URL+"/v1/status", "", "")
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status: %d %s", resp.StatusCode, body)
+	}
+	var st Status
+	if err := json.Unmarshal([]byte(body), &st); err != nil {
+		t.Fatal(err)
+	}
+	return st
+}
+
+// siteRow finds a site's row in a decoded Status.
+func siteRow(t *testing.T, st Status, name string) SiteStatus {
+	t.Helper()
+	for _, s := range st.Sites {
+		if s.Name == name {
+			return s
+		}
+	}
+	t.Fatalf("no site %q in %+v", name, st.Sites)
+	return SiteStatus{}
+}
+
+// configBytes is config.json as stored, for byte-identity assertions.
+func configBytes(t *testing.T, b *fakeBackend) []byte {
+	t.Helper()
+	data, err := os.ReadFile(filepath.Join(b.root, "config.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return data
 }
 
 func serve(t *testing.T, b Backend, token string) *httptest.Server {
@@ -599,6 +686,237 @@ func TestSitesSwitchToFrankenPHPAndBack(t *testing.T) {
 	}
 	if resp, body := call(t, "PATCH", srv.URL+"/v1/sites/app", "", `{"server":"swoole"}`); resp.StatusCode != http.StatusBadRequest {
 		t.Fatalf("unknown server: %d %s", resp.StatusCode, body)
+	}
+}
+
+// TestSiteTLDPatchAndCreate pins the per-site suffix override: PATCH tld "loc" stores the
+// sanitized suffix and the row shows the effective domain and the raw override; a public TLD
+// is refused with config.json byte-identical; "" is inherit; nil keeps. Creating a site can
+// set it too, and an absent "tld" inherits.
+func TestSiteTLDPatchAndCreate(t *testing.T) {
+	b := &fakeBackend{root: t.TempDir()}
+	cfg := config.Default()
+	if err := cfg.Upsert(config.Site{Name: "demo", Path: t.TempDir()}); err != nil {
+		t.Fatal(err)
+	}
+	if err := cfg.Save(b.root); err != nil {
+		t.Fatal(err)
+	}
+	srv := serve(t, b, "")
+
+	// "LOC " is stored sanitized, as "loc".
+	if resp, body := call(t, "PATCH", srv.URL+"/v1/sites/demo", "", `{"tld":"LOC "}`); resp.StatusCode != http.StatusOK {
+		t.Fatalf("tld LOC: %d %s", resp.StatusCode, body)
+	}
+	if site, _ := b.config(t).FindSite("demo"); site.TLD != "loc" {
+		t.Fatalf("tld not stored sanitized: %+v", site)
+	}
+	statusRowsFromConfig(t, b)
+	if r := siteRow(t, statusRows(t, srv), "demo"); r.Domain != "demo.loc" || r.TLD != "loc" || r.SiteTLD != "loc" {
+		t.Fatalf("row after tld loc: %+v", r)
+	}
+
+	// A public TLD is refused, and config.json stays byte-identical.
+	before := configBytes(t, b)
+	resp, body := call(t, "PATCH", srv.URL+"/v1/sites/demo", "", `{"tld":"dev"}`)
+	if resp.StatusCode != http.StatusBadRequest || !strings.Contains(body, "public TLD") {
+		t.Fatalf("tld dev: %d %s", resp.StatusCode, body)
+	}
+	if !bytes.Equal(before, configBytes(t, b)) {
+		t.Fatal("a rejected tld changed config.json")
+	}
+
+	// "" means inherit: stored empty, and the row shows the effective global suffix.
+	if resp, body := call(t, "PATCH", srv.URL+"/v1/sites/demo", "", `{"tld":""}`); resp.StatusCode != http.StatusOK {
+		t.Fatalf("inherit: %d %s", resp.StatusCode, body)
+	}
+	if site, _ := b.config(t).FindSite("demo"); site.TLD != "" {
+		t.Fatalf("inherit not stored empty: %+v", site)
+	}
+	statusRowsFromConfig(t, b)
+	if r := siteRow(t, statusRows(t, srv), "demo"); r.Domain != "demo.test" || r.TLD != "test" || r.SiteTLD != "" {
+		t.Fatalf("row after inherit: %+v", r)
+	}
+
+	// nil means keep: a patch without tld leaves the override alone.
+	if resp, body := call(t, "PATCH", srv.URL+"/v1/sites/demo", "", `{"tld":"loc"}`); resp.StatusCode != http.StatusOK {
+		t.Fatalf("tld loc: %d %s", resp.StatusCode, body)
+	}
+	if resp, body := call(t, "PATCH", srv.URL+"/v1/sites/demo", "", `{"secured":true}`); resp.StatusCode != http.StatusOK {
+		t.Fatalf("secured: %d %s", resp.StatusCode, body)
+	}
+	site, _ := b.config(t).FindSite("demo")
+	if site.TLD != "loc" || !site.Secured {
+		t.Fatalf("a patch without tld must keep the override: %+v", site)
+	}
+
+	// R7: an explicit JSON null keeps too; "" (above) is the one that inherits.
+	if resp, body := call(t, "PATCH", srv.URL+"/v1/sites/demo", "", `{"tld":null,"node":"20"}`); resp.StatusCode != http.StatusOK {
+		t.Fatalf("tld null: %d %s", resp.StatusCode, body)
+	}
+	if site, _ := b.config(t).FindSite("demo"); site.TLD != "loc" || site.Node != "20" {
+		t.Fatalf("tld null must keep the override: %+v", site)
+	}
+
+	// A public suffix is refused on create too, and creates nothing.
+	project := t.TempDir()
+	if resp, body := call(t, "POST", srv.URL+"/v1/sites", "", `{"path":`+jsonString(project)+`,"name":"bad","tld":"dev"}`); resp.StatusCode != http.StatusBadRequest || !strings.Contains(body, "public TLD") {
+		t.Fatalf("create with tld dev: %d %s", resp.StatusCode, body)
+	}
+	if _, ok := b.config(t).FindSite("bad"); ok {
+		t.Fatal("the rejected site was created")
+	}
+
+	// "LOC " is stored sanitized on create; an absent tld inherits.
+	if resp, body := call(t, "POST", srv.URL+"/v1/sites", "", `{"path":`+jsonString(project)+`,"name":"zoo","tld":"LOC "}`); resp.StatusCode != http.StatusOK {
+		t.Fatalf("create with tld loc: %d %s", resp.StatusCode, body)
+	}
+	if site, ok := b.config(t).FindSite("zoo"); !ok || site.TLD != "loc" {
+		t.Fatalf("tld not stored on create: %+v", site)
+	}
+	if resp, body := call(t, "POST", srv.URL+"/v1/sites", "", `{"path":`+jsonString(t.TempDir())+`,"name":"plain"}`); resp.StatusCode != http.StatusOK {
+		t.Fatalf("create plain: %d %s", resp.StatusCode, body)
+	}
+	if site, _ := b.config(t).FindSite("plain"); site.TLD != "" {
+		t.Fatalf("an absent tld must inherit: %+v", site)
+	}
+}
+
+// TestAddDomainSuffix pins the structured domain add (ruling R7: the suffix parameter is only
+// a suffix, the domain is label-only): suffix "loc" stores an explicit alias, "inherit" an
+// inherited one, and the Q2 sequence demo2+loc / demo2+inherit survives a global test→loc with
+// demo2.loc untouched and demo2.test following. An absent suffix keeps today's full-host
+// semantics exactly — including R6: a new x.example on a .test site becomes alias x.example.
+func TestAddDomainSuffix(t *testing.T) {
+	b := &fakeBackend{root: t.TempDir()}
+	cfg := config.Default()
+	if err := cfg.Upsert(config.Site{Name: "demo", Path: t.TempDir()}); err != nil {
+		t.Fatal(err)
+	}
+	if err := cfg.Save(b.root); err != nil {
+		t.Fatal(err)
+	}
+	srv := serve(t, b, "")
+	add := func(body string) {
+		t.Helper()
+		if resp, out := call(t, "POST", srv.URL+"/v1/sites/demo/domains", "", body); resp.StatusCode != http.StatusOK {
+			t.Fatalf("add %s: %d %s", body, resp.StatusCode, out)
+		}
+	}
+
+	// (c) The R7 sequence: demo2 pinned to loc, demo2 marked inherit.
+	add(`{"domain":"demo2","suffix":"loc"}`)
+	if e := domainEntry(t, b, "demo", "demo2", "loc"); !e.Alias {
+		t.Fatalf("demo2 on loc: %+v, want an explicit alias", e)
+	}
+	add(`{"domain":"demo2","suffix":"inherit"}`)
+	if e := domainEntry(t, b, "demo", "demo2", ""); !e.Alias {
+		t.Fatalf("demo2 inherit: %+v, want an inherited alias", e)
+	}
+
+	// "LOC " is stored sanitized, as "loc".
+	add(`{"domain":"demo4","suffix":"LOC "}`)
+	if e := domainEntry(t, b, "demo", "demo4", "loc"); !e.Alias {
+		t.Fatalf("demo4: %+v, want an explicit alias on loc", e)
+	}
+
+	// (e) Legacy full host with the suffix key present-empty: today's string semantics give
+	// the inherited alias.
+	add(`{"domain":"app-2.test","suffix":""}`)
+	if e := domainEntry(t, b, "demo", "app-2", ""); !e.Alias {
+		t.Fatalf("legacy app-2.test: %+v, want an inherited alias", e)
+	}
+
+	// (d) R6: a NEW full host with a non-public suffix on a .test site becomes its alias.
+	add(`{"domain":"x.example"}`)
+	if e := domainEntry(t, b, "demo", "x", "example"); !e.Alias {
+		t.Fatalf("x.example: %+v, want the alias x.example (R6)", e)
+	}
+	if got := storedHosts(t, b, "demo"); got != "demo2.loc,demo2.test,demo4.loc,app-2.test,x.example" {
+		t.Fatalf("hosts before the global change: %s", got)
+	}
+
+	// The Q2 trap at API level: global test→loc follows the inherited names (demo2→demo2.loc,
+	// app-2→app-2.loc) and leaves the explicit ones (demo2.loc, demo4.loc, x.example)
+	// byte-identical.
+	if resp, body := call(t, "POST", srv.URL+"/v1/settings", "", `{"tld":"loc"}`); resp.StatusCode != http.StatusOK {
+		t.Fatalf("global tld loc: %d %s", resp.StatusCode, body)
+	}
+	if got := storedHosts(t, b, "demo"); got != "demo2.loc,demo2.loc,demo4.loc,app-2.loc,x.example" {
+		t.Fatalf("hosts after the global change: %s", got)
+	}
+	if e := domainEntry(t, b, "demo", "demo2", "loc"); !e.Alias {
+		t.Fatalf("the explicit demo2.loc changed: %+v", e)
+	}
+	if e := domainEntry(t, b, "demo", "demo2", ""); !e.Alias {
+		t.Fatalf("the inherited demo2 changed: %+v", e)
+	}
+
+	// The suffix parameter is only a suffix: a full host with it, a public suffix, bad labels
+	// and an empty domain are refused.
+	for _, body := range []string{
+		`{"domain":"x.example","suffix":"loc"}`, // R7: mutually exclusive with full-host input
+		`{"domain":"z","suffix":"dev"}`,         // public
+		`{"domain":"z","suffix":"com"}`,         // public
+		`{"domain":"bad space","suffix":"inherit"}`,
+		`{"domain":"","suffix":"loc"}`,
+	} {
+		if resp, out := call(t, "POST", srv.URL+"/v1/sites/demo/domains", "", body); resp.StatusCode != http.StatusBadRequest {
+			t.Errorf("add %s must be rejected, got %d: %s", body, resp.StatusCode, out)
+		}
+	}
+}
+
+// TestSiteTLDProxyCollision pins that a suffix change moving the site's inherited aliases onto
+// a proxy's host is refused in the existing proxy-conflict shape, with config.json untouched.
+func TestSiteTLDProxyCollision(t *testing.T) {
+	b := &fakeBackend{root: t.TempDir()}
+	cfg := config.Default()
+	cfg.TLD = "loc"
+	if err := cfg.UpsertProxy(config.Proxy{Name: "pxy", Upstream: "http://127.0.0.1:3000"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := cfg.Upsert(config.Site{Name: "app", Path: t.TempDir(), TLD: "test"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := cfg.Save(b.root); err != nil {
+		t.Fatal(err)
+	}
+	srv := serve(t, b, "")
+
+	// The site's inherited alias pxy.test sits next to the proxy's pxy.loc: allowed.
+	if resp, body := call(t, "POST", srv.URL+"/v1/sites/app/domains", "", `{"domain":"pxy","suffix":"inherit"}`); resp.StatusCode != http.StatusOK {
+		t.Fatalf("alias next to the proxy: %d %s", resp.StatusCode, body)
+	}
+
+	// Moving the site onto loc would drag the alias onto the proxy's host: refused, and the
+	// site keeps its old override with config.json byte-identical.
+	before := configBytes(t, b)
+	resp, body := call(t, "PATCH", srv.URL+"/v1/sites/app", "", `{"tld":"loc"}`)
+	if resp.StatusCode != http.StatusBadRequest || !strings.Contains(body, "pxy.loc") || !strings.Contains(body, "proxy") {
+		t.Fatalf("override onto the proxy's host: %d %s", resp.StatusCode, body)
+	}
+	if site, _ := b.config(t).FindSite("app"); site.TLD != "test" {
+		t.Fatalf("the rejected override changed the site: %+v", site)
+	}
+	if !bytes.Equal(before, configBytes(t, b)) {
+		t.Fatal("a rejected override changed config.json")
+	}
+
+	// An explicit alias onto the proxy's host is refused the same way.
+	if resp, body := call(t, "POST", srv.URL+"/v1/sites/app/domains", "", `{"domain":"pxy","suffix":"loc"}`); resp.StatusCode != http.StatusBadRequest || !strings.Contains(body, "pxy.loc") {
+		t.Fatalf("explicit alias onto the proxy's host: %d %s", resp.StatusCode, body)
+	}
+}
+
+// TestSiteStatusJSONAdditive pins SiteStatus's wire format for old clients: the existing keys
+// keep their names and order byte for byte, and the new tld and site_tld keys append last.
+func TestSiteStatusJSONAdditive(t *testing.T) {
+	row := SiteStatus{Name: "demo", Domain: "demo.loc", TLD: "loc", SiteTLD: "loc", Domains: []SiteDomain{}, Server: config.ServerFastCGI}
+	got, err := json.Marshal(row)
+	want := `{"name":"demo","domain":"demo.loc","path":"","php":"","php_source":"","php_pinned":"","php_file":"","node":"","node_source":"","node_pinned":"","node_file":"","node_shadowed":"","secured":false,"parked":false,"root":"","root_source":"","root_pinned":"","root_file":"","domains":[],"server":"fastcgi","worker":"","octane_available":false,"tld":"loc","site_tld":"loc"}`
+	if err != nil || string(got) != want {
+		t.Fatalf("got  %s\nwant %s", got, want)
 	}
 }
 

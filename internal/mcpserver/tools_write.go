@@ -78,12 +78,14 @@ func (s *server) addWriteTools(srv *mcp.Server) {
 			"- isolate (tool, version) / unisolate (tool): use a PHP or Node.js version for the site on this machine only.\n" +
 			"- pin (tool, version) / unpin (tool): write the version into the project's .flockrc (committed, so everyone " +
 			"working on the project gets it); pin without a version pins the one the site uses now.\n" +
-			"- add_domain (domain): an extra domain, a subdomain (\"tenant1\" → tenant1.<site>.test) or an alias (\"my-app-2.test\").\n" +
+			"- add_domain (domain[, suffix]): an extra domain, a subdomain (\"tenant1\" → tenant1.<site>.test) or an alias (\"my-app-2.test\"); " +
+			"with suffix the domain is a single label and the suffix makes it an alias: \"inherit\" follows the site's suffix, \"loc\" pins it to one of its own.\n" +
+			"- set_site_tld (tld): serve the site at <name>.<suffix> (e.g. loc); \"inherit\" makes it follow Flock's global suffix again.\n" +
 			"- set_server (server, worker): run PHP through FastCGI (PHP-FPM) or FrankenPHP, optionally in Octane's worker mode.\n" +
 			"- restart: restart a FrankenPHP site's process, e.g. so Octane workers load changed code.",
 		Annotations: additive(false),
 		InputSchema: schema[updateSiteIn](map[string][]any{
-			"action": {"secure", "unsecure", "isolate", "unisolate", "pin", "unpin", "add_domain", "set_server", "restart"},
+			"action": {"secure", "unsecure", "isolate", "unisolate", "pin", "unpin", "add_domain", "set_site_tld", "set_server", "restart"},
 			"tool":   {"php", "node"},
 			"server": {"fastcgi", "frankenphp"},
 			"worker": {"classic", "octane"},
@@ -683,7 +685,9 @@ type updateSiteIn struct {
 	Action  string `json:"action" jsonschema:"what to change; see the tool's description"`
 	Tool    string `json:"tool,omitempty" jsonschema:"isolate, unisolate, pin and unpin: php or node"`
 	Version string `json:"version,omitempty" jsonschema:"isolate and pin: e.g. 8.4 for PHP or 22 for Node.js"`
-	Domain  string `json:"domain,omitempty" jsonschema:"add_domain: a subdomain (tenant1) or an alias (my-app-2.test)"`
+	Domain  string `json:"domain,omitempty" jsonschema:"add_domain: a subdomain (tenant1) or an alias (my-app-2.test); with suffix: a single label (demo2)"`
+	Suffix  string `json:"suffix,omitempty" jsonschema:"add_domain: the alias's suffix: inherit (it follows the site's suffix) or one of its own (loc); left out for subdomains"`
+	TLD     string `json:"tld,omitempty" jsonschema:"set_site_tld: the site's own suffix (e.g. loc), or inherit to follow Flock's global suffix again"`
 	Server  string `json:"server,omitempty" jsonschema:"set_server: fastcgi or frankenphp"`
 	Worker  string `json:"worker,omitempty" jsonschema:"set_server with frankenphp: classic (the default) or octane (Laravel Octane's worker mode)"`
 }
@@ -741,8 +745,22 @@ func (s *server) updateSite(ctx context.Context, _ *mcp.CallToolRequest, in upda
 		if in.Domain == "" {
 			return nil, siteActionOut{}, errors.New("add_domain needs domain")
 		}
-		st, err = s.Daemon.AddDomain(ctx, site.Name, in.Domain)
+		st, err = s.Daemon.AddDomain(ctx, site.Name, in.Domain, in.Suffix)
 		msg = fmt.Sprintf("Added %s to %s.", in.Domain, site.Name)
+	case "set_site_tld":
+		tld := strings.TrimSpace(in.TLD)
+		if tld == "" {
+			return nil, siteActionOut{}, errors.New("set_site_tld needs tld (a suffix like loc, or inherit)")
+		}
+		if strings.EqualFold(tld, "inherit") {
+			tld = "" // the API stores inherit as ""
+		}
+		st, err = s.Daemon.UpdateSite(ctx, site.Name, api.SiteChange{TLD: &tld})
+		if tld == "" {
+			msg = fmt.Sprintf("%s follows Flock's global suffix again.", site.Name)
+		} else {
+			msg = fmt.Sprintf("%s is served at <name>.%s.", site.Name, tld)
+		}
 	case "set_server":
 		if in.Server != config.ServerFastCGI && in.Server != config.ServerFrankenPHP {
 			return nil, siteActionOut{}, errors.New("set_server needs server: fastcgi or frankenphp")

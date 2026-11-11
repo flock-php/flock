@@ -169,6 +169,10 @@ type SiteStatus struct {
 	Boost string `json:"boost,omitempty"`
 	// Share is the site's tunnel (`flock share`), while there is one.
 	Share *share.Status `json:"share,omitempty"`
+	// TLD is the suffix the site is served under: its SiteTLD override, the global one when
+	// SiteTLD is "" (inherit). Added last: old clients keep the field order they parse.
+	TLD     string `json:"tld"`
+	SiteTLD string `json:"site_tld"` // the raw override ("" = inherit)
 }
 
 // FrankenPHP states of a site.

@@ -132,6 +132,42 @@ func TestStatusReportsRunningServices(t *testing.T) {
 	}
 }
 
+// TestSiteTLDAppearsInStatusRows pins the daemon's rows: a site on its own suffix carries it
+// as the effective domain and the raw site_tld, an inheriting one follows the global TLD.
+func TestSiteTLDAppearsInStatusRows(t *testing.T) {
+	demo, app := t.TempDir(), t.TempDir()
+	if err := os.WriteFile(filepath.Join(demo, "index.php"), []byte("<?php\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(app, "index.php"), []byte("<?php\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	root, _ := testRoot(t, func(cfg *config.Config) {
+		if err := cfg.Upsert(config.Site{Name: "demo", Path: demo, TLD: "loc"}); err != nil {
+			t.Fatal(err)
+		}
+		if err := cfg.Upsert(config.Site{Name: "app", Path: app}); err != nil {
+			t.Fatal(err)
+		}
+	})
+	client := startDaemon(t, root)
+
+	status, err := client.Status(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	rows := map[string]api.SiteStatus{}
+	for _, s := range status.Sites {
+		rows[s.Name] = s
+	}
+	if r := rows["demo"]; r.Domain != "demo.loc" || r.TLD != "loc" || r.SiteTLD != "loc" {
+		t.Errorf("override row: %+v", r)
+	}
+	if r := rows["app"]; r.Domain != "app.test" || r.TLD != "test" || r.SiteTLD != "" {
+		t.Errorf("inherited row: %+v", r)
+	}
+}
+
 func TestStatusListsValkeyOnce(t *testing.T) {
 	root, _ := testRoot(t, func(c *config.Config) {
 		c.Services.SetExtra("valkey", config.Extra{Version: "9.1.2", Port: freePort(t)})

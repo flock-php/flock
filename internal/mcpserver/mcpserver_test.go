@@ -155,8 +155,8 @@ func (f *fakeDaemon) UpdateSite(_ context.Context, name string, c api.SiteChange
 	return f.status, nil
 }
 
-func (f *fakeDaemon) AddDomain(_ context.Context, name, domain string) (api.Status, error) {
-	f.record("domain", name, domain)
+func (f *fakeDaemon) AddDomain(_ context.Context, name, domain, suffix string) (api.Status, error) {
+	f.record("domain", name, domain, suffix)
 	return f.status, nil
 }
 
@@ -490,7 +490,11 @@ func TestUpdateSiteActions(t *testing.T) {
 		{map[string]any{"action": "pin", "tool": "php"}, `pin ["shop","php",""]`},
 		{map[string]any{"action": "unsecure"}, `update ["shop",{"secured":false}]`},
 		{map[string]any{"action": "set_server", "server": "frankenphp", "worker": "octane"}, `update ["shop",{"server":"frankenphp","worker":"octane"}]`},
-		{map[string]any{"action": "add_domain", "domain": "tenant2"}, `domain ["shop","tenant2"]`},
+		{map[string]any{"action": "add_domain", "domain": "tenant2"}, `domain ["shop","tenant2",""]`},
+		{map[string]any{"action": "add_domain", "domain": "demo2", "suffix": "loc"}, `domain ["shop","demo2","loc"]`},
+		{map[string]any{"action": "add_domain", "domain": "demo2", "suffix": "inherit"}, `domain ["shop","demo2","inherit"]`},
+		{map[string]any{"action": "set_site_tld", "tld": "loc"}, `update ["shop",{"tld":"loc"}]`},
+		{map[string]any{"action": "set_site_tld", "tld": "inherit"}, `update ["shop",{"tld":""}]`},
 		{map[string]any{"action": "restart", "site": "shop.test"}, `restart ["shop"]`},
 	} {
 		d.changes = nil
@@ -504,6 +508,9 @@ func TestUpdateSiteActions(t *testing.T) {
 	}
 	if e := callTool(t, cs, "update_site", map[string]any{"action": "isolate", "tool": "php"}, nil); !strings.Contains(e, "needs version") {
 		t.Errorf("isolate without a version: %q", e)
+	}
+	if e := callTool(t, cs, "update_site", map[string]any{"action": "set_site_tld"}, nil); !strings.Contains(e, "needs tld") {
+		t.Errorf("set_site_tld without a tld: %q", e)
 	}
 }
 
