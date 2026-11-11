@@ -51,15 +51,15 @@ Run `flock site tld loc demo`. Expect the password / administrator prompt for th
 
 ## S4 — Declined prompts: `flock install` repairs fully
 
-- [ ] Run `flock site tld dev shop` and **decline** the password / administrator prompt. Expect the error to say the site is served at `shop.dev` already and to name `flock install` to finish the switch. The config carries the override (`flock site tld` shows `site suffix .dev`), the `.env` files are retargeted, the root exists at `<data>/certs/roots/dev/` (the daemon created it unprivileged) — the OS integration is not there yet.
-- [ ] `flock status` names it: a `dns` row for `*.dev` that doesn't resolve.
-- [ ] Run `flock install`. It converges the whole set: the resolver file / NRPT rule for `.dev`, the trust for the `.dev` root (macOS: the per-suffix authorization dialog, per certificate), the bundle, the roots of every other suffix.
-- [ ] After it: `curl -sI https://shop.dev` answers with a trusted certificate; `flock status` is green for every suffix row.
+- [ ] Run `flock site tld lab shop` and **decline** the password / administrator prompt. Expect the error to say the site is served at `shop.lab` already and to name `flock install` to finish the switch. The config carries the override (`flock site tld` shows `site suffix .lab`), the `.env` files are retargeted, the root exists at `<data>/certs/roots/lab/` (the daemon created it unprivileged) — the OS integration is not there yet.
+- [ ] `flock status` names it: a `dns` row for `*.lab` that doesn't resolve.
+- [ ] Run `flock install`. It converges the whole set: the resolver file / NRPT rule for `.lab`, the trust for the `.lab` root (macOS: the per-suffix authorization dialog, per certificate), the bundle, the roots of every other suffix.
+- [ ] After it: `curl -sI https://shop.lab` answers with a trusted certificate; `flock status` is green for every suffix row.
 
 ## S5 — `flock site tld --inherit` returns
 
 - [ ] Run `flock site tld --inherit shop`. Expect the site back under the global suffix and its `.env` hosts retargeted again.
-- [ ] Nothing serves under `.dev` any more, so the sync retires it right there (expect the password / authorization prompts, the mirror of the S1 ones): the resolver file / rule is removed, the `.dev` root is untrusted and `<data>/certs/roots/dev/` deleted — the sweep S3 needed `flock install` for, run inline.
+- [ ] Nothing serves under `.lab` any more, so the sync retires it right there (expect the password / authorization prompts, the mirror of the S1 ones): the resolver file / rule is removed, the `.lab` root is untrusted and `<data>/certs/roots/lab/` deleted — the sweep S3 needed `flock install` for, run inline.
 - [ ] Pin-to-the-global case: `flock site tld xyz` on a site while the global suffix is `xyz` prints that the site **pins** `.xyz` (it stops following the global suffix); a later global flip leaves that site and `--inherit` puts it back.
 - [ ] Return the machine: global back to `.test` (`flock tld test`), the cast sites left inherited, and `flock install` converges the set. `flock status` green, `curl -sI https://shop.test` trusted, `/etc/resolver/` (macOS) / the drop-in / `Get-DnsClientNrptRule` carry `.test` only, `<data>/certs/roots/` holds no stores outside the active set.
 

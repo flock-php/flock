@@ -22,7 +22,7 @@ What you may choose:
 - `localhost` and `invalid` are refused; they are reserved for special use.
 - `local` is accepted with a warning: mDNS (Bonjour) owns `.local`, and macOS may keep resolving those names itself. Prefer `loc`.
 
-`flock status` shows the current suffix under **dns** — one row for every suffix in use. The local API takes the suffix too: `POST /v1/settings` with `{"tld": "loc"}` updates the config and migrates the site aliases; pointing the OS at a new suffix is `flock tld`'s job.
+`flock status` shows the current suffix under **dns** — one row for every suffix in use. The local API takes the suffix too: `POST /v1/settings` with `{"tld": "loc"}` updates the config and moves the aliases that follow (inherited); explicit ones stay. Pointing the OS at a new suffix is `flock tld`'s job.
 
 ### Per-site domains
 

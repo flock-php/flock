@@ -29,7 +29,7 @@ This page lists the `flock` commands. The other pages show where to find each ac
 | `flock unpark [dir]` | Stop serving a parked directory (alias: `forget`) |
 | `flock link [name] [--php 8.4] [--secure]` | Serve the current directory as `<name>.test` |
 | `flock unlink [name]` | Remove a linked site |
-| `flock site tld [suffix] [site]` | Show what a site is served under; with a suffix, serve it under its own (`<name>.<suffix>`, DNS and HTTPS provisioned — asks for your password); `--inherit` makes it follow the global TLD again |
+| `flock site tld [suffix] [site]` | Show what a site is served under; with a suffix, serve it under its own (`<name>.<suffix>`, DNS and HTTPS provisioned — asks for your password on macOS and Linux, administrator approval on Windows); `--inherit` makes it follow the global TLD again |
 | `flock sites` | List linked and parked sites, and proxies |
 | `flock proxy <name> <port\|host:port\|url> [--secure]` | Proxy `<name>.test` to a local service, e.g. a Node.js dev server |
 | `flock unproxy <name>` | Stop serving a proxy |
