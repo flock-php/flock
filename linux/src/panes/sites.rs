@@ -1,7 +1,8 @@
 //! Sites: the sites added one by one and those of the project folders, and a site's detail: its
-//! address, domains and document root, its PHP and Node.js versions, what serves it, its share and
-//! Laravel Boost. Version and root pickers offer the project's pin (or the default) first, then
-//! what isolates the site on this machine; the pin menu writes them into the project.
+//! address, domains and document root, its PHP and Node.js versions, what serves it, its Reverb
+//! server, its share and Laravel Boost. Version and root pickers offer the project's pin (or the
+//! default) first, then what isolates the site on this machine; the pin menu writes them into the
+//! project.
 //!
 //! A Node.js site has no PHP settings: its detail shows its dev server instead, which Flock starts
 //! on the site's first visit, with the server's output.
@@ -22,13 +23,13 @@ use adw::prelude::*;
 use base64::Engine;
 use gtk::{gdk, gio, glib};
 
-use super::common::{PaneView, ask_link, group, info_row, report, state_dot, status_dot};
+use super::common::{PaneView, ask_link, code_block, group, info_row, report, state_dot, status_dot, switch_row};
 use super::versions::{MenuItem, badge, button, more_menu};
 use super::worktree_job;
 use super::{Data, Pane};
 use crate::api::{
     Branches, Client, Config, Error, ExtensionReport, PhpExtension, ProxyChange, ProxyCommand, ProxyCommandChange, ProxyStatus,
-    ShareStatus, SiteChange, SiteNodeServer, SiteStatus, Status, WorktreeStatus,
+    ShareStatus, SiteChange, SiteNodeServer, SiteReverb, SiteStatus, Status, WorktreeStatus,
 };
 use crate::links::{self, Link};
 use crate::model::AppModel;
@@ -49,12 +50,15 @@ struct Inner {
     selected: RefCell<Option<String>>,
     /// The FrankenPHP site that is restarting.
     restarting: RefCell<Option<String>>,
+    /// The site whose Reverb server is restarting.
+    restarting_reverb: RefCell<Option<String>>,
     shown: RefCell<Option<String>>,
     /// The sites whose worktrees the list shows (prefs.rs).
     expanded: RefCell<Vec<String>>,
     /// The folder of the worktree being removed.
     removing: RefCell<Option<String>>,
-    /// The output of a dev server or a proxy's command, moved into each detail that shows one.
+    /// The output of a dev server, a Reverb server or a proxy's command, moved into each detail that
+    /// shows one.
     output: Rc<Output>,
 }
 
@@ -89,6 +93,7 @@ impl SitesPane {
             config: RefCell::default(),
             selected: RefCell::default(),
             restarting: RefCell::default(),
+            restarting_reverb: RefCell::default(),
             shown: RefCell::default(),
             expanded: RefCell::new(prefs::load().expanded_sites),
             removing: RefCell::default(),
@@ -136,11 +141,12 @@ impl Inner {
     fn render(self: &Rc<Self>) {
         self.ask_link();
         let key = format!(
-            "{:?}{:?}{:?}{:?}{:?}",
+            "{:?}{:?}{:?}{:?}{:?}{:?}",
             self.status.borrow(),
             self.config.borrow(),
             self.selected.borrow(),
             self.restarting.borrow(),
+            self.restarting_reverb.borrow(),
             self.removing.borrow()
         );
         if self.shown.borrow().as_deref() == Some(key.as_str()) {
@@ -452,6 +458,10 @@ impl Inner {
             groups.push(self.output.show(&server.log, server.live()));
         } else {
             groups.push(self.server_group(site).upcast());
+            groups.push(self.reverb_group(site).upcast());
+            if let Some(reverb) = &site.reverb {
+                groups.push(self.output.show(&reverb_log(site, reverb), reverb.running()));
+            }
             if site.boost == "missing" || site.boost == "outdated" {
                 groups.push(self.boost_group(site).upcast());
             }
@@ -1023,6 +1033,78 @@ impl Inner {
             move |c| c.restart_site(&n),
             move |e| {
                 this.restarting.replace(None);
+                report(&banner, e);
+                this.render();
+            },
+        );
+    }
+
+    /// Laravel Reverb for a PHP site: Run Reverb, then its state, the .env lines the app needs and
+    /// Restart. Its output follows the group.
+    fn reverb_group(self: &Rc<Self>, site: &SiteStatus) -> adw::PreferencesGroup {
+        let address = site.reverb_url();
+        let footer = if site.reverb.is_some() {
+            "WebSocket connections under /app and Laravel's broadcasts under /apps go to Reverb; every other request stays the app's. Flock doesn't change the project's .env. Rebuild the front end after changing it.".to_owned()
+        } else if site.reverb_available {
+            format!(
+                "Flock runs php artisan reverb:start for the site. Browsers reach it at {address}, with no port or certificate of its own."
+            )
+        } else {
+            "Install Laravel Reverb in the project (php artisan install:broadcasting --reverb) to run it.".to_owned()
+        };
+        let group = group("Reverb", &footer);
+        let (this, name) = (self.clone(), site.name.clone());
+        let run = switch_row("Run Reverb", "", site.reverb.is_some(), move |on| {
+            this.change(&name, SiteChange { reverb: Some(on), ..Default::default() });
+        });
+        run.set_sensitive(site.reverb_available || site.reverb.is_some());
+        group.add(&run);
+        let Some(reverb) = &site.reverb else { return group };
+
+        let (text, dot, class) = match reverb.state.as_str() {
+            "running" => (format!("Running at {address}"), "success", ""),
+            "unavailable" => (reverb.problem.clone(), "warning", "warning"),
+            _ if reverb.problem.is_empty() => ("Failed".to_owned(), "error", ""),
+            _ => (reverb.problem.clone(), "error", ""),
+        };
+        let state = adw::ActionRow::builder().title(glib::markup_escape_text(&text)).build();
+        if !class.is_empty() {
+            state.add_css_class(class);
+        }
+        state.add_prefix(&gtk::Label::builder().label("●").css_classes([dot]).build());
+        let restarting = self.restarting_reverb.borrow().as_deref() == Some(site.name.as_str());
+        if restarting {
+            state.add_suffix(&gtk::Spinner::builder().spinning(true).build());
+        }
+        let (this, name) = (self.clone(), site.name.clone());
+        let restart = button("Restart", false, move || this.restart_reverb(&name));
+        restart.set_sensitive(reverb.running() && !restarting);
+        restart.set_tooltip_text(Some("Restart Reverb, e.g. so it loads changed code"));
+        state.add_suffix(&restart);
+        group.add(&state);
+
+        if !reverb.env.is_empty() {
+            let env = reverb.env.join("\n");
+            let lines = code_block(&env);
+            let row = adw::ActionRow::builder().title("The app's .env needs:").build();
+            row.add_suffix(&button("Copy", false, {
+                let row = row.clone();
+                move || row.clipboard().set_text(&env)
+            }));
+            group.add(&row);
+            group.add(&lines);
+        }
+        group
+    }
+
+    fn restart_reverb(self: &Rc<Self>, name: &str) {
+        self.restarting_reverb.replace(Some(name.to_owned()));
+        self.render();
+        let (this, banner, n) = (self.clone(), self.banner.clone(), name.to_owned());
+        self.model.perform(
+            move |c| c.restart_reverb(&n),
+            move |e| {
+                this.restarting_reverb.replace(None);
                 report(&banner, e);
                 this.render();
             },
@@ -2219,8 +2301,8 @@ fn slug(branch: &str) -> String {
     out.trim_matches('-').to_owned()
 }
 
-/// What a site's list row warns about: the site, its document root, a domain, or its FrankenPHP. A
-/// dev server that failed shows in its dot.
+/// What a site's list row warns about: the site, its document root, a domain, its FrankenPHP or its
+/// Reverb server. A dev server that failed shows in its dot.
 fn problem(site: &SiteStatus) -> Option<String> {
     if let Some(p) = site.problem.clone().or_else(|| site.notice.clone()) {
         return Some(p);
@@ -2232,6 +2314,17 @@ fn problem(site: &SiteStatus) -> Option<String> {
         .as_ref()
         .filter(|f| site.server == "frankenphp" && (f.state == "failed" || f.state == "unavailable") && !f.problem.is_empty())
         .map(|f| f.problem.clone())
+        .or_else(|| {
+            site.reverb
+                .as_ref()
+                .filter(|r| !site.is_node() && (r.state == "failed" || r.state == "unavailable") && !r.problem.is_empty())
+                .map(|r| r.problem.clone())
+        })
+}
+
+/// The service log with a Reverb server's output.
+fn reverb_log(site: &SiteStatus, reverb: &SiteReverb) -> String {
+    if reverb.log.is_empty() { format!("reverb-{}", site.name) } else { reverb.log.clone() }
 }
 
 /// A proxy's suffixes in the list: why it isn't served, whether something answers at its
