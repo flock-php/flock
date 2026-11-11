@@ -69,7 +69,7 @@ These tools change things, so clients ask you first:
 | `link_site` | Serve a project as a new site |
 | `proxy_site` | Proxy `<name>.test` to a local service, e.g. a dashboard or a Docker container, optionally with the command that starts its server |
 | `proxy_server` | Start or stop the server of a proxy that has a command |
-| `update_site` | Turn HTTPS on or off, isolate, unisolate, pin or unpin a version, add a domain, switch between FrankenPHP (with or without Octane) and PHP-FPM, serve it as a PHP site or a Node.js app, run or stop its Reverb server, or restart or stop it |
+| `update_site` | Turn HTTPS on or off, isolate, unisolate, pin or unpin a version, add a domain, switch between FrankenPHP (with or without Octane) and PHP-FPM, serve it as a PHP site or a Node.js app, run, stop or restart its Reverb server, or restart or stop it |
 | `set_debugging` | Turn Xdebug or dump capture on or off |
 | `create_database` | Create a database in PostgreSQL, MySQL or MariaDB |
 | `create_worktree` | Create a [git worktree](worktrees.md) of a site on a branch (or one Flock names), at its own URL, and wait while Flock sets it up |

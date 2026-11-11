@@ -136,7 +136,7 @@ Run them without a site name inside the project folder.
 
 Flock can run a Laravel app's [Reverb](https://reverb.laravel.com) server for its site. Browsers reach it at the site's own address, `wss://acme.test/app`, through Flock's web server, so there's no port to open and no separate certificate. Flock runs `php artisan reverb:start` in the project with the site's PHP version, on a loopback port of its own. The project needs Laravel Reverb (`php artisan install:broadcasting --reverb`).
 
-Only Reverb's traffic goes to it: WebSocket connections under `/app/` and the signed requests Laravel broadcasts through under `/apps/`. Every other request on those paths stays the app's, so a panel at `/app` keeps working.
+Only Reverb's traffic goes to it: WebSocket connections under `/app/` and the signed requests Laravel broadcasts through under `/apps/`. Every other request on those paths stays the app's, so a panel at `/app` keeps working. This needs Reverb's default paths, so leave `REVERB_SERVER_PATH` unset.
 
 The app has to send its broadcasts and its Echo client to the site rather than to Reverb's own port. Flock shows the `.env` lines that do this, but doesn't change the project's `.env` itself:
 
@@ -151,7 +151,7 @@ On a site served over HTTP only, they are `REVERB_PORT=80` and `REVERB_SCHEME=ht
 Restart the Reverb server to load changed code. It restarts on its own, so the site's FrankenPHP keeps running, and restarting FrankenPHP keeps Reverb's connections. Reverb's output goes to the `reverb-acme` [log](logs.md).
 
 :::app
-Reverb isn't in the app yet. Use the CLI commands below, or ask an [AI agent](ai.md) to turn it on: Flock's `update_site` tool runs and stops it.
+In **Settings → Sites**, select the site and turn on **Run Reverb** in its **Reverb** section. It shows the `.env` lines with a **Copy** button, Reverb's state and output, and **Restart**.
 :::
 
 :::cli
