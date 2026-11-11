@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"os"
 	"os/exec"
@@ -412,6 +413,14 @@ func ensurePrivileged(cmd *cobra.Command, s *state, _ string, ca *certs.CA) erro
 	}
 	return nil
 }
+
+// retireTLD: nothing to remove on Linux, verified. systemd-resolved's routing lives in one
+// drop-in, dns.ResolvedFile(), which names the TLD in its Domains= line; setupPrivileged
+// compares dns.ResolvedContent for the current TLD and rewrites the file wholesale (restarting
+// systemd-resolved), so provisioning the new TLD deletes the old one's routing with the same
+// write. There is no per-TLD file to retire: the SELinux port label and everything else the
+// drop-in references are shared by TLDs.
+func retireTLD(*state, io.Writer, string) error { return nil }
 
 // resolvedMissing says how to switch to systemd-resolved, which Flock sends tld's lookups through:
 // Ubuntu and Fedora use it, Arch doesn't until it is enabled. The link makes programs that read

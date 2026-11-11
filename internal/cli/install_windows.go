@@ -5,6 +5,7 @@ import (
 	"encoding/csv"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"os"
 	"os/exec"
@@ -592,6 +593,15 @@ func ensurePrivileged(cmd *cobra.Command, s *state, _ string, ca *certs.CA) erro
 	done()
 	return nil
 }
+
+// retireTLD: nothing to remove per TLD on Windows, verified. Both TLD-bound pieces are replaced
+// wholesale, not added to, by the privileged setup that provisions the new TLD: dns.SetNRPT
+// deletes every Flock NRPT rule before installing the one for the new TLD, and ensurePrivileged
+// re-runs privileged-setup, whose hosts.InstallHelper reconfigures the service for the new TLD
+// (its single marked block in the hosts file is rewritten from the daemon's domain list, which
+// the reload already moved). The --remove path tears the helper, rule and CA trust down whole —
+// that is uninstall, and calling it here would prompt for elevation twice for nothing.
+func retireTLD(*state, io.Writer, string) error { return nil }
 
 // bundledHelper returns the running flock.exe and the flock-helper.exe next to it, which the
 // elevated setup (privilegedSetup) installs.

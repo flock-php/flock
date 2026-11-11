@@ -24,7 +24,7 @@ func newInstallCommand() *cobra.Command {
 
 	cmd := &cobra.Command{
 		Use:   "install",
-		Short: "Set Flock up: shims on PATH, background daemon, .test DNS and trusted HTTPS (asks for your password once)",
+		Short: "Set Flock up: shims on PATH, background daemon, local DNS and trusted HTTPS (asks for your password once)",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			s, err := load()

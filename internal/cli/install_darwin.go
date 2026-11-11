@@ -2,6 +2,7 @@ package cli
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -303,22 +304,52 @@ func securityError(err error, out []byte) error {
 // runPrivileged runs a command as root. At a terminal that is sudo, which asks for the password
 // there; without one (the Flock app runs `flock install`) macOS' own password dialog asks instead.
 func runPrivileged(cmd *cobra.Command, prompt, exe string, args ...string) error {
+	return runPrivilegedTo(cmd.OutOrStdout(), cmd.ErrOrStderr(), prompt, exe, args...)
+}
+
+// runPrivilegedTo is runPrivileged writing to plain writers: the per-OS TLD hooks (retireTLD)
+// get an io.Writer, not a cobra command.
+func runPrivilegedTo(out, errOut io.Writer, prompt, exe string, args ...string) error {
 	if term.IsTerminal(int(os.Stdin.Fd())) {
 		sudo := exec.Command("sudo", append([]string{exe}, args...)...)
-		sudo.Stdin, sudo.Stdout, sudo.Stderr = os.Stdin, cmd.OutOrStdout(), cmd.ErrOrStderr()
+		sudo.Stdin, sudo.Stdout, sudo.Stderr = os.Stdin, out, errOut
 		return sudo.Run()
 	}
 
-	out, err := exec.Command("osascript", administratorScript(prompt, exe, args...)...).CombinedOutput()
-	if text := strings.TrimSpace(string(out)); err != nil {
+	result, err := exec.Command("osascript", administratorScript(prompt, exe, args...)...).CombinedOutput()
+	if text := strings.TrimSpace(string(result)); err != nil {
 		// -128: the user cancelled the password dialog.
 		if strings.Contains(text, "(-128)") {
 			return errDeclined
 		}
 		return fmt.Errorf("%v: %s", err, text)
 	} else if text != "" {
-		cmd.Println(text)
+		fmt.Fprintln(out, text)
 	}
+	return nil
+}
+
+// retireTLD removes macOS' resolver file for a TLD Flock stops serving: /etc/resolver/<old>
+// keeps sending .<old> to Flock's DNS server otherwise, and a stale one shadows a setup the
+// user makes for that suffix elsewhere. Removing it needs root, so it is privileged-setup
+// --remove, which deletes the file only while it carries Flock's marker: a resolver file
+// someone else owns is left alone. That check runs here first as well, so a suffix macOS
+// never sent to Flock costs no password prompt.
+func retireTLD(s *state, out io.Writer, old string) error {
+	data, _ := os.ReadFile(dns.ResolverFile(old))
+	if !strings.HasPrefix(string(data), "# Managed by Flock") {
+		return nil
+	}
+	self, err := os.Executable()
+	if err != nil {
+		return err
+	}
+	fmt.Fprintf(out, "→ removing the old *.%s DNS setup (needs your password)…\n", old)
+	if err := runPrivilegedTo(out, out, "Flock wants to remove its *."+old+" DNS setup.",
+		self, "privileged-setup", "--remove", "--tld", old); err != nil {
+		return fmt.Errorf("remove the old *.%s DNS setup: %w", old, err)
+	}
+	fmt.Fprintf(out, "✓ removed %s\n", dns.ResolverFile(old))
 	return nil
 }
 
