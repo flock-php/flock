@@ -9,6 +9,10 @@ flock tld         # show the current TLD
 flock tld loc     # switch: acme.loc from now on
 ```
 
+:::app
+The macOS app asks for the same choice in **Settings → General → Network**: pick **.test**, **.loc** or **.local**, or type your own under **Custom…**. What you pick is checked against the rules below as you type: refusals show in red and disable **Apply**, warnings in orange, and a normalized name previews in green. **Apply** runs the whole switch, the password prompt included. Decline the password and the config is on the new suffix already; the app tells you to finish with `flock tld` in a terminal.
+:::
+
 `loc` is the usual choice. A switch touches everything that names the suffix: site aliases that end in the old one move to the new one (`app-2.test` → `app-2.loc`), the `.env` files of linked sites and worktrees are rewritten (`APP_URL`, `SESSION_DOMAIN`, `SANCTUM_STATEFUL_DOMAINS` and `MAIL_FROM` now name the new hosts), the daemon reloads, the old suffix's DNS setup is retired and the new one is pointed at Flock, and the certificate authority — its root is name-constrained to the TLD — is recreated and re-trusted, so browsers keep trusting your sites' HTTPS. macOS and Linux ask for your password for the DNS and certificate steps, and Windows asks for administrator approval. If you decline a prompt, the config is on the new suffix already; run `flock install` to finish the setup.
 
 What you may choose:

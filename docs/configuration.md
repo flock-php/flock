@@ -30,7 +30,7 @@ Flock keeps PHP and Node builds, service data, certificates, caught mail and log
 
 Global settings live in `config.json` in the data directory. Edit them through the app or the CLI rather than by hand, because the daemon owns this file. It contains:
 
-- the TLD, the local suffix sites are served under (default `test`; `flock tld` switches it, see [Choosing the local domain](domains.md#choosing-the-local-domain)),
+- the TLD, the local suffix sites are served under (default `test`; `flock tld` switches it, and so does the **Domain** picker in the macOS app's **Settings → General → Network**, see [Choosing the local domain](domains.md#choosing-the-local-domain)),
 - the default PHP and Node versions,
 - the release channel (stable, beta), and the Xdebug and dump capture switches,
 - parked folders and linked sites, with their PHP and Node versions, HTTPS state and extra domains,
