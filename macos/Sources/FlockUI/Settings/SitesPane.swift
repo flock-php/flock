@@ -41,6 +41,47 @@ struct SitesPane: View {
         get { sharingState.wrappedValue }
         nonmutating set { sharingState.wrappedValue = newValue }
     }
+    /// The Domain row's draft, the daemon's verdict and the rules around them; one site's detail
+    /// is open, and a site switch resets it.
+    private let suffixModelState = State<SuffixCheckModel>(initialValue: SuffixCheckModel())
+    private var suffixModel: SuffixCheckModel {
+        get { suffixModelState.wrappedValue }
+        nonmutating set { suffixModelState.wrappedValue = newValue }
+    }
+    /// The bundled CLI's `flock site tld` is running.
+    private let applyingState = State<Bool>(initialValue: false)
+    private var applying: Bool {
+        get { applyingState.wrappedValue }
+        nonmutating set { applyingState.wrappedValue = newValue }
+    }
+    /// The site the sheet is switching, and the domain it switches to; nil once it is closed.
+    private let applySiteState = State<String?>(initialValue: nil)
+    private var applySite: String? {
+        get { applySiteState.wrappedValue }
+        nonmutating set { applySiteState.wrappedValue = newValue }
+    }
+    private let applyTLDState = State<String?>(initialValue: nil)
+    private var applyTLD: String? {
+        get { applyTLDState.wrappedValue }
+        nonmutating set { applyTLDState.wrappedValue = newValue }
+    }
+    /// The `flock site tld` output as it streams in.
+    private let applyLinesState = State<[String]>(initialValue: [])
+    private var applyLines: [String] {
+        get { applyLinesState.wrappedValue }
+        nonmutating set { applyLinesState.wrappedValue = newValue }
+    }
+    /// The switch stopped at a declined password prompt.
+    private let applyDeclinedState = State<Bool>(initialValue: false)
+    private var applyDeclined: Bool {
+        get { applyDeclinedState.wrappedValue }
+        nonmutating set { applyDeclinedState.wrappedValue = newValue }
+    }
+    private let showApplySheetState = State<Bool>(initialValue: false)
+    private var showApplySheet: Bool {
+        get { showApplySheetState.wrappedValue }
+        nonmutating set { showApplySheetState.wrappedValue = newValue }
+    }
 
     /// The Add Proxy alert is open; its name and upstream typed so far.
     private let addingProxyState = State<Bool>(initialValue: false)
@@ -146,6 +187,18 @@ struct SitesPane: View {
         }
         .sheet(item: extensionsState.projectedValue) { site in
             SiteExtensionsSheet(site: site)
+        }
+        .sheet(isPresented: showApplySheetState.projectedValue) {
+            if let applySite, let applyTLD {
+                ProvisionSheet(
+                    title: "Switching \(applySite) to .\(applyTLD)…",
+                    failedTitle: "Switching \(applySite) to .\(applyTLD) didn’t finish",
+                    lines: applyLines,
+                    running: applying,
+                    declined: applyDeclined,
+                    footer: "You declined the password. Flock’s config is on .\(applyTLD); finish by running `flock install` in a terminal."
+                )
+            }
         }
         .sheet(isPresented: Binding(get: { sharing != nil }, set: { if !$0 { sharing = nil } })) {
             ShareSheet(site: sharing ?? "") { allow, debug in
@@ -414,6 +467,7 @@ struct SitesPane: View {
     /// The selected site: its address and actions, then Site, Versions and Server sections of labelled settings.
     private func detail(_ site: Status.Site, phpVersions: [String], nodeMajors: [String]) -> some View {
         let store = model.settings
+        let global = model.status?.dns.tld ?? "test"
         return VStack(alignment: .leading, spacing: 20) {
             HStack(alignment: .top, spacing: 10) {
                 VStack(alignment: .leading, spacing: 2) {
@@ -468,6 +522,27 @@ struct SitesPane: View {
                     .labelsHidden()
                     .toggleStyle(.switch)
                     .controlSize(.small)
+                }
+                field("Domain") {
+                    VStack(alignment: .leading, spacing: 6) {
+                        HStack(spacing: 8) {
+                            SuffixPicker(store: store, suffixModel: suffixModel, current: global, allowInherit: true)
+                            Button {
+                                if suffixModel.draft == SuffixValue.inherit {
+                                    Task { await applySuffix(site, inherit: true) }
+                                } else if let check = suffixModel.check {
+                                    Task { await applySuffix(site, inherit: false, tld: check.normalized) }
+                                }
+                            } label: {
+                                BusyLabel(title: "Apply", busyTitle: "Applying…", isBusy: applying)
+                            }
+                            .disabled(!canApplySuffix(site) || applying)
+                        }
+                        SuffixFeedback(suffixModel: suffixModel, candidate: suffixModel.candidate(current: site.tld))
+                        Text("The suffix \(site.name) is served under. Inherit follows Flock's global (.\(global)); a picked suffix pins \(site.name) to its own.")
+                            .font(.caption).foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
                 }
                 field("Domains") {
                     VStack(alignment: .leading, spacing: 3) {
@@ -548,6 +623,75 @@ struct SitesPane: View {
                     selectionState.wrappedValue = worktree.id
                 }
             }
+        }
+        // A site's details are the Domain row's owner: switching sites resets the one picker.
+        .onChange(of: site.siteTld, initial: true) { _, _ in
+            prefillSuffix(site)
+        }
+    }
+
+    /// What the Domain menu shows for a site's raw suffix: "" follows the global suffix
+    /// (`SuffixValue.inherit`), a preset is itself, anything else is edited in the custom field.
+    private func domainTag(for siteTld: String, global: String) -> String {
+        if siteTld.isEmpty { return SuffixValue.inherit }
+        return SuffixPicker.presets.contains(siteTld) ? siteTld : SuffixValue.custom
+    }
+
+    /// Points the picker at the site's own suffix: its raw value picks the menu, and a suffix
+    /// the menu doesn't offer sits in the custom field (the check is the picker's, starting clean).
+    private func prefillSuffix(_ site: Status.Site) {
+        suffixModel.reset()
+        let tag = domainTag(for: site.siteTld, global: model.status?.dns.tld ?? "test")
+        switch tag {
+        case SuffixValue.custom:
+            suffixModel.custom = site.siteTld
+        default:
+            suffixModel.draft = tag
+        }
+    }
+
+    /// Apply: a suffix needs the daemon's verdict on a domain the site doesn't have; Inherit is
+    /// an Apply as soon as the site pins a suffix today (there is nothing to check).
+    private func canApplySuffix(_ site: Status.Site) -> Bool {
+        if suffixModel.draft == SuffixValue.inherit {
+            return !site.siteTld.isEmpty
+        }
+        return suffixModel.canApply(current: site.tld)
+    }
+
+    /// Runs the bundled CLI's `flock site tld` for one site, streaming its output in the sheet —
+    /// the same runner as General's global switch. On success the refresh moves the site's rows.
+    private func applySuffix(_ site: Status.Site, inherit: Bool, tld: String = "") async {
+        let store = model.settings
+        applying = true
+        defer { applying = false }
+        applySite = site.name
+        applyTLD = inherit ? (model.status?.dns.tld ?? "test") : tld
+        applyLines = []
+        applyDeclined = false
+        showApplySheet = true
+        guard let binary = model.installation.bundledFlock else {
+            let command = inherit ? "flock site tld --inherit \(site.name)" : "flock site tld \(tld) \(site.name)"
+            applyLines = ["This build of Flock has no bundled CLI — run `\(command)` in a terminal."]
+            return
+        }
+        let arguments = inherit ? ["site", "tld", "--inherit", site.name] : ["site", "tld", tld, site.name]
+        let result = await Installation.run(binary, arguments) { line in
+            // Lines arrive from the pipe's thread; late ones lose to the final output below.
+            Task { @MainActor in
+                if applying {
+                    applyLines.append(line)
+                }
+            }
+        }
+        applyLines = result.output.split(separator: "\n").map(String.init)
+        applyDeclined = result.permissionDeclined
+        if result.ok {
+            showApplySheet = false
+            applySite = nil
+            applyTLD = nil
+            suffixModel.reset()
+            await store.refresh()
         }
     }
 
