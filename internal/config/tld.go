@@ -44,7 +44,7 @@ func ValidateTLD(tld string) (string, error) {
 		return "", fmt.Errorf("%q is a public TLD: sites under .%s would shadow real internet names", tld, tld)
 	}
 	if tld == "local" {
-		return ".local is owned by mDNS (Bonjour, RFC 6767): macOS may keep resolving it itself and browsers special-case it — .loc is the usual choice", nil
+		return ".local is owned by mDNS (Bonjour, RFC 6762; reserved for that use by RFC 8375): macOS may keep resolving it itself and browsers special-case it — .loc is the usual choice", nil
 	}
 	return "", nil
 }
