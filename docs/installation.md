@@ -14,7 +14,7 @@ The setup:
 
 - adds Flock's `bin` folder (with the `php`, `composer`, `node` and `npm` shims) to your PATH,
 - registers the **Flock Daemon** scheduled task, which starts at sign-in without a console window,
-- routes `*.test` to Flock's DNS server with a name-resolution policy rule, and installs a small helper service that keeps a `# BEGIN Flock` block in your hosts file as a fallback,
+- routes `*.<tld>` to Flock's DNS server with a name-resolution policy rule, and installs a small helper service that keeps a `# BEGIN Flock` block in your hosts file as a fallback,
 - adds Flock's certificate authority to the Trusted Root store.
 
 ## macOS
@@ -26,7 +26,7 @@ The setup:
 3. Optionally keep **Open Flock's menu bar app at login** checked.
 4. Click **Set Up Flock**. macOS asks for your password twice: once to add the DNS resolver, and once to trust Flock's certificate authority.
 
-The setup adds the shims to your PATH, registers a launchd agent for the daemon, writes `/etc/resolver/test` so `.test` names go to Flock's DNS server, and trusts the certificate authority in your login keychain.
+The setup adds the shims to your PATH, registers a launchd agent for the daemon, writes `/etc/resolver/<tld>` so local names go to Flock's DNS server, and trusts the certificate authority in your login keychain.
 
 ## Linux
 
@@ -59,7 +59,7 @@ The setup:
 
 - adds Flock's `bin` folder to your PATH, in `~/.bashrc`, `~/.zshrc`, fish's `conf.d` and `~/.config/environment.d` for apps started from the desktop,
 - registers the `flock@<user>` systemd service, which starts with your computer,
-- tells systemd-resolved to send `*.test` lookups to Flock's DNS server,
+- tells systemd-resolved to send `*.<tld>` lookups to Flock's DNS server,
 - adds Flock's certificate authority to the system's trust store, to Firefox through a policy, and to the certificate databases of Chrome and other Chromium browsers.
 
 Flock also puts an icon in the top bar with its status, your sites, mail, dumps and logs. KDE shows it on its own, and GNOME with the AppIndicator extension, which Ubuntu includes. On Fedora's GNOME, install **AppIndicator and KStatusNotifierItem Support** to get it. Without the icon, Flock is a regular window that quits when you close it, and the daemon keeps running.
@@ -81,8 +81,12 @@ Open a **new** terminal (so it picks up the new PATH) and run:
 flock status
 ```
 
-It shows the daemon, web server, DNS and every service, and whether `.test` names resolve. `php -v` and `node -v` should print Flock's versions.
+It shows the daemon, web server, DNS and every service, and whether site names resolve under your TLD. `php -v` and `node -v` should print Flock's versions.
 :::
+
+## Changing the local domain
+
+Flock serves sites under `test` by default. `flock tld loc` switches every site to a suffix of your choice (see [Choosing the local domain](domains.md#choosing-the-local-domain)). The command re-runs the DNS and certificate setup for the new suffix, so it needs the same privileges as the setup above: macOS asks for your password, Windows asks for administrator approval, and Linux rewrites the systemd-resolved drop-in. If you decline a prompt, the config is on the new suffix already; run `flock install` to finish.
 
 ## Ports
 

@@ -30,7 +30,7 @@ Flock keeps PHP and Node builds, service data, certificates, caught mail and log
 
 Global settings live in `config.json` in the data directory. Edit them through the app or the CLI rather than by hand, because the daemon owns this file. It contains:
 
-- the TLD (default `test`),
+- the TLD, the local suffix sites are served under (default `test`; `flock tld` switches it, see [Choosing the local domain](domains.md#choosing-the-local-domain)),
 - the default PHP and Node versions,
 - the release channel (stable, beta), and the Xdebug and dump capture switches,
 - parked folders and linked sites, with their PHP and Node versions, HTTPS state and extra domains,
@@ -41,7 +41,7 @@ Global settings live in `config.json` in the data directory. Edit them through t
 | Port | Used for |
 | --- | --- |
 | 80 / 443 | Web server (HTTP / HTTPS) |
-| 53535 | DNS for `.test` (macOS and Linux; Windows uses 53) |
+| 53535 | DNS for the local TLD (macOS and Linux; Windows uses 53) |
 | 2525 | Mail catcher (SMTP) |
 | 9912 | Dump server |
 | 9003 | Xdebug client (your editor) |
