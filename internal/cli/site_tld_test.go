@@ -567,12 +567,12 @@ func TestSweepStaleRootsRetiresStoresOutsideTheActiveSet(t *testing.T) {
 
 	// Provisioning is the intersection: the stale stores are on disk and not in the list.
 	want := []string{filepath.Join(certsDir, "roots", "loc", "ca.crt")}
-	if got := activeSuffixRootCerts(root, active); !slices.Equal(got, want) {
+	if got := activeSuffixRootCerts(root, "test", active); !slices.Equal(got, want) {
 		t.Fatalf("provisioning list: got %v, want %v", got, want)
 	}
 
 	var calls []string
-	swept, err := sweepStaleRoots(io.Discard, certsDir, active, sweepOpts{
+	swept, err := sweepStaleRoots(io.Discard, certsDir, "test", active, sweepOpts{
 		untrust: func(_ io.Writer, suffix, certPath, fingerprint string) error {
 			calls = append(calls, suffix+"|"+certPath+"|"+fingerprint)
 			return nil
@@ -616,7 +616,7 @@ func TestSweepStaleRootsRetiresStoresOutsideTheActiveSet(t *testing.T) {
 	if _, err := certs.Ensure(filepath.Join(certsDir, "roots", "retired2"), "retired2"); err != nil {
 		t.Fatal(err)
 	}
-	captured, err := sweepStaleRoots(io.Discard, certsDir, active, sweepOpts{remove: false})
+	captured, err := sweepStaleRoots(io.Discard, certsDir, "test", active, sweepOpts{remove: false})
 	if err != nil {
 		t.Fatalf("capture sweep: %v", err)
 	}
@@ -629,6 +629,64 @@ func TestSweepStaleRootsRetiresStoresOutsideTheActiveSet(t *testing.T) {
 	}
 	if !fileExists(filepath.Join(certsDir, "roots", "retired2")) {
 		t.Error("the capture-only sweep must leave the store for the elevated untrust run")
+	}
+}
+
+// TestSweepRetiresAnAdoptedGlobalStore pins the adoption end to end at the shared layer: a
+// site pinned .loc while the global suffix was test (its store at roots/loc), the global
+// switched to loc. dirFor maps the suffix to the store dir — the global root is
+// certsDir/ca.crt — so the active set's name now collides with its own store directory:
+// provisioning must not carry roots/loc/ca.crt beside the global root (one suffix, two
+// trusted roots), and the sweep retires the leftover store — untrust with the captured
+// fingerprint, directory deleted — leaving the global root intact.
+func TestSweepRetiresAnAdoptedGlobalStore(t *testing.T) {
+	root := t.TempDir()
+	certsDir := filepath.Join(root, "certs")
+	global, err := certs.Ensure(certsDir, "loc") // the global root for loc lives at the store dir
+	if err != nil {
+		t.Fatal(err)
+	}
+	siteStore, err := certs.Ensure(filepath.Join(certsDir, "roots", "loc"), "loc") // left by the pinned site
+	if err != nil {
+		t.Fatal(err)
+	}
+	fp, err := certs.FileFingerprint(siteStore.CertPath())
+	if err != nil {
+		t.Fatal(err)
+	}
+	globalBefore, err := os.ReadFile(global.CertPath())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	active := []string{"loc"}
+	if got := activeSuffixRootCerts(root, "loc", active); got != nil {
+		t.Errorf("provisioning list: got %v, want none (the global root is passed separately)", got)
+	}
+
+	var calls []string
+	swept, err := sweepStaleRoots(io.Discard, certsDir, "loc", active, sweepOpts{
+		untrust: func(_ io.Writer, suffix, certPath, fingerprint string) error {
+			calls = append(calls, suffix+"|"+certPath+"|"+fingerprint)
+			return nil
+		},
+		remove: true,
+	})
+	if err != nil {
+		t.Fatalf("sweep: %v", err)
+	}
+	if len(swept) != 1 || swept[0].suffix != "loc" || swept[0].fingerprint != fp {
+		t.Fatalf("swept stores: %+v, want loc with fingerprint %s", swept, fp)
+	}
+	if len(calls) != 1 || calls[0] != "loc|"+siteStore.CertPath()+"|"+fp {
+		t.Errorf("untrust hook calls: %v", calls)
+	}
+	if fileExists(filepath.Join(certsDir, "roots", "loc")) {
+		t.Error("the adopted store must be deleted by the sweep")
+	}
+	globalAfter, err := os.ReadFile(global.CertPath())
+	if err != nil || string(globalAfter) != string(globalBefore) {
+		t.Errorf("the global root touched: %v", err)
 	}
 }
 

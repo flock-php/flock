@@ -15,12 +15,12 @@ import (
 // under <root>/certs/roots whose suffix left the set (trusted roots outside the active set
 // are as stale as stale routing; the CLI sweep retires them, the warning names them). Tests
 // move the directories.
-func staleSuffixes(root string, active []string) []string {
+func staleSuffixes(root, global string, active []string) []string {
 	var dnsSide []string
 	if runtime.GOOS == "darwin" {
 		dnsSide = dns.StaleResolvers(dns.ResolverDir, active)
 	} else {
 		dnsSide = dns.StaleResolved(dns.ResolvedFile(), active)
 	}
-	return mergedStale(dnsSide, staleRootSuffixes(root, active))
+	return mergedStale(dnsSide, staleRootSuffixes(root, global, active))
 }

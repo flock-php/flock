@@ -388,7 +388,7 @@ func ensurePrivileged(cmd *cobra.Command, s *state, _ string, ca *certs.CA) erro
 	// the name. The list is the disk ∩ the active set (F1): a store the sweep left behind
 	// (unprivileged retirement, no sync ran) never reaches the anchors, and the wholesale
 	// anchor rewrite retires the suffixes that left the active set.
-	caPaths := append([]string{ca.CertPath()}, activeSuffixRootCerts(s.root, s.cfg.ActiveSuffixes())...)
+	caPaths := append([]string{ca.CertPath()}, activeSuffixRootCerts(s.root, s.cfg.TLD, s.cfg.ActiveSuffixes())...)
 	anchors, err := wantAnchors(s.root, name, caPaths)
 	if err != nil {
 		return err

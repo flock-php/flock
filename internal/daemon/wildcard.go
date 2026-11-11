@@ -61,7 +61,7 @@ func (d *daemon) checkWildcard() {
 	for _, tld := range suffixes {
 		states[tld] = suffixState(cfg, srv, dnsErr, tld)
 	}
-	stale := staleSuffixes(d.root, suffixes)
+	stale := staleSuffixes(d.root, cfg.TLD, suffixes)
 
 	d.mu.Lock()
 	d.wildcards, d.stale = states, stale

@@ -27,6 +27,40 @@ func permitted(ca *CA, suffix string) bool {
 	return slices.Contains(ca.cert.PermittedDNSDomains, "."+suffix)
 }
 
+// TestScanRetiresAnAdoptedGlobalStore pins the scan side of the adoption: a site pinned the
+// suffix that the global switch later adopts (roots/loc/ was created while the global suffix
+// was test; the global becomes loc). dirFor maps the suffix to the store dir — the global
+// root lives at dir/ca.crt, and roots/<global>/ is never created going forward — so the
+// existing roots/loc/ must never join provisioning beside the global root (two trusted roots
+// for one suffix), and the sweep retires it. While the global suffix is a different one,
+// roots/loc is a live site root: provisioning lists it, the sweep leaves it.
+func TestScanRetiresAnAdoptedGlobalStore(t *testing.T) {
+	dir := t.TempDir()
+	if _, err := Ensure(filepath.Join(dir, "roots", "loc"), "loc"); err != nil {
+		t.Fatal(err)
+	}
+
+	// global = test: roots/loc is a site root, active and provisioned.
+	if got, want := ActiveRootCerts(dir, "test", []string{"loc", "test"}), []string{filepath.Join(dir, "roots", "loc", "ca.crt")}; !slices.Equal(got, want) {
+		t.Fatalf("provisioning with global test: got %v, want %v", got, want)
+	}
+	if got := StaleRootDirs(dir, "test", []string{"loc", "test"}); got != nil {
+		t.Fatalf("stale with global test: got %v, want none", got)
+	}
+
+	// The global suffix adopts loc: the global root is dir/ca.crt, and the site store
+	// roots/loc left by the adoption is out of provisioning and swept.
+	if _, err := Ensure(dir, "loc"); err != nil {
+		t.Fatal(err)
+	}
+	if got := ActiveRootCerts(dir, "loc", []string{"loc"}); got != nil {
+		t.Fatalf("provisioning after the adoption: got %v, want none (the global root is dir/ca.crt)", got)
+	}
+	if got := StaleRootDirs(dir, "loc", []string{"loc"}); !slices.Equal(got, []string{"loc"}) {
+		t.Fatalf("stale after the adoption: got %v, want [loc]", got)
+	}
+}
+
 func TestEnsureLoadsOneRootPerSuffix(t *testing.T) {
 	dir := t.TempDir()
 	roots := OpenRoots(dir, "test")

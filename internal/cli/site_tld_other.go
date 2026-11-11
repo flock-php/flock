@@ -16,6 +16,6 @@ import (
 // outside the active set out of the store, so provisioning (the disk ∩ the active set)
 // never sees a retired suffix's root again.
 func syncSuffixesOS(s *state, cmd *cobra.Command, ca *certs.CA) error {
-	_, err := sweepStaleRoots(io.Discard, filepath.Join(s.root, "certs"), s.cfg.ActiveSuffixes(), sweepOpts{remove: true})
+	_, err := sweepStaleRoots(io.Discard, filepath.Join(s.root, "certs"), s.cfg.TLD, s.cfg.ActiveSuffixes(), sweepOpts{remove: true})
 	return err
 }

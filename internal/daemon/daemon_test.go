@@ -868,3 +868,38 @@ func TestStaleRootsWarningConverges(t *testing.T) {
 		return !containsText(st.Warnings, "stale .loc") && !containsText(st.Warnings, "stale .retired")
 	})
 }
+
+// TestStaleAdoptedRootWarns: the global suffix adopts a suffix sites pinned (global was
+// test, a site pinned loc, then the global moved to loc). The global root lives at
+// certs/ca.crt, so the leftover store roots/loc/ is not the active suffix's root — it is a
+// store the adoption retired, and the daemon's scan names it (the scan takes the global
+// suffix; the CLI sweep retires the store).
+func TestStaleAdoptedRootWarns(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("the stale NRPT scan queries rules through PowerShell, which tests never run")
+	}
+	root, _ := testRoot(t, func(cfg *config.Config) { cfg.TLD = "loc" })
+	if _, err := certs.Ensure(filepath.Join(root, "certs", "roots", "loc"), "loc"); err != nil {
+		t.Fatal(err)
+	}
+
+	client := startDaemon(t, root)
+	status := waitStatus(t, client, func(st api.Status) bool { return len(st.Warnings) > 0 })
+
+	want := "stale .loc setup: run `flock install`"
+	count := 0
+	for _, w := range status.Warnings {
+		if w == want {
+			count++
+		}
+	}
+	if count != 1 {
+		t.Fatalf("want exactly one %q, got %v", want, status.Warnings)
+	}
+
+	// Converged: the swept store gone, the reload's scan says nothing.
+	os.RemoveAll(filepath.Join(root, "certs", "roots", "loc"))
+	reloadUntil(t, client, func(st api.Status) bool {
+		return !containsText(st.Warnings, "stale .loc")
+	})
+}

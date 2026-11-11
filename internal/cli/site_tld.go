@@ -325,9 +325,11 @@ func retiredSuffixes(oldActive, newActive []string) []string {
 // ∩ the active set (certs.ActiveRootCerts). A root store left behind by a suffix that
 // retired through an unprivileged path — `unlink`, `flock domain remove`, no sync ran —
 // is not in it: the next `flock install` must never re-trust it (the sweep below retires
-// it). The global root is not among them (suffixRootCerts' rule); callers pass it separately.
-func activeSuffixRootCerts(root string, active []string) []string {
-	return certs.ActiveRootCerts(filepath.Join(root, "certs"), active)
+// it). The global root is not among them (suffixRootCerts' rule); callers pass it
+// separately — and neither is a roots/<global>/ store: the global suffix's root lives at
+// certs/ca.crt, and the sweep retires a roots/<global>/ left by an adoption.
+func activeSuffixRootCerts(root, global string, active []string) []string {
+	return certs.ActiveRootCerts(filepath.Join(root, "certs"), global, active)
 }
 
 // sweptRoot is one root store retired by the sweep: its suffix, and the fingerprint of
@@ -348,16 +350,19 @@ type sweepOpts struct {
 }
 
 // sweepStaleRoots retires every root store under certsDir/roots whose suffix is outside
-// the active set: while the file exists its fingerprint is captured, untrust runs, and
-// the directory is deleted. It is the shared half of the fix for the stale-trust path —
-// provisioning takes the intersection, the sweep deletes what provisioning must not see,
-// and both the sync (site_tld_*.go) and `flock install` (install_*.go) run it, so a root
-// store that outlived its suffix converges out of the OS trust and the store, not back
-// into the trust. The sweep stops at the first untrust error (a cancelled macOS dialog:
-// errDeclined) with that store intact, so the next pass retries the whole set.
-func sweepStaleRoots(out io.Writer, certsDir string, active []string, opts sweepOpts) ([]sweptRoot, error) {
+// the active set, plus roots/<global> itself: the global root lives at certsDir/ca.crt,
+// so a roots/<global>/ store — left when a suffix a site pinned is later adopted by the
+// global switch — is retired beside it, never re-provisioned. While the file exists its
+// fingerprint is captured, untrust runs, and the directory is deleted. It is the shared
+// half of the fix for the stale-trust path — provisioning takes the intersection, the
+// sweep deletes what provisioning must not see, and both the sync (site_tld_*.go) and
+// `flock install` (install_*.go) run it, so a root store that outlived its suffix
+// converges out of the OS trust and the store, not back into the trust. The sweep stops
+// at the first untrust error (a cancelled macOS dialog: errDeclined) with that store
+// intact, so the next pass retries the whole set.
+func sweepStaleRoots(out io.Writer, certsDir, global string, active []string, opts sweepOpts) ([]sweptRoot, error) {
 	var swept []sweptRoot
-	for _, suffix := range certs.StaleRootDirs(certsDir, active) {
+	for _, suffix := range certs.StaleRootDirs(certsDir, global, active) {
 		dir := filepath.Join(certsDir, "roots", suffix)
 		root := sweptRoot{suffix: suffix}
 		certPath := filepath.Join(dir, "ca.crt")

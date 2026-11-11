@@ -12,6 +12,6 @@ import (
 // retires them, the warning names them). The rule query needs no administrator rights; a
 // query that fails says nothing (no warning), the wildcard check covers rules that don't
 // work.
-func staleSuffixes(root string, active []string) []string {
-	return mergedStale(dns.StaleNRPTRules(active), staleRootSuffixes(root, active))
+func staleSuffixes(root, global string, active []string) []string {
+	return mergedStale(dns.StaleNRPTRules(active), staleRootSuffixes(root, global, active))
 }

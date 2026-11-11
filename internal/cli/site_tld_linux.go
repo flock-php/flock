@@ -35,7 +35,7 @@ func provisionRootsOS(s *state, out io.Writer) error {
 		return err
 	}
 
-	if _, err := sweepStaleRoots(out, certsDir, active, sweepOpts{untrust: untrustRootHook, remove: true}); err != nil {
+	if _, err := sweepStaleRoots(out, certsDir, s.cfg.TLD, active, sweepOpts{untrust: untrustRootHook, remove: true}); err != nil {
 		return err
 	}
 

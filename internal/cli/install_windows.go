@@ -563,7 +563,7 @@ func provisionPrivileged(cmd *cobra.Command, s *state, ca *certs.CA) error {
 	if err := certs.OpenRoots(certsDir, s.cfg.TLD).Ensure(suffixes); err != nil {
 		return err
 	}
-	swept, err := sweepStaleRoots(cmd.OutOrStdout(), certsDir, suffixes, sweepOpts{remove: false})
+	swept, err := sweepStaleRoots(cmd.OutOrStdout(), certsDir, s.cfg.TLD, suffixes, sweepOpts{remove: false})
 	if err != nil {
 		return err
 	}
@@ -574,7 +574,7 @@ func provisionPrivileged(cmd *cobra.Command, s *state, ca *certs.CA) error {
 			untrust = append(untrust, root.fingerprint)
 		}
 	}
-	extraRoots := activeSuffixRootCerts(s.root, suffixes)
+	extraRoots := activeSuffixRootCerts(s.root, s.cfg.TLD, suffixes)
 	source := hosts.SourceFile(s.root)
 	helper := hosts.HelperStatus()
 	// A helper Windows refused before isn't tried again; a different build is.

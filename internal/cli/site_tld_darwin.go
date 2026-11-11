@@ -42,7 +42,7 @@ func provisionRootsOS(s *state, out io.Writer) error {
 		return err
 	}
 
-	swept, err := sweepStaleRoots(out, certsDir, active, sweepOpts{untrust: untrustRootHook, remove: true})
+	swept, err := sweepStaleRoots(out, certsDir, s.cfg.TLD, active, sweepOpts{untrust: untrustRootHook, remove: true})
 	if err != nil {
 		return err // a cancelled dialog: `flock install` finishes the switch
 	}
