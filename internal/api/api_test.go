@@ -785,7 +785,8 @@ func TestSiteTLDPatchAndCreate(t *testing.T) {
 // TestAddDomainSuffix pins the structured domain add (ruling R7: the suffix parameter is only
 // a suffix, the domain is label-only): suffix "loc" stores an explicit alias, "inherit" an
 // inherited one, and the Q2 sequence demo2+loc / demo2+inherit survives a global test→loc with
-// demo2.loc untouched and demo2.test following. An absent suffix keeps today's full-host
+// demo2.loc untouched and demo2.test following. A suffix equal to the site's effective one
+// (demo5+test) is pinned as an explicit alias too. An absent suffix keeps today's full-host
 // semantics exactly — including R6: a new x.example on a .test site becomes alias x.example.
 func TestAddDomainSuffix(t *testing.T) {
 	b := &fakeBackend{root: t.TempDir()}
@@ -820,6 +821,13 @@ func TestAddDomainSuffix(t *testing.T) {
 		t.Fatalf("demo4: %+v, want an explicit alias on loc", e)
 	}
 
+	// A suffix EQUAL to the site's effective one is still pinned: the stored entry carries
+	// its own tld ("demo5","test"), never the inherited marker an unforced resolve leaves.
+	add(`{"domain":"demo5","suffix":"test"}`)
+	if e := domainEntry(t, b, "demo", "demo5", "test"); !e.Alias {
+		t.Fatalf("demo5.test: %+v, want the explicit alias {label:demo5,tld:test,alias:true}", e)
+	}
+
 	// (e) Legacy full host with the suffix key present-empty: today's string semantics give
 	// the inherited alias.
 	add(`{"domain":"app-2.test","suffix":""}`)
@@ -832,17 +840,17 @@ func TestAddDomainSuffix(t *testing.T) {
 	if e := domainEntry(t, b, "demo", "x", "example"); !e.Alias {
 		t.Fatalf("x.example: %+v, want the alias x.example (R6)", e)
 	}
-	if got := storedHosts(t, b, "demo"); got != "demo2.loc,demo2.test,demo4.loc,app-2.test,x.example" {
+	if got := storedHosts(t, b, "demo"); got != "demo2.loc,demo2.test,demo4.loc,demo5.test,app-2.test,x.example" {
 		t.Fatalf("hosts before the global change: %s", got)
 	}
 
 	// The Q2 trap at API level: global test→loc follows the inherited names (demo2→demo2.loc,
-	// app-2→app-2.loc) and leaves the explicit ones (demo2.loc, demo4.loc, x.example)
-	// byte-identical.
+	// app-2→app-2.loc) and leaves the explicit ones (demo2.loc, demo4.loc, demo5.test,
+	// x.example) byte-identical.
 	if resp, body := call(t, "POST", srv.URL+"/v1/settings", "", `{"tld":"loc"}`); resp.StatusCode != http.StatusOK {
 		t.Fatalf("global tld loc: %d %s", resp.StatusCode, body)
 	}
-	if got := storedHosts(t, b, "demo"); got != "demo2.loc,demo2.loc,demo4.loc,app-2.loc,x.example" {
+	if got := storedHosts(t, b, "demo"); got != "demo2.loc,demo2.loc,demo4.loc,demo5.test,app-2.loc,x.example" {
 		t.Fatalf("hosts after the global change: %s", got)
 	}
 	if e := domainEntry(t, b, "demo", "demo2", "loc"); !e.Alias {
@@ -850,6 +858,9 @@ func TestAddDomainSuffix(t *testing.T) {
 	}
 	if e := domainEntry(t, b, "demo", "demo2", ""); !e.Alias {
 		t.Fatalf("the inherited demo2 changed: %+v", e)
+	}
+	if e := domainEntry(t, b, "demo", "demo5", "test"); !e.Alias {
+		t.Fatalf("the explicit demo5.test changed: %+v", e)
 	}
 
 	// The suffix parameter is only a suffix: a full host with it, a public suffix, bad labels
