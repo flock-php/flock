@@ -52,7 +52,8 @@ func Ensure(dir, tld string) (*CA, error) {
 		// Two stored roots are unusable and get recreated. One is permitted only for the
 		// previous TLD: no verifier accepts a certificate it signs for the new one. The other
 		// pairs the certificate of one root with the key of another, which a create interrupted
-		// between writing ca.key and ca.crt leaves on disk; keeping it would sign every leaf
+		// between renaming ca.key and ca.crt leaves on disk — the only torn state a create can
+		// leave now, since each file is renamed whole; keeping it would sign every leaf
 		// with a key the issuer certificate cannot vouch for, and only a recreate repairs it.
 		// Nothing needs invalidating: the Leaves cache keys on the CA fingerprint, so a new root
 		// is a separate entry, and SiteCert re-issues a file certificate as soon as
@@ -166,10 +167,23 @@ func (ca *CA) create(tld string) error {
 	if err := os.MkdirAll(ca.dir, 0o700); err != nil {
 		return err
 	}
-	if err := writeKey(ca.keyPath(), key); err != nil {
+	keyDER, err := x509.MarshalECPrivateKey(key)
+	if err != nil {
 		return err
 	}
-	if err := writePEM(ca.CertPath(), "CERTIFICATE", der, 0o644); err != nil {
+
+	// The root goes out through temp files and renames: the key first, the certificate last.
+	// Writing in place leaves a truncated ca.crt when the process dies mid-write, and load()
+	// reads that as a parse error rather than os.ErrNotExist, so Ensure would return it on every
+	// run from then on and only a hand-deleted ca.crt would clear it. A rename is atomic, so a
+	// file is either absent or whole, and the one torn state a crash can leave is the window
+	// between the two renames: the previous root's certificate next to the new root's key, the
+	// pairing mismatch Ensure already detects and repairs. Nothing else about the pair is
+	// reachable, and an interrupted write leaves at most an unreferenced *.tmp.
+	if err := writePEMAtomic(ca.keyPath(), "EC PRIVATE KEY", keyDER, 0o600); err != nil {
+		return err
+	}
+	if err := writePEMAtomic(ca.CertPath(), "CERTIFICATE", der, 0o644); err != nil {
 		return err
 	}
 
@@ -283,6 +297,48 @@ func writeKey(path string, key *ecdsa.PrivateKey) error {
 
 func writePEM(path, typ string, der []byte, mode os.FileMode) error {
 	return os.WriteFile(path, pem.EncodeToMemory(&pem.Block{Type: typ, Bytes: der}), mode)
+}
+
+// writePEMAtomic publishes a PEM the way a rename can and os.WriteFile cannot: it writes to a
+// temp file in the destination directory and renames that into path, so path is never observed
+// half-written. The mode is set on the temp file before the rename, which carries it along:
+// writeKey's 0600 and a certificate's 0644 are exactly what lands at path. A temp file is left
+// behind only when the write itself failed, and it is removed on the way out.
+func writePEMAtomic(path, typ string, der []byte, mode os.FileMode) error {
+	tmp, err := os.CreateTemp(filepath.Dir(path), filepath.Base(path)+".*.tmp")
+	if err != nil {
+		return err
+	}
+	published := false
+	defer func() {
+		if !published {
+			_ = os.Remove(tmp.Name())
+		}
+	}()
+
+	if _, err := tmp.Write(pem.EncodeToMemory(&pem.Block{Type: typ, Bytes: der})); err != nil {
+		tmp.Close()
+		return err
+	}
+	if err := tmp.Chmod(mode); err != nil {
+		tmp.Close()
+		return err
+	}
+	// The bytes have to be on disk before the rename links them in, or a crash would publish an
+	// empty file atomically, which is the same trouble in a different shape.
+	if err := tmp.Sync(); err != nil {
+		tmp.Close()
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		return err
+	}
+
+	if err := os.Rename(tmp.Name(), path); err != nil {
+		return err
+	}
+	published = true
+	return nil
 }
 
 func randomSerial() *big.Int {
