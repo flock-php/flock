@@ -59,14 +59,17 @@ public struct Installation: Sendable {
     public struct Result: Sendable, Equatable {
         public var ok: Bool
         public var output: String
+        /// The CLI's exit status.
+        public var status: Int32
 
-        public init(ok: Bool, output: String) {
+        public init(ok: Bool, output: String, status: Int32 = 1) {
             self.ok = ok
             self.output = output
+            self.status = status
         }
 
-        /// The password dialog was cancelled (runPrivileged in internal/cli/install_darwin.go).
-        public var permissionDeclined: Bool { output.contains("administrator permission was declined") }
+        /// The password dialog was cancelled: flock exits with exitDeclined (internal/cli/exitcodes.go).
+        public var permissionDeclined: Bool { status == 4 }
     }
 
     /// Runs `flock install` from the bundled CLI, passing each output line to onLine.
@@ -188,7 +191,7 @@ public struct Installation: Sendable {
             process.terminationHandler = { process in
                 // Wait for the pipe to drain: the handler sees end-of-file once the CLI's output is read.
                 collector.waitUntilFinished()
-                continuation.resume(returning: Result(ok: process.terminationStatus == 0, output: collector.output))
+                continuation.resume(returning: Result(ok: process.terminationStatus == 0, output: collector.output, status: process.terminationStatus))
             }
             do {
                 try process.run()

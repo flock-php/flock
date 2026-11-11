@@ -54,11 +54,17 @@ import Testing
         let lines = Lines()
         let result = await Installation.run(script, ["install"]) { lines.add($0) }
         #expect(!result.ok)
+        #expect(result.status == 3)
+        #expect(!result.permissionDeclined)
         #expect(result.output == "✓ first install\nsecond\nno newline")
         #expect(lines.all == ["✓ first install", "second", "no newline"])
 
-        let declined = Installation.Result(ok: false, output: "Error: privileged setup: administrator permission was declined")
+        let declined = Installation.Result(ok: false, output: "Error: privileged setup: administrator permission was declined", status: 4)
         #expect(declined.permissionDeclined)
+
+        // The message alone, without the exit status, is a failure: the apps don't match the text.
+        let failed = Installation.Result(ok: false, output: "Error: privileged setup: administrator permission was declined", status: 1)
+        #expect(!failed.permissionDeclined)
     }
 }
 

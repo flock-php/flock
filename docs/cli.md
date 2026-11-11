@@ -20,6 +20,8 @@ This page lists the `flock` commands. The other pages show where to find each ac
 | `flock update` | Update Flock, CLI and daemon included: the app installs the new version (on Linux, apt or dnf) |
 | `flock version` | Print the Flock version |
 
+In scripts, `flock install` and `flock uninstall` exit with `0` when they're done, `1` when a step failed and `4` when the administrator password or permission prompt was declined, so a cancelled prompt can be told from a failure without reading the output.
+
 ## Sites
 
 | Command | Description |

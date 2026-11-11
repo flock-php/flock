@@ -22,6 +22,6 @@ func main() {
 	}
 
 	if err := cli.NewRootCommand().Execute(); err != nil {
-		os.Exit(1)
+		os.Exit(cli.ExitCode(err))
 	}
 }

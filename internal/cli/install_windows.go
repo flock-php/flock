@@ -671,7 +671,7 @@ func runElevated(exe string, args ...string) error {
 	ok, _, callErr := windows.NewLazySystemDLL("shell32.dll").NewProc("ShellExecuteExW").Call(uintptr(unsafe.Pointer(&info)))
 	if ok == 0 {
 		if errors.Is(callErr, windows.ERROR_CANCELLED) {
-			return errors.New("administrator permission was declined")
+			return errDeclined
 		}
 		return callErr
 	}

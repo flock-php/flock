@@ -35,9 +35,6 @@ func writeShims(root, bin string) error {
 // installHelperBinary: only Windows has a hosts helper.
 func installHelperBinary(string) error { return nil }
 
-// errDeclined is what the app looks for to tell a cancelled password dialog from a failure.
-var errDeclined = errors.New("administrator permission was declined")
-
 // shellQuote quotes s for /bin/sh.
 func shellQuote(s string) string {
 	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
