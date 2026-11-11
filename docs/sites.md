@@ -68,6 +68,24 @@ flock link shop --php 8.4 --secure
 Remove a link with `flock unlink [name]`.
 :::
 
+## Domain
+
+A site is served as `<name>.<suffix>`. By default the suffix is Flock's global TLD, and the site moves with every change to it. One site can take a suffix of its own:
+
+:::cli
+```bash
+cd ~/Code/acme
+flock site tld loc      # acme.loc; the global suffix and the other sites stay as they are
+flock site tld --inherit
+```
+:::
+
+:::app
+A per-site domain control for the apps is on its way. Until then use the CLI, and the global **Domain** picker in **Settings → General → Network** (see [Choosing the local domain](domains.md#choosing-the-local-domain)).
+:::
+
+A site with a suffix of its own is never dragged by a global change, and neither is an alias pinned to a suffix. What a suffix switch provisions, and the rules a suffix must obey: [Per-site domains](domains.md#per-site-domains).
+
 ## Proxying a local service
 
 Apps that aren't PHP, such as a Next.js, Nuxt or Vite dev server, an object store or a dashboard, run a server of their own on a port. A proxy passes a `.test` domain to that server, so the app gets a name, and HTTPS, like a site:
