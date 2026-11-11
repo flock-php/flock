@@ -7,9 +7,11 @@ import (
 )
 
 // staleSuffixes lists the suffixes Flock's NRPT rules send to 127.0.0.1 that are no longer
-// active: rules of a TLD change whose `flock install` never ran. The rule query needs no
-// administrator rights; a query that fails says nothing (no warning), the wildcard check
-// covers rules that don't work.
-func staleSuffixes(active []string) []string {
-	return dns.StaleNRPTRules(active)
+// active, merged with the root stores under <root>/certs/roots whose suffix left the set
+// (certutil store entries of a retired suffix are as stale as stale rules; the CLI sweep
+// retires them, the warning names them). The rule query needs no administrator rights; a
+// query that fails says nothing (no warning), the wildcard check covers rules that don't
+// work.
+func staleSuffixes(root string, active []string) []string {
+	return mergedStale(dns.StaleNRPTRules(active), staleRootSuffixes(root, active))
 }

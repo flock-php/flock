@@ -370,16 +370,25 @@ const privilegedFirst = true
 
 // ensurePrivileged checks what needs root and does what is missing in one sudo or pkexec run:
 // the daemon's unit, the polkit rule, the resolved drop-in and the CA in the system trust store.
+// The roots converge as a set (F2): provisionRootsOS first retires every store outside the
+// active set — browser entries and directories, unprivileged — so the privileged pass below
+// sees, anchors and all, exactly the active set; its wholesale rewrite takes the anchors of
+// suffixes that left the set out of the system store with it.
 func ensurePrivileged(cmd *cobra.Command, s *state, _ string, ca *certs.CA) error {
 	name, err := serviceUser()
 	if err != nil {
 		return err
 	}
+	if err := provisionRootsOS(s, cmd.OutOrStdout()); err != nil {
+		return err
+	}
 	bin := filepath.Join(s.root, "bin", exeName("flock"))
 	// The whole root set goes into the system store: the global root at the anchor name it
-	// has always had, every per-suffix root beside it with its suffix in the name, so the
-	// wholesale anchor rewrite retires the suffixes that left the active set.
-	caPaths := append([]string{ca.CertPath()}, suffixRootCerts(s.root)...)
+	// has always had, every per-suffix root of the active set beside it with its suffix in
+	// the name. The list is the disk ∩ the active set (F1): a store the sweep left behind
+	// (unprivileged retirement, no sync ran) never reaches the anchors, and the wholesale
+	// anchor rewrite retires the suffixes that left the active set.
+	caPaths := append([]string{ca.CertPath()}, activeSuffixRootCerts(s.root, s.cfg.ActiveSuffixes())...)
 	anchors, err := wantAnchors(s.root, name, caPaths)
 	if err != nil {
 		return err
@@ -390,7 +399,7 @@ func ensurePrivileged(cmd *cobra.Command, s *state, _ string, ca *certs.CA) erro
 		fileHas(dropInPath(name), instanceDropIn(s.root, bin)) &&
 		(fileHas(polkitRule, polkitRuleContent) || unreadable(polkitRule)) &&
 		fileHas(dns.ResolvedFile(), dns.ResolvedContent(s.cfg.ActiveSuffixes(), s.cfg.Ports.DNS)) &&
-		(anchor == "" || anchorsCurrent(anchors)) &&
+		(anchor == "" || anchorsExact(name, anchors)) &&
 		certs.FirefoxPolicyInstalled(name, ca.CertPath())
 	if !ok {
 		if !dns.ResolvedRunning() {
@@ -490,10 +499,31 @@ func wantAnchors(root, user string, caPaths []string) (map[string]string, error)
 	return want, nil
 }
 
+// anchorsExact reports whether the system store holds exactly the set's anchors: every
+// wanted file present byte for byte, and no Flock anchor of this user outside the set.
+// Stale anchors — the per-suffix copies of suffixes that left the set, including through
+// an unprivileged path where the drop-in never changed (F1) — are a reason to prompt:
+// they leave with the same wholesale privileged write, and nothing else asks for it.
+func anchorsExact(user string, want map[string]string) bool {
+	if !anchorsCurrent(want) {
+		return false
+	}
+	dir := caAnchorDir()
+	if dir == "" {
+		return true
+	}
+	for _, pattern := range []string{"flock-" + user + ".crt", "flock-" + user + "-*.crt"} {
+		stale, _ := filepath.Glob(filepath.Join(dir, pattern))
+		for _, path := range stale {
+			if _, keep := want[path]; !keep {
+				return false
+			}
+		}
+	}
+	return true
+}
+
 // anchorsCurrent reports whether every anchor of the set is in the store, byte for byte.
-// Stale anchors of suffixes that left the set are not a reason to prompt: they leave with
-// the same privileged write, and the drop-in — which changed when the set did — is what
-// asks for that write.
 func anchorsCurrent(want map[string]string) bool {
 	for anchor, caPath := range want {
 		if !sameFile(anchor, caPath) {

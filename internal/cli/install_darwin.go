@@ -227,7 +227,9 @@ const privilegedFirst = false
 
 // ensurePrivileged checks the resolver files (one per active suffix) and the CA's trust and fixes
 // what is missing: the files as root (re-running flock under sudo), the trust as the user (see
-// trustCA).
+// trustCA). Then it runs the whole-set roots pass (provisionRootsOS): `flock install` converges
+// the per-suffix roots too — the sweep retires stores outside the active set out of the trust
+// settings, and every active root's trust is ensured, the same loop the provisioning sync runs.
 func ensurePrivileged(cmd *cobra.Command, s *state, bin string, ca *certs.CA) error {
 	suffixes := s.cfg.ActiveSuffixes()
 	if !dns.ResolversCurrent(dns.ResolverDir, suffixes, s.cfg.Ports.DNS) {
@@ -246,6 +248,10 @@ func ensurePrivileged(cmd *cobra.Command, s *state, bin string, ca *certs.CA) er
 		}
 	}
 	cmd.Println("✓ Flock CA is trusted")
+
+	if err := provisionRootsOS(s, cmd.OutOrStdout()); err != nil {
+		return err
+	}
 	return nil
 }
 

@@ -254,13 +254,15 @@ func (s *state) siteHostsFree(site config.Site, newSuffix string) error {
 
 // syncSuffixes is the privileged half of a suffix change, shared by `flock tld` (the global
 // switch) and `flock site tld` (a site's own): given the active-suffix set captured before
-// the mutation, it set-diffs it against the config's new set — retires what left it (the
-// per-OS DNS integration, the per-suffix root certificate and its OS trust), provisions the
-// whole new set (roots for every suffix, the PHP/Node bundle carrying all of them, the OS
-// DNS and trust steps through the install entry points) — and prints what the daemon sees
-// once the machine is in sync. A declined elevation returns through errDeclined wrapped by
-// the callers into "… run `flock install` to finish the switch" (Plan 1's decline
-// semantics). Tests drive the cores behind it, never this.
+// the mutation, it set-diffs it against the config's new set — retires the DNS integration
+// of what left it (the per-OS resolver piece) — and then runs the per-OS pass that
+// converges the roots as a set: the sweep retires every root store outside the active set
+// (OS untrust + delete), provisioning Ensures and bundles the active roots, and the OS
+// trust is ensured for every root of the set. Retirement is the disk sweep, not the
+// captured diff alone: suffixes that retired through unprivileged paths, where no sync
+// ever ran, leave the OS trust the same way. A declined elevation returns through
+// errDeclined wrapped by the callers into "… run `flock install` to finish the switch"
+// (Plan 1's decline semantics). Tests drive the cores behind it, never this.
 func syncSuffixes(s *state, cmd *cobra.Command, oldActive []string) error {
 	out := cmd.OutOrStdout()
 	newActive := s.cfg.ActiveSuffixes()
@@ -286,14 +288,17 @@ func syncSuffixes(s *state, cmd *cobra.Command, oldActive []string) error {
 	// DNS integration first: the per-OS entry point retires the resolver/NRPT piece of every
 	// suffix that left the set (macOS removes the marker-owned /etc/resolver file; the Linux
 	// drop-in and the Windows rules are rewritten wholesale by the provisioning below, so
-	// their retireTLD says nothing), and then the install checks provision the new set.
+	// their retireTLD says nothing), and then the per-OS pass converges the roots: the sweep
+	// retires every root store outside the set — the captured diff and the stale stores no
+	// diff can see (suffixes retired by unlink / `flock domain remove`) — and the
+	// provisioning trusts the whole active set.
 	for _, suffix := range retired {
 		if err := retireTLD(s, out, suffix); err != nil {
 			return err
 		}
 	}
 
-	if err := syncSuffixesOS(s, cmd, ca, retired); err != nil {
+	if err := syncSuffixesOS(s, cmd, ca); err != nil {
 		return err
 	}
 
@@ -322,7 +327,69 @@ func retiredSuffixes(oldActive, newActive []string) []string {
 	return retired
 }
 
-// deleteRootDirs removes the root stores of retired suffixes, the directories
+// activeSuffixRootCerts is the provisioning list of per-suffix roots: the stores on disk
+// ∩ the active set (certs.ActiveRootCerts). A root store left behind by a suffix that
+// retired through an unprivileged path — `unlink`, `flock domain remove`, no sync ran —
+// is not in it: the next `flock install` must never re-trust it (the sweep below retires
+// it). The global root is not among them (suffixRootCerts' rule); callers pass it separately.
+func activeSuffixRootCerts(root string, active []string) []string {
+	return certs.ActiveRootCerts(filepath.Join(root, "certs"), active)
+}
+
+// sweptRoot is one root store retired by the sweep: its suffix, and the fingerprint of
+// the ca.crt it held while the file existed ("" when the store had none).
+type sweptRoot struct {
+	suffix      string
+	fingerprint string
+}
+
+// sweepOpts shapes the sweep for its caller: untrust is the per-OS layer that takes the
+// certificate out of the OS trust (argv-allowlisted as today; nil where the untrust rides
+// an elevated run — Windows captures the fingerprint here and certutil -delstore runs in
+// the provisioning pass), and remove says whether the swept directories leave now
+// (everywhere but Windows, where they leave only once the elevated untrust succeeded).
+type sweepOpts struct {
+	untrust func(out io.Writer, suffix, certPath, fingerprint string) error
+	remove  bool
+}
+
+// sweepStaleRoots retires every root store under certsDir/roots whose suffix is outside
+// the active set: while the file exists its fingerprint is captured, untrust runs, and
+// the directory is deleted. It is the shared half of the fix for the stale-trust path —
+// provisioning takes the intersection, the sweep deletes what provisioning must not see,
+// and both the sync (site_tld_*.go) and `flock install` (install_*.go) run it, so a root
+// store that outlived its suffix converges out of the OS trust and the store, not back
+// into the trust. The sweep stops at the first untrust error (a cancelled macOS dialog:
+// errDeclined) with that store intact, so the next pass retries the whole set.
+func sweepStaleRoots(out io.Writer, certsDir string, active []string, opts sweepOpts) ([]sweptRoot, error) {
+	var swept []sweptRoot
+	for _, suffix := range certs.StaleRootDirs(certsDir, active) {
+		dir := filepath.Join(certsDir, "roots", suffix)
+		root := sweptRoot{suffix: suffix}
+		certPath := filepath.Join(dir, "ca.crt")
+		fingerprint, err := certs.FileFingerprint(certPath)
+		switch {
+		case err == nil:
+			root.fingerprint = fingerprint
+			if opts.untrust != nil {
+				if err := opts.untrust(out, suffix, certPath, fingerprint); err != nil {
+					return swept, err
+				}
+			}
+		case !errors.Is(err, os.ErrNotExist):
+			return swept, err
+		}
+		if opts.remove {
+			if err := os.RemoveAll(dir); err != nil {
+				return swept, err
+			}
+		}
+		swept = append(swept, root)
+	}
+	return swept, nil
+}
+
+// deleteRootDirs removes the root stores of the given suffixes, the directories
 // certsDir/roots/<suffix> the Roots store creates for non-global suffixes. The global root
 // lives at certsDir itself and belongs to the store, never to one suffix, so this only ever
 // reaches under roots/. A suffix is one validated DNS label (see ActiveSuffixes), so a name

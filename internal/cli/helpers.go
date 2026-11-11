@@ -55,9 +55,11 @@ func parseCSVList(list string) []string {
 }
 
 // suffixRootCerts lists the per-suffix root certificates Flock stores on disk under root —
-// every certs/roots/<suffix>/ca.crt, sorted, so the provisioning passes the same set every
-// run. The global root (certs/ca.crt) is not one of them: it belongs to the store, not to
-// one suffix, and callers pass it separately.
+// every certs/roots/<suffix>/ca.crt, sorted. The global root (certs/ca.crt) is not one of
+// them: it belongs to the store, not to one suffix, and callers pass it separately. This is
+// the whole disk set, the uninstall scope (tear every root down, active suffixes and stale
+// ones alike); provisioning uses activeSuffixRootCerts — the disk set intersected with
+// ActiveSuffixes, so a root whose suffix left the set is never handed back to the OS trust.
 func suffixRootCerts(root string) []string {
 	paths, _ := filepath.Glob(filepath.Join(root, "certs", "roots", "*", "ca.crt"))
 	slices.Sort(paths)

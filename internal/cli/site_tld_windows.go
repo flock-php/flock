@@ -1,37 +1,19 @@
 package cli
 
 import (
-	"errors"
-	"os"
-	"path/filepath"
-
 	"github.com/spf13/cobra"
 
 	"flock/internal/certs"
 )
 
-// syncSuffixesOS (Windows): both suffix-bound DNS pieces are replaced wholesale by the one
-// elevated run — dns.SetNRPT deletes every Flock rule and re-adds one per suffix, and
-// hosts.InstallHelper reconfigures the service for the new set — so the provisioning needs
-// nothing per retiring suffix. The machine's certificate store is not: it carries one entry
-// per root, and certutil -delstore by fingerprint needs the same administrator rights as
-// -addstore. So the retired roots' fingerprints are captured here (their files go right
-// after), and ride the elevated privileged-setup that provisions the new set.
-func syncSuffixesOS(s *state, cmd *cobra.Command, ca *certs.CA, retired []string) error {
-	certsDir := filepath.Join(s.root, "certs")
-
-	var untrust []string
-	for _, suffix := range retired {
-		dir := filepath.Join(certsDir, "roots", suffix)
-		fingerprint, err := certs.FileFingerprint(filepath.Join(dir, "ca.crt"))
-		if err == nil {
-			untrust = append(untrust, fingerprint)
-		} else if !errors.Is(err, os.ErrNotExist) {
-			return err
-		}
-		if err := os.RemoveAll(dir); err != nil {
-			return err
-		}
-	}
-	return provisionPrivileged(cmd, s, ca, untrust)
+// syncSuffixesOS (Windows): the whole-set provisioning — provisionPrivileged sweeps the
+// root stores outside the active set, carries their fingerprints to the elevated run
+// (certutil -delstore by fingerprint needs the same administrator rights as -addstore),
+// re-provisions the active set's roots, and deletes the swept stores only once the
+// elevated untrust went through, so a declined prompt leaves the sweep retryable. Both
+// suffix-bound DNS pieces are replaced wholesale by the same elevated run — dns.SetNRPT
+// deletes every Flock rule and re-adds one per suffix, and hosts.InstallHelper
+// reconfigures the service for the new set — so DNS, roots and trust all converge.
+func syncSuffixesOS(s *state, cmd *cobra.Command, ca *certs.CA) error {
+	return provisionPrivileged(cmd, s, ca)
 }

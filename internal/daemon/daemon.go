@@ -108,7 +108,8 @@ type daemon struct {
 	breakpointSites map[string]bool
 	cfg             *config.Config
 	// wildcards is every active suffix's DNS health, keyed by suffix (see checkWildcard);
-	// stale lists Flock-marked suffixes provisioned in the system outside the active set.
+	// stale lists Flock-marked suffixes provisioned in the system outside the active set —
+	// stale DNS routing and stale root stores under certs/roots alike (see staleSuffixes).
 	wildcards map[string]wildcardState
 	stale     []string
 
@@ -1191,8 +1192,9 @@ func (d *daemon) Status() api.Status {
 					fmt.Sprintf("*.%s domains don't resolve: %s, and %s", s.TLD, s.Problem, helperBlockedProblem))
 			}
 		}
-		// Suffixes the system still routes to Flock that left the active set: one line naming
-		// the repair, found by the wildcard check's scan.
+		// Suffixes the system still routes to Flock, or that still have a root store under
+		// certs/roots, while outside the active set: one deduped line naming the repair,
+		// found by the wildcard check's scan.
 		if len(d.stale) > 0 {
 			names := make([]string, 0, len(d.stale))
 			for _, s := range d.stale {

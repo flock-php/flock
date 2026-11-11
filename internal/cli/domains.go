@@ -133,10 +133,15 @@ running "flock install" sets its DNS and HTTPS up.`,
 
 			// A pinned alias adds its suffix to the active set; the daemon created its root on
 			// the reload commit ran, but the DNS and OS-trust provisioning is the CLI's
-			// privileged job — say so once, the way the stale-suffix warnings do.
-			if tld := suffixTLD(suffix); withSuffix && tld != "" && !slices.Contains(oldActive, tld) {
-				cmd.Printf("! .%s is new to Flock's setup: run `flock install` to provision its DNS and HTTPS\n", tld)
+			// privileged job — say so once, the way the stale-suffix warnings do. The bare
+			// full-host form (`flock domain add host.loc`) lands a new suffix too:
+			// NormalizeDomain pins it into the stored entry, so the entry says what the add
+			// introduced, and both forms print the same guidance line.
+			newSuffix := suffixTLD(suffix)
+			if !withSuffix {
+				newSuffix = site.Domains[len(site.Domains)-1].TLD
 			}
+			suffixNewNote(cmd.OutOrStdout(), oldActive, newSuffix)
 			return nil
 		},
 	}
@@ -144,6 +149,16 @@ running "flock install" sets its DNS and HTTPS up.`,
 	cmd.Flags().StringVar(&suffix, "suffix", "", "the alias's suffix: a validated suffix like loc (pinned) or inherit (follows the site); takes a single-label domain")
 
 	return cmd
+}
+
+// suffixNewNote prints the provisioning guidance for a suffix the active set did not carry
+// before the entry landed: its DNS and HTTPS setup is `flock install`'s job. The --suffix
+// form and the bare full-host form (NormalizeDomain pins a new non-public suffix) share
+// the line, and an inherited alias (no suffix of its own) prints nothing.
+func suffixNewNote(out io.Writer, oldActive []string, suffix string) {
+	if suffix != "" && !slices.Contains(oldActive, suffix) {
+		fmt.Fprintf(out, "! .%s is new to Flock's setup: run `flock install` to provision its DNS and HTTPS\n", suffix)
+	}
 }
 
 // suffixTLD is the suffix --suffix stores: "" for inherit (and for an empty value, which

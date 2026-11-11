@@ -539,21 +539,43 @@ const privilegedFirst = true
 // re-runs this flock.exe elevated (Windows shows a UAC prompt) to fix them. It runs before bin is
 // installed (privilegedFirst), so it doesn't use it.
 func ensurePrivileged(cmd *cobra.Command, s *state, _ string, ca *certs.CA) error {
-	return provisionPrivileged(cmd, s, ca, nil)
+	return provisionPrivileged(cmd, s, ca)
 }
 
-// provisionPrivileged is ensurePrivileged's body with one addition the provisioning sync
-// (site_tld_windows.go) needs: the fingerprints of roots whose suffixes left the set, taken
-// out of the machine's Root store by the same elevated run that provisions the new one.
-func provisionPrivileged(cmd *cobra.Command, s *state, ca *certs.CA, untrust []string) error {
+// provisionPrivileged is the whole-set provisioning the install checks (ensurePrivileged)
+// and the provisioning sync (site_tld_windows.go) share. It adds the roots sweep to the
+// elevated run it already drove: the root stores under certs/roots whose suffixes left
+// the active set are captured — fingerprints while the files exist — and their store
+// entries go by certutil -delstore in the same elevated run that provisions the active
+// set's roots (the --roots list is the disk ∩ the active set, so a stale store is never
+// re-added). The swept directories leave only once that run succeeded, so a declined
+// prompt keeps the sweep intact: the next install captures the fingerprints again.
+func provisionPrivileged(cmd *cobra.Command, s *state, ca *certs.CA) error {
 	self, helperBin, err := bundledHelper()
 	if err != nil {
 		return err
 	}
 
-	source := hosts.SourceFile(s.root)
+	certsDir := filepath.Join(s.root, "certs")
 	suffixes := s.cfg.ActiveSuffixes()
-	extraRoots := suffixRootCerts(s.root)
+	// Create-if-missing for the active set (the daemon reload does this when it runs; the
+	// install path reaches here before the daemon exists on a first install).
+	if err := certs.OpenRoots(certsDir, s.cfg.TLD).Ensure(suffixes); err != nil {
+		return err
+	}
+	swept, err := sweepStaleRoots(cmd.OutOrStdout(), certsDir, suffixes, sweepOpts{remove: false})
+	if err != nil {
+		return err
+	}
+	var stale, untrust []string
+	for _, root := range swept {
+		stale = append(stale, root.suffix)
+		if root.fingerprint != "" {
+			untrust = append(untrust, root.fingerprint)
+		}
+	}
+	extraRoots := activeSuffixRootCerts(s.root, suffixes)
+	source := hosts.SourceFile(s.root)
 	helper := hosts.HelperStatus()
 	// A helper Windows refused before isn't tried again; a different build is.
 	blocked := hosts.BlockedExe(s.root, helperBin)
@@ -591,14 +613,17 @@ func provisionPrivileged(cmd *cobra.Command, s *state, ca *certs.CA, untrust []s
 	if !blocked && helper.Running {
 		hosts.ClearBlocked(s.root)
 	}
-	if helperOK && trusted && ruleOK {
+	// A stale store on disk is work: its entry leaves the machine's Root store in the
+	// elevated run, so "everything current" requires "nothing outside the set left to sweep".
+	if helperOK && trusted && ruleOK && len(swept) == 0 {
 		done()
 		return nil
 	}
 
 	args := []string{"privileged-setup", "--tlds", strings.Join(suffixes, ","), "--ca", ca.CertPath(), "--source", source}
 	if len(extraRoots) > 0 {
-		// Every per-suffix root joins the machine's Root store in the same elevated run.
+		// Every per-suffix root of the active set joins the machine's Root store in the
+		// same elevated run.
 		args = append(args, "--roots", strings.Join(extraRoots, ","))
 	}
 	if len(untrust) > 0 {
@@ -614,6 +639,8 @@ func provisionPrivileged(cmd *cobra.Command, s *state, ca *certs.CA, untrust []s
 	err = runElevated(self, args...)
 	switch {
 	case errors.Is(err, errHelperBlocked):
+		// The elevated run applied the DNS rules and the stores (the helper goes last):
+		// the swept roots' entries are out of the machine's Root store, the stores can go.
 		if err := hosts.MarkBlocked(s.root, helperBin); err != nil {
 			return err
 		}
@@ -622,6 +649,9 @@ func provisionPrivileged(cmd *cobra.Command, s *state, ca *certs.CA, untrust []s
 		return fmt.Errorf("privileged setup: %w", err)
 	case !blocked:
 		hosts.ClearBlocked(s.root)
+	}
+	if err := deleteRootDirs(certsDir, stale); err != nil {
+		return err
 	}
 	done()
 	return nil

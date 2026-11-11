@@ -1,12 +1,14 @@
 package cli
 
 import (
+	"io"
 	"os"
 	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
 
+	"flock/internal/certs"
 	"flock/internal/config"
 )
 
@@ -426,4 +428,202 @@ func globalRoot(name string) string {
 		return "global root"
 	}
 	return "global key"
+}
+
+// TestSweepStaleRootsRetiresStoresOutsideTheActiveSet pins F1's shared layer. A stale root
+// store (planted with a real cert, as the Goal-4 unprivileged retirement leaves it —
+// unlink / `flock domain remove` run no sync): the provisioning list excludes it while it
+// is on disk (disk ∩ active, not the disk glob), the sweep returns its fingerprint captured
+// while the file exists and hands it to the per-OS untrust hook (whose argv layer is pinned
+// per OS, TestUntrustRootArgs on macOS), and deletes the store. The active roots, the global
+// root and a foreign directory inside roots/ stay exactly as they were. The capture-only
+// sweep (Windows: remove:false, no untrust hook) keeps the store for the elevated run.
+func TestSweepStaleRootsRetiresStoresOutsideTheActiveSet(t *testing.T) {
+	root := t.TempDir()
+	certsDir := filepath.Join(root, "certs")
+	active := []string{"test", "loc"}
+	for _, suffix := range []string{"loc", "stale", "old"} {
+		if _, err := certs.Ensure(filepath.Join(certsDir, "roots", suffix), suffix); err != nil {
+			t.Fatal(err)
+		}
+	}
+	global, err := certs.Ensure(certsDir, "test") // the global root lives at the store dir
+	if err != nil {
+		t.Fatal(err)
+	}
+	junk := filepath.Join(certsDir, "roots", "a.b") // not a suffix label: never swept, never listed
+	if err := os.MkdirAll(junk, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(junk, "ca.crt"), []byte("not a Flock root"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	staleCert := filepath.Join(certsDir, "roots", "stale", "ca.crt")
+	oldCert := filepath.Join(certsDir, "roots", "old", "ca.crt")
+	staleFP, err := certs.FileFingerprint(staleCert)
+	if err != nil {
+		t.Fatal(err)
+	}
+	oldFP, err := certs.FileFingerprint(oldCert)
+	if err != nil {
+		t.Fatal(err)
+	}
+	locBefore, err := os.ReadFile(filepath.Join(certsDir, "roots", "loc", "ca.crt"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	globalBefore, err := os.ReadFile(global.CertPath())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Provisioning is the intersection: the stale stores are on disk and not in the list.
+	want := []string{filepath.Join(certsDir, "roots", "loc", "ca.crt")}
+	if got := activeSuffixRootCerts(root, active); !slices.Equal(got, want) {
+		t.Fatalf("provisioning list: got %v, want %v", got, want)
+	}
+
+	var calls []string
+	swept, err := sweepStaleRoots(io.Discard, certsDir, active, sweepOpts{
+		untrust: func(_ io.Writer, suffix, certPath, fingerprint string) error {
+			calls = append(calls, suffix+"|"+certPath+"|"+fingerprint)
+			return nil
+		},
+		remove: true,
+	})
+	if err != nil {
+		t.Fatalf("sweepStaleRoots: %v", err)
+	}
+	if len(swept) != 2 || swept[0].suffix != "old" || swept[1].suffix != "stale" {
+		t.Fatalf("swept stores, sorted: %+v", swept)
+	}
+	if swept[0].fingerprint != oldFP || swept[1].fingerprint != staleFP {
+		t.Errorf("swept fingerprints: %+v, want %s and %s", swept, oldFP, staleFP)
+	}
+	wantCalls := []string{
+		"old|" + oldCert + "|" + oldFP,
+		"stale|" + staleCert + "|" + staleFP,
+	}
+	if !slices.Equal(calls, wantCalls) {
+		t.Errorf("untrust hook calls: got %v, want %v", calls, wantCalls)
+	}
+	for _, suffix := range []string{"old", "stale"} {
+		if fileExists(filepath.Join(certsDir, "roots", suffix)) {
+			t.Errorf("roots/%s must be deleted by the sweep", suffix)
+		}
+	}
+	locAfter, err := os.ReadFile(filepath.Join(certsDir, "roots", "loc", "ca.crt"))
+	if err != nil || string(locAfter) != string(locBefore) {
+		t.Errorf("roots/loc touched: %v", err)
+	}
+	globalAfter, err := os.ReadFile(global.CertPath())
+	if err != nil || string(globalAfter) != string(globalBefore) {
+		t.Errorf("the global root touched: %v", err)
+	}
+	if data, err := os.ReadFile(filepath.Join(junk, "ca.crt")); err != nil || string(data) != "not a Flock root" {
+		t.Errorf("a directory that cannot name a suffix was touched: %q, %v", data, err)
+	}
+
+	// The Windows seam: capture the fingerprint, leave the store for the elevated run.
+	if _, err := certs.Ensure(filepath.Join(certsDir, "roots", "retired2"), "retired2"); err != nil {
+		t.Fatal(err)
+	}
+	captured, err := sweepStaleRoots(io.Discard, certsDir, active, sweepOpts{remove: false})
+	if err != nil {
+		t.Fatalf("capture sweep: %v", err)
+	}
+	fp, err := certs.FileFingerprint(filepath.Join(certsDir, "roots", "retired2", "ca.crt"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(captured) != 1 || captured[0].suffix != "retired2" || captured[0].fingerprint != fp {
+		t.Errorf("captured stores: %+v, want retired2 with fingerprint %s", captured, fp)
+	}
+	if !fileExists(filepath.Join(certsDir, "roots", "retired2")) {
+		t.Error("the capture-only sweep must leave the store for the elevated untrust run")
+	}
+}
+
+// TestChangeSiteTLDunwritableEnvIsReportedAndSkipped pins the report-and-continue semantics
+// for a site-scoped .env Flock may not rewrite: chmod 000 on the site's .env, the switch
+// stands, the file is named in the output, and the worktree's .env is retargeted after it.
+func TestChangeSiteTLDunwritableEnvIsReportedAndSkipped(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("running as root: chmod 000 does not block the write")
+	}
+	s, demoDir, _, wtDir := siteTLDFixture(t)
+	envPath := filepath.Join(demoDir, ".env")
+	if err := os.Chmod(envPath, 0o000); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(envPath, 0o644) })
+
+	var out strings.Builder
+	old, _, err := s.changeSiteTLD("loc", "demo", false, &out)
+	if err != nil {
+		t.Fatalf("an unwritable .env must not fail the switch: %v\n%s", err, out.String())
+	}
+	if old != "test" {
+		t.Errorf("old effective suffix: got %q, want %q", old, "test")
+	}
+	if !strings.Contains(out.String(), "! could not retarget "+envPath) {
+		t.Errorf("the unwritable file must be named in the output:\n%s", out.String())
+	}
+	site, _ := s.cfg.FindSite("demo")
+	if site.TLD != "loc" {
+		t.Errorf("the switch must stand: %+v", site)
+	}
+	// The pass kept going after the unwritable file: the worktree's .env is retargeted.
+	data, err := os.ReadFile(filepath.Join(wtDir, ".env"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if wt := string(data); !strings.Contains(wt, "APP_URL=http://feature.demo.loc") {
+		t.Errorf("the worktree .env must be retargeted after the skipped file:\n%s", wt)
+	}
+}
+
+// TestSuffixNewNote pins the guidance line the domain add prints for a suffix new to the
+// provisioning set (c): the --suffix form and the bare full-host form land on the same
+// line, an already-active suffix and an inherited alias print nothing, and the bare form's
+// suffix comes from the entry NormalizeDomain pinned.
+func TestSuffixNewNote(t *testing.T) {
+	for _, tc := range []struct {
+		name      string
+		oldActive []string
+		suffix    string
+		want      string
+	}{
+		{"bare host.loc, new suffix", []string{"test"}, "loc", "! .loc is new to Flock's setup: run `flock install` to provision its DNS and HTTPS\n"},
+		{"--suffix loc, new suffix", nil, "loc", "! .loc is new to Flock's setup: run `flock install` to provision its DNS and HTTPS\n"},
+		{"suffix already active", []string{"loc", "test"}, "loc", ""},
+		{"inherited alias / subdomain", []string{"test"}, "", ""},
+	} {
+		var out strings.Builder
+		suffixNewNote(&out, tc.oldActive, tc.suffix)
+		if got := out.String(); got != tc.want {
+			t.Errorf("%s: got %q, want %q", tc.name, got, tc.want)
+		}
+	}
+
+	// The bare form: `flock domain add host.loc` on a .test site stores the pinned marker,
+	// which is the suffix the note runs on.
+	s, _, _, _ := siteTLDFixture(t)
+	site, ok := s.cfg.FindSite("demo")
+	if !ok {
+		t.Fatal("site demo missing")
+	}
+	extra, err := s.cfg.AddDomain(&site, "host.loc")
+	if err != nil {
+		t.Fatalf("domain add host.loc: %v", err)
+	}
+	if extra.Host != "host.loc" {
+		t.Fatalf("resolved host: got %q", extra.Host)
+	}
+	var out strings.Builder
+	suffixNewNote(&out, []string{"test"}, site.Domains[len(site.Domains)-1].TLD)
+	if !strings.Contains(out.String(), "!.loc is new") && !strings.Contains(out.String(), ".loc is new to Flock's setup") {
+		t.Errorf("the bare form must print the install guidance, got %q", out.String())
+	}
 }

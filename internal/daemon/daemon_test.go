@@ -19,6 +19,7 @@ import (
 
 	"flock/internal/api"
 	"flock/internal/binaries"
+	"flock/internal/certs"
 	"flock/internal/config"
 	"flock/internal/dns"
 	"flock/internal/paths"
@@ -801,4 +802,69 @@ func TestUnlinkingASiteForgetsItsWorktrees(t *testing.T) {
 		t.Fatal(err)
 	}
 	waitForgotten(path, db)
+}
+
+// TestStaleRootsWarningConverges: a root store under certs/roots whose suffix left the
+// active set (Goal 4's stale trusted root, e.g. left by an unprivileged `unlink` /
+// `flock domain remove` that ran no sync) is stale setup the same way stale DNS routing
+// is. The unprivileged roots scan joins the DNS-side suffixes into one aggregated warning,
+// deduped, naming the same repair, and removing the stores converges it away.
+func TestStaleRootsWarningConverges(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("the stale NRPT scan queries rules through PowerShell, which tests never run")
+	}
+	root, cfg := testRoot(t, nil)
+
+	// The DNS side: a Flock-marked .loc setup outside the set. "loc" is named by both
+	// scans; the warning must name it once.
+	switch runtime.GOOS {
+	case "darwin":
+		if err := os.WriteFile(dns.ResolverFile("loc"), []byte(dns.ResolverContent(cfg.Ports.DNS)), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { os.Remove(dns.ResolverFile("loc")) })
+	case "linux":
+		if err := os.WriteFile(dns.ResolvedFile(), []byte(dns.ResolvedContent([]string{"test", "loc"}, cfg.Ports.DNS)), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { os.Remove(dns.ResolvedFile()) })
+	}
+
+	// The roots side: stores for .retired (DNS-side clean) and .loc (the dedup row).
+	for _, suffix := range []string{"retired", "loc"} {
+		if _, err := certs.Ensure(filepath.Join(root, "certs", "roots", suffix), suffix); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	client := startDaemon(t, root)
+	status := waitStatus(t, client, func(st api.Status) bool { return len(st.Warnings) > 0 })
+
+	want := "stale .loc, .retired setup: run `flock install`"
+	count := 0
+	for _, w := range status.Warnings {
+		if w == want {
+			count++
+		}
+		if strings.Count(w, ".loc") > 1 {
+			t.Fatalf("the shared suffix named twice: %q (all: %v)", w, status.Warnings)
+		}
+	}
+	if count != 1 {
+		t.Fatalf("want exactly one %q, got %v", want, status.Warnings)
+	}
+
+	// Converged setup: the stores gone and the routing cleaned, the reload's scan says nothing.
+	os.RemoveAll(filepath.Join(root, "certs", "roots", "retired"))
+	os.RemoveAll(filepath.Join(root, "certs", "roots", "loc"))
+	if runtime.GOOS == "darwin" {
+		os.Remove(dns.ResolverFile("loc"))
+	} else {
+		if err := os.WriteFile(dns.ResolvedFile(), []byte(dns.ResolvedContent([]string{"test"}, cfg.Ports.DNS)), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	reloadUntil(t, client, func(st api.Status) bool {
+		return !containsText(st.Warnings, "stale .loc") && !containsText(st.Warnings, "stale .retired")
+	})
 }
