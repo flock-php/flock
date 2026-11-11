@@ -55,12 +55,35 @@ func (d *daemon) reverbSite(cfg *config.Config, site config.Site, minor, scheme 
 	if other, taken := cfg.UsedPorts("")[site.ReverbPort]; site.ReverbPort == 0 || taken && other != name {
 		return fail(api.ReverbFailed, "port %d is also configured for %s — turn Reverb off and on again for a new port", site.ReverbPort, serviceName(other))
 	}
+	// Its own counter: restarting the site's FrankenPHP doesn't drop Reverb's connections.
 	d.mu.Lock()
-	restart := d.restarts[site.Name]
+	restart := d.restarts[name]
 	d.mu.Unlock()
 	spec := reverb.Spec(d.root, reverb.Site{Name: site.Name, Path: site.Path, Minor: minor, Port: site.ReverbPort, Env: extraEnv, Restart: restart})
 	if !d.procUp(spec.Name) && !ports.Free("127.0.0.1", site.ReverbPort) {
 		return fail(api.ReverbFailed, "%s", ports.Describe(site.ReverbPort))
 	}
 	return &spec, st
+}
+
+// RestartReverb implements api.Backend: it restarts a site's Reverb server, e.g. so it loads
+// changed code. The site's FrankenPHP keeps running.
+func (d *daemon) RestartReverb(name string) error {
+	d.mu.Lock()
+	cfg := d.cfg
+	d.mu.Unlock()
+	if cfg == nil {
+		return fmt.Errorf("the daemon has no configuration yet")
+	}
+	site, ok := cfg.FindSite(name)
+	if !ok {
+		return fmt.Errorf("no site named %s", name)
+	}
+	if !site.Reverb {
+		return fmt.Errorf("Reverb is off for %s", name)
+	}
+	d.mu.Lock()
+	d.restarts[config.ReverbPortID(name)]++
+	d.mu.Unlock()
+	return d.reload()
 }

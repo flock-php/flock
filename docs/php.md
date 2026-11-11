@@ -148,7 +148,7 @@ REVERB_SCHEME=https
 
 On a site served over HTTP only, they are `REVERB_PORT=80` and `REVERB_SCHEME=http`. `install:broadcasting --reverb` writes the `VITE_REVERB_*` variables as references to these, so the Echo client follows them. Rebuild the front end (`npm run build`, or restart `npm run dev`) after changing them.
 
-Restart the Reverb server to load changed code. A restart also restarts the site's FrankenPHP if the site runs on it, and `flock frankenphp restart` restarts Reverb too. Reverb's output goes to the `reverb-acme` [log](logs.md).
+Restart the Reverb server to load changed code. It restarts on its own, so the site's FrankenPHP keeps running, and restarting FrankenPHP keeps Reverb's connections. Reverb's output goes to the `reverb-acme` [log](logs.md).
 
 :::app
 Reverb isn't in the app yet. Use the CLI commands below, or ask an [AI agent](ai.md) to turn it on: Flock's `update_site` tool runs and stops it.

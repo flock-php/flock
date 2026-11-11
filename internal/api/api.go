@@ -319,8 +319,10 @@ type Backend interface {
 	FrankenPHP() *frankenphp.Manager
 	// Binaries is the package manifest of the configured channel (nil when there is none).
 	Binaries() *binaries.Catalog
-	// RestartSite restarts a site's FrankenPHP and Reverb processes, e.g. so they load changed code.
+	// RestartSite restarts a FrankenPHP site's process or a Node.js site's dev server, e.g. so it
+	// loads changed code; RestartReverb does the same for a site's Reverb server.
 	RestartSite(name string) error
+	RestartReverb(name string) error
 	// StopSite puts a Node.js site's dev server to sleep until the site's next request.
 	StopSite(name string) error
 	// StartProxy and StopProxy run a proxy's command and stop its server (see config.Proxy.Command).

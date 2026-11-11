@@ -71,7 +71,7 @@ needs the REVERB_HOST, REVERB_PORT and REVERB_SCHEME lines ` + "`flock reverb`" 
 
 	restart := &cobra.Command{
 		Use:   "restart [site]",
-		Short: "Restart a site's Reverb server (and its FrankenPHP), e.g. to load changed code",
+		Short: "Restart a site's Reverb server, e.g. to load changed code",
 		Args:  cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			s, err := load()
@@ -85,7 +85,7 @@ needs the REVERB_HOST, REVERB_PORT and REVERB_SCHEME lines ` + "`flock reverb`" 
 			if !site.Reverb {
 				return errors.New("Reverb is off for " + site.Name + " — `flock reverb on` runs it")
 			}
-			st, err := s.client().RestartSite(cmd.Context(), site.Name)
+			st, err := s.client().RestartReverb(cmd.Context(), site.Name)
 			if err != nil {
 				return err
 			}

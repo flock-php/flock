@@ -59,6 +59,7 @@ func (f *fakeBackend) Catalog() *catalog.Manager               { return f.catalo
 func (f *fakeBackend) FrankenPHP() *frankenphp.Manager         { return f.frankenphp }
 func (f *fakeBackend) Binaries() *binaries.Catalog             { return f.binaries }
 func (f *fakeBackend) RestartSite(string) error                { return nil }
+func (f *fakeBackend) RestartReverb(string) error              { return nil }
 func (f *fakeBackend) StopSite(string) error                   { return nil }
 func (f *fakeBackend) Shares() *share.Manager                  { return nil }
 func (f *fakeBackend) StartShare(string, []string, bool) error { return nil }

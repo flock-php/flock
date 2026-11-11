@@ -15,7 +15,7 @@ import (
 )
 
 func TestReverbSiteRunsReverbStartOrSaysWhyNot(t *testing.T) {
-	d := &daemon{root: t.TempDir(), procs: supervisor.New(), restarts: map[string]int{"app": 2}}
+	d := &daemon{root: t.TempDir(), procs: supervisor.New(), restarts: map[string]int{"app": 5, "reverb-app": 2}}
 	cfg := config.Default()
 	cfg.Ports.HTTPS = 8443
 	app := t.TempDir()

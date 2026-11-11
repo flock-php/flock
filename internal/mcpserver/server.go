@@ -53,6 +53,7 @@ type Daemon interface {
 	WorktreeSetup(ctx context.Context, path string) (api.WorktreeStatus, error)
 	UnpinSite(ctx context.Context, name, tool string) (api.Status, error)
 	RestartSite(ctx context.Context, name string) (api.Status, error)
+	RestartReverb(ctx context.Context, name string) (api.Status, error)
 	StopSite(ctx context.Context, name string) (api.Status, error)
 	UpdateSettings(ctx context.Context, s api.Settings) (api.Status, error)
 }

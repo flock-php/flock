@@ -90,11 +90,12 @@ func (s *server) addWriteTools(srv *mcp.Server) {
 			"- set_server (server, worker): run PHP through FastCGI (PHP-FPM) or FrankenPHP, optionally in Octane's worker mode.\n" +
 			"- set_type (type): serve it as a php site or as a node app, whose dev server (npm run dev) Flock starts on the first visit.\n" +
 			"- reverb_on / reverb_off: run or stop the Laravel app's Reverb server, reached at wss://<site>.test/app; site_info shows the .env lines it needs.\n" +
-			"- restart: restart a site's FrankenPHP and Reverb processes, e.g. so Octane workers or Reverb load changed code, or a Node.js app's dev server.\n" +
+			"- restart: restart a FrankenPHP site's process, e.g. so Octane workers load changed code, or a Node.js app's dev server.\n" +
+			"- restart_reverb: restart the site's Reverb server, e.g. so it loads changed code.\n" +
 			"- stop: stop a Node.js app's dev server until the site's next request (it also stops after 30 idle minutes).",
 		Annotations: additive(false),
 		InputSchema: schema[updateSiteIn](map[string][]any{
-			"action": {"secure", "unsecure", "isolate", "unisolate", "pin", "unpin", "add_domain", "set_server", "set_type", "reverb_on", "reverb_off", "restart", "stop"},
+			"action": {"secure", "unsecure", "isolate", "unisolate", "pin", "unpin", "add_domain", "set_server", "set_type", "reverb_on", "reverb_off", "restart", "restart_reverb", "stop"},
 			"type":   {"php", "node"},
 			"tool":   {"php", "node"},
 			"server": {"fastcgi", "frankenphp"},
@@ -831,6 +832,9 @@ func (s *server) updateSite(ctx context.Context, _ *mcp.CallToolRequest, in upda
 	case "restart":
 		st, err = s.Daemon.RestartSite(ctx, site.Name)
 		msg = fmt.Sprintf("Restarted %s.", site.Name)
+	case "restart_reverb":
+		st, err = s.Daemon.RestartReverb(ctx, site.Name)
+		msg = fmt.Sprintf("Restarted %s's Reverb server.", site.Name)
 	case "stop":
 		st, err = s.Daemon.StopSite(ctx, site.Name)
 		msg = fmt.Sprintf("Stopped %s's dev server; the next request starts it again.", site.Name)
