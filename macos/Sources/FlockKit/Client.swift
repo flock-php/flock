@@ -85,6 +85,11 @@ public actor FlockClient {
         try await decode(Status.self, "POST", "/v1/settings", body: try JSONEncoder().encode(change))
     }
 
+    /// Asks the daemon what it makes of a TLD (ok, normalized, warning, error) before it is applied.
+    public func checkTLD(_ tld: String) async throws -> TLDCheck {
+        try await decode(TLDCheck.self, "POST", "/v1/tld/check", body: try JSONEncoder().encode(["tld": tld]))
+    }
+
     public func config() async throws -> FlockConfig {
         try await decode(FlockConfig.self, "GET", "/v1/config")
     }

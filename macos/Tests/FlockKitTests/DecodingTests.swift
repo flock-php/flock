@@ -353,6 +353,25 @@ private func decode<T: Decodable>(_ type: T.Type, _ json: String) throws -> T {
 
 }
 
+@Test func decodesTLDCheckWithTheWarningAndErrorKeysAbsent() throws {
+    // Task 1 emits warning and error with omitempty: a clean TLD carries only ok and normalized.
+    let check = try decode(TLDCheck.self, #"{"ok":true,"normalized":"loc"}"#)
+    #expect(check.ok && check.normalized == "loc")
+    #expect(check.warning.isEmpty && check.error.isEmpty)
+}
+
+@Test func decodesTLDCheckLocalWithAnMDNSWarning() throws {
+    let check = try decode(TLDCheck.self, #"{"ok":true,"normalized":"local","warning":"local is reserved for mDNS: sites under it resolve only in browsers with Bonjour"}"#)
+    #expect(check.ok && check.normalized == "local")
+    #expect(check.warning.contains("mDNS") && check.error.isEmpty)
+}
+
+@Test func decodesTLDCheckRefusingAPublicTLD() throws {
+    let check = try decode(TLDCheck.self, #"{"ok":false,"normalized":"com","error":"com is a public TLD"}"#)
+    #expect(!check.ok && check.normalized == "com")
+    #expect(check.error == "com is a public TLD" && check.warning.isEmpty)
+}
+
 @Test func ordersBranchesCurrentAndDefaultFirst() throws {
     let branches = try decode(Branches.self, """
     {"current":"develop","default":"main","local":["alpha","develop","main"],"remote":["origin/main"]}

@@ -182,6 +182,28 @@ public struct SettingsChange: Encodable, Sendable {
     }
 }
 
+/// Answer of POST /v1/tld/check: the daemon's verdict on a TLD before it is applied.
+public struct TLDCheck: Decodable, Sendable, Equatable {
+    public var ok: Bool
+    /// The lowercased, trimmed TLD the daemon would use.
+    public var normalized: String
+    /// Set for a TLD that works only in a limited way, e.g. "local" (resolved by mDNS, not Flock's DNS).
+    public var warning: String
+    /// Set when the TLD is refused, e.g. a public one.
+    public var error: String
+
+    enum CodingKeys: String, CodingKey { case ok, normalized, warning, error }
+
+    public init(from decoder: Decoder) throws {
+        // The daemon omits warning and error when they are empty (Go's omitempty).
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        ok = try c.decodeIfPresent(Bool.self, forKey: .ok) ?? false
+        normalized = try c.decodeIfPresent(String.self, forKey: .normalized) ?? ""
+        warning = try c.decodeIfPresent(String.self, forKey: .warning) ?? ""
+        error = try c.decodeIfPresent(String.self, forKey: .error) ?? ""
+    }
+}
+
 /// Body of PATCH /v1/sites/{name}; nil fields are left out. An empty `php` means "use the default".
 /// `server` is "fastcgi" or "frankenphp", `worker` "" (classic) or "octane".
 public struct SiteChange: Encodable, Sendable {

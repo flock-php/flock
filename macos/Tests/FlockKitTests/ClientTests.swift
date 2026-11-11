@@ -273,4 +273,28 @@ struct ClientTests {
         ])
         #expect(StubProtocol.requests.map(\.timeout) == [5, 30, 30, 120])
     }
+
+    @Test func checkTLDPostsTheDomainToTheDaemon() async throws {
+        StubProtocol.reset { _ in (200, #"{"ok":true,"normalized":"dev"}"#) }
+        let client = client(try apiJSON(token: "t"))
+
+        let check = try await client.checkTLD("dev")
+        #expect(check.ok && check.normalized == "dev")
+
+        let request = try #require(StubProtocol.requests.first)
+        #expect(request.method == "POST")
+        #expect(request.url == "http://127.0.0.1:53531/v1/tld/check")
+        #expect(request.body.contains(#""tld":"dev""#))
+        #expect(request.timeout == 30)
+    }
+
+    @Test func checkTLDReturnsTheDaemonsRefusal() async throws {
+        // A refusal is 200 + ok:false (see Task 1); the app shows `error`, it is no exception.
+        StubProtocol.reset { _ in (200, #"{"ok":false,"normalized":"com","error":"com is a public TLD"}"#) }
+        let client = client(try apiJSON(token: "t"))
+
+        let check = try await client.checkTLD("com")
+        #expect(!check.ok && check.normalized == "com")
+        #expect(check.error == "com is a public TLD" && check.warning.isEmpty)
+    }
 }
