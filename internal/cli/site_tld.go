@@ -183,7 +183,8 @@ func (s *state) changeSiteTLD(raw, siteName string, inherit bool, out io.Writer)
 	}
 
 	// Before any mutation: the hosts the site moves onto must be free — no other site's
-	// domain, no alias of any site, no proxy (the API's siteProxyClash, CLI-side).
+	// domain, no alias of any site, no proxy (config.SiteHostCollision, the check the
+	// API's site TLD patch runs too).
 	if err := s.siteHostsFree(site, newSuffix); err != nil {
 		return "", "", err
 	}
@@ -220,34 +221,14 @@ func (s *state) changeSiteTLD(raw, siteName string, inherit bool, out io.Writer)
 // siteHostsFree refuses a suffix that would move site onto a host Flock already serves
 // under newSuffix: another site's domain, any site's alias (pinned hosts included), or a
 // proxy's domain. The site's own inherited aliases move with it, onto the same suffix, and
-// are checked against the other owners too.
+// are checked against the other owners too. The config-side check (config.
+// SiteHostCollision) is the one the API's site TLD patch runs on the same proposal, so CLI
+// and API refuse exactly the same collisions.
 func (s *state) siteHostsFree(site config.Site, newSuffix string) error {
-	taken := map[string]string{}
-	for _, o := range s.cfg.AllSites() {
-		if o.Name == site.Name {
-			continue
-		}
-		taken[s.cfg.Domain(o)] = "site " + o.Name
-		for _, e := range s.cfg.ExtraDomains(o) {
-			if e.Alias {
-				taken[e.Host] = "site " + o.Name
-			}
-		}
-	}
-	for _, p := range s.cfg.Proxies {
-		taken[s.cfg.ProxyDomain(p)] = "proxy " + p.Name
-	}
-
-	moving := []string{site.Name + "." + newSuffix}
-	for _, d := range site.Domains {
-		if d.Alias && d.TLD == "" {
-			moving = append(moving, d.Label+"."+newSuffix)
-		}
-	}
-	for _, host := range moving {
-		if owner, ok := taken[host]; ok {
-			return fmt.Errorf("%s is already served by %s: %s can't move to .%s", host, owner, site.Name, newSuffix)
-		}
+	probe := site
+	probe.TLD = newSuffix
+	if host, owner := s.cfg.SiteHostCollision(probe); host != "" {
+		return fmt.Errorf("%s is already served by %s: %s can't move to .%s", host, owner, site.Name, newSuffix)
 	}
 	return nil
 }

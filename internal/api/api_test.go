@@ -1066,3 +1066,53 @@ func TestProxyEndpoints(t *testing.T) {
 		t.Fatalf("unproxying twice, got %d", resp.StatusCode)
 	}
 }
+
+// TestSiteTLDCrossSiteCollision pins the API/CLI parity (a): PATCH {"tld":X} refuses the
+// collisions the CLI's siteHostsFree refuses — the site's primary host or a moving
+// inherited alias landing on ANOTHER SITE's effective host (domain or alias), not just a
+// proxy's — with the same 400 invalid() shape and config.json byte-identical. A free
+// landing goes through, sanitized as ever.
+func TestSiteTLDCrossSiteCollision(t *testing.T) {
+	b := &fakeBackend{root: t.TempDir()}
+	cfg := config.Default()
+	// shop (global .test) serves the inherited alias "app"; site app sits on .loc.
+	if err := cfg.Upsert(config.Site{Name: "shop", Path: t.TempDir(), Domains: []config.Domain{{Label: "app", Alias: true}}}); err != nil {
+		t.Fatal(err)
+	}
+	// app2 (.loc) carries the inherited alias "x"; site x serves x.test.
+	if err := cfg.Upsert(config.Site{Name: "app", Path: t.TempDir(), TLD: "loc"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := cfg.Upsert(config.Site{Name: "app2", Path: t.TempDir(), TLD: "loc", Domains: []config.Domain{{Label: "x", Alias: true}}}); err != nil {
+		t.Fatal(err)
+	}
+	if err := cfg.Upsert(config.Site{Name: "x", Path: t.TempDir()}); err != nil {
+		t.Fatal(err)
+	}
+	if err := cfg.Save(b.root); err != nil {
+		t.Fatal(err)
+	}
+	srv := serve(t, b, "")
+
+	for _, tc := range []struct{ site, body, want string }{
+		{"app", `{"tld":"test"}`, "app.test is already served by site shop"}, // the primary lands on shop's alias
+		{"app2", `{"tld":"test"}`, "x.test is already served by site x"},     // the moving alias lands on x's domain
+	} {
+		before := configBytes(t, b)
+		resp, body := call(t, "PATCH", srv.URL+"/v1/sites/"+tc.site, "", tc.body)
+		if resp.StatusCode != http.StatusBadRequest || !strings.Contains(body, tc.want) {
+			t.Fatalf("PATCH %s %s: %d %s, want 400 naming %q", tc.site, tc.body, resp.StatusCode, body, tc.want)
+		}
+		if !bytes.Equal(before, configBytes(t, b)) {
+			t.Fatalf("PATCH %s %s: the rejected patch changed config.json", tc.site, tc.body)
+		}
+	}
+
+	// A free landing goes through, sanitized: "LOC2 " → "loc2".
+	if resp, body := call(t, "PATCH", srv.URL+"/v1/sites/app", "", `{"tld":"LOC2 "}`); resp.StatusCode != http.StatusOK {
+		t.Fatalf("free landing: %d %s", resp.StatusCode, body)
+	}
+	if site, _ := b.config(t).FindSite("app"); site.TLD != "loc2" {
+		t.Fatalf("free landing not stored sanitized: %+v", site)
+	}
+}

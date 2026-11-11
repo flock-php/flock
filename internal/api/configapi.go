@@ -222,24 +222,18 @@ func siteTLD(raw string) (string, error) {
 	return tld, nil
 }
 
-// siteProxyClash reports why the hosts site is served at (its domain and extra domains)
-// collide with a proxy's host: a suffix override moves the site's domain and its inherited
-// aliases, and one of them can land on the <name>.<global TLD> a proxy serves. The proxy's
-// own handlers check the same hosts in the other direction (config.UpsertProxy); this covers
-// the site-side mutations. The shape mirrors NormalizeDomain's proxy conflicts: an
-// invalid() with the host and its owner.
-func siteProxyClash(cfg *config.Config, s config.Site) error {
-	hosts := []string{cfg.Domain(s)}
-	for _, e := range cfg.ExtraDomains(s) {
-		hosts = append(hosts, e.Host)
-	}
-	for _, p := range cfg.Proxies {
-		domain := cfg.ProxyDomain(p)
-		for _, h := range hosts {
-			if h == domain {
-				return invalid("%s is already served by proxy %s", domain, p.Name)
-			}
-		}
+// siteHostClash reports why the site — in the state given, its TLD override as proposed —
+// lands on a host Flock already serves: a suffix change moves the site's domain and its
+// inherited aliases, and any of them (the site's full set of effective hosts, pinned
+// aliases included) can land on a proxy's host, another site's domain, or another site's
+// alias. This is the config-side check the CLI's `flock site tld` runs
+// (state.siteHostsFree), so the API refuses exactly the collisions the CLI does — not just
+// the proxy ones. The proxy's own handlers check the same hosts in the other direction
+// (config.UpsertProxy). The shape is NormalizeDomain's conflict: an invalid() with the
+// host and its owner.
+func siteHostClash(cfg *config.Config, s config.Site) error {
+	if host, owner := cfg.SiteHostCollision(s); host != "" {
+		return invalid("%s is already served by %s", host, owner)
 	}
 	return nil
 }
@@ -395,8 +389,10 @@ func registerConfig(mux *http.ServeMux, b Backend) {
 				}
 				site.TLD = tld
 				// The new suffix moves the site's domain and its inherited aliases:
-				// none may land on a proxy's host.
-				if err := siteProxyClash(cfg, site); err != nil {
+				// none may land on a host Flock already serves — another site's
+				// domain, any site's alias, a proxy's host (the CLI's siteHostsFree
+				// runs the same config-side check on the same proposal).
+				if err := siteHostClash(cfg, site); err != nil {
 					return err
 				}
 			}
