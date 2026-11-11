@@ -325,6 +325,10 @@ func (nopCloser) Close() error { return nil }
 // Windows, which gets the line as typed (Go's quoting of arguments isn't cmd's).
 func ShellCommand(line string) *exec.Cmd { return shellCommand(line) }
 
+// KillTree kills a command started after Configure and the processes it started: its process
+// group on unix, its process tree on Windows.
+func KillTree(cmd *exec.Cmd) { killTree(cmd) }
+
 // Configure prepares a command the way the supervisor starts its own children (a process group of
 // its own on unix, no console window on Windows), for processes Flock runs outside the supervisor.
 func Configure(cmd *exec.Cmd) { configure(cmd) }

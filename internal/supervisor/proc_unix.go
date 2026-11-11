@@ -16,6 +16,12 @@ func configure(cmd *exec.Cmd) {
 
 func shellCommand(line string) *exec.Cmd { return exec.Command("/bin/sh", "-c", line) }
 
+// killTree kills cmd's process group: configure made it the group's leader.
+func killTree(cmd *exec.Cmd) {
+	_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+	_ = cmd.Process.Kill()
+}
+
 func terminate(cmd *exec.Cmd, sig os.Signal) {
 	if sig == nil {
 		sig = syscall.SIGTERM

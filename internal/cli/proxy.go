@@ -187,43 +187,58 @@ func newProxyServerCommand(start bool) *cobra.Command {
 			}
 			name := config.SiteName(args[0])
 			client := s.client()
-			if !start {
-				if _, err := client.StopProxy(cmd.Context(), name); err != nil {
+			if start {
+				if _, err := client.StartProxy(cmd.Context(), name); err != nil {
 					return err
 				}
-				cmd.Printf("stopped %s\n", name)
-				return nil
-			}
-
-			if _, err := client.StartProxy(cmd.Context(), name); err != nil {
+			} else if _, err := client.StopProxy(cmd.Context(), name); err != nil {
 				return err
 			}
-			// Wait a little for the server, to say whether it came up.
-			deadline := time.Now().Add(30 * time.Second)
-			for {
-				st, err := client.Status(cmd.Context())
-				if err != nil {
-					return err
-				}
-				for _, p := range st.Proxies {
-					if p.Name != name || p.Command == nil {
-						continue
-					}
-					switch p.Command.State {
-					case api.ProxyRunning:
-						cmd.Printf("started %s: %s\n", name, p.URL)
-						return nil
-					case api.ProxyFailed:
-						return fmt.Errorf("%s: %s (see `flock logs %s`)", name, p.Command.Problem, name)
-					}
-					if time.Now().After(deadline) {
-						cmd.Printf("%s is still starting — see `flock logs %s`\n", name, name)
-						return nil
-					}
-				}
-				time.Sleep(300 * time.Millisecond)
-			}
+			// Wait a little for the server (or a background stop command), to say how it went.
+			return waitForProxy(cmd, client, name, start, proxyWait)
 		},
+	}
+}
+
+// proxyWait is how long `flock proxy start|stop` waits to say how it went. Tests shorten it.
+var proxyWait = 30 * time.Second
+
+// waitForProxy waits until a proxy's server runs (start) or stopped, and says so, or why not.
+// It gives up after wait, and when the proxy or its command is gone.
+func waitForProxy(cmd *cobra.Command, client *api.Client, name string, start bool, wait time.Duration) error {
+	deadline := time.Now().Add(wait)
+	for {
+		st, err := client.Status(cmd.Context())
+		if err != nil {
+			return err
+		}
+		var command *api.ProxyCommand
+		var url string
+		for _, p := range st.Proxies {
+			if p.Name == name {
+				command, url = p.Command, p.URL
+			}
+		}
+		switch {
+		case command == nil:
+			return fmt.Errorf("%s no longer has a command", name)
+		case command.State == api.ProxyFailed:
+			return fmt.Errorf("%s: %s (see `flock logs %s`)", name, command.Problem, name)
+		case start && command.State == api.ProxyRunning:
+			cmd.Printf("started %s: %s\n", name, url)
+			return nil
+		case !start && command.State == api.ProxyStopped:
+			cmd.Printf("stopped %s\n", name)
+			return nil
+		case time.Now().After(deadline):
+			verb := "stopping"
+			if start {
+				verb = "starting"
+			}
+			cmd.Printf("%s is still %s — see `flock logs %s`\n", name, verb, name)
+			return nil
+		}
+		time.Sleep(300 * time.Millisecond)
 	}
 }
 

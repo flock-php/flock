@@ -164,6 +164,12 @@ func (d *daemon) StartProxy(name string) error {
 	}
 
 	r.mu.Lock()
+	// Again under the lock that claims the start: another start may have come in while the
+	// upstream was probed.
+	if busy := r.busy[name]; busy != "" {
+		r.mu.Unlock()
+		return fmt.Errorf("%w: %s is %s", api.ErrConflict, name, busy)
+	}
 	r.started[name] = time.Now()
 	delete(r.failed, name)
 	if p.Background() {
@@ -257,7 +263,8 @@ func (d *daemon) runCommand(cfg *config.Config, p config.Proxy, command string) 
 	select {
 	case err = <-done:
 	case <-ctx.Done():
-		_ = cmd.Process.Kill()
+		// The shell and what it started: a command that never finished doesn't leave a server.
+		supervisor.KillTree(cmd)
 		<-done
 		err = fmt.Errorf("it didn't finish in %s", backgroundTimeout)
 	}

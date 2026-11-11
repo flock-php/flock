@@ -5,6 +5,7 @@ package supervisor
 import (
 	"os"
 	"os/exec"
+	"strconv"
 	"sync"
 	"syscall"
 	"unsafe"
@@ -19,6 +20,14 @@ func configure(cmd *exec.Cmd) {
 		cmd.SysProcAttr = &syscall.SysProcAttr{}
 	}
 	cmd.SysProcAttr.CreationFlags |= windows.CREATE_NO_WINDOW
+}
+
+// killTree kills cmd and the processes it started (those still its descendants), with taskkill.
+func killTree(cmd *exec.Cmd) {
+	kill := exec.Command("taskkill", "/T", "/F", "/PID", strconv.Itoa(cmd.Process.Pid))
+	configure(kill)
+	_ = kill.Run()
+	_ = cmd.Process.Kill()
 }
 
 // shellCommand runs line through cmd.exe. /s makes cmd take what's between the outer quotes as
