@@ -38,10 +38,25 @@ type CA struct {
 }
 
 // Ensure loads the CA from dir, creating it on first use.
+// A stored root that does not permit tld is replaced, so the CA always constrains
+// names to the TLD the user selected.
 func Ensure(dir, tld string) (*CA, error) {
 	ca := &CA{dir: dir}
 
 	if err := ca.load(); err == nil {
+		if ca.serves(tld) {
+			return ca, nil
+		}
+
+		// A root permitted only for the previous TLD cannot sign certificates any verifier
+		// accepts for the new one, so it is recreated here. Nothing needs invalidating: the
+		// Leaves cache keys on the CA fingerprint, so the new root is a separate entry, and
+		// SiteCert re-issues a file certificate as soon as CheckSignatureFrom rejects the
+		// old root's signature.
+		if err := ca.create(tld); err != nil {
+			return nil, err
+		}
+
 		return ca, nil
 	} else if !errors.Is(err, os.ErrNotExist) {
 		return nil, err
@@ -52,6 +67,11 @@ func Ensure(dir, tld string) (*CA, error) {
 	}
 
 	return ca, nil
+}
+
+// serves reports whether ca's root is name-constrained to tld, the way create writes it.
+func (ca *CA) serves(tld string) bool {
+	return slices.Contains(ca.cert.PermittedDNSDomains, "."+tld)
 }
 
 // CertPath is the PEM file of the root certificate (what gets trusted by the OS).

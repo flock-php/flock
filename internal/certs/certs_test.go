@@ -3,6 +3,7 @@ package certs
 import (
 	"crypto/x509"
 	"os"
+	"slices"
 	"testing"
 )
 
@@ -56,6 +57,34 @@ func TestReusesCAAndCurrentCerts(t *testing.T) {
 	after, _ := os.ReadFile(certPath)
 	if string(before) != string(after) {
 		t.Fatal("current certificate was reissued")
+	}
+}
+
+func TestEnsureRecreatesRootWhenTLDChanges(t *testing.T) {
+	dir := t.TempDir()
+
+	first, err := Ensure(dir, "test")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	second, err := Ensure(dir, "loc")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if second.Fingerprint() == first.Fingerprint() {
+		t.Fatal("root constrained to the old TLD was kept")
+	}
+	if !slices.Contains(second.cert.PermittedDNSDomains, ".loc") {
+		t.Fatalf("new root is not constrained to .loc: %v", second.cert.PermittedDNSDomains)
+	}
+
+	third, err := Ensure(dir, "loc")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if third.Fingerprint() != second.Fingerprint() {
+		t.Fatal("a matching root was recreated on every load")
 	}
 }
 
