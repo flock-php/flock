@@ -3,7 +3,6 @@ package cli
 import (
 	"fmt"
 	"io"
-	"regexp"
 	"runtime"
 	"slices"
 	"strings"
@@ -170,10 +169,6 @@ func suffixTLD(raw string) string {
 	return ""
 }
 
-// domainLabelShape is one DNS label: with --suffix the domain is label-only (ruling R7 —
-// the suffix parameter is only a suffix), the shape config's hostLabel checks for a label.
-var domainLabelShape = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$`)
-
 // addDomainWithSuffix stores an explicit-suffix alias for site: the "inherit" keyword (or
 // an empty suffix) marks the alias inherited — Domain.TLD stays "" and the host rides the
 // site's effective suffix at use time; any other suffix is normalized and validated
@@ -184,7 +179,7 @@ var domainLabelShape = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$`
 // alone cannot state. Mirrors the API's addDomainSuffix (POST /v1/sites/{name}/domains).
 func addDomainWithSuffix(cfg *config.Config, site *config.Site, domain, suffix string) (config.ExtraDomain, error) {
 	label := strings.ToLower(strings.TrimSpace(domain))
-	if !domainLabelShape.MatchString(label) {
+	if !config.HostLabelOK(label) { // the one label rule (ruling R7: with --suffix, domain is label-only)
 		return config.ExtraDomain{}, fmt.Errorf("%q is not a domain label: with --suffix the domain is a single label of a-z, 0-9 and inner hyphens", domain)
 	}
 	tld := suffixTLD(suffix)

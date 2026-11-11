@@ -165,3 +165,19 @@ func TestDomainsBySiteConflictsAcrossSiteSuffixes(t *testing.T) {
 		t.Errorf("media.test: app inherits .test, want it served, got %q", p)
 	}
 }
+
+// TestHostLabelOK pins the one exported DNS-label rule: 1 to 63 characters of a-z, 0-9 and
+// inner hyphens — what config's hostLabel checks for every domain label, now shared by the
+// api's and the cli's label-only domain adds (ruling R7) instead of three regex copies.
+func TestHostLabelOK(t *testing.T) {
+	for _, good := range []string{"a", "1", "app-2", "tenant1", "demo2", "9z9", strings.Repeat("a", 63)} {
+		if !HostLabelOK(good) {
+			t.Errorf("%q: want a valid label", good)
+		}
+	}
+	for _, bad := range []string{"", "-a", "a-", "a--", "AbC", "a.b", "a_b", "a b", strings.Repeat("a", 64)} {
+		if HostLabelOK(bad) {
+			t.Errorf("%q: want an invalid label", bad)
+		}
+	}
+}

@@ -13,6 +13,14 @@ const MaxDepth = 4
 
 var hostLabel = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$`)
 
+// HostLabelOK reports whether label is a single DNS label: 1 to 63 characters of a-z, 0-9
+// and inner hyphens. This is hostLabel's shape, exported as the one rule for label-only
+// input: the api's add_domain with suffix (ruling R7) and the cli's --suffix form check
+// against it, and NormalizeDomain's per-label loop below runs it, so the shape lives once.
+func HostLabelOK(label string) bool {
+	return hostLabel.MatchString(label)
+}
+
 // ExtraDomain is one of a site's extra domains (Site.Domains), resolved for display and
 // routing: Entry is the API-facing string (the bare label for a subdomain, the full host
 // for an alias, inherited or pinned — like the stored strings of old), Host the name it is

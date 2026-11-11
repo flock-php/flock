@@ -10,7 +10,6 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
-	"regexp"
 	"slices"
 	"strings"
 	"time"
@@ -214,10 +213,6 @@ func decodeBody(r *http.Request, v any) error {
 	return nil
 }
 
-// domainLabel is the shape of a single DNS label: with the suffix parameter a domain add is
-// label-only (ruling R7), so its domain must match — the same shape config's hostLabel checks.
-var domainLabel = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$`)
-
 // siteTLD normalizes a requested site suffix: "" is inherit (stored as ""), anything else is
 // validated and stored sanitized. A rejected one is an invalid() error: callers run it inside
 // b.Mutate, so returning it leaves config.json untouched.
@@ -260,7 +255,7 @@ func siteHostClash(cfg *config.Config, s config.Site) error {
 // checks — no site, proxy, or extra domain of the site may serve it.
 func addDomainSuffix(cfg *config.Config, s *config.Site, domain, suffix string) (config.Domain, error) {
 	label := strings.ToLower(strings.TrimSpace(domain))
-	if !domainLabel.MatchString(label) {
+	if !config.HostLabelOK(label) { // the one label rule (ruling R7: with suffix, domain is label-only)
 		return config.Domain{}, invalid("%q is not a domain label: with a suffix the domain is a single label of a-z, 0-9 and inner hyphens", domain)
 	}
 	suffix = strings.ToLower(strings.TrimSpace(suffix))
