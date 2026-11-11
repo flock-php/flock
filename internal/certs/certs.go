@@ -5,7 +5,6 @@
 package certs
 
 import (
-	"bytes"
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
@@ -91,6 +90,9 @@ func (ca *CA) pairs() bool {
 func (ca *CA) CertPath() string { return filepath.Join(ca.dir, "ca.crt") }
 
 func (ca *CA) keyPath() string { return filepath.Join(ca.dir, "ca.key") }
+
+// Cert is the root certificate.
+func (ca *CA) Cert() *x509.Certificate { return ca.cert }
 
 // Fingerprint is the SHA-1 of the root, as shown by Keychain Access and certutil.
 func (ca *CA) Fingerprint() string {
@@ -256,23 +258,10 @@ func (ca *CA) leafIsCurrent(path, domain string) bool {
 
 // WriteBundle writes system (PEM roots, see SystemRoots) followed by the Flock root to path,
 // leaving the file alone when it is already current. PHP and Node use it so they trust both
-// public sites and other local .test sites.
+// public sites and other local .test sites. Roots.Bundle writes the same file for every root
+// Flock has; this is the one-root form the single-suffix flows (see install) use.
 func (ca *CA) WriteBundle(path string, system []byte) error {
-	root, err := os.ReadFile(ca.CertPath())
-	if err != nil {
-		return err
-	}
-
-	out := append([]byte{}, system...)
-	if len(out) > 0 && out[len(out)-1] != '\n' {
-		out = append(out, '\n')
-	}
-	out = append(out, root...)
-
-	if current, err := os.ReadFile(path); err == nil && bytes.Equal(current, out) {
-		return nil
-	}
-	return os.WriteFile(path, out, 0o644)
+	return writeBundle(path, system, []*CA{ca})
 }
 
 func readCert(path string) (*x509.Certificate, error) {

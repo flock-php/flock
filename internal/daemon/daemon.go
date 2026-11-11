@@ -554,11 +554,15 @@ func (d *daemon) reload() error {
 		return err
 	}
 
-	ca, err := certs.Ensure(filepath.Join(d.root, "certs"), cfg.TLD)
-	if err != nil {
+	// One name-constrained root per active suffix: the global TLD's root stays at
+	// <root>/certs/ca.crt (the file the OS trust follows) and every site override gets its own
+	// under certs/roots/. The PHP/Node bundle carries all of them, so PHP on a .loc site verifies
+	// the leaf its own root signed.
+	roots := certs.OpenRoots(filepath.Join(d.root, "certs"), cfg.TLD)
+	if err := roots.Ensure(cfg.ActiveSuffixes()); err != nil {
 		return fmt.Errorf("certificate authority: %w", err)
 	}
-	if err := ca.WriteBundle(php.CABundle(d.root), certs.SystemRoots()); err != nil {
+	if err := roots.Bundle(php.CABundle(d.root), certs.SystemRoots()); err != nil {
 		return err
 	}
 
@@ -568,8 +572,21 @@ func (d *daemon) reload() error {
 		warnings = append(warnings, ".local is owned by mDNS (Bonjour, RFC 6762; reserved for that use by RFC 8375): macOS keeps resolving it in the OS and browsers special-case it, so *.local requests may not reach Flock — .loc is the usual choice")
 	}
 	// Linux browsers keep their own trust stores, and one installed since `flock install` lacks the CA.
-	if err := trustInBrowsers(ca.CertPath()); err != nil {
-		warnings = append(warnings, "browsers don't trust Flock's HTTPS certificates: "+err.Error())
+	// The global root is the one install trusts; trusting the roots of the other suffixes is the
+	// provisioning sync's job (`flock install`).
+	if global := roots.Global(); global != nil {
+		if err := trustInBrowsers(global.CertPath()); err != nil {
+			warnings = append(warnings, "browsers don't trust Flock's HTTPS certificates: "+err.Error())
+		}
+	}
+	// siteCerts is the file certificate of a secured name, signed by the root of the suffix it
+	// is served under (a root may only sign names inside its own suffix).
+	siteCerts := func(domain string) (certPath, keyPath string, err error) {
+		ca, ok := roots.For(domain)
+		if !ok {
+			return "", "", fmt.Errorf("no root for the suffix of %s", domain)
+		}
+		return ca.SiteCert(domain)
 	}
 	for _, ensure := range []func(*config.Config) error{d.ensureDNS, d.ensureMail, d.ensureCollector} {
 		if err := ensure(cfg); err != nil {
@@ -760,7 +777,7 @@ func (d *daemon) reload() error {
 			status.Debugging = ws.Debugging
 		}
 		if site.Secured {
-			if ws.CertFile, ws.KeyFile, err = ca.SiteCert(domain); err != nil {
+			if ws.CertFile, ws.KeyFile, err = siteCerts(domain); err != nil {
 				return fmt.Errorf("certificate for %s: %w", domain, err)
 			}
 		}
@@ -797,7 +814,7 @@ func (d *daemon) reload() error {
 		scheme := "http"
 		if p.Secured {
 			scheme = "https"
-			if ws.CertFile, ws.KeyFile, err = ca.SiteCert(domain); err != nil {
+			if ws.CertFile, ws.KeyFile, err = siteCerts(domain); err != nil {
 				return fmt.Errorf("certificate for %s: %w", domain, err)
 			}
 		}
@@ -917,7 +934,7 @@ func (d *daemon) reload() error {
 		bind = ""
 	}
 
-	if err := d.applyWeb(cfg, bind, webSites, waiting, rootless, shares, ca); err != nil {
+	if err := d.applyWeb(cfg, bind, webSites, waiting, rootless, shares, roots); err != nil {
 		warnings = append(warnings, "web: "+err.Error())
 	}
 
@@ -936,7 +953,7 @@ func (d *daemon) reload() error {
 
 // applyWeb (re)configures Caddy. Before the first successful start it checks the ports itself,
 // because Caddy's own error does not say who holds them.
-func (d *daemon) applyWeb(cfg *config.Config, bind string, sites []web.Site, waiting []web.Waiting, rootless []web.Rootless, shares []web.Share, ca *certs.CA) error {
+func (d *daemon) applyWeb(cfg *config.Config, bind string, sites []web.Site, waiting []web.Waiting, rootless []web.Rootless, shares []web.Share, roots *certs.Roots) error {
 	owned := map[int]bool{}
 	if d.webUp && d.cfg != nil {
 		owned[d.cfg.Ports.HTTP], owned[d.cfg.Ports.HTTPS] = true, true
@@ -963,7 +980,16 @@ func (d *daemon) applyWeb(cfg *config.Config, bind string, sites []web.Site, wai
 		Rootless:   rootless,
 		Shares:     shares,
 		TLD:        cfg.TLD,
-		Issue:      func(name string) (*tls.Certificate, error) { return d.leaves.Get(ca, name) },
+		Roots:      roots,
+		// A name gets a leaf from the root of its own suffix; Leaves keys on the root's
+		// fingerprint, so one cache serves every suffix.
+		Issue: func(name string) (*tls.Certificate, error) {
+			ca, ok := roots.For(name)
+			if !ok {
+				return nil, fmt.Errorf("no root for the suffix of %s", name)
+			}
+			return d.leaves.Get(ca, name)
+		},
 	})
 	if err != nil {
 		return err

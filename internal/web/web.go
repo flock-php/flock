@@ -22,6 +22,7 @@ import (
 	_ "github.com/caddyserver/caddy/v2/caddyconfig/httpcaddyfile"
 	_ "github.com/caddyserver/caddy/v2/modules/standard"
 
+	"flock/internal/certs"
 	"flock/internal/config"
 )
 
@@ -102,6 +103,10 @@ type Config struct {
 	// TLD limits the names HTTPS answers for; Issue makes a certificate for one of them.
 	TLD   string
 	Issue func(name string) (*tls.Certificate, error)
+	// Roots is Flock's root for each suffix sites are served under (the global TLD plus every
+	// site's own override). HTTPS answers names it covers and nothing for the rest, and Issue
+	// signs a name with the root of its own suffix. Empty means the one TLD.
+	Roots *certs.Roots
 }
 
 // hosts are the names one of a site's names (its domain or an alias) answers to: the name itself
