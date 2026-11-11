@@ -124,7 +124,7 @@ final class Screenshots {
         return window
     }
 
-    /// The Add Domain alert of a site, with a domain typed in.
+    /// The Add Domain sheet of a site, with a domain typed in.
     func addDomain(_ site: String, typing domain: String) async throws -> NSWindow {
         let window = try await self.site(site)
         try UI.click(in: window, text: "Add Domain…")
