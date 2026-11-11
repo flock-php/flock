@@ -10,13 +10,14 @@ import (
 	"slices"
 	"time"
 
+	"flock/internal/config"
 	"flock/internal/dns"
 )
 
 // wildcardInterval is how often the wildcard check runs besides after each reload.
 var wildcardInterval = time.Minute
 
-// wildcardState is whether every name under the TLD resolves to Flock, and if not, why.
+// wildcardState is whether every name under one suffix resolves to Flock, and if not, why.
 type wildcardState struct {
 	ok      bool
 	problem string
@@ -35,11 +36,13 @@ func (d *daemon) recheckWildcard() {
 	d.checkWildcard()
 }
 
-// checkWildcard looks up a random name under the TLD through the system resolver, the way browsers
-// and PHP do, and checks that the query reached Flock's DNS server. On Windows that only happens
-// when the NRPT rule from `flock install` is in effect, on macOS when /etc/resolver/<tld> is, on
-// Linux when systemd-resolved's drop-in is;
-// Group Policy, VPN clients and security software can override either without Flock noticing otherwise.
+// checkWildcard looks up a random name under every active suffix through the system resolver,
+// the way browsers and PHP do, and checks that the query reached Flock's DNS server. On Windows
+// that only happens when the NRPT rule from `flock install` is in effect, on macOS when
+// /etc/resolver/<suffix> is, on Linux when systemd-resolved's drop-in routes it; Group Policy,
+// VPN clients and security software can override any of them without Flock noticing otherwise.
+// The same pass scans the system for Flock-marked setup of suffixes that left the active set
+// (see staleSuffixes); one pass covers the whole set, on the same timer.
 func (d *daemon) checkWildcard() {
 	if !d.checking.CompareAndSwap(false, true) {
 		return
@@ -53,6 +56,20 @@ func (d *daemon) checkWildcard() {
 		return
 	}
 
+	suffixes := cfg.ActiveSuffixes()
+	states := make(map[string]wildcardState, len(suffixes))
+	for _, tld := range suffixes {
+		states[tld] = suffixState(cfg, srv, dnsErr, tld)
+	}
+	stale := staleSuffixes(suffixes)
+
+	d.mu.Lock()
+	d.wildcards, d.stale = states, stale
+	d.mu.Unlock()
+}
+
+// suffixState checks one suffix, the way the old single-TLD check did.
+func suffixState(cfg *config.Config, srv *dns.Server, dnsErr error, tld string) wildcardState {
 	var state wildcardState
 	switch {
 	case srv == nil && dnsErr != nil:
@@ -60,28 +77,25 @@ func (d *daemon) checkWildcard() {
 	case srv == nil:
 		state.problem = "Flock's DNS server isn't running"
 	case runtime.GOOS == "darwin":
-		state.problem = dns.ResolverProblem(cfg.TLD, cfg.Ports.DNS)
-		if state.problem == "" && !reaches(srv, cfg.TLD) {
-			state.problem = fmt.Sprintf("macOS doesn't send .%s lookups to Flock (a VPN or DNS filter may be overriding /etc/resolver)", cfg.TLD)
+		state.problem = dns.ResolverProblem(tld, cfg.Ports.DNS)
+		if state.problem == "" && !reaches(srv, tld) {
+			state.problem = fmt.Sprintf("macOS doesn't send .%s lookups to Flock (a VPN or DNS filter may be overriding /etc/resolver)", tld)
 		}
 		state.ok = state.problem == ""
 	case runtime.GOOS == "linux":
-		state.problem = dns.ResolvedProblem(cfg.TLD, cfg.Ports.DNS)
-		if state.problem == "" && !reaches(srv, cfg.TLD) {
-			state.problem = fmt.Sprintf("Linux doesn't send .%s lookups to Flock (systemd-resolved may not be the system's resolver, or a VPN may be overriding it)", cfg.TLD)
+		state.problem = dns.ResolvedProblem(tld, cfg.Ports.DNS)
+		if state.problem == "" && !reaches(srv, tld) {
+			state.problem = fmt.Sprintf("Linux doesn't send .%s lookups to Flock (systemd-resolved may not be the system's resolver, or a VPN may be overriding it)", tld)
 		}
 		state.ok = state.problem == ""
 	case runtime.GOOS != "windows":
 		state.ok = true // nothing to check elsewhere (Flock runs on macOS, Windows and Linux)
-	case reaches(srv, cfg.TLD):
+	case reaches(srv, tld):
 		state.ok = true
 	default:
-		state.problem = windowsWildcardProblem(cfg.TLD)
+		state.problem = windowsWildcardProblem(tld)
 	}
-
-	d.mu.Lock()
-	d.wildcard = state
-	d.mu.Unlock()
+	return state
 }
 
 // reaches is lookupReaches with one retry: a single lookup can get lost while the network changes

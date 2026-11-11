@@ -156,3 +156,88 @@ func TestWildcardCheckReportsWhyItDoesNotWork(t *testing.T) {
 	arrives.Store(true)
 	reloadUntil(t, client, func(st api.Status) bool { return st.DNS.Wildcard && st.DNS.WildcardProblem == "" })
 }
+
+// suffixRow finds one suffix's row in the per-suffix list (nil when the list lacks it).
+func suffixRow(dns api.DNSStatus, tld string) *api.SuffixStatus {
+	for i, s := range dns.Suffixes {
+		if s.TLD == tld {
+			return &dns.Suffixes[i]
+		}
+	}
+	return nil
+}
+
+// TestWildcardCheckReportsEveryActiveSuffix: the check covers the whole active-suffix set. A
+// suffix with no resolver setup gets its own problem row naming the repair, while the global
+// suffix's legacy fields keep their exact meaning: they describe the global suffix only.
+func TestWildcardCheckReportsEveryActiveSuffix(t *testing.T) {
+	var arrives atomic.Bool
+	old := reaches
+	reaches = func(*dns.Server, string) bool { return arrives.Load() }
+	t.Cleanup(func() { reaches = old })
+
+	root, cfg := testRoot(t, func(cfg *config.Config) {
+		cfg.Upsert(config.Site{Name: "app", Path: t.TempDir(), TLD: "loc"})
+	})
+	if runtime.GOOS == "windows" {
+		client := startDaemon(t, root)
+		// No NRPT rule exists for either suffix (the query needs PowerShell, never run in tests).
+		st := waitStatus(t, client, func(st api.Status) bool { return st.DNS.WildcardProblem != "" })
+		if st.DNS.Wildcard {
+			t.Fatalf("global row: %+v", st.DNS)
+		}
+		loc := suffixRow(st.DNS, "loc")
+		if loc == nil || loc.Wildcard || loc.Problem == "" {
+			t.Fatalf("loc row: %+v", st.DNS)
+		}
+		return
+	}
+
+	// Provision the global suffix only: .loc is active (the site overrides to it) but has no setup.
+	provision := func(tlds ...string) {
+		if runtime.GOOS == "linux" {
+			if err := os.WriteFile(dns.ResolvedFile(), []byte(dns.ResolvedContent(tlds, cfg.Ports.DNS)), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			return
+		}
+		for _, tld := range tlds {
+			if err := os.WriteFile(dns.ResolverFile(tld), []byte(dns.ResolverContent(cfg.Ports.DNS)), 0o644); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	provision(cfg.TLD)
+	t.Cleanup(func() {
+		for _, tld := range []string{"test", "loc"} {
+			os.Remove(dns.ResolverFile(tld))
+		}
+		os.Remove(dns.ResolvedFile())
+	})
+
+	arrives.Store(true)
+	client := startDaemon(t, root)
+
+	st := waitStatus(t, client, func(st api.Status) bool {
+		row := suffixRow(st.DNS, "loc")
+		return row != nil && !row.Wildcard && row.Problem != ""
+	})
+	if !st.DNS.Wildcard || st.DNS.WildcardProblem != "" {
+		t.Errorf("the global row must stay healthy: %+v", st.DNS)
+	}
+	if row := suffixRow(st.DNS, "loc"); !strings.Contains(row.Problem, "run `flock install`") {
+		t.Errorf("the loc row must name the repair: %q", row.Problem)
+	}
+	if row := suffixRow(st.DNS, "test"); row == nil || !row.Wildcard || row.Problem != "" {
+		t.Errorf("the test row must match the legacy fields: %+v, %+v", row, st.DNS)
+	}
+	if len(st.DNS.Suffixes) != 2 || st.DNS.Suffixes[0].TLD != "loc" || st.DNS.Suffixes[1].TLD != "test" {
+		t.Errorf("the list must cover every active suffix, sorted: %+v", st.DNS.Suffixes)
+	}
+
+	// One pass fixes every row: provisioning .loc converges the whole map.
+	provision("test", "loc")
+	reloadUntil(t, client, func(st api.Status) bool {
+		return len(st.DNS.Suffixes) == 2 && suffixRow(st.DNS, "loc").Wildcard && suffixRow(st.DNS, "test").Wildcard
+	})
+}

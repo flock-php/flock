@@ -129,3 +129,27 @@ func ResolverProblem(tld string, port int) string {
 	}
 	return ""
 }
+
+// StaleResolvers lists the Flock-marked resolver files in dir whose suffix is outside tlds:
+// setup for suffixes Flock no longer serves, left behind when a TLD change's `flock install`
+// never ran. Files without the marker belong to other programs, and a name that isn't a single
+// label is nothing Flock provisioned; both are ignored. The result is sorted.
+func StaleResolvers(dir string, tlds []string) []string {
+	active := normalizeSuffixes(tlds)
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return nil
+	}
+	var stale []string
+	for _, e := range entries {
+		name := e.Name()
+		if e.IsDir() || !ValidTLD(name) || slices.Contains(active, name) {
+			continue
+		}
+		if data, err := os.ReadFile(filepath.Join(dir, name)); err == nil && strings.HasPrefix(string(data), ResolverMarker) {
+			stale = append(stale, name)
+		}
+	}
+	slices.Sort(stale)
+	return stale
+}

@@ -2,6 +2,7 @@ package dns
 
 import (
 	"os"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -50,5 +51,31 @@ func TestResolvedProblemMissingAndForeign(t *testing.T) {
 	}
 	if p := ResolvedProblem("test", 53535); !strings.Contains(p, "flock install") {
 		t.Fatalf("a foreign drop-in: %q", p)
+	}
+}
+
+// StaleResolved lists the suffixes the drop-in routes to Flock that are outside the active set
+// (setup for retired suffixes `flock install` would rewrite away). Non-label words are ignored.
+func TestStaleResolvedListsExtraDomains(t *testing.T) {
+	ResolvedDir = t.TempDir()
+	t.Cleanup(func() { ResolvedDir = "/etc/systemd/resolved.conf.d" })
+
+	if got := StaleResolved(ResolvedFile(), []string{"test"}); got != nil {
+		t.Fatalf("no drop-in: %v", got)
+	}
+	if err := os.WriteFile(ResolvedFile(), []byte(ResolvedContent([]string{"test", "xyz", "old"}, 53535)), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if got := StaleResolved(ResolvedFile(), []string{"test"}); !slices.Equal(got, []string{"old", "xyz"}) {
+		t.Fatalf("got %v, want [old xyz]", got)
+	}
+	if got := StaleResolved(ResolvedFile(), []string{"test", "old", "xyz"}); got != nil {
+		t.Fatalf("a matching set: %v", got)
+	}
+	if err := os.WriteFile(ResolvedFile(), []byte("[Resolve]\nDNS=8.8.8.8\nDomains=example.com ~a.b ~x\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if got := StaleResolved(ResolvedFile(), nil); !slices.Equal(got, []string{"x"}) {
+		t.Fatalf("a plain word and a multi-label domain are no Flock routing: %v", got)
 	}
 }

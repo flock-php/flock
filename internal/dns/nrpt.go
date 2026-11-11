@@ -2,6 +2,7 @@ package dns
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 )
 
@@ -48,6 +49,24 @@ func nrptRuleNamespaces(out string) map[string]bool {
 		}
 	}
 	return set
+}
+
+// StaleNRPTRuleSuffixes reads that same Flock-rule dump and lists the single-label namespaces
+// (".loc" → "loc") outside tlds: rules Flock provisioned for suffixes it no longer serves,
+// which `flock install` sweeps away. Multi-label namespaces are nothing Flock added (its rules
+// are one label each) and get no name. Sorted. The dump, never PowerShell, is what tests feed.
+func StaleNRPTRuleSuffixes(out string, tlds []string) []string {
+	active := normalizeSuffixes(tlds)
+	var stale []string
+	for ns := range nrptRuleNamespaces(out) {
+		suffix := strings.TrimPrefix(ns, ".")
+		if !ValidTLD(suffix) || slices.Contains(active, suffix) {
+			continue
+		}
+		stale = append(stale, suffix)
+	}
+	slices.Sort(stale)
+	return stale
 }
 
 // ValidTLD accepts what a NRPT namespace, a resolver file name and a resolved Domains= word can

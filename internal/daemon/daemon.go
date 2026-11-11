@@ -107,7 +107,10 @@ type daemon struct {
 	breakpoints     xdebug.Detector
 	breakpointSites map[string]bool
 	cfg             *config.Config
-	wildcard        wildcardState
+	// wildcards is every active suffix's DNS health, keyed by suffix (see checkWildcard);
+	// stale lists Flock-marked suffixes provisioned in the system outside the active set.
+	wildcards map[string]wildcardState
+	stale     []string
 
 	defaults defaults // the first run's default PHP and Node.js
 }
@@ -1139,9 +1142,18 @@ func (d *daemon) Status() api.Status {
 			}
 		}
 	}
-	st.DNS = api.DNSStatus{Wildcard: d.wildcard.ok, WildcardProblem: d.wildcard.problem, MaxDepth: config.MaxDepth}
+	st.DNS = api.DNSStatus{MaxDepth: config.MaxDepth}
 	if d.cfg != nil {
 		st.DNS.TLD = d.cfg.TLD
+		// The legacy fields carry the global suffix's state, exactly as before; the list
+		// covers every active suffix (the global row appears in both).
+		if g, ok := d.wildcards[d.cfg.TLD]; ok {
+			st.DNS.Wildcard, st.DNS.WildcardProblem = g.ok, g.problem
+		}
+		for _, tld := range d.cfg.ActiveSuffixes() {
+			s := d.wildcards[tld]
+			st.DNS.Suffixes = append(st.DNS.Suffixes, api.SuffixStatus{TLD: tld, Wildcard: s.ok, Problem: s.problem})
+		}
 	}
 	if d.dns != nil {
 		st.DNS.Addr = d.dns.Addr()
@@ -1165,10 +1177,26 @@ func (d *daemon) Status() api.Status {
 		st.CaptureOff = append([]string{}, d.cfg.CaptureOff...)
 		st.Defaults = d.defaultsStatus(d.cfg)
 
-		// Without the helper, sites resolve only through the DNS rule: say so when that fails too.
-		if runtime.GOOS == "windows" && d.wildcard.problem != "" && hosts.Blocked(d.root) && !hosts.HelperStatus().Installed {
+		// Without the helper, sites resolve only through the DNS rule: say so, per suffix,
+		// when that fails too.
+		if runtime.GOOS == "windows" && hosts.Blocked(d.root) && !hosts.HelperStatus().Installed {
+			for _, s := range st.DNS.Suffixes {
+				if s.Problem == "" {
+					continue
+				}
+				st.Warnings = append(st.Warnings[:len(st.Warnings):len(st.Warnings)],
+					fmt.Sprintf("*.%s domains don't resolve: %s, and %s", s.TLD, s.Problem, helperBlockedProblem))
+			}
+		}
+		// Suffixes the system still routes to Flock that left the active set: one line naming
+		// the repair, found by the wildcard check's scan.
+		if len(d.stale) > 0 {
+			names := make([]string, 0, len(d.stale))
+			for _, s := range d.stale {
+				names = append(names, "."+s)
+			}
 			st.Warnings = append(st.Warnings[:len(st.Warnings):len(st.Warnings)],
-				fmt.Sprintf("*.%s domains don't resolve: %s, and %s", d.cfg.TLD, d.wildcard.problem, helperBlockedProblem))
+				"stale "+strings.Join(names, ", ")+" setup: run `flock install`")
 		}
 	}
 
@@ -1199,7 +1227,11 @@ func (d *daemon) ReleasePHP(minor string) {
 func (d *daemon) Services() []api.Service {
 	d.mu.Lock()
 	cfg := d.cfg
-	dnsUp, mailUp, webUp, wildcard, problems := d.dns != nil, d.mail != nil, d.webUp, d.wildcard, d.problems
+	dnsUp, mailUp, webUp, problems := d.dns != nil, d.mail != nil, d.webUp, d.problems
+	var wildcard wildcardState // the DNS service row describes the global suffix, as before
+	if cfg != nil {
+		wildcard = d.wildcards[cfg.TLD]
+	}
 	d.mu.Unlock()
 	if cfg == nil {
 		return []api.Service{}

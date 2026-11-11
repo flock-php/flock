@@ -12,3 +12,6 @@ func SetNRPT([]string) error    { return nil }
 func RemoveNRPT() error         { return nil }
 func NRPTInstalled(string) bool { return true }
 func PolicyManaged() bool       { return false }
+
+// StaleNRPTRules: outside Windows there are no NRPT rules, so nothing is stale there.
+func StaleNRPTRules([]string) []string { return nil }

@@ -32,14 +32,8 @@ func newStatusCommand() *cobra.Command {
 
 			out := cmd.OutOrStdout()
 			fmt.Fprintf(out, "daemon    running (pid %d, %s, up %s)\n", st.PID, st.Version, time.Since(st.StartedAt).Round(time.Second))
-			switch {
-			case st.DNS.Wildcard:
-				fmt.Fprintf(out, "dns       *.%s → 127.0.0.1, any subdomain (server on %s)\n", st.DNS.TLD, st.DNS.Addr)
-			case st.DNS.TLD != "" && runtime.GOOS == "windows":
-				fmt.Fprintf(out, "dns       site domains and extra domains → 127.0.0.1 (hosts file); other *.%s subdomains don't resolve: %s\n",
-					st.DNS.TLD, st.DNS.WildcardProblem)
-			case st.DNS.TLD != "":
-				fmt.Fprintf(out, "dns       *.%s doesn't resolve to Flock: %s\n", st.DNS.TLD, st.DNS.WildcardProblem)
+			for _, line := range dnsStatusLines(st.DNS, runtime.GOOS) {
+				fmt.Fprintln(out, line)
 			}
 			fmt.Fprintf(out, "web       http :%d, https :%d\n", st.HTTPPort, st.HTTPSPort)
 			fmt.Fprintf(out, "mail      smtp://%s\n", st.Mail)
@@ -97,6 +91,32 @@ func newStatusCommand() *cobra.Command {
 			return nil
 		},
 	}
+}
+
+// dnsStatusLines is the dns part of `flock status`: one terse row per active suffix (a daemon
+// that predates the per-suffix list gets its single legacy row). On Windows a suffix that
+// doesn't resolve through the DNS rule still works for the sites' domains, through the hosts
+// file; elsewhere its subdomains simply don't resolve.
+func dnsStatusLines(dns api.DNSStatus, goos string) []string {
+	rows := dns.Suffixes
+	if len(rows) == 0 && dns.TLD != "" {
+		rows = []api.SuffixStatus{{TLD: dns.TLD, Wildcard: dns.Wildcard, Problem: dns.WildcardProblem}}
+	}
+	var lines []string
+	for _, s := range rows {
+		if s.TLD == "" {
+			continue
+		}
+		switch {
+		case s.Wildcard:
+			lines = append(lines, fmt.Sprintf("dns       *.%s → 127.0.0.1, any subdomain (server on %s)", s.TLD, dns.Addr))
+		case goos == "windows":
+			lines = append(lines, fmt.Sprintf("dns       site domains and extra domains → 127.0.0.1 (hosts file); other *.%s subdomains don't resolve: %s", s.TLD, s.Problem))
+		default:
+			lines = append(lines, fmt.Sprintf("dns       *.%s doesn't resolve to Flock: %s", s.TLD, s.Problem))
+		}
+	}
+	return lines
 }
 
 func newSitesCommand() *cobra.Command {

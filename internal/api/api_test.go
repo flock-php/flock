@@ -304,6 +304,30 @@ func TestTLDCheck(t *testing.T) {
 	}
 }
 
+// TestDNSStatusJSONShapeIsStable pins the wire format old clients parse: the legacy fields keep
+// their names, order and omit rules byte for byte; the per-suffix list is additive and last, and
+// absent (not null) when empty.
+func TestDNSStatusJSONShapeIsStable(t *testing.T) {
+	healthy := DNSStatus{TLD: "test", Addr: "127.0.0.1:53", Wildcard: true, MaxDepth: 3}
+	if got, err := json.Marshal(healthy); err != nil || string(got) != `{"tld":"test","addr":"127.0.0.1:53","wildcard":true,"max_depth":3}` {
+		t.Fatalf("healthy: %s, %v", got, err)
+	}
+	problem := DNSStatus{TLD: "test", Wildcard: false, WildcardProblem: "the resolver file is missing", MaxDepth: 3}
+	if got, err := json.Marshal(problem); err != nil || string(got) !=
+		`{"tld":"test","addr":"","wildcard":false,"wildcard_problem":"the resolver file is missing","max_depth":3}` {
+		t.Fatalf("problem: %s, %v", got, err)
+	}
+	all := DNSStatus{TLD: "test", Addr: "127.0.0.1:53", Wildcard: true, MaxDepth: 3, Suffixes: []SuffixStatus{
+		{TLD: "loc", Problem: "the resolver file is missing"},
+		{TLD: "test", Wildcard: true},
+	}}
+	want := `{"tld":"test","addr":"127.0.0.1:53","wildcard":true,"max_depth":3,` +
+		`"suffixes":[{"tld":"loc","wildcard":false,"problem":"the resolver file is missing"},{"tld":"test","wildcard":true}]}`
+	if got, err := json.Marshal(all); err != nil || string(got) != want {
+		t.Fatalf("suffixes: %s, %v", got, err)
+	}
+}
+
 func TestMailEndpoints(t *testing.T) {
 	root := t.TempDir()
 	path := filepath.Join(root, "mail", "app", "1-000001.eml")

@@ -1,6 +1,7 @@
 package dns
 
 import (
+	"slices"
 	"strings"
 	"testing"
 )
@@ -47,5 +48,20 @@ func TestNRPTRuleNamespaces(t *testing.T) {
 	}
 	if set[".loc"] {
 		t.Errorf(".loc points at 10.0.0.2, not Flock: %v", set)
+	}
+}
+
+// StaleNRPTRuleSuffixes reads Flock's rule dump and lists single-label namespaces outside the
+// active set; multi-label namespaces and rules pointing elsewhere (not 127.0.0.1) are ignored.
+func TestStaleNRPTRuleSuffixes(t *testing.T) {
+	out := ".loc|127.0.0.1\n.old|127.0.0.1\n.a.b|127.0.0.1\n.x|8.8.8.8\n\n"
+	if got := StaleNRPTRuleSuffixes(out, []string{"loc"}); !slices.Equal(got, []string{"old"}) {
+		t.Fatalf("got %v, want [old]", got)
+	}
+	if got := StaleNRPTRuleSuffixes(out, nil); !slices.Equal(got, []string{"loc", "old"}) {
+		t.Fatalf("an empty active set: %v", got)
+	}
+	if got := StaleNRPTRuleSuffixes("", []string{"loc"}); got != nil {
+		t.Fatalf("no rules: %v", got)
 	}
 }

@@ -210,6 +210,18 @@ type DNSStatus struct {
 	Wildcard        bool   `json:"wildcard"`
 	WildcardProblem string `json:"wildcard_problem,omitempty"`
 	MaxDepth        int    `json:"max_depth"` // subdomain levels below a site that are served
+	// Suffixes is the wildcard health of every active suffix (config.ActiveSuffixes), the
+	// global TLD included: its row duplicates the fields above, so old clients that only read
+	// those keep seeing exactly the global suffix's state. Added last; omitted when empty.
+	Suffixes []SuffixStatus `json:"suffixes,omitempty"`
+}
+
+// SuffixStatus is one active suffix's DNS health: whether every name under it resolves to
+// Flock, and when it doesn't, why (see DNSStatus.Wildcard).
+type SuffixStatus struct {
+	TLD      string `json:"tld"`
+	Wildcard bool   `json:"wildcard"`
+	Problem  string `json:"problem,omitempty"`
 }
 
 // Settings are the global toggles a UI can change; nil fields stay as they are.

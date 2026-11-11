@@ -125,3 +125,30 @@ func TestRemoveResolverFilesKeepsForeign(t *testing.T) {
 		t.Fatalf("the foreign file went away: %v", err)
 	}
 }
+
+// StaleResolvers lists the Flock-marked resolver files in dir whose suffix is outside the
+// active set. Foreign files (no marker), non-label names and directories are ignored.
+func TestStaleResolversIgnoresForeignAndActive(t *testing.T) {
+	dir := t.TempDir()
+	for _, s := range []string{"test", "old", "xyz", "a_b"} {
+		if err := os.WriteFile(filepath.Join(dir, s), []byte(ResolverContent(53535)), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.WriteFile(filepath.Join(dir, "corp"), []byte(foreignResolver), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(filepath.Join(dir, "sub"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	if got := StaleResolvers(dir, []string{"test"}); !slices.Equal(got, []string{"old", "xyz"}) {
+		t.Fatalf("got %v, want [old xyz]", got)
+	}
+	if got := StaleResolvers(dir, nil); !slices.Equal(got, []string{"old", "test", "xyz"}) {
+		t.Fatalf("an empty active set: %v", got)
+	}
+	if got := StaleResolvers(filepath.Join(dir, "nope"), []string{"test"}); got != nil {
+		t.Fatalf("a missing dir is nothing's problem: %v", got)
+	}
+}

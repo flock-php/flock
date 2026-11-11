@@ -46,13 +46,27 @@ func RemoveNRPT() error {
 	return err
 }
 
+// nrptRulesQuery prints Flock's rules as one "<namespaces>|<servers>" line each, the dump
+// nrptRuleNamespaces and StaleNRPTRuleSuffixes parse.
+const nrptRulesQuery = `Get-DnsClientNrptRule | Where-Object { $_.Comment -eq '` + nrptComment + `' } | ForEach-Object { ($_.Namespace -join ',') + '|' + ($_.NameServers -join ',') }`
+
 // NRPTInstalled reports whether a Flock rule sends .<tld> to 127.0.0.1.
 func NRPTInstalled(tld string) bool {
-	out, err := powershell(`Get-DnsClientNrptRule | Where-Object { $_.Comment -eq '` + nrptComment + `' } | ForEach-Object { ($_.Namespace -join ',') + '|' + ($_.NameServers -join ',') }`)
+	out, err := powershell(nrptRulesQuery)
 	if err != nil {
 		return false
 	}
 	return nrptRuleNamespaces(string(out))["."+tld]
+}
+
+// StaleNRPTRules lists the suffixes Flock's NRPT rules route to 127.0.0.1 that are outside
+// tlds: rules for suffixes Flock no longer serves, which `flock install` sweeps away.
+func StaleNRPTRules(tlds []string) []string {
+	out, err := powershell(nrptRulesQuery)
+	if err != nil {
+		return nil
+	}
+	return StaleNRPTRuleSuffixes(string(out), tlds)
 }
 
 // PolicyManaged reports whether Group Policy deploys NRPT rules, which make Windows ignore local ones.

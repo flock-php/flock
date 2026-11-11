@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strconv"
 	"strings"
@@ -19,6 +20,7 @@ import (
 	"flock/internal/api"
 	"flock/internal/binaries"
 	"flock/internal/config"
+	"flock/internal/dns"
 	"flock/internal/paths"
 	"flock/internal/web"
 	"flock/internal/worktree"
@@ -328,6 +330,70 @@ func TestLocalTLDIsAWarning(t *testing.T) {
 	if containsText(status.Warnings, "mDNS") {
 		t.Fatalf("unexpected mDNS warning for TLD loc: %v", status.Warnings)
 	}
+}
+
+// TestStaleSuffixSetupWarnsOnce: a suffix Flock provisioned in the system but no longer active
+// (a TLD change whose `flock install` never ran) is stale. The daemon says so in exactly one
+// warning naming the repair; foreign setup and a matching set get none.
+func TestStaleSuffixSetupWarnsOnce(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("the stale NRPT scan queries rules through PowerShell, which tests never run")
+	}
+
+	root, cfg := testRoot(t, nil)
+
+	switch runtime.GOOS {
+	case "darwin":
+		// Two Flock-marked resolver files for suffixes outside the set; "corp" is somebody else's.
+		for _, s := range []string{"old", "xyz"} {
+			if err := os.WriteFile(dns.ResolverFile(s), []byte(dns.ResolverContent(cfg.Ports.DNS)), 0o644); err != nil {
+				t.Fatal(err)
+			}
+		}
+		if err := os.WriteFile(dns.ResolverFile("corp"), []byte("nameserver 1.2.3.4\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() {
+			for _, s := range []string{"old", "xyz", "corp"} {
+				os.Remove(dns.ResolverFile(s))
+			}
+		})
+	case "linux":
+		// The one drop-in routes the active suffix plus two retired ones.
+		if err := os.WriteFile(dns.ResolvedFile(), []byte(dns.ResolvedContent([]string{"test", "old", "xyz"}, cfg.Ports.DNS)), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { os.Remove(dns.ResolvedFile()) })
+	}
+
+	client := startDaemon(t, root)
+	status := waitStatus(t, client, func(st api.Status) bool { return len(st.Warnings) > 0 })
+
+	want := "stale .old, .xyz setup: run `flock install`"
+	count := 0
+	for _, w := range status.Warnings {
+		if w == want {
+			count++
+		}
+		if strings.Contains(w, "corp") {
+			t.Fatalf("foreign setup named: %q (all: %v)", w, status.Warnings)
+		}
+	}
+	if count != 1 {
+		t.Fatalf("want exactly one %q, got %v", want, status.Warnings)
+	}
+
+	// Converged setup: the reload's scan clears the warning.
+	if runtime.GOOS == "darwin" {
+		for _, s := range []string{"old", "xyz"} {
+			os.Remove(dns.ResolverFile(s))
+		}
+	} else {
+		if err := os.WriteFile(dns.ResolvedFile(), []byte(dns.ResolvedContent([]string{"test"}, cfg.Ports.DNS)), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	reloadUntil(t, client, func(st api.Status) bool { return !containsText(st.Warnings, "stale .old") })
 }
 
 func TestReloadMovesServicesToNewPorts(t *testing.T) {

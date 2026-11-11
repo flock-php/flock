@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 )
@@ -76,6 +77,33 @@ func resolvedSends(content, tld string, port int) bool {
 		}
 	}
 	return dns && routed
+}
+
+// StaleResolved lists the suffixes the drop-in at path routes to Flock ("~suffix" in Domains=)
+// that are outside tlds: routing for suffixes Flock no longer serves, which `flock install`
+// rewrites away. Words that aren't a single label are none of Flock's business. Sorted.
+func StaleResolved(path string, tlds []string) []string {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil
+	}
+	active := normalizeSuffixes(tlds)
+	var stale []string
+	for line := range strings.Lines(string(data)) {
+		rest, ok := strings.CutPrefix(line, "Domains=")
+		if !ok {
+			continue
+		}
+		for _, word := range strings.Fields(rest) {
+			suffix := strings.TrimPrefix(word, "~")
+			if !ValidTLD(suffix) || slices.Contains(active, suffix) || slices.Contains(stale, suffix) {
+				continue
+			}
+			stale = append(stale, suffix)
+		}
+	}
+	slices.Sort(stale)
+	return stale
 }
 
 // ResolvedRunning reports whether systemd-resolved answers the system's lookups: its stub
