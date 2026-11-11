@@ -706,6 +706,7 @@ func (s *server) updateSite(ctx context.Context, _ *mcp.CallToolRequest, in upda
 
 	var st api.Status
 	var msg string
+	echoDomain := false // set_site_tld with a suffix: the echo is the status row's real domain
 	switch in.Action {
 	case "secure", "unsecure":
 		st, err = s.Daemon.UpdateSite(ctx, site.Name, api.SiteChange{Secured: ptr(in.Action == "secure")})
@@ -759,7 +760,11 @@ func (s *server) updateSite(ctx context.Context, _ *mcp.CallToolRequest, in upda
 		if tld == "" {
 			msg = fmt.Sprintf("%s follows Flock's global suffix again.", site.Name)
 		} else {
-			msg = fmt.Sprintf("%s is served at <name>.%s.", site.Name, tld)
+			// Echo the site's real effective domain: the guess below is replaced
+			// with the status row's Domain — the suffix as the daemon stored it
+			// (normalized, collision-checked), the name the site is served at.
+			msg = fmt.Sprintf("%s is served at %s.%s.", site.Name, site.Name, tld)
+			echoDomain = true
 		}
 	case "set_server":
 		if in.Server != config.ServerFastCGI && in.Server != config.ServerFrankenPHP {
@@ -789,6 +794,9 @@ func (s *server) updateSite(ctx context.Context, _ *mcp.CallToolRequest, in upda
 		if updated.Name == site.Name {
 			info := siteInfoOf(updated)
 			out.Site = &info
+			if echoDomain && updated.Domain != "" {
+				out.Message = fmt.Sprintf("%s is served at %s.", site.Name, updated.Domain)
+			}
 			if info.Problem != "" {
 				out.Message += " Problem: " + info.Problem
 			}

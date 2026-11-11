@@ -482,28 +482,40 @@ func TestUpdateSiteActions(t *testing.T) {
 	cs := connect(t, opts)
 
 	for _, c := range []struct {
-		args map[string]any
-		want string
+		args   map[string]any
+		want   string
+		domain string // the effective domain the update's status row carries
+		msg    string // the echo the tool must answer with
 	}{
-		{map[string]any{"action": "isolate", "tool": "php", "version": "8.3"}, `update ["shop",{"php":"8.3"}]`},
-		{map[string]any{"action": "unisolate", "tool": "node"}, `update ["shop",{"node":""}]`},
-		{map[string]any{"action": "pin", "tool": "php"}, `pin ["shop","php",""]`},
-		{map[string]any{"action": "unsecure"}, `update ["shop",{"secured":false}]`},
-		{map[string]any{"action": "set_server", "server": "frankenphp", "worker": "octane"}, `update ["shop",{"server":"frankenphp","worker":"octane"}]`},
-		{map[string]any{"action": "add_domain", "domain": "tenant2"}, `domain ["shop","tenant2",""]`},
-		{map[string]any{"action": "add_domain", "domain": "demo2", "suffix": "loc"}, `domain ["shop","demo2","loc"]`},
-		{map[string]any{"action": "add_domain", "domain": "demo2", "suffix": "inherit"}, `domain ["shop","demo2","inherit"]`},
-		{map[string]any{"action": "set_site_tld", "tld": "loc"}, `update ["shop",{"tld":"loc"}]`},
-		{map[string]any{"action": "set_site_tld", "tld": "inherit"}, `update ["shop",{"tld":""}]`},
-		{map[string]any{"action": "restart", "site": "shop.test"}, `restart ["shop"]`},
+		{map[string]any{"action": "isolate", "tool": "php", "version": "8.3"}, `update ["shop",{"php":"8.3"}]`, "", ""},
+		{map[string]any{"action": "unisolate", "tool": "node"}, `update ["shop",{"node":""}]`, "", ""},
+		{map[string]any{"action": "pin", "tool": "php"}, `pin ["shop","php",""]`, "", ""},
+		{map[string]any{"action": "unsecure"}, `update ["shop",{"secured":false}]`, "", ""},
+		{map[string]any{"action": "set_server", "server": "frankenphp", "worker": "octane"}, `update ["shop",{"server":"frankenphp","worker":"octane"}]`, "", ""},
+		{map[string]any{"action": "add_domain", "domain": "tenant2"}, `domain ["shop","tenant2",""]`, "", ""},
+		{map[string]any{"action": "add_domain", "domain": "demo2", "suffix": "loc"}, `domain ["shop","demo2","loc"]`, "", ""},
+		{map[string]any{"action": "add_domain", "domain": "demo2", "suffix": "inherit"}, `domain ["shop","demo2","inherit"]`, "", ""},
+		// set_site_tld echoes the site's REAL effective domain — the suffix as the
+		// daemon stored it, from the status row — not a literal "<name>".
+		{map[string]any{"action": "set_site_tld", "tld": "loc"}, `update ["shop",{"tld":"loc"}]`, "shop.loc", "shop is served at shop.loc."},
+		{map[string]any{"action": "set_site_tld", "tld": "inherit"}, `update ["shop",{"tld":""}]`, "shop.test", "shop follows Flock's global suffix again."},
+		{map[string]any{"action": "restart", "site": "shop.test"}, `restart ["shop"]`, "", ""},
 	} {
 		d.changes = nil
-		if e := callTool(t, cs, "update_site", c.args, nil); e != "" {
+		d.status.Sites[0].Domain = "shop.test"
+		if c.domain != "" {
+			d.status.Sites[0].Domain = c.domain
+		}
+		var out siteActionOut
+		if e := callTool(t, cs, "update_site", c.args, &out); e != "" {
 			t.Errorf("%v: %s", c.args, e)
 			continue
 		}
 		if len(d.changes) != 1 || d.changes[0] != c.want {
 			t.Errorf("%v: got %q, want %q", c.args, d.changes, c.want)
+		}
+		if c.msg != "" && out.Message != c.msg {
+			t.Errorf("%v: echo %q, want %q", c.args, out.Message, c.msg)
 		}
 	}
 	if e := callTool(t, cs, "update_site", map[string]any{"action": "isolate", "tool": "php"}, nil); !strings.Contains(e, "needs version") {
