@@ -225,14 +225,15 @@ func uninstallService() error {
 // privilegedFirst: `flock install` runs ensurePrivileged last, as the installed flock binary.
 const privilegedFirst = false
 
-// ensurePrivileged checks the resolver file and the CA's trust and fixes what is missing: the
-// resolver file as root (re-running flock under sudo), the trust as the user (see trustCA).
+// ensurePrivileged checks the resolver files (one per active suffix) and the CA's trust and fixes
+// what is missing: the files as root (re-running flock under sudo), the trust as the user (see
+// trustCA).
 func ensurePrivileged(cmd *cobra.Command, s *state, bin string, ca *certs.CA) error {
-	current, _ := os.ReadFile(dns.ResolverFile(s.cfg.TLD))
-	if string(current) != dns.ResolverContent(s.cfg.Ports.DNS) {
+	suffixes := s.cfg.ActiveSuffixes()
+	if !dns.ResolversCurrent(dns.ResolverDir, suffixes, s.cfg.Ports.DNS) {
 		cmd.Printf("→ configuring *.%s DNS (needs your password)…\n", s.cfg.TLD)
 		if err := runPrivileged(cmd, "Flock wants to set up *."+s.cfg.TLD+" DNS.", bin, "privileged-setup",
-			"--tld", s.cfg.TLD, "--dns-port", strconv.Itoa(s.cfg.Ports.DNS)); err != nil {
+			"--tlds", strings.Join(suffixes, ","), "--dns-port", strconv.Itoa(s.cfg.Ports.DNS)); err != nil {
 			return fmt.Errorf("privileged setup: %w", err)
 		}
 	}
@@ -330,14 +331,14 @@ func runPrivilegedTo(out, errOut io.Writer, prompt, exe string, args ...string) 
 }
 
 // retireTLD removes macOS' resolver file for a TLD Flock stops serving: /etc/resolver/<old>
-// keeps sending .<old> to Flock's DNS server otherwise, and a stale one shadows a setup the
-// user makes for that suffix elsewhere. Removing it needs root, so it is privileged-setup
+// keeps sending .<old> lookups to Flock's DNS server otherwise, and a stale one shadows a setup
+// the user makes for that suffix elsewhere. Removing it needs root, so it is privileged-setup
 // --remove, which deletes the file only while it carries Flock's marker: a resolver file
 // someone else owns is left alone. That check runs here first as well, so a suffix macOS
 // never sent to Flock costs no password prompt.
 func retireTLD(s *state, out io.Writer, old string) error {
 	data, _ := os.ReadFile(dns.ResolverFile(old))
-	if !strings.HasPrefix(string(data), "# Managed by Flock") {
+	if !strings.HasPrefix(string(data), dns.ResolverMarker) {
 		return nil
 	}
 	self, err := os.Executable()
@@ -346,7 +347,7 @@ func retireTLD(s *state, out io.Writer, old string) error {
 	}
 	fmt.Fprintf(out, "→ removing the old *.%s DNS setup (needs your password)…\n", old)
 	if err := runPrivilegedTo(out, out, "Flock wants to remove its *."+old+" DNS setup.",
-		self, "privileged-setup", "--remove", "--tld", old); err != nil {
+		self, "privileged-setup", "--remove", "--tlds", old); err != nil {
 		return fmt.Errorf("remove the old *.%s DNS setup: %w", old, err)
 	}
 	fmt.Fprintf(out, "✓ removed %s\n", dns.ResolverFile(old))
@@ -370,7 +371,7 @@ func administratorScript(prompt, exe string, args ...string) []string {
 }
 
 func newPrivilegedSetupCommand() *cobra.Command {
-	var tld string
+	var tlds string
 	var dnsPort int
 	var remove bool
 
@@ -383,26 +384,24 @@ func newPrivilegedSetupCommand() *cobra.Command {
 			if os.Geteuid() != 0 {
 				return fmt.Errorf("must run as root")
 			}
-			if tld == "" || strings.ContainsAny(tld, "/.") {
-				return fmt.Errorf("invalid --tld %q", tld)
+			suffixes, err := parseTLDList(tlds)
+			if err != nil {
+				return err
 			}
 
 			if remove {
-				data, _ := os.ReadFile(dns.ResolverFile(tld))
-				if strings.HasPrefix(string(data), "# Managed by Flock") {
-					_ = os.Remove(dns.ResolverFile(tld))
-				}
+				dns.RemoveResolverFiles("/etc/resolver", suffixes)
 				return nil
 			}
 
-			if err := os.MkdirAll("/etc/resolver", 0o755); err != nil {
-				return err
-			}
-			return os.WriteFile(dns.ResolverFile(tld), []byte(dns.ResolverContent(dnsPort)), 0o644)
+			// Write every missing file, take away the Flock-marked ones whose suffix left the
+			// set, leave foreign files alone.
+			_, _, err = dns.SyncResolverFiles("/etc/resolver", suffixes, dnsPort)
+			return err
 		},
 	}
 
-	cmd.Flags().StringVar(&tld, "tld", "", "")
+	cmd.Flags().StringVar(&tlds, "tlds", "", "")
 	cmd.Flags().IntVar(&dnsPort, "dns-port", 0, "")
 	cmd.Flags().BoolVar(&remove, "remove", false, "")
 
@@ -439,10 +438,12 @@ func newUninstallCommand() *cobra.Command {
 
 			self, _ := os.Executable()
 			if err := runPrivileged(cmd, "Flock wants to remove its *."+s.cfg.TLD+" DNS setup.", self, "privileged-setup", "--remove",
-				"--tld", s.cfg.TLD); err != nil {
+				"--tlds", strings.Join(s.cfg.ActiveSuffixes(), ",")); err != nil {
 				return err
 			}
-			cmd.Printf("✓ removed %s\n", dns.ResolverFile(s.cfg.TLD))
+			for _, suffix := range s.cfg.ActiveSuffixes() {
+				cmd.Printf("✓ removed %s\n", dns.ResolverFile(suffix))
+			}
 			if err := untrustCA(filepath.Join(s.root, "certs", "ca.crt")); err != nil {
 				return fmt.Errorf("remove CA trust: %w", err)
 			}

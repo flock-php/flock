@@ -36,10 +36,11 @@ func init() {
 	trustInBrowsers = func(string) error { return nil }
 }
 
-// resolverFile is the file `flock install` writes to send the TLD to Flock, and its content for port.
+// resolverFile is the file (or drop-in) `flock install` writes to send the TLD to Flock, and its
+// content for port.
 func resolverFile(tld string, port int) (string, string) {
 	if runtime.GOOS == "linux" {
-		return dns.ResolvedFile(), dns.ResolvedContent(tld, port)
+		return dns.ResolvedFile(), dns.ResolvedContent([]string{tld}, port)
 	}
 	return dns.ResolverFile(tld), dns.ResolverContent(port)
 }

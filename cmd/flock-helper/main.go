@@ -18,7 +18,7 @@ var version = "dev"
 
 func main() {
 	source := flag.String("source", "", "file the daemon lists its domains in")
-	tld := flag.String("tld", "", "only names under this TLD are accepted")
+	tlds := flag.String("tlds", "", "comma-separated list: only names under these suffixes are accepted")
 	showVersion := flag.Bool("version", false, "print the version and exit")
 	flag.Parse()
 
@@ -27,7 +27,7 @@ func main() {
 		return
 	}
 
-	if err := hosts.RunHelper(*source, *tld); err != nil {
+	if err := hosts.RunHelper(*source, hosts.SplitSuffixes(*tlds)); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}

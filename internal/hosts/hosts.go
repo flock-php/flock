@@ -5,8 +5,9 @@
 // serves to <root>/hosts.txt. A small Windows service (the "hosts helper", installed once by
 // `flock install` with administrator rights) copies them into a marked block of the hosts file.
 // The helper runs as LocalSystem and reads a file the user can write, so it only accepts
-// strictly validated names under the TLD fixed at install time, always mapped to 127.0.0.1:
-// the worst a rogue process could do is point other *.test names at this machine.
+// strictly validated names under the suffixes fixed at install time (the active-suffix set),
+// always mapped to 127.0.0.1: the worst a rogue process could do is point other *.test names
+// at this machine.
 package hosts
 
 import (
@@ -109,13 +110,14 @@ func BlockedExe(root, exe string) bool {
 	return strings.TrimSpace(string(recorded)) == hex.EncodeToString(sum[:])
 }
 
-// ParseSource returns the valid domains of a source file, in order, without duplicates.
-func ParseSource(data []byte, tld string) []string {
+// ParseSources returns the valid domains of a source file, in order, without duplicates: the
+// names under any suffix of the set tlds (the active suffixes fixed at install time).
+func ParseSources(data []byte, tlds []string) []string {
 	var out []string
 	seen := map[string]bool{}
 	for _, line := range strings.Split(string(data), "\n") {
 		name := strings.ToLower(strings.TrimSpace(line))
-		if seen[name] || !ValidDomain(name, tld) {
+		if seen[name] || !underAny(name, tlds) {
 			continue
 		}
 		seen[name] = true
@@ -123,6 +125,30 @@ func ParseSource(data []byte, tld string) []string {
 		if len(out) == MaxDomains {
 			break
 		}
+	}
+	return out
+}
+
+// underAny reports whether name is valid under at least one suffix of the set.
+func underAny(name string, tlds []string) bool {
+	for _, tld := range tlds {
+		if ValidDomain(name, tld) {
+			return true
+		}
+	}
+	return false
+}
+
+// SplitSuffixes reads a helper's --tlds list (comma-separated) into the valid, deduplicated
+// suffixes it names. Entries that are not a single valid label (a public "a.b", junk) are dropped.
+func SplitSuffixes(list string) []string {
+	var out []string
+	for _, s := range strings.Split(list, ",") {
+		s = strings.ToLower(strings.TrimSpace(s))
+		if s == "" || !label.MatchString(s) || slices.Contains(out, s) {
+			continue
+		}
+		out = append(out, s)
 	}
 	return out
 }

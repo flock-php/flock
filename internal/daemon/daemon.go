@@ -12,6 +12,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -185,17 +186,18 @@ func (d *daemon) degraded() bool {
 // Tests move it out of the way.
 var windowsDNSPort = dns.Port
 
-// ensureDNS (re)starts the DNS server when its address or TLD changed. On Windows it is optional:
-// the hosts file still resolves every site's domains when port 53 is taken, so a failure there is
-// reported through the wildcard check instead of as a warning.
+// ensureDNS (re)starts the DNS server when its address or the active-suffix set changed. On
+// Windows it is optional: the hosts file still resolves every site's domains when port 53 is
+// taken, so a failure there is reported through the wildcard check instead of as a warning.
 func (d *daemon) ensureDNS(cfg *config.Config) error {
 	port := cfg.Ports.DNS
 	if runtime.GOOS == "windows" {
 		port = windowsDNSPort
 	}
 
+	suffixes := cfg.ActiveSuffixes()
 	addr := fmt.Sprintf("127.0.0.1:%d", port)
-	if d.dns != nil && d.dns.Addr() == addr && d.dns.TLD() == cfg.TLD {
+	if d.dns != nil && d.dns.Addr() == addr && slices.Equal(d.dns.TLDs(), suffixes) {
 		return nil
 	}
 	if d.dns != nil {
@@ -203,7 +205,7 @@ func (d *daemon) ensureDNS(cfg *config.Config) error {
 		d.setDNS(nil, nil)
 	}
 
-	srv := dns.New(addr, cfg.TLD)
+	srv := dns.New(addr, suffixes)
 	if err := srv.Start(); err != nil {
 		err = fmt.Errorf("dns: %s", busy(port, err))
 		d.setDNS(nil, err)
@@ -1276,7 +1278,7 @@ func (d *daemon) syncHosts(cfg *config.Config, domains []string) []string {
 		return []string{fmt.Sprintf("*.%s domains don't resolve: the Flock hosts helper is not installed — run `flock install`", cfg.TLD)}
 	case !helper.Running:
 		return []string{fmt.Sprintf("*.%s domains don't resolve: the Flock hosts helper service is stopped — run `flock install`", cfg.TLD)}
-	case !helper.Configured(hosts.SourceFile(d.root), cfg.TLD):
+	case !helper.Configured(hosts.SourceFile(d.root), cfg.ActiveSuffixes()):
 		return []string{fmt.Sprintf("the Flock hosts helper is set up for another domain or user — run `flock install` to switch it to *.%s", cfg.TLD)}
 	}
 	return nil

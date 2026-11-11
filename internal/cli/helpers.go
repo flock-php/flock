@@ -5,12 +5,38 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"slices"
+	"strings"
 
 	"flock/internal/api"
 	"flock/internal/binaries"
 	"flock/internal/config"
 	"flock/internal/paths"
 )
+
+// parseTLDList reads a privileged-setup --tlds comma list into the suffixes it names: trimmed,
+// lower-case, deduplicated. It is the guard the root-only setup runs on its input: an entry with
+// a path, dot or space (the characters a resolver file name, a resolved Domains= word and a NRPT
+// namespace can't carry) is refused, and an empty list provisions nothing.
+func parseTLDList(list string) ([]string, error) {
+	var out []string
+	for _, s := range strings.Split(list, ",") {
+		s = strings.ToLower(strings.TrimSpace(s))
+		if s == "" {
+			continue
+		}
+		if strings.ContainsAny(s, "/. ") || len(s) > 63 {
+			return nil, fmt.Errorf("invalid --tlds entry %q", s)
+		}
+		if !slices.Contains(out, s) {
+			out = append(out, s)
+		}
+	}
+	if len(out) == 0 {
+		return nil, fmt.Errorf("--tlds must name at least one suffix")
+	}
+	return out, nil
+}
 
 // state is the loaded config plus where it lives.
 type state struct {

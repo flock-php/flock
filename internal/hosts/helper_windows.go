@@ -42,7 +42,7 @@ func HelperExe() string { return filepath.Join(HelperDir(), HelperName) }
 // HelperRevision is the version of what the helper does (cmd/flock-helper, RunHelper and what it
 // calls). Raise it with every change to them: `flock install` replaces the installed helper, which
 // needs administrator permission, only when its revision differs, not with every Flock release.
-const HelperRevision = 1
+const HelperRevision = 2
 
 // revisionValue is where InstallHelper records the helper's revision: in the service's registry
 // key, which every user can read.
@@ -54,7 +54,7 @@ const serviceKey = `SYSTEM\CurrentControlSet\Services\` + ServiceName
 type Status struct {
 	Installed bool
 	Running   bool
-	Command   string // the service's command line, to check its TLD and source file
+	Command   string // the service's command line, to check its suffixes and source file
 	Revision  int    // the installed helper's HelperRevision (0: a helper from before revisions)
 }
 
@@ -90,23 +90,25 @@ func HelperStatus() Status {
 	return st
 }
 
-// Args are the helper's service arguments.
-func Args(source, tld string) []string {
-	return []string{"--source", source, "--tld", tld}
+// Args are the helper's service arguments: its source file and the active-suffix set.
+func Args(source string, tlds []string) []string {
+	return []string{"--source", source, "--tlds", strings.Join(tlds, ",")}
 }
 
-// Configured reports whether the installed helper runs from HelperExe and reads source for tld.
-// The command line is compared the way the service manager builds it (mgr.CreateService).
-func (s Status) Configured(source, tld string) bool {
+// Configured reports whether the installed helper runs from HelperExe and reads source for
+// exactly the suffix set tlds. The command line is compared the way the service manager builds
+// it (mgr.CreateService).
+func (s Status) Configured(source string, tlds []string) bool {
 	want := syscall.EscapeArg(HelperExe())
-	for _, a := range Args(source, tld) {
+	for _, a := range Args(source, tlds) {
 		want += " " + syscall.EscapeArg(a)
 	}
 	return s.Installed && strings.EqualFold(s.Command, want)
 }
 
-// InstallHelper (administrator only) copies exe (a flock-helper.exe) to HelperExe and (re)creates the service.
-func InstallHelper(exe, source, tld string) error {
+// InstallHelper (administrator only) copies exe (a flock-helper.exe) to HelperExe and (re)creates
+// the service for the suffix set tlds.
+func InstallHelper(exe, source string, tlds []string) error {
 	m, err := mgr.Connect()
 	if err != nil {
 		return fmt.Errorf("service manager: %w", err)
@@ -136,7 +138,7 @@ func InstallHelper(exe, source, tld string) error {
 		DisplayName: "Flock hosts helper",
 		Description: "Adds the domains of your Flock sites to the hosts file.",
 		StartType:   mgr.StartAutomatic,
-	}, Args(source, tld)...)
+	}, Args(source, tlds)...)
 	if err != nil {
 		return fmt.Errorf("create service: %w", err)
 	}
@@ -232,9 +234,9 @@ func copyExe(src, dst string) error {
 	return nil
 }
 
-// RunHelper is the service's main loop: it mirrors source into the hosts file.
-// A service has no console, so failures also go to HelperLog.
-func RunHelper(source, tld string) (err error) {
+// RunHelper is the service's main loop: it mirrors source into the hosts file, accepting names
+// under any suffix of the set tlds. A service has no console, so failures also go to HelperLog.
+func RunHelper(source string, tlds []string) (err error) {
 	defer func() {
 		if r := recover(); r != nil {
 			err = fmt.Errorf("panic: %v", r)
@@ -243,8 +245,13 @@ func RunHelper(source, tld string) (err error) {
 			logHelper(err)
 		}
 	}()
-	if !label.MatchString(tld) {
-		return fmt.Errorf("invalid --tld %q", tld)
+	if len(tlds) == 0 {
+		return fmt.Errorf("invalid --tlds %q: no suffix accepted", strings.Join(tlds, ","))
+	}
+	for _, tld := range tlds {
+		if !label.MatchString(tld) {
+			return fmt.Errorf("invalid --tlds entry %q", tld)
+		}
 	}
 	inService, err := svc.IsWindowsService()
 	if err != nil {
@@ -253,7 +260,7 @@ func RunHelper(source, tld string) (err error) {
 	if !inService {
 		return errors.New("flock-helper only runs as the Flock hosts service (installed by `flock install`)")
 	}
-	if err := svc.Run(ServiceName, &helper{source: source, tld: tld}); err != nil {
+	if err := svc.Run(ServiceName, &helper{source: source, tlds: tlds}); err != nil {
 		return fmt.Errorf("run service: %w", err)
 	}
 	return nil
@@ -272,7 +279,8 @@ func logHelper(err error) {
 }
 
 type helper struct {
-	source, tld string
+	source string
+	tlds   []string
 }
 
 func (h *helper) Execute(_ []string, requests <-chan svc.ChangeRequest, status chan<- svc.Status) (bool, uint32) {
@@ -294,7 +302,7 @@ func (h *helper) Execute(_ []string, requests <-chan svc.ChangeRequest, status c
 		if last != nil && bytes.Equal(data, last) {
 			return
 		}
-		if apply(ParseSource(data, h.tld)) == nil {
+		if apply(ParseSources(data, h.tlds)) == nil {
 			last = data
 		}
 	}

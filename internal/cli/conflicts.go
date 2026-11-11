@@ -111,7 +111,8 @@ func corePorts(cfg *config.Config) []corePort {
 	return core
 }
 
-// findConflicts checks Flock's core ports and, on macOS, whether another program answers for the TLD.
+// findConflicts checks Flock's core ports and, on macOS, whether another program answers for an
+// active suffix.
 func findConflicts(s *state) []conflict {
 	var found []conflict
 	seen := map[int]bool{}
@@ -124,9 +125,7 @@ func findConflicts(s *state) []conflict {
 			found = append(found, portConflict(p, h))
 		}
 	}
-	if c, ok := resolverConflict(s); ok {
-		found = append(found, c)
-	}
+	found = append(found, resolverConflicts(s)...)
 	return found
 }
 
@@ -152,33 +151,38 @@ func holderApp(h ports.Holder) string {
 	return "the other program"
 }
 
-// resolverConflict reports another program's resolver file for the TLD (macOS sends *.test
-// lookups wherever it says) while that program's DNS server runs. A leftover file of a program
-// that no longer runs is no conflict: `flock install` replaces it.
-func resolverConflict(s *state) (conflict, bool) {
+// resolverConflicts reports the foreign resolver files (macOS sends *.test lookups wherever one
+// says) that shadow an active suffix while their program's DNS server runs. A leftover file of a
+// program that no longer runs is no conflict: `flock install` replaces it, and SyncResolvers
+// converges every suffix of the set.
+func resolverConflicts(s *state) []conflict {
 	if runtime.GOOS != "darwin" {
-		return conflict{}, false
+		return nil
 	}
-	file := dns.ResolverFile(s.cfg.TLD)
-	data, err := os.ReadFile(file)
-	if err != nil || strings.HasPrefix(string(data), "# Managed by Flock") {
-		return conflict{}, false
+	var found []conflict
+	for _, tld := range s.cfg.ActiveSuffixes() {
+		file := dns.ResolverFile(tld)
+		data, err := os.ReadFile(file)
+		if err != nil || strings.HasPrefix(string(data), dns.ResolverMarker) {
+			continue
+		}
+		port := resolverPort(string(data))
+		if port == 0 {
+			continue
+		}
+		holders := ports.Foreign(port, s.root)
+		if len(holders) == 0 {
+			continue
+		}
+		h := holders[0]
+		c := conflict{File: file, Service: "*." + tld + " DNS", Holder: h.String(), App: holderApp(h), Hint: h.Hint()}
+		c.Message = fmt.Sprintf("%s sends *.%s to %s (port %d)", file, tld, c.Holder, port)
+		if c.Hint != "" {
+			c.Message += " — " + c.Hint
+		}
+		found = append(found, c)
 	}
-	port := resolverPort(string(data))
-	if port == 0 {
-		return conflict{}, false
-	}
-	holders := ports.Foreign(port, s.root)
-	if len(holders) == 0 {
-		return conflict{}, false
-	}
-	h := holders[0]
-	c := conflict{File: file, Service: "*." + s.cfg.TLD + " DNS", Holder: h.String(), App: holderApp(h), Hint: h.Hint()}
-	c.Message = fmt.Sprintf("%s sends *.%s to %s (port %d)", file, s.cfg.TLD, c.Holder, port)
-	if c.Hint != "" {
-		c.Message += " — " + c.Hint
-	}
-	return c, true
+	return found
 }
 
 // resolverPort is the local port a resolver file sends lookups to, or 0 when its nameserver

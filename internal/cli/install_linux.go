@@ -381,7 +381,7 @@ func ensurePrivileged(cmd *cobra.Command, s *state, _ string, ca *certs.CA) erro
 	ok := fileExists(templatePath()) &&
 		fileHas(dropInPath(name), instanceDropIn(s.root, bin)) &&
 		(fileHas(polkitRule, polkitRuleContent) || unreadable(polkitRule)) &&
-		dns.ResolvedProblem(s.cfg.TLD, s.cfg.Ports.DNS) == "" &&
+		fileHas(dns.ResolvedFile(), dns.ResolvedContent(s.cfg.ActiveSuffixes(), s.cfg.Ports.DNS)) &&
 		(anchor == "" || sameFile(anchor, ca.CertPath())) &&
 		certs.FirefoxPolicyInstalled(name, ca.CertPath())
 	if !ok {
@@ -394,7 +394,7 @@ func ensurePrivileged(cmd *cobra.Command, s *state, _ string, ca *certs.CA) erro
 			return err
 		}
 		if err := runPrivileged(cmd, self, "privileged-setup", "--user", name, "--root", s.root,
-			"--tld", s.cfg.TLD, "--dns-port", strconv.Itoa(s.cfg.Ports.DNS), "--ca", ca.CertPath()); err != nil {
+			"--tlds", strings.Join(s.cfg.ActiveSuffixes(), ","), "--dns-port", strconv.Itoa(s.cfg.Ports.DNS), "--ca", ca.CertPath()); err != nil {
 			return fmt.Errorf("privileged setup: %w", err)
 		}
 	}
@@ -415,11 +415,11 @@ func ensurePrivileged(cmd *cobra.Command, s *state, _ string, ca *certs.CA) erro
 }
 
 // retireTLD: nothing to remove on Linux, verified. systemd-resolved's routing lives in one
-// drop-in, dns.ResolvedFile(), which names the TLD in its Domains= line; setupPrivileged
-// compares dns.ResolvedContent for the current TLD and rewrites the file wholesale (restarting
-// systemd-resolved), so provisioning the new TLD deletes the old one's routing with the same
-// write. There is no per-TLD file to retire: the SELinux port label and everything else the
-// drop-in references are shared by TLDs.
+// drop-in, dns.ResolvedFile(), whose Domains= line names the whole active-suffix set;
+// setupPrivileged compares dns.ResolvedContent for that set and rewrites the file wholesale
+// (restarting systemd-resolved), so provisioning the set deletes the routing of a suffix that
+// left it with the same write. There is no per-suffix file to retire: the SELinux port label
+// and everything else the drop-in references are shared by suffixes.
 func retireTLD(*state, io.Writer, string) error { return nil }
 
 // resolvedMissing says how to switch to systemd-resolved, which Flock sends tld's lookups through:
@@ -494,7 +494,7 @@ func runPrivileged(cmd *cobra.Command, exe string, args ...string) error {
 var validUser = regexp.MustCompile(`^[a-z_][a-z0-9_-]*$`)
 
 func newPrivilegedSetupCommand() *cobra.Command {
-	var name, root, tld, caPath, repo string
+	var name, root, tlds, caPath, repo string
 	var dnsPort int
 	var remove, ifMissing bool
 
@@ -518,19 +518,20 @@ func newPrivilegedSetupCommand() *cobra.Command {
 			if remove {
 				return removePrivileged(name)
 			}
-			if tld == "" || strings.ContainsAny(tld, "/. ") {
-				return fmt.Errorf("invalid --tld %q", tld)
+			suffixes, err := parseTLDList(tlds)
+			if err != nil {
+				return err
 			}
 			if !filepath.IsAbs(root) || !filepath.IsAbs(caPath) {
 				return fmt.Errorf("--root and --ca must be absolute paths")
 			}
-			return setupPrivileged(name, root, tld, dnsPort, caPath)
+			return setupPrivileged(name, root, suffixes, dnsPort, caPath)
 		},
 	}
 
 	cmd.Flags().StringVar(&name, "user", "", "")
 	cmd.Flags().StringVar(&root, "root", "", "")
-	cmd.Flags().StringVar(&tld, "tld", "", "")
+	cmd.Flags().StringVar(&tlds, "tlds", "", "")
 	cmd.Flags().IntVar(&dnsPort, "dns-port", 0, "")
 	cmd.Flags().StringVar(&caPath, "ca", "", "")
 	cmd.Flags().BoolVar(&remove, "remove", false, "")
@@ -540,9 +541,11 @@ func newPrivilegedSetupCommand() *cobra.Command {
 	return cmd
 }
 
-// setupPrivileged registers name's daemon, lets them manage it, sends tld to Flock's DNS server
-// and trusts the CA system-wide. It is safe to run again: every file is rewritten.
-func setupPrivileged(name, root, tld string, dnsPort int, caPath string) error {
+// setupPrivileged registers name's daemon, lets them manage it, sends every suffix in tlds to
+// Flock's DNS server and trusts the CA system-wide. It is safe to run again: every file is
+// rewritten, the resolved drop-in wholesale (its Domains= line carries the whole set, so
+// provisioning the set retires what left it with the same write).
+func setupPrivileged(name, root string, tlds []string, dnsPort int, caPath string) error {
 	if !packaged() {
 		if err := writeOwnFile(templatePath(), unitTemplate); err != nil {
 			return err
@@ -562,14 +565,14 @@ func setupPrivileged(name, root, tld string, dnsPort int, caPath string) error {
 		return err
 	}
 
-	if !fileHas(dns.ResolvedFile(), dns.ResolvedContent(tld, dnsPort)) {
+	if !fileHas(dns.ResolvedFile(), dns.ResolvedContent(tlds, dnsPort)) {
 		if old := resolvedPort(); old != 0 && old != dnsPort {
 			unlabelDNSPort(old)
 		}
 		if err := labelDNSPort(dnsPort); err != nil {
 			return err
 		}
-		if err := writeOwnFile(dns.ResolvedFile(), dns.ResolvedContent(tld, dnsPort)); err != nil {
+		if err := writeOwnFile(dns.ResolvedFile(), dns.ResolvedContent(tlds, dnsPort)); err != nil {
 			return err
 		}
 		if err := runRoot("systemctl", "restart", "systemd-resolved"); err != nil {

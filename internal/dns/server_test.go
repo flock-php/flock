@@ -2,6 +2,7 @@ package dns
 
 import (
 	"net"
+	"slices"
 	"testing"
 
 	mdns "github.com/miekg/dns"
@@ -10,7 +11,7 @@ import (
 func startServer(t *testing.T) *Server {
 	t.Helper()
 
-	srv := New("127.0.0.1:0", "test")
+	srv := New("127.0.0.1:0", []string{"test"})
 	if err := srv.Start(); err != nil {
 		t.Fatal(err)
 	}
@@ -87,6 +88,33 @@ func TestRefusesNamesOutsideTheTLD(t *testing.T) {
 	srv := startServer(t)
 
 	for _, name := range []string{"example.com", "nottest", "test.com"} {
+		resp := query(t, srv, "udp", name, mdns.TypeA)
+		if resp.Rcode != mdns.RcodeRefused || len(resp.Answer) != 0 {
+			t.Fatalf("%s: want REFUSED with no answers, got rcode=%d answers=%v", name, resp.Rcode, resp.Answer)
+		}
+	}
+}
+
+// Plan 3a: one server for the whole active-suffix set, not one per TLD.
+func TestAnswersEverySuffixOfTheSet(t *testing.T) {
+	srv := New("127.0.0.1:0", []string{"test", "loc"})
+	if err := srv.Start(); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = srv.Shutdown() })
+
+	if got := srv.TLDs(); !slices.Equal(got, []string{"loc", "test"}) {
+		t.Fatalf("TLDs() = %v, want the set normalized and sorted", got)
+	}
+	for _, name := range []string{"a.test", "a.loc", "api.app.loc", "A.B.TEST"} {
+		resp := query(t, srv, "udp", name, mdns.TypeA)
+		if len(resp.Answer) != 1 || !resp.Answer[0].(*mdns.A).A.Equal(net.IPv4(127, 0, 0, 1)) {
+			t.Fatalf("%s: want 127.0.0.1, got %+v", name, resp.Answer)
+		}
+	}
+
+	// a.dev is outside the set; "xloc" ends in the suffix's characters, not at a label boundary.
+	for _, name := range []string{"a.dev", "xloc", "dev"} {
 		resp := query(t, srv, "udp", name, mdns.TypeA)
 		if resp.Rcode != mdns.RcodeRefused || len(resp.Answer) != 0 {
 			t.Fatalf("%s: want REFUSED with no answers, got rcode=%d answers=%v", name, resp.Rcode, resp.Answer)

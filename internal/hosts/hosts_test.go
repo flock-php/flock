@@ -19,7 +19,7 @@ func TestValidDomainOnlyAcceptsNamesUnderTheTLD(t *testing.T) {
 		"app..test":          false,
 		"-app.test":          false,
 		"app-.test":          false,
-		"APP.test":           false, // ParseSource lowercases first
+		"APP.test":           false, // ParseSources lowercases first
 		"app.test\n1.2.3.4":  false,
 		"app test.test":      false,
 		"xn--bcher-kva.test": true,
@@ -33,10 +33,30 @@ func TestValidDomainOnlyAcceptsNamesUnderTheTLD(t *testing.T) {
 	}
 }
 
-func TestParseSourceDropsInvalidAndDuplicateNames(t *testing.T) {
-	got := ParseSource([]byte("app.test\r\nApp.Test\n  shop.test \nbank.com\n0.0.0.0 evil.test\n\n"), "test")
+func TestParseSourcesDropsInvalidAndDuplicateNames(t *testing.T) {
+	got := ParseSources([]byte("app.test\r\nApp.Test\n  shop.test \nbank.com\n0.0.0.0 evil.test\n\n"), []string{"test"})
 	if want := []string{"app.test", "shop.test"}; !slices.Equal(got, want) {
 		t.Fatalf("got %v, want %v", got, want)
+	}
+}
+
+// The helper accepts names under any suffix of the active set, not just the global one.
+func TestParseSourcesFiltersOverTheSuffixSet(t *testing.T) {
+	got := ParseSources([]byte("app.test\napp.loc\nsub.app.loc\napp.dev\naploc\nbank.com\nApp.Loc\n\n"), []string{"test", "loc"})
+	if want := []string{"app.test", "app.loc", "sub.app.loc"}; !slices.Equal(got, want) {
+		t.Fatalf("got %v, want %v", got, want)
+	}
+	if got := ParseSources([]byte("app.loc\n"), nil); got != nil {
+		t.Fatalf("an empty set accepts nothing, got %v", got)
+	}
+}
+
+func TestSplitSuffixes(t *testing.T) {
+	if got := SplitSuffixes("test, LOC, test,, a.b, bad!"); !slices.Equal(got, []string{"test", "loc"}) {
+		t.Fatalf("got %v", got)
+	}
+	if got := SplitSuffixes(""); got != nil {
+		t.Fatalf("got %v", got)
 	}
 }
 

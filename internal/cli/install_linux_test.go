@@ -131,7 +131,7 @@ func TestResolvedDropInUnderSELinux(t *testing.T) {
 	defer func(resolved, selinux string) { dns.ResolvedDir, dns.SELinuxDir = resolved, selinux }(dns.ResolvedDir, dns.SELinuxDir)
 	dns.ResolvedDir, dns.SELinuxDir = dir, filepath.Join(dir, "selinux")
 
-	plain := dns.ResolvedContent("test", 53535)
+	plain := dns.ResolvedContent([]string{"test"}, 53535)
 	_ = os.WriteFile(dns.ResolvedFile(), []byte(plain), 0o644)
 	if p := dns.ResolvedProblem("test", 53535); p != "" || resolvedPort() != 53535 {
 		t.Fatalf("without SELinux: problem %q, port %d", p, resolvedPort())
@@ -142,7 +142,7 @@ func TestResolvedDropInUnderSELinux(t *testing.T) {
 	if dns.ResolvedProblem("test", 53535) == "" {
 		t.Fatal("a drop-in from before the port was labelled counts as set up")
 	}
-	labelled := dns.ResolvedContent("test", 53535)
+	labelled := dns.ResolvedContent([]string{"test"}, 53535)
 	if !strings.Contains(labelled, "port 53535 is labelled dns_port_t") {
 		t.Fatalf("drop-in under SELinux:\n%s", labelled)
 	}

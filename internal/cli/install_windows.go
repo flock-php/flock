@@ -544,14 +544,21 @@ func ensurePrivileged(cmd *cobra.Command, s *state, _ string, ca *certs.CA) erro
 	}
 
 	source := hosts.SourceFile(s.root)
+	suffixes := s.cfg.ActiveSuffixes()
 	helper := hosts.HelperStatus()
 	// A helper Windows refused before isn't tried again; a different build is.
 	blocked := hosts.BlockedExe(s.root, helperBin)
 	// The installed helper is replaced only when it does something else (HelperRevision): every
 	// release's build differs, and replacing it needs administrator permission.
-	helperOK := blocked || helper.Configured(source, s.cfg.TLD) && helper.Running && helper.Revision == hosts.HelperRevision
+	helperOK := blocked || helper.Configured(source, suffixes) && helper.Running && helper.Revision == hosts.HelperRevision
 	trusted := exec.Command("certutil", "-store", "Root", ca.Fingerprint()).Run() == nil
-	ruleOK := dns.NRPTInstalled(s.cfg.TLD)
+	ruleOK := true
+	for _, suffix := range suffixes {
+		if !dns.NRPTInstalled(suffix) {
+			ruleOK = false
+			break
+		}
+	}
 
 	done := func() {
 		cmd.Printf("✓ every *.%s name (any subdomain) is sent to Flock's DNS server\n", s.cfg.TLD)
@@ -571,7 +578,7 @@ func ensurePrivileged(cmd *cobra.Command, s *state, _ string, ca *certs.CA) erro
 		return nil
 	}
 
-	args := []string{"privileged-setup", "--tld", s.cfg.TLD, "--ca", ca.CertPath(), "--source", source}
+	args := []string{"privileged-setup", "--tlds", strings.Join(suffixes, ","), "--ca", ca.CertPath(), "--source", source}
 	if blocked {
 		cmd.Println("→ setting up DNS for *." + s.cfg.TLD + " and the local CA (Windows asks for permission)…")
 		args = append(args, "--no-helper")
@@ -594,12 +601,12 @@ func ensurePrivileged(cmd *cobra.Command, s *state, _ string, ca *certs.CA) erro
 	return nil
 }
 
-// retireTLD: nothing to remove per TLD on Windows, verified. Both TLD-bound pieces are replaced
-// wholesale, not added to, by the privileged setup that provisions the new TLD: dns.SetNRPT
-// deletes every Flock NRPT rule before installing the one for the new TLD, and ensurePrivileged
-// re-runs privileged-setup, whose hosts.InstallHelper reconfigures the service for the new TLD
+// retireTLD: nothing to remove per TLD on Windows, verified. Both suffix-bound pieces are
+// replaced wholesale, not added to, by the privileged setup that provisions the active set:
+// dns.SetNRPT deletes every Flock NRPT rule before adding one per suffix, and ensurePrivileged
+// re-runs privileged-setup, whose hosts.InstallHelper reconfigures the service for the new set
 // (its single marked block in the hosts file is rewritten from the daemon's domain list, which
-// the reload already moved). The --remove path tears the helper, rule and CA trust down whole —
+// the reload already moved). The --remove path tears the helper, rules and CA trust down whole —
 // that is uninstall, and calling it here would prompt for elevation twice for nothing.
 func retireTLD(*state, io.Writer, string) error { return nil }
 
@@ -707,7 +714,7 @@ func runElevated(exe string, args ...string) error {
 }
 
 func newPrivilegedSetupCommand() *cobra.Command {
-	var tld, caPath, source, resultFile string
+	var tlds, caPath, source, resultFile string
 	var remove, noHelper bool
 
 	cmd := &cobra.Command{
@@ -716,7 +723,11 @@ func newPrivilegedSetupCommand() *cobra.Command {
 		Hidden: true,
 		Args:   cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			err := privilegedSetup(tld, caPath, source, remove, noHelper)
+			suffixes, perr := parseTLDList(tlds)
+			if perr != nil && !remove {
+				return perr
+			}
+			err := privilegedSetup(suffixes, caPath, source, remove, noHelper)
 			if resultFile != "" && err != nil {
 				_ = os.WriteFile(resultFile, []byte(err.Error()), 0o644)
 			}
@@ -724,7 +735,7 @@ func newPrivilegedSetupCommand() *cobra.Command {
 		},
 	}
 
-	cmd.Flags().StringVar(&tld, "tld", "", "")
+	cmd.Flags().StringVar(&tlds, "tlds", "", "")
 	cmd.Flags().StringVar(&caPath, "ca", "", "")
 	cmd.Flags().StringVar(&source, "source", "", "")
 	cmd.Flags().StringVar(&resultFile, "result-file", "", "")
@@ -737,7 +748,7 @@ func newPrivilegedSetupCommand() *cobra.Command {
 // everything else is set up. It crosses the process boundary as its message (see runElevated).
 var errHelperBlocked = errors.New("hosts helper blocked by Windows")
 
-func privilegedSetup(tld, caPath, source string, remove, noHelper bool) error {
+func privilegedSetup(tlds []string, caPath, source string, remove, noHelper bool) error {
 	if !windows.GetCurrentProcessToken().IsElevated() {
 		return errors.New("must run as administrator")
 	}
@@ -752,16 +763,19 @@ func privilegedSetup(tld, caPath, source string, remove, noHelper bool) error {
 		return err
 	}
 
-	if tld == "" || strings.ContainsAny(tld, `/\. `) {
-		return fmt.Errorf("invalid --tld %q", tld)
+	for _, tld := range tlds {
+		if tld == "" || strings.ContainsAny(tld, `/\. `) {
+			return fmt.Errorf("invalid --tlds entry %q", tld)
+		}
 	}
 	if !filepath.IsAbs(source) || filepath.Base(source) != "hosts.txt" {
 		return fmt.Errorf("invalid --source %q", source)
 	}
 
-	// The DNS rule and the CA first: sites work without the helper, which Windows may refuse to run.
-	if err := dns.SetNRPT(tld); err != nil {
-		return fmt.Errorf("DNS rule for .%s: %w", tld, err)
+	// The DNS rules and the CA first: sites work without the helper, which Windows may refuse
+	// to run.
+	if err := dns.SetNRPT(tlds); err != nil {
+		return fmt.Errorf("DNS rules for %s: %w", strings.Join(tlds, ", "), err)
 	}
 	out, err := exec.Command("certutil", "-addstore", "-f", "Root", caPath).CombinedOutput()
 	if err != nil {
@@ -775,7 +789,7 @@ func privilegedSetup(tld, caPath, source string, remove, noHelper bool) error {
 	if err != nil {
 		return err
 	}
-	if err := hosts.InstallHelper(filepath.Join(filepath.Dir(self), hosts.HelperName), source, tld); err != nil {
+	if err := hosts.InstallHelper(filepath.Join(filepath.Dir(self), hosts.HelperName), source, tlds); err != nil {
 		if hosts.IsBlocked(err) {
 			// Don't leave a service behind that can never start (or an older helper's stale entries).
 			_ = hosts.RemoveHelper()

@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -345,6 +346,44 @@ func TestReloadMovesServicesToNewPorts(t *testing.T) {
 	if status.Mail != "127.0.0.1:"+strconv.Itoa(cfg.Ports.SMTP) {
 		t.Fatalf("mail did not move: %s (warnings %v)", status.Mail, status.Warnings)
 	}
+}
+
+// The DNS server carries the whole active-suffix set: it restarts only when that set (or the
+// address) changes, not on every reload, and not when the global TLD alone stays the same.
+func TestEnsureDNSRestartsOnlyOnSuffixSetChange(t *testing.T) {
+	cfg := config.Default()
+	cfg.Ports.DNS = freePort(t)
+
+	d := &daemon{}
+	if err := d.ensureDNS(cfg); err != nil {
+		t.Fatal(err)
+	}
+	first := d.dns
+	if got := first.TLDs(); !slices.Equal(got, []string{"test"}) {
+		t.Fatalf("the server started for %v, want [test]", got)
+	}
+
+	if err := d.ensureDNS(cfg); err != nil {
+		t.Fatal(err)
+	}
+	if d.dns != first {
+		t.Fatal("an unchanged suffix set restarted the server")
+	}
+
+	cfg.Upsert(config.Site{Name: "app", Path: t.TempDir(), TLD: "loc"})
+	if err := d.ensureDNS(cfg); err != nil {
+		t.Fatal(err)
+	}
+	if d.dns == first {
+		t.Fatal("a new suffix joined the set, the server kept the old one")
+	}
+	if got := d.dns.TLDs(); !slices.Equal(got, []string{"loc", "test"}) {
+		t.Fatalf("the set after the change is %v, want [loc test]", got)
+	}
+	if d.dns.Addr() != first.Addr() {
+		t.Fatalf("the server moved ports: %s -> %s", first.Addr(), d.dns.Addr())
+	}
+	_ = d.dns.Shutdown()
 }
 
 func TestFoldersInParkedPathsAreFollowed(t *testing.T) {

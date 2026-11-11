@@ -1,13 +1,14 @@
-// Package dns answers every query under the local TLD (e.g. *.test) with loopback.
+// Package dns answers every query under the active suffixes (e.g. *.test, *.loc) with loopback.
 //
-// On macOS it is wired up via /etc/resolver/<tld> with a non-privileged port, so it never needs
-// root. On Windows it listens on port 53 (Windows can't send queries to another port) and an NRPT
-// rule (see nrpt_windows.go) sends the TLD to it; the hosts file stays as the fallback.
+// On macOS it is wired up via /etc/resolver/<suffix> files with a non-privileged port, so it never
+// needs root. On Windows it listens on port 53 (Windows can't send queries to another port) and an
+// NRPT rule per suffix (see nrpt_windows.go) sends them to it; the hosts file stays as the fallback.
 package dns
 
 import (
 	"fmt"
 	"net"
+	"slices"
 	"strings"
 	"sync"
 
@@ -16,9 +17,9 @@ import (
 
 const ttl = 60
 
-// Server is a tiny authoritative DNS server for a single local TLD.
+// Server is a tiny authoritative DNS server for a set of local suffixes.
 type Server struct {
-	tld  string
+	tlds []string
 	addr string
 	udp  *mdns.Server
 	tcp  *mdns.Server
@@ -27,9 +28,25 @@ type Server struct {
 	watched map[string]bool // name → queried since Watch
 }
 
-// New creates a server for tld (without dots, e.g. "test") listening on addr (e.g. "127.0.0.1:53535").
-func New(addr, tld string) *Server {
-	return &Server{tld: strings.Trim(strings.ToLower(tld), "."), addr: addr, watched: map[string]bool{}}
+// New creates a server answering names under any of tlds (without dots, e.g. "test") listening
+// on addr (e.g. "127.0.0.1:53535"). The set is normalized: lower-case, deduplicated, sorted.
+func New(addr string, tlds []string) *Server {
+	return &Server{tlds: normalizeSuffixes(tlds), addr: addr, watched: map[string]bool{}}
+}
+
+// normalizeSuffixes turns a suffix list into the canonical set: trimmed of dots, lower-case,
+// deduplicated, sorted. Provisions that compare sets (the daemon, the resolver files) rely on it.
+func normalizeSuffixes(tlds []string) []string {
+	set := make([]string, 0, len(tlds))
+	for _, tld := range tlds {
+		tld = strings.Trim(strings.ToLower(tld), ".")
+		if tld == "" || slices.Contains(set, tld) {
+			continue
+		}
+		set = append(set, tld)
+	}
+	slices.Sort(set)
+	return set
 }
 
 // Start binds UDP and TCP on the same port and serves in the background.
@@ -61,13 +78,13 @@ func (s *Server) Addr() string {
 	return s.addr
 }
 
-// TLD is the domain this server answers for.
-func (s *Server) TLD() string {
-	return s.tld
+// TLDs lists the suffixes this server answers for, sorted.
+func (s *Server) TLDs() []string {
+	return slices.Clone(s.tlds)
 }
 
 // Watch starts recording queries for name and returns a function reporting whether one arrived.
-// The daemon uses it to check that the system resolver really sends the TLD here.
+// The daemon uses it to check that the system resolver really sends these names here.
 func (s *Server) Watch(name string) (seen func() bool) {
 	name = strings.TrimSuffix(strings.ToLower(name), ".")
 	s.mu.Lock()
@@ -134,5 +151,10 @@ func (s *Server) saw(name string) {
 func (s *Server) owns(name string) bool {
 	name = strings.TrimSuffix(strings.ToLower(name), ".")
 
-	return name == s.tld || strings.HasSuffix(name, "."+s.tld)
+	for _, tld := range s.tlds {
+		if name == tld || strings.HasSuffix(name, "."+tld) {
+			return true
+		}
+	}
+	return false
 }
