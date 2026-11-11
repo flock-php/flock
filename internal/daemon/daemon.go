@@ -565,7 +565,9 @@ func (d *daemon) reload() error {
 	// the leaf its own root signed.
 	roots := certs.OpenRoots(filepath.Join(d.root, "certs"), cfg.TLD)
 	if err := roots.Ensure(cfg.ActiveSuffixes()); err != nil {
-		return fmt.Errorf("certificate authority: %w", err)
+		// Roots.Ensure names the suffix whose root failed ("certificate authority for .loc:
+		// ..."): the store is the certificate authority from here on, no outer prefix to add.
+		return err
 	}
 	if err := roots.Bundle(php.CABundle(d.root), certs.SystemRoots()); err != nil {
 		return err

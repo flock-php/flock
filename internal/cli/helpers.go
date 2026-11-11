@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"path/filepath"
 	"slices"
 	"strings"
 
@@ -40,10 +41,37 @@ func parseTLDList(list string) ([]string, error) {
 	return out, nil
 }
 
+// parseCSVList reads a privileged-setup list flag (--ca, --roots, --untrust) into its
+// trimmed, non-empty entries; an empty string gives no entries. The entries themselves are
+// validated by the root-run command that consumes them, the way --tlds entries are.
+func parseCSVList(list string) []string {
+	var out []string
+	for _, part := range strings.Split(list, ",") {
+		if part = strings.TrimSpace(part); part != "" {
+			out = append(out, part)
+		}
+	}
+	return out
+}
+
+// suffixRootCerts lists the per-suffix root certificates Flock stores on disk under root —
+// every certs/roots/<suffix>/ca.crt, sorted, so the provisioning passes the same set every
+// run. The global root (certs/ca.crt) is not one of them: it belongs to the store, not to
+// one suffix, and callers pass it separately.
+func suffixRootCerts(root string) []string {
+	paths, _ := filepath.Glob(filepath.Join(root, "certs", "roots", "*", "ca.crt"))
+	slices.Sort(paths)
+	return paths
+}
+
 // state is the loaded config plus where it lives.
 type state struct {
 	root string
 	cfg  *config.Config
+	// lastWarnings are the status warnings the last commit printed, remembered so the
+	// provisioning sync reports only what changed after the machine caught up (see
+	// syncSuffixes).
+	lastWarnings []string
 }
 
 func load() (*state, error) {
@@ -75,7 +103,9 @@ func (s *state) client() *api.Client {
 	return api.NewClient(paths.Socket(s.root))
 }
 
-// commit saves the config and asks a running daemon to apply it.
+// commit saves the config and asks a running daemon to apply it. The warnings it prints are
+// remembered in lastWarnings, so the provisioning sync can report only the ones the user
+// has not heard yet.
 func (s *state) commit(ctx context.Context, out io.Writer) error {
 	if err := s.cfg.Save(s.root); err != nil {
 		return err
@@ -83,6 +113,7 @@ func (s *state) commit(ctx context.Context, out io.Writer) error {
 
 	status, err := s.client().Reload(ctx)
 	if errors.Is(err, api.ErrDaemonNotRunning) {
+		s.lastWarnings = nil
 		fmt.Fprintln(out, "saved — the daemon is not running, changes apply when it starts")
 		return nil
 	}
@@ -93,5 +124,6 @@ func (s *state) commit(ctx context.Context, out io.Writer) error {
 	for _, w := range status.Warnings {
 		fmt.Fprintln(out, "warning: "+w)
 	}
+	s.lastWarnings = status.Warnings
 	return nil
 }

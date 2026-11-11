@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"os"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -33,6 +32,11 @@ func newTLDCommand() *cobra.Command {
 				return nil
 			}
 
+			// The suffix set before the mutation: syncSuffixes set-diffs the config's new set
+			// against it. The global switch retires the old TLD's integration only when no
+			// site keeps it alive with an override of its own.
+			oldActive := s.cfg.ActiveSuffixes()
+
 			old, warning, err := s.changeTLD(args[0], cmd.OutOrStdout())
 			if err != nil {
 				return err
@@ -41,23 +45,12 @@ func newTLDCommand() *cobra.Command {
 				return nil // changeTLD said "already serving .X": it touched nothing
 			}
 
-			// The privileged half, in the plan's order: take the old suffix's OS integration out
-			// while it is the old one, then provision the new. certs.Ensure (ensureCA) has
-			// replaced the root CA on the TLD mismatch, so the trust store must learn the new
-			// root: ensurePrivileged re-runs per-OS trust (macOS trustCA, Linux's system anchors,
-			// Windows's certutil) with the config now on the new TLD.
-			if err := retireTLD(s, cmd.OutOrStdout(), old); err != nil {
-				return err
-			}
-			bin, err := os.Executable()
-			if err != nil {
-				return err
-			}
-			ca, err := ensureCA(cmd, s)
-			if err != nil {
-				return err
-			}
-			if err := ensurePrivileged(cmd, s, bin, ca); err != nil {
+			// The privileged half, shared with `flock site tld` (site_tld.go): retire the
+			// suffixes that left the set while their integration is the old one, then
+			// provision the new set — ensureCA (certs.Ensure replaces the root CA on the TLD
+			// mismatch) and ensurePrivileged re-running per-OS trust (macOS trustCA, Linux's
+			// system anchors, Windows's certutil) with the config now on the new TLD.
+			if err := syncSuffixes(s, cmd, oldActive); err != nil {
 				// The config is on the new TLD already, and a declined or failed elevation leaves
 				// the old suffix's integration in place: say what is finished and how to finish
 				// the rest (`flock install` runs the same privileged steps).
@@ -80,8 +73,8 @@ func newTLDCommand() *cobra.Command {
 // .env files, store the new TLD in the config and hand it to the daemon. It returns the TLD it
 // left ("" when the input already is the current TLD, the signal for RunE to skip provisioning),
 // and ValidateTLD's warning to show with the success. Validation runs before anything is
-// touched: a rejected TLD changes nothing. The privileged steps (retireTLD, ensureCA,
-// ensurePrivileged) are RunE's, so this core is testable on a temp root with no daemon.
+// touched: a rejected TLD changes nothing. The privileged half (syncSuffixes, shared with
+// `flock site tld`) is RunE's, so this core is testable on a temp root with no daemon.
 func (s *state) changeTLD(raw string, out io.Writer) (old string, warning string, err error) {
 	tld := config.NormalizeTLD(raw)
 	warning, err = config.ValidateTLD(tld)

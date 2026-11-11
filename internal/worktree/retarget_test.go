@@ -195,3 +195,53 @@ func TestTLDHostSwapsSiteAware(t *testing.T) {
 		t.Errorf("site .env after the swaps:\n%s", got)
 	}
 }
+
+// TestSwapsForSite: a site-scoped suffix change moves exactly the site named — its primary
+// host, its inherited aliases (which ride the site's effective suffix) and its worktrees —
+// and nothing of any other site. Pinned aliases (the Q2 rule) never appear, the old side is
+// derived from the arguments (the caller may already have stored the override), an unknown
+// name and an unchanged suffix list nothing.
+func TestSwapsForSiteMovesOnlyTheSiteItNames(t *testing.T) {
+	cfg := &config.Config{
+		TLD: "test",
+		Sites: []config.Site{
+			{Name: "demo", Path: "/code/demo", Domains: []config.Domain{
+				{Label: "app-2", Alias: true},
+				{Label: "demo2", TLD: "loc", Alias: true},
+				{Label: "tenant1"},
+			}},
+			{Name: "shop", Path: "/code/shop", Domains: []config.Domain{{Label: "shop-2", Alias: true}}},
+		},
+		Worktrees: []config.WorktreeEntry{
+			{Path: "/wt/feature", Site: "demo", Slug: "feature"},
+			{Path: "/wt/shopfix", Site: "shop", Slug: "shopfix"},
+		},
+	}
+	want := []HostSwap{
+		{Path: filepath.Join("/code/demo", ".env"), Old: "demo.test", New: "demo.loc"},
+		{Path: filepath.Join("/code/demo", ".env"), Old: "app-2.test", New: "app-2.loc"},
+		{Path: filepath.Join("/wt/feature", ".env"), Old: "feature.demo.test", New: "feature.demo.loc"},
+	}
+	swaps := SwapsForSite(cfg, "demo", "test", "loc")
+	if !slices.Equal(swaps, want) {
+		t.Errorf("got %+v\nwant %+v", swaps, want)
+	}
+
+	// The inherit pass: the override is already stored (the core sets Site.TLD before listing),
+	// and the entries swap back.
+	cfg.Sites[0].TLD = "loc"
+	back := make([]HostSwap, len(want))
+	for i, w := range want {
+		back[i] = HostSwap{Path: w.Path, Old: w.New, New: w.Old}
+	}
+	if got := SwapsForSite(cfg, "demo", "loc", "test"); !slices.Equal(got, back) {
+		t.Errorf("inherit pass: got %+v\nwant %+v", got, back)
+	}
+
+	if got := SwapsForSite(cfg, "nope", "test", "loc"); got != nil {
+		t.Errorf("unknown site: got %+v, want nil", got)
+	}
+	if got := SwapsForSite(cfg, "demo", "loc", "loc"); got != nil {
+		t.Errorf("unchanged suffix: got %+v, want nil", got)
+	}
+}

@@ -376,13 +376,21 @@ func ensurePrivileged(cmd *cobra.Command, s *state, _ string, ca *certs.CA) erro
 		return err
 	}
 	bin := filepath.Join(s.root, "bin", exeName("flock"))
+	// The whole root set goes into the system store: the global root at the anchor name it
+	// has always had, every per-suffix root beside it with its suffix in the name, so the
+	// wholesale anchor rewrite retires the suffixes that left the active set.
+	caPaths := append([]string{ca.CertPath()}, suffixRootCerts(s.root)...)
+	anchors, err := wantAnchors(s.root, name, caPaths)
+	if err != nil {
+		return err
+	}
 	anchor := caAnchorPath(name)
 
 	ok := fileExists(templatePath()) &&
 		fileHas(dropInPath(name), instanceDropIn(s.root, bin)) &&
 		(fileHas(polkitRule, polkitRuleContent) || unreadable(polkitRule)) &&
 		fileHas(dns.ResolvedFile(), dns.ResolvedContent(s.cfg.ActiveSuffixes(), s.cfg.Ports.DNS)) &&
-		(anchor == "" || sameFile(anchor, ca.CertPath())) &&
+		(anchor == "" || anchorsCurrent(anchors)) &&
 		certs.FirefoxPolicyInstalled(name, ca.CertPath())
 	if !ok {
 		if !dns.ResolvedRunning() {
@@ -394,7 +402,8 @@ func ensurePrivileged(cmd *cobra.Command, s *state, _ string, ca *certs.CA) erro
 			return err
 		}
 		if err := runPrivileged(cmd, self, "privileged-setup", "--user", name, "--root", s.root,
-			"--tlds", strings.Join(s.cfg.ActiveSuffixes(), ","), "--dns-port", strconv.Itoa(s.cfg.Ports.DNS), "--ca", ca.CertPath()); err != nil {
+			"--tlds", strings.Join(s.cfg.ActiveSuffixes(), ","), "--dns-port", strconv.Itoa(s.cfg.Ports.DNS),
+			"--ca", strings.Join(caPaths, ",")); err != nil {
 			return fmt.Errorf("privileged setup: %w", err)
 		}
 	}
@@ -432,15 +441,66 @@ func resolvedMissing(tld string) string {
 		"  sudo ln -sf ../run/systemd/resolve/stub-resolv.conf /etc/resolv.conf"
 }
 
-// caAnchorPath is where the privileged setup puts user's CA in the system trust store, "" when
-// the distribution has neither Debian's nor Fedora's tooling. Every user has their own Flock CA.
-func caAnchorPath(user string) string {
+// caAnchorDir is the distribution's trust store source directory Flock writes into, "" when
+// the distribution has neither Debian's nor Fedora's tooling.
+func caAnchorDir() string {
 	for _, a := range caAnchors {
 		if dirExists(a.dir) {
-			return filepath.Join(a.dir, "flock-"+user+".crt")
+			return a.dir
 		}
 	}
 	return ""
+}
+
+// caAnchorPath is the global root's anchor file, the name Flock has always used, "" when
+// there is no trust store. Every user of the computer has their own Flock roots.
+func caAnchorPath(user string) string {
+	if dir := caAnchorDir(); dir != "" {
+		return filepath.Join(dir, "flock-"+user+".crt")
+	}
+	return ""
+}
+
+// wantAnchors maps every root certificate of the set to the anchor file it occupies in the
+// system trust store: the global root — the store's own certs/ca.crt — keeps the name it
+// has always had, and a per-suffix root gets its suffix in the name, so the wholesale
+// anchor write retires the suffixes that left the active set. A path outside Flock's root
+// store layout is refused: this is a root-run argv guard, the one --tlds has.
+func wantAnchors(root, user string, caPaths []string) (map[string]string, error) {
+	dir := caAnchorDir()
+	if dir == "" {
+		return nil, nil
+	}
+	want := map[string]string{}
+	for _, caPath := range caPaths {
+		if !filepath.IsAbs(caPath) || filepath.Base(caPath) != "ca.crt" {
+			return nil, fmt.Errorf("invalid --ca entry %q", caPath)
+		}
+		certDir := filepath.Dir(caPath)
+		switch certsDir := filepath.Join(root, "certs"); {
+		case certDir == certsDir:
+			want[filepath.Join(dir, "flock-"+user+".crt")] = caPath
+		case filepath.Base(filepath.Dir(certDir)) == "roots" && dns.ValidTLD(filepath.Base(certDir)):
+			suffix := filepath.Base(certDir)
+			want[filepath.Join(dir, "flock-"+user+"-"+suffix+".crt")] = caPath
+		default:
+			return nil, fmt.Errorf("invalid --ca entry %q", caPath)
+		}
+	}
+	return want, nil
+}
+
+// anchorsCurrent reports whether every anchor of the set is in the store, byte for byte.
+// Stale anchors of suffixes that left the set are not a reason to prompt: they leave with
+// the same privileged write, and the drop-in — which changed when the set did — is what
+// asks for that write.
+func anchorsCurrent(want map[string]string) bool {
+	for anchor, caPath := range want {
+		if !sameFile(anchor, caPath) {
+			return false
+		}
+	}
+	return true
 }
 
 // fileHas reports whether the file at path holds exactly content.
@@ -522,10 +582,11 @@ func newPrivilegedSetupCommand() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			if !filepath.IsAbs(root) || !filepath.IsAbs(caPath) {
-				return fmt.Errorf("--root and --ca must be absolute paths")
+			caPaths := parseCSVList(caPath)
+			if !filepath.IsAbs(root) || len(caPaths) == 0 || caPaths[0] != filepath.Join(root, "certs", "ca.crt") {
+				return fmt.Errorf("--root must be absolute and --ca must list the roots to trust, the global one (%s) first", filepath.Join(root, "certs", "ca.crt"))
 			}
-			return setupPrivileged(name, root, suffixes, dnsPort, caPath)
+			return setupPrivileged(name, root, suffixes, dnsPort, caPaths)
 		},
 	}
 
@@ -542,10 +603,11 @@ func newPrivilegedSetupCommand() *cobra.Command {
 }
 
 // setupPrivileged registers name's daemon, lets them manage it, sends every suffix in tlds to
-// Flock's DNS server and trusts the CA system-wide. It is safe to run again: every file is
-// rewritten, the resolved drop-in wholesale (its Domains= line carries the whole set, so
-// provisioning the set retires what left it with the same write).
-func setupPrivileged(name, root string, tlds []string, dnsPort int, caPath string) error {
+// Flock's DNS server and trusts every root in caPaths (the global one first) system-wide. It
+// is safe to run again: every file is rewritten, the resolved drop-in wholesale (its Domains=
+// line carries the whole set, so provisioning the set retires what left it with the same
+// write) and the anchors wholesale (one file per root, suffixes in the names).
+func setupPrivileged(name, root string, tlds []string, dnsPort int, caPaths []string) error {
 	if !packaged() {
 		if err := writeOwnFile(templatePath(), unitTemplate); err != nil {
 			return err
@@ -580,21 +642,31 @@ func setupPrivileged(name, root string, tlds []string, dnsPort int, caPath strin
 		}
 	}
 
-	if err := certs.InstallFirefoxPolicy(name, caPath); err != nil {
+	// Firefox's enterprise policy keeps installing the global root — one file per user, the
+	// layout the certs package has always had. The extra roots reach Firefox through the
+	// user's own database (the sync's user-level TrustInBrowsers); the anchors below give
+	// every root of the set to curl and the rest of the system.
+	if err := certs.InstallFirefoxPolicy(name, caPaths[0]); err != nil {
 		return err
 	}
-	return trustSystemCA(name, caPath)
+	return trustSystemCA(name, root, caPaths)
 }
 
-// trustSystemCA copies name's CA into the system trust store's sources and rebuilds the store.
-func trustSystemCA(name, caPath string) error {
-	for _, a := range caAnchors {
-		if !dirExists(a.dir) {
-			continue
-		}
-		anchor := filepath.Join(a.dir, "flock-"+name+".crt")
+// trustSystemCA puts every root of the set into the system trust store's sources and rebuilds
+// the store: one anchor per root (wantAnchors), written when out of date, and the anchors of
+// suffixes that left the set taken out — a wholesale rewrite of Flock's own files only. The
+// store is rebuilt once, and only when something changed.
+func trustSystemCA(user, root string, caPaths []string) error {
+	want, err := wantAnchors(root, user, caPaths)
+	if err != nil || len(want) == 0 {
+		return err
+	}
+	dir := caAnchorDir()
+
+	changed := false
+	for anchor, caPath := range want {
 		if sameFile(anchor, caPath) {
-			return nil
+			continue
 		}
 		data, err := os.ReadFile(caPath)
 		if err != nil {
@@ -603,7 +675,27 @@ func trustSystemCA(name, caPath string) error {
 		if err := os.WriteFile(anchor, data, 0o644); err != nil {
 			return err
 		}
-		return runRoot(a.update)
+		changed = true
+	}
+	for _, pattern := range []string{"flock-" + user + ".crt", "flock-" + user + "-*.crt"} {
+		stale, _ := filepath.Glob(filepath.Join(dir, pattern))
+		for _, path := range stale {
+			if _, keep := want[path]; keep {
+				continue
+			}
+			if err := os.Remove(path); err != nil {
+				return err
+			}
+			changed = true
+		}
+	}
+	if !changed {
+		return nil
+	}
+	for _, a := range caAnchors {
+		if a.dir == dir {
+			return runRoot(a.update)
+		}
 	}
 	return nil
 }
@@ -660,10 +752,18 @@ func resolvedPort() int {
 func removePrivileged(name string) error {
 	_ = runRoot("systemctl", "disable", "--now", unitName(name))
 	errs := []error{os.RemoveAll(filepath.Dir(dropInPath(name))), certs.RemoveFirefoxPolicy(name)}
+	// All of name's anchors go: the global root's and every per-suffix one.
 	for _, a := range caAnchors {
-		anchor := filepath.Join(a.dir, "flock-"+name+".crt")
-		if fileExists(anchor) {
-			errs = append(errs, os.Remove(anchor), runRoot(a.update))
+		anchors, _ := filepath.Glob(filepath.Join(a.dir, "flock-"+name+".crt"))
+		extra, _ := filepath.Glob(filepath.Join(a.dir, "flock-"+name+"-*.crt"))
+		removed := false
+		for _, anchor := range append(anchors, extra...) {
+			if os.Remove(anchor) == nil {
+				removed = true
+			}
+		}
+		if removed {
+			errs = append(errs, runRoot(a.update))
 		}
 	}
 

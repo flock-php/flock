@@ -36,7 +36,8 @@ func OpenRoots(dir, global string) *Roots {
 
 // Ensure loads a root for every suffix in tlds, creating the missing ones, and keeps the roots it
 // already loaded: a suffix whose override was just removed is still served (its names are still
-// trusted by the OS) and stays in the bundle, so PHP keeps verifying the leaves it has.
+// trusted by the OS) and stays in the bundle, so PHP keeps verifying the leaves it has. Ensure is
+// not serialized itself: callers run reloads one at a time (the daemon under reloadMu).
 //
 // A suffix that is already loaded is re-checked, the way a reload re-checked the single CA
 // before: Ensure re-reads the stored root and replaces it when it stopped permitting its suffix

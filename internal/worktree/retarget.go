@@ -244,3 +244,44 @@ func TLDHostSwaps(c *config.Config, oldTLD, newTLD string) []HostSwap {
 	}
 	return swaps
 }
+
+// SwapsForSite lists the .env files a site-scoped suffix change moves: the site's own
+// <name>.<oldSuffix> → <name>.<newSuffix>, its inherited aliases (Domain.Alias with an
+// empty TLD, whose hosts ride the site's effective suffix: <label>.<oldSuffix> →
+// <label>.<newSuffix>, in the site's .env), and every stored worktree entry of that site
+// (<slug>.<name>.<oldSuffix> → <slug>.<name>.<newSuffix>). Nothing else: aliases pinned to
+// a suffix of their own never move (the Q2 rule), subdomain hosts ride the site's through
+// RetargetDotenv's deeper-host matching, and every other site — inheriting included — keeps
+// its hosts where they are. The suffixes come from the arguments, never from the config:
+// callers list the swaps after storing the site's new override, and reading Site.TLD for the
+// old side would then give both sides the new suffix. Equal suffixes move nothing; an
+// unknown name lists nothing. (A free function, like TLDHostSwaps: the .env rewriting
+// lives here.)
+func SwapsForSite(c *config.Config, name, oldSuffix, newSuffix string) []HostSwap {
+	if oldSuffix == newSuffix {
+		return nil
+	}
+	site, ok := c.FindSite(name)
+	if !ok {
+		return nil
+	}
+
+	path := filepath.Join(site.Path, ".env")
+	swaps := []HostSwap{{Path: path, Old: name + "." + oldSuffix, New: name + "." + newSuffix}}
+	for _, d := range site.Domains {
+		if d.Alias && d.TLD == "" {
+			swaps = append(swaps, HostSwap{Path: path, Old: d.Label + "." + oldSuffix, New: d.Label + "." + newSuffix})
+		}
+	}
+	for _, e := range c.Worktrees {
+		if e.Site != name || e.Slug == "" {
+			continue // not this site's worktree, or no stored slug: no host named it
+		}
+		swaps = append(swaps, HostSwap{
+			Path: filepath.Join(e.Path, ".env"),
+			Old:  e.Slug + "." + name + "." + oldSuffix,
+			New:  e.Slug + "." + name + "." + newSuffix,
+		})
+	}
+	return swaps
+}

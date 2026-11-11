@@ -257,9 +257,11 @@ func (ca *CA) leafIsCurrent(path, domain string) bool {
 }
 
 // WriteBundle writes system (PEM roots, see SystemRoots) followed by the Flock root to path,
-// leaving the file alone when it is already current. PHP and Node use it so they trust both
-// public sites and other local .test sites. Roots.Bundle writes the same file for every root
-// Flock has; this is the one-root form the single-suffix flows (see install) use.
+// leaving the file alone when it is already current. PHP and Node use the bundle so they
+// trust both public sites and other local sites. Roots.Bundle writes the same file carrying
+// every root Flock has (one per active suffix); this is the one-root form of the legacy
+// single-suffix bundle — no live flow calls it anymore (the daemon and the CLI provisioning
+// sync both go through Roots.Bundle), kept for callers that only know the global root.
 func (ca *CA) WriteBundle(path string, system []byte) error {
 	return writeBundle(path, system, []*CA{ca})
 }

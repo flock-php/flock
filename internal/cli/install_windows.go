@@ -11,6 +11,7 @@ import (
 	"os/exec"
 	"os/user"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -538,6 +539,13 @@ const privilegedFirst = true
 // re-runs this flock.exe elevated (Windows shows a UAC prompt) to fix them. It runs before bin is
 // installed (privilegedFirst), so it doesn't use it.
 func ensurePrivileged(cmd *cobra.Command, s *state, _ string, ca *certs.CA) error {
+	return provisionPrivileged(cmd, s, ca, nil)
+}
+
+// provisionPrivileged is ensurePrivileged's body with one addition the provisioning sync
+// (site_tld_windows.go) needs: the fingerprints of roots whose suffixes left the set, taken
+// out of the machine's Root store by the same elevated run that provisions the new one.
+func provisionPrivileged(cmd *cobra.Command, s *state, ca *certs.CA, untrust []string) error {
 	self, helperBin, err := bundledHelper()
 	if err != nil {
 		return err
@@ -545,6 +553,7 @@ func ensurePrivileged(cmd *cobra.Command, s *state, _ string, ca *certs.CA) erro
 
 	source := hosts.SourceFile(s.root)
 	suffixes := s.cfg.ActiveSuffixes()
+	extraRoots := suffixRootCerts(s.root)
 	helper := hosts.HelperStatus()
 	// A helper Windows refused before isn't tried again; a different build is.
 	blocked := hosts.BlockedExe(s.root, helperBin)
@@ -552,6 +561,15 @@ func ensurePrivileged(cmd *cobra.Command, s *state, _ string, ca *certs.CA) erro
 	// release's build differs, and replacing it needs administrator permission.
 	helperOK := blocked || helper.Configured(source, suffixes) && helper.Running && helper.Revision == hosts.HelperRevision
 	trusted := exec.Command("certutil", "-store", "Root", ca.Fingerprint()).Run() == nil
+	for _, path := range extraRoots {
+		fingerprint, err := certs.FileFingerprint(path)
+		if err != nil {
+			continue // a half-created root store: the next sync sees the file and trusts it
+		}
+		if trusted && exec.Command("certutil", "-store", "Root", fingerprint).Run() != nil {
+			trusted = false // one root of the set outside the store: the whole set goes back in
+		}
+	}
 	ruleOK := true
 	for _, suffix := range suffixes {
 		if !dns.NRPTInstalled(suffix) {
@@ -579,6 +597,14 @@ func ensurePrivileged(cmd *cobra.Command, s *state, _ string, ca *certs.CA) erro
 	}
 
 	args := []string{"privileged-setup", "--tlds", strings.Join(suffixes, ","), "--ca", ca.CertPath(), "--source", source}
+	if len(extraRoots) > 0 {
+		// Every per-suffix root joins the machine's Root store in the same elevated run.
+		args = append(args, "--roots", strings.Join(extraRoots, ","))
+	}
+	if len(untrust) > 0 {
+		// Roots whose suffixes left the set: their store entries go in the same run.
+		args = append(args, "--untrust", strings.Join(untrust, ","))
+	}
 	if blocked {
 		cmd.Println("→ setting up DNS for *." + s.cfg.TLD + " and the local CA (Windows asks for permission)…")
 		args = append(args, "--no-helper")
@@ -714,7 +740,7 @@ func runElevated(exe string, args ...string) error {
 }
 
 func newPrivilegedSetupCommand() *cobra.Command {
-	var tlds, caPath, source, resultFile string
+	var tlds, caPath, source, resultFile, rootsCSV, untrustCSV string
 	var remove, noHelper bool
 
 	cmd := &cobra.Command{
@@ -727,7 +753,7 @@ func newPrivilegedSetupCommand() *cobra.Command {
 			if perr != nil && !remove {
 				return perr
 			}
-			err := privilegedSetup(suffixes, caPath, source, remove, noHelper)
+			err := privilegedSetup(suffixes, caPath, source, parseCSVList(rootsCSV), parseCSVList(untrustCSV), remove, noHelper)
 			if resultFile != "" && err != nil {
 				_ = os.WriteFile(resultFile, []byte(err.Error()), 0o644)
 			}
@@ -738,6 +764,8 @@ func newPrivilegedSetupCommand() *cobra.Command {
 	cmd.Flags().StringVar(&tlds, "tlds", "", "")
 	cmd.Flags().StringVar(&caPath, "ca", "", "")
 	cmd.Flags().StringVar(&source, "source", "", "")
+	cmd.Flags().StringVar(&rootsCSV, "roots", "", "")
+	cmd.Flags().StringVar(&untrustCSV, "untrust", "", "")
 	cmd.Flags().StringVar(&resultFile, "result-file", "", "")
 	cmd.Flags().BoolVar(&remove, "remove", false, "")
 	cmd.Flags().BoolVar(&noHelper, "no-helper", false, "")
@@ -748,7 +776,19 @@ func newPrivilegedSetupCommand() *cobra.Command {
 // everything else is set up. It crosses the process boundary as its message (see runElevated).
 var errHelperBlocked = errors.New("hosts helper blocked by Windows")
 
-func privilegedSetup(tlds []string, caPath, source string, remove, noHelper bool) error {
+// fingerprintHex is what a certutil fingerprint can be: SHA-1's 40 hex digits, upper-case as
+// certs.FileFingerprint writes it, with room for the longer ones a future store uses. The
+// root-run argv guard for --untrust: nothing that is not hex reaches certutil.
+var fingerprintHex = regexp.MustCompile(`^[0-9A-Fa-f]{8,128}$`)
+
+// privilegedSetup provisions the whole suffix set as administrator: one NRPT rule per
+// suffix, the machine's Root store carrying every root Flock signs with (the global one at
+// caPath plus the per-suffix ones at roots), the store entries of suffixes that left the set
+// removed by fingerprint, and the hosts helper configured for the set. --roots entries are
+// validated to Flock's own store layout (roots\<suffix>\ca.crt with <suffix> a valid label)
+// before certutil sees them, the way --tlds is validated: this process runs elevated, so
+// every argument is input.
+func privilegedSetup(tlds []string, caPath, source string, roots, untrust []string, remove, noHelper bool) error {
 	if !windows.GetCurrentProcessToken().IsElevated() {
 		return errors.New("must run as administrator")
 	}
@@ -759,6 +799,12 @@ func privilegedSetup(tlds []string, caPath, source string, remove, noHelper bool
 			if fp, ferr := certs.FileFingerprint(caPath); ferr == nil {
 				_ = exec.Command("certutil", "-delstore", "Root", fp).Run()
 			}
+			// The per-suffix roots went into the same store; uninstall takes all of them out.
+			for _, path := range suffixRootCerts(filepath.Dir(filepath.Dir(caPath))) {
+				if fp, ferr := certs.FileFingerprint(path); ferr == nil {
+					_ = exec.Command("certutil", "-delstore", "Root", fp).Run()
+				}
+			}
 		}
 		return err
 	}
@@ -766,6 +812,18 @@ func privilegedSetup(tlds []string, caPath, source string, remove, noHelper bool
 	for _, tld := range tlds {
 		if tld == "" || strings.ContainsAny(tld, `/\. `) {
 			return fmt.Errorf("invalid --tlds entry %q", tld)
+		}
+	}
+	for _, path := range roots {
+		suffix := filepath.Base(filepath.Dir(path))
+		if !filepath.IsAbs(path) || filepath.Base(path) != "ca.crt" ||
+			!dns.ValidTLD(suffix) || filepath.Base(filepath.Dir(filepath.Dir(path))) != "roots" {
+			return fmt.Errorf("invalid --roots entry %q", path)
+		}
+	}
+	for _, fingerprint := range untrust {
+		if !fingerprintHex.MatchString(fingerprint) {
+			return fmt.Errorf("invalid --untrust entry %q", fingerprint)
 		}
 	}
 	if !filepath.IsAbs(source) || filepath.Base(source) != "hosts.txt" {
@@ -777,9 +835,15 @@ func privilegedSetup(tlds []string, caPath, source string, remove, noHelper bool
 	if err := dns.SetNRPT(tlds); err != nil {
 		return fmt.Errorf("DNS rules for %s: %w", strings.Join(tlds, ", "), err)
 	}
-	out, err := exec.Command("certutil", "-addstore", "-f", "Root", caPath).CombinedOutput()
-	if err != nil {
-		return fmt.Errorf("trust CA: %v: %s", err, bytes.TrimSpace(out))
+	for _, path := range append([]string{caPath}, roots...) {
+		out, err := exec.Command("certutil", "-addstore", "-f", "Root", path).CombinedOutput()
+		if err != nil {
+			return fmt.Errorf("trust CA: %v: %s", err, bytes.TrimSpace(out))
+		}
+	}
+	for _, fingerprint := range untrust {
+		// Best effort: an entry the store never had (or already lost) is the answer wanted.
+		_ = exec.Command("certutil", "-delstore", "Root", fingerprint).Run()
 	}
 	if noHelper {
 		return nil

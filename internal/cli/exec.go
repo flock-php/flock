@@ -161,7 +161,10 @@ func resolveTool(s *state, cwd, tool string, args []string) (path string, argv, 
 
 		// npm and npx are scripts that look `node` up on PATH. Global packages, and an npm updated
 		// with `npm install -g npm`, go to the major's global prefix (see node.GlobalDir).
-		env = append(node.NpmEnv(s.root, version, binDir), "NODE_EXTRA_CA_CERTS="+filepath.Join(s.root, "certs", "ca.crt"))
+		// NODE_EXTRA_CA_CERTS carries Flock's CA bundle, not certs/ca.crt: the bundle holds every
+		// root of the active-suffix set (see Roots.Bundle), so node on a site with its own suffix
+		// trusts the leaf that suffix's root signed — the global root alone never will.
+		env = append(node.NpmEnv(s.root, version, binDir), "NODE_EXTRA_CA_CERTS="+php.CABundle(s.root))
 		env = append(env, viteTLSEnv(s, site, inSite)...)
 		path = filepath.Join(binDir, name)
 		if tool != "node" {
