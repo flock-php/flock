@@ -196,8 +196,10 @@ type SiteStatus struct {
 	// FrankenPHP is the state of the site's FrankenPHP process, when Server is "frankenphp". Until
 	// it runs, the site is served through FastCGI.
 	FrankenPHP *SiteFrankenPHP `json:"frankenphp,omitempty"`
-	// Reverb is the state of the site's Laravel Reverb server, when it's turned on.
-	Reverb *SiteReverb `json:"reverb,omitempty"`
+	// Reverb is the state of the site's Laravel Reverb server, when it's turned on. ReverbAvailable
+	// is set when the project has Laravel Reverb installed, so it can be turned on.
+	Reverb          *SiteReverb `json:"reverb,omitempty"`
+	ReverbAvailable bool        `json:"reverb_available"`
 	// Type is what the site is: "php" or "node" (see config.Site.Type). A Node.js site has
 	// NodeServer instead of the PHP settings (PHP, Root, Server, FrankenPHP, Reverb).
 	Type       string          `json:"type"`

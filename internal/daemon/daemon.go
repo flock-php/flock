@@ -36,6 +36,7 @@ import (
 	"flock/internal/ports"
 	"flock/internal/postgres"
 	"flock/internal/project"
+	"flock/internal/reverb"
 	"flock/internal/share"
 	"flock/internal/supervisor"
 	"flock/internal/web"
@@ -676,6 +677,7 @@ func (d *daemon) reload() error {
 			NodeShadowed: nodeVersion.Shadowed, Domains: []api.SiteDomain{},
 		}
 		status.Server, status.Worker, status.OctaneAvailable = config.ServerFastCGI, site.Worker, frankenphp.HasOctane(site.Path)
+		status.ReverbAvailable = reverb.Installed(site.Path)
 		if site.FrankenPHP() {
 			status.Server = config.ServerFrankenPHP
 		}
@@ -703,7 +705,7 @@ func (d *daemon) reload() error {
 			takenPorts[port] = true
 			spec := d.nodeSpec(cfg, site, port, nodeVersion.Version)
 			nodeSpecs[site.Name], nodePorts[site.Name] = spec, port
-			status.Server, status.Worker, status.OctaneAvailable, status.PHP = "", "", false, ""
+			status.Server, status.Worker, status.OctaneAvailable, status.ReverbAvailable, status.PHP = "", "", false, false, ""
 			status.NodeServer = &api.SiteNodeServer{State: api.NodeSleeping, Port: port, Command: spec.Shell, Log: spec.Name, Problem: nodeSiteProblem(site)}
 			if d.node.isAwake(site.Name) && !runningAsRoot() {
 				d.procs.Ensure(spec)
