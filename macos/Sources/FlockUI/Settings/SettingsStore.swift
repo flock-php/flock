@@ -70,6 +70,18 @@ final class SettingsStore {
         }
     }
 
+    /// Adds a domain, answering with the daemon's verdict so the add-domain sheet can show a
+    /// refusal in the sheet itself (red text) and chain `flock install` on success. Not through
+    /// `perform`: that swallows the Status and raises the pane's banner, and the caller refreshes.
+    func addDomainChecked(site: String, domain: String, suffix: String) async -> Result<Void, Error> {
+        do {
+            _ = try await client.addDomain(site: site, domain: domain, suffix: suffix)
+            return .success(())
+        } catch {
+            return .failure(error)
+        }
+    }
+
     /// Runs a change against the daemon, then reloads everything that may depend on it.
     func perform(_ change: @Sendable (FlockClient) async throws -> Void) async {
         isBusy = true

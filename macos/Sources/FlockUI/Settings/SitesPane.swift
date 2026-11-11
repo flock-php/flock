@@ -20,13 +20,12 @@ struct SitesPane: View {
         get { confirmState.wrappedValue }
         nonmutating set { confirmState.wrappedValue = newValue }
     }
-    /// The site a domain is being added to, and the name typed so far.
+    /// The site the Add Domain sheet is open for (the sheet's fields live in it).
     private let addingState = State<String?>(initialValue: nil)
     private var adding: String? {
         get { addingState.wrappedValue }
         nonmutating set { addingState.wrappedValue = newValue }
     }
-    private let newDomainState = State<String>(initialValue: "")
     /// The site whose PHP extensions are shown.
     private let extensionsState = State<Status.Site?>(initialValue: nil)
     /// The site whose FrankenPHP is restarting.
@@ -217,19 +216,13 @@ struct SitesPane: View {
         } message: { action in
             Text(action.message)
         }
-        .alert("Add a domain to \(adding ?? "")", isPresented: Binding(get: { adding != nil }, set: { if !$0 { adding = nil } })) {
-            TextField("tenant1, a.b or \(adding ?? "app")-2.\(model.status?.dns.tld ?? "test")", text: newDomainState.projectedValue)
-            Button("Add") {
-                let name = adding ?? ""
-                let domain = newDomainState.wrappedValue.trimmingCharacters(in: .whitespaces)
-                newDomainState.wrappedValue = ""
-                if !name.isEmpty, !domain.isEmpty {
-                    Task { await store.perform { _ = try await $0.addDomain(site: name, domain: domain) } }
-                }
+        .sheet(isPresented: Binding(get: { adding != nil }, set: { if !$0 { adding = nil } }), onDismiss: {
+            // The sheet added, declined, or chained and finished: the sites show the outcome.
+            Task { await model.settings.refresh() }
+        }) {
+            if let adding, let site = model.status?.sites.first(where: { $0.name == adding }) {
+                AddDomainSheet(site: site)
             }
-            Button("Cancel", role: .cancel) { newDomainState.wrappedValue = "" }
-        } message: {
-            Text(domainHelp)
         }
         .alert("Add a proxy", isPresented: addingProxyState.projectedValue) {
             TextField("Name, e.g. my-app", text: newProxyNameState.projectedValue)
@@ -283,16 +276,6 @@ struct SitesPane: View {
     /// What a pending flock://secure link asks for, once the sites are loaded.
     private var linkRequest: SecureLink.Resolution? {
         model.pendingSecure?.resolve(sites: model.status?.sites)
-    }
-
-    /// What adding a domain does on this machine.
-    private var domainHelp: String {
-        let dns = model.status?.dns
-        let depth = dns?.maxDepth ?? 4
-        if dns?.wildcard ?? true {
-            return "Every subdomain up to \(depth) levels below the site already works. Add a full name like \(adding ?? "app")-2.\(dns?.tld ?? "test") for an alias, or a subdomain (tenant1, a.b) so it is listed here and also resolves on Windows machines without wildcard DNS."
-        }
-        return "Wildcard subdomains don't work here (\(dns?.wildcardProblem ?? "")), so add each subdomain you use (tenant1, a.b). A full name adds an alias."
     }
 
     /// A site in the list: its name and address, a lock when it is secured, a badge while it is shared, a
@@ -1290,5 +1273,223 @@ private struct ShareSheet: View {
         }
         .padding(20)
         .frame(width: 420)
+    }
+}
+
+/// Adds a domain to a site: a label and the suffix it lands under. The alias is <label>.<suffix>:
+/// Inherit follows the site's suffix (it moves when the suffix moves), a picked suffix pins the
+/// alias in place. A suffix new to the machine chains the bundled CLI's `flock install` (streaming
+/// in the sheet stacked on this one, prompts included) so the alias resolves with trusted HTTPS
+/// right away; an already-active suffix adds with nothing to install.
+private struct AddDomainSheet: View {
+    @Environment(AppModel.self) private var model
+    @Environment(\.dismiss) private var dismiss
+    let site: Status.Site
+
+    private let labelState = State<String>(initialValue: "")
+    private var label: String {
+        get { labelState.wrappedValue }
+        nonmutating set { labelState.wrappedValue = newValue }
+    }
+    /// The drafted suffix, starting on Inherit; the picker's live check gates Add.
+    private let suffixModelState = State<SuffixCheckModel>(initialValue: SuffixCheckModel(draft: SuffixValue.inherit))
+    private var suffixModel: SuffixCheckModel {
+        get { suffixModelState.wrappedValue }
+        nonmutating set { suffixModelState.wrappedValue = newValue }
+    }
+    /// The add is in flight; a refusal is the sheet's own red line, never the pane's banner.
+    private let submittingState = State<Bool>(initialValue: false)
+    private var submitting: Bool {
+        get { submittingState.wrappedValue }
+        nonmutating set { submittingState.wrappedValue = newValue }
+    }
+    private let errorState = State<String?>(initialValue: nil)
+    private var error: String? {
+        get { errorState.wrappedValue }
+        nonmutating set { errorState.wrappedValue = newValue }
+    }
+    /// The chained `flock install`: the suffix it provisions, its output, its state.
+    private let chainSuffixState = State<String?>(initialValue: nil)
+    private var chainSuffix: String? {
+        get { chainSuffixState.wrappedValue }
+        nonmutating set { chainSuffixState.wrappedValue = newValue }
+    }
+    private let chainLinesState = State<[String]>(initialValue: [])
+    private var chainLines: [String] {
+        get { chainLinesState.wrappedValue }
+        nonmutating set { chainLinesState.wrappedValue = newValue }
+    }
+    private let chainRunningState = State<Bool>(initialValue: false)
+    private var chainRunning: Bool {
+        get { chainRunningState.wrappedValue }
+        nonmutating set { chainRunningState.wrappedValue = newValue }
+    }
+    private let chainDeclinedState = State<Bool>(initialValue: false)
+    private var chainDeclined: Bool {
+        get { chainDeclinedState.wrappedValue }
+        nonmutating set { chainDeclinedState.wrappedValue = newValue }
+    }
+    /// The install finished and the sheets are closing on their own: the chain sheet's close
+    /// then must not fire a second dismiss.
+    private let chainDoneState = State<Bool>(initialValue: false)
+    private var chainDone: Bool {
+        get { chainDoneState.wrappedValue }
+        nonmutating set { chainDoneState.wrappedValue = newValue }
+    }
+
+    private var global: String { model.status?.dns.tld ?? "test" }
+    /// The suffix an inherited alias lands on; an old daemon reports no effective suffix.
+    private var siteSuffix: String { site.tld.isEmpty ? global : site.tld }
+    private var isInherit: Bool { suffixModel.draft == SuffixValue.inherit }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Add a domain to \(site.name)").font(.headline)
+            HStack(alignment: .firstTextBaseline, spacing: 12) {
+                Text("Label").foregroundStyle(.secondary)
+                    .frame(width: 48, alignment: .leading)
+                TextField("tenant1, a.b", text: labelState.projectedValue)
+                    .textFieldStyle(.roundedBorder)
+                    .frame(width: 230)
+            }
+            HStack(alignment: .firstTextBaseline, spacing: 12) {
+                Text("Suffix").foregroundStyle(.secondary)
+                    .frame(width: 48, alignment: .leading)
+                SuffixPicker(store: model.settings, suffixModel: suffixModel, current: global, allowInherit: true)
+            }
+            SuffixFeedback(suffixModel: suffixModel, candidate: suffixModel.candidate(current: global))
+            Text(domainHelp)
+                .font(.caption).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            if let error {
+                Label(error, systemImage: "exclamationmark.triangle.fill")
+                    .font(.caption).foregroundStyle(.red)
+                    .textSelection(.enabled)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            HStack {
+                Spacer()
+                Button("Cancel", role: .cancel) { dismiss() }
+                    .keyboardShortcut(.cancelAction)
+                Button {
+                    Task { await submit() }
+                } label: {
+                    BusyLabel(title: "Add", busyTitle: "Adding…", isBusy: submitting)
+                }
+                .keyboardShortcut(.defaultAction)
+                .disabled(!canAdd)
+            }
+        }
+        .padding(20)
+        .frame(width: 420)
+        .sheet(isPresented: Binding(get: { chainSuffix != nil }, set: { if !$0 { chainSuffix = nil } }), onDismiss: {
+            // The chain is over — installed, failed, or the password declined: the alias is in
+            // the config, so close the Add sheet and let the pane refresh.
+            if !chainDone {
+                dismiss()
+            }
+        }) {
+            if let chainSuffix {
+                ProvisionSheet(
+                    title: "Provisioning .\(chainSuffix)…",
+                    failedTitle: "Provisioning .\(chainSuffix) didn’t finish",
+                    lines: chainLines,
+                    running: chainRunning,
+                    declined: chainDeclined,
+                    footer: "You declined the password. The alias is added to \(site.name); finish by running `flock install` in a terminal to make .\(chainSuffix) resolve."
+                )
+            }
+        }
+    }
+
+    /// Add needs a label, and on a picked suffix the daemon's verdict: a pending or refused
+    /// check stays disabled. A suffix equal to the site's effective one is a legal explicit pin.
+    private var canAdd: Bool {
+        if submitting { return false }
+        if label.trimmingCharacters(in: .whitespaces).isEmpty { return false }
+        if isInherit { return true }
+        return suffixModel.check?.ok ?? false
+    }
+
+    /// The alias as it lands: the label over the suffix it serves under.
+    private var aliasPreview: String {
+        let trimmed = label.trimmingCharacters(in: .whitespaces)
+        let shown = isInherit ? siteSuffix : (suffixModel.check?.normalized ?? "suffix")
+        return "\(trimmed.isEmpty ? "name" : trimmed).\(shown)"
+    }
+
+    /// What adding a domain does on this machine, in the label + suffix model.
+    private var domainHelp: String {
+        let dns = model.status?.dns
+        let depth = dns?.maxDepth ?? 4
+        if dns?.wildcard ?? true {
+            return "Every subdomain up to \(depth) levels below \(site.domain) already works. The label adds the alias \(aliasPreview): Inherit follows \(site.name)’s suffix (.\(siteSuffix)) and moves with it; a picked suffix pins the alias in place. Added names are listed here and resolve on machines without wildcard DNS."
+        }
+        return "Wildcard subdomains don't work here (\(dns?.wildcardProblem ?? "")), so add each name you use. The label adds the alias \(aliasPreview): Inherit follows \(site.name)’s suffix; a picked suffix pins the alias in place."
+    }
+
+    /// Adds the domain on the banner-free path, so a refusal shows in the sheet, then chains
+    /// the install when the suffix is new to the machine. The pane refreshes on close.
+    private func submit() async {
+        submitting = true
+        error = nil
+        let domain = label.trimmingCharacters(in: .whitespaces)
+        // "inherit" marks the alias as following the site; anything else is the checked,
+        // normalized suffix, which pins the alias (an explicit suffix equal to the site's own
+        // is legal: the API forces the pin, and it survives suffix moves).
+        let suffix = isInherit ? SuffixValue.inherit : (suffixModel.check?.normalized ?? "")
+        let fresh = isNewSuffix(suffix)
+        switch await model.settings.addDomainChecked(site: site.name, domain: domain, suffix: suffix) {
+        case .success:
+            if fresh {
+                await chainInstall(suffix)
+            } else {
+                dismiss()
+            }
+        case .failure(let failure):
+            submitting = false
+            error = failure.localizedDescription
+        }
+    }
+
+    /// New to the machine (R8): the suffix is neither the global one (`dns.tld`) nor one of
+    /// the active suffixes (`dns.suffixes`, rows without a tld skipped — the ledger contract).
+    /// Inherit never chains: the site's suffix is provisioned by definition. A daemon from
+    /// before the list chains once, and `flock install` is idempotent.
+    private func isNewSuffix(_ suffix: String) -> Bool {
+        guard !suffix.isEmpty, suffix != SuffixValue.inherit, let dns = model.status?.dns else { return false }
+        if suffix == dns.tld { return false }
+        return !dns.suffixes.contains { !$0.tld.isEmpty && $0.tld == suffix }
+    }
+
+    /// The suffix was never provisioned here: the alias is in the config, and the bundled CLI's
+    /// `flock install` makes it resolve with trusted certificates — the same runner as the
+    /// global switch, streaming in the sheet stacked on this one.
+    private func chainInstall(_ suffix: String) async {
+        chainRunning = true
+        defer { chainRunning = false }
+        chainLines = []
+        chainDeclined = false
+        chainDone = false
+        chainSuffix = suffix
+        guard let binary = model.installation.bundledFlock else {
+            chainLines = ["This build of Flock has no bundled CLI — run `flock install` in a terminal."]
+            return
+        }
+        let result = await Installation.run(binary, ["install"]) { line in
+            // Lines arrive from the pipe's thread; late ones lose to the final output below.
+            Task { @MainActor in
+                if chainRunning {
+                    chainLines.append(line)
+                }
+            }
+        }
+        chainLines = result.output.split(separator: "\n").map(String.init)
+        chainDeclined = result.permissionDeclined
+        if result.ok {
+            // Installed: close both sheets and refresh; the chain sheet's onDismiss stays quiet.
+            chainDone = true
+            dismiss()
+        }
     }
 }

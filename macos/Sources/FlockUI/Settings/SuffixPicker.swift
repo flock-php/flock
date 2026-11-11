@@ -24,7 +24,10 @@ final class SuffixCheckModel {
     /// Why the last check couldn't be made (the daemon didn't answer); the last verdict stays.
     var checkNote: String?
 
-    nonisolated init() {}
+    /// The add-domain sheet starts on Inherit; the others fall back to the config's domain.
+    init(draft: String? = nil) {
+        self.draft = draft
+    }
 
     /// The domain to check and apply: the picked preset, else the trimmed custom text.
     func candidate(current: String) -> String {
