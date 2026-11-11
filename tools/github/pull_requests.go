@@ -49,10 +49,10 @@ func (s PullRequestEventService) Run(owner, repository string, data []byte) erro
 			return pr_gate.CloseClaimedIssue(s.Gate.PullRequests, owner, repository, event.Number, approvedIssue, assignment.ClaimedBy)
 		}
 		if !assignment.ApprovalWithdrawn {
-			if err := pr_gate.CompleteClaim(s.Gate.Issues, owner, repository, event.Number); err != nil {
+			if err := milestone_transfer.Execute(s.Milestones, owner, repository, event.Number, approvedIssue); err != nil {
 				return err
 			}
-			return milestone_transfer.Execute(s.Milestones, owner, repository, event.Number, approvedIssue)
+			return pr_gate.CompleteClaim(s.Gate.Issues, owner, repository, event.Number)
 		}
 		if retries == maxApprovalRetries {
 			return fmt.Errorf("issue approval changed repeatedly while processing pull request #%d", event.Number)

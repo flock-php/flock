@@ -74,7 +74,8 @@ type pullRequestGate struct {
 
 func (g pullRequestGate) evaluate(retryAllowed bool) (Result, bool, error) {
 	pr, err := g.dependencies.PullRequests.Get(g.owner, g.repository, g.event.Number)
-	if err != nil || pr == nil || bypassesGate(pr.Author, pr.AuthorAssociation) || (approvedPullRequest(pr) && pr.BaseRef == "main") {
+	if err != nil || pr == nil || bypassesGate(pr.Author, pr.AuthorAssociation) ||
+		(pr.State == "open" && approvedPullRequest(pr) && pr.BaseRef == "main") {
 		return Result{}, false, err
 	}
 	if pr.State == "closed" {
@@ -115,6 +116,13 @@ func (g pullRequestGate) evaluateOpen(pr *github_pr.PullRequest, retryAllowed bo
 	if pr.BaseRef != "main" {
 		return Result{}, false, closePullRequest(g.dependencies.PullRequests, g.owner, g.repository, pr, closeWrongBase)
 	}
+	files, err := g.dependencies.PullRequests.ListFiles(g.owner, g.repository, pr.Number)
+	if err != nil {
+		return Result{}, false, err
+	}
+	if len(files) != 0 && evaluate(files) == allow {
+		return Result{}, false, nil
+	}
 	issue, approved, claimedBy, err := firstApprovedIssue(g.dependencies.Issues, g.dependencies.PullRequests, g.owner, g.repository, pr)
 	if err != nil {
 		return Result{}, false, err
@@ -124,10 +132,6 @@ func (g pullRequestGate) evaluateOpen(pr *github_pr.PullRequest, retryAllowed bo
 	}
 	if approved {
 		return approvedResult(issue), false, nil
-	}
-	files, err := g.dependencies.PullRequests.ListFiles(g.owner, g.repository, pr.Number)
-	if err != nil {
-		return Result{}, false, err
 	}
 	if evaluate(files) == allow {
 		return Result{}, false, nil
@@ -163,6 +167,8 @@ func evaluate(files []github_pr.File) action {
 }
 
 func firstApprovedIssue(issues IssueReader, pullRequests PullRequestGateService, owner, repository string, pr *github_pr.PullRequest) (issue_reference.Reference, bool, string, error) {
+	var competingIssue issue_reference.Reference
+	var competingClaimant string
 	for _, reference := range issue_reference.Parse(pr.Body, "flock") {
 		if reference.Repository != repository {
 			continue
@@ -188,9 +194,16 @@ func firstApprovedIssue(issues IssueReader, pullRequests PullRequestGateService,
 			winner = pr
 		}
 		if winner.Number != pr.Number {
-			return reference, false, winner.Author.Login, nil
+			if competingClaimant == "" {
+				competingIssue = reference
+				competingClaimant = winner.Author.Login
+			}
+			continue
 		}
 		return reference, true, "", nil
+	}
+	if competingClaimant != "" {
+		return competingIssue, false, competingClaimant, nil
 	}
 	return issue_reference.Reference{}, false, "", nil
 }
@@ -200,7 +213,7 @@ func isNotFound(err error) bool {
 	return errors.As(err, &response) && response.Response != nil && response.Response.StatusCode == http.StatusNotFound
 }
 
-// CompleteClaim marks a pull request as durably approved after its issue assignment succeeds.
+// CompleteClaim marks a pull request as durably approved after its completion work succeeds.
 func CompleteClaim(issues IssueReader, owner, repository string, number int) error {
 	if err := issues.EnsureClaimedLabel(owner, repository); err != nil {
 		return err

@@ -58,7 +58,7 @@ func TestRunClosesUnapprovedPullRequest(t *testing.T) {
 	}
 }
 
-func TestRunDoesNotListFilesForApprovedIssue(t *testing.T) {
+func TestRunChecksFilesBeforeApprovingIssue(t *testing.T) {
 	api := &fakeService{pullRequest: pullRequest("open", "Fixes #73"), issue: approvedIssue()}
 	result, err := Execute(Dependencies{Issues: &fakeIssueService{api: api}, PullRequests: api}, "flock-php", "flock", Event{Action: "opened", Number: 87})
 	if err != nil {
@@ -67,8 +67,8 @@ func TestRunDoesNotListFilesForApprovedIssue(t *testing.T) {
 	if result.ApprovedIssue == nil || result.ApprovedIssue.Number != 73 {
 		t.Fatalf("approved issue = %+v, want flock#73", result.ApprovedIssue)
 	}
-	if api.filesCalls != 0 {
-		t.Fatalf("Files() calls = %d, want 0", api.filesCalls)
+	if api.filesCalls != 1 {
+		t.Fatalf("Files() calls = %d, want 1", api.filesCalls)
 	}
 }
 
@@ -88,8 +88,8 @@ func TestRunSkipsMissingIssueReferences(t *testing.T) {
 	if result.ApprovedIssue == nil || result.ApprovedIssue.Number != 73 {
 		t.Fatalf("approved issue = %+v, want flock#73", result.ApprovedIssue)
 	}
-	if api.filesCalls != 0 {
-		t.Fatalf("Files() calls = %d, want 0", api.filesCalls)
+	if api.filesCalls != 1 {
+		t.Fatalf("Files() calls = %d, want 1", api.filesCalls)
 	}
 }
 
@@ -153,6 +153,20 @@ func TestRunBypassesClaimedPullRequestsWithoutCheckingIssuesOrFiles(t *testing.T
 	}
 }
 
+func TestRunReopensClaimedPullRequestClosedForTheWrongBase(t *testing.T) {
+	pr := pullRequest("closed", "Fixes #73")
+	pr.Labels = []github_issue.Label{{Name: github_issue.Claimed}}
+	api := &fakeService{pullRequest: pr, gateClosed: true, issue: approvedIssue()}
+
+	result, err := Execute(Dependencies{Issues: &fakeIssueService{api: api}, PullRequests: api}, "flock-php", "flock", Event{Action: "edited", Number: 87, BodyEdited: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if api.state != "open" || result.ApprovedIssue == nil || result.ApprovedIssue.Number != 73 {
+		t.Fatalf("state = %q, result = %+v; want open and approved issue flock#73", api.state, result)
+	}
+}
+
 func TestRunReturnsAssignedHelpWantedIssueForAssignment(t *testing.T) {
 	api := &fakeService{
 		pullRequest: pullRequest("open", "Fixes #73"),
@@ -167,7 +181,7 @@ func TestRunReturnsAssignedHelpWantedIssueForAssignment(t *testing.T) {
 	if result.ApprovedIssue == nil || result.ApprovedIssue.Number != 73 || result.ClaimedBy != "" {
 		t.Fatalf("result = %+v, want approved issue flock#73", result)
 	}
-	if want := []string{"pr:get", "issue:get"}; !reflect.DeepEqual(api.calls, want) {
+	if want := []string{"pr:get", "pr:list-files", "issue:get"}; !reflect.DeepEqual(api.calls, want) {
 		t.Fatalf("calls = %v, want %v", api.calls, want)
 	}
 }
@@ -189,8 +203,30 @@ func TestRunRejectsHigherNumberedCompetingPullRequest(t *testing.T) {
 	if result.ClaimedBy != "first-contributor" {
 		t.Fatalf("claimed by = %q, want first-contributor", result.ClaimedBy)
 	}
-	if want := []string{"pr:get", "issue:get", "pr:lowest-reference"}; !reflect.DeepEqual(api.calls, want) {
+	if want := []string{"pr:get", "pr:list-files", "issue:get", "pr:lowest-reference"}; !reflect.DeepEqual(api.calls, want) {
 		t.Fatalf("calls = %v, want %v", api.calls, want)
+	}
+}
+
+func TestRunUsesLaterEligibleIssueAfterACompetingClaim(t *testing.T) {
+	api := &fakeService{
+		pullRequest: pullRequest("open", "Fixes #73\nFixes #74"),
+		issues: map[int]*github_issue.Issue{
+			73: approvedIssue(),
+			74: approvedIssue(),
+		},
+	}
+	competitor := pullRequest("open", "Fixes #73")
+	competitor.Number = 86
+	competitor.Author.Login = "first-contributor"
+	api.winners = map[int]*github_pr.PullRequest{73: competitor, 74: api.pullRequest}
+
+	result, err := Execute(Dependencies{Issues: &fakeIssueService{api: api}, PullRequests: api}, "flock-php", "flock", Event{Action: "synchronize", Number: 87})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.ClaimedBy != "" || result.ApprovedIssue == nil || result.ApprovedIssue.Number != 74 {
+		t.Fatalf("result = %+v; want approved issue flock#74", result)
 	}
 }
 
@@ -309,9 +345,11 @@ func TestRunReturnsIssueServiceErrors(t *testing.T) {
 type fakeService struct {
 	pullRequest *github_pr.PullRequest
 	winner      *github_pr.PullRequest
+	winners     map[int]*github_pr.PullRequest
 	noWinner    bool
 	files       []github_pr.File
 	issue       *github_issue.Issue
+	issues      map[int]*github_issue.Issue
 	gateClosed  bool
 	state       string
 	commented   bool
@@ -332,10 +370,13 @@ func (f *fakeService) Get(string, string, int) (*github_pr.PullRequest, error) {
 	f.calls = append(f.calls, "pr:get")
 	return f.pullRequest, f.getErr
 }
-func (f *fakeService) LowestOpenReference(string, string, issue_reference.Reference) (*github_pr.PullRequest, error) {
+func (f *fakeService) LowestOpenReference(_ string, _ string, issue issue_reference.Reference) (*github_pr.PullRequest, error) {
 	f.calls = append(f.calls, "pr:lowest-reference")
 	if f.noWinner {
 		return nil, f.lowestErr
+	}
+	if winner, ok := f.winners[issue.Number]; ok {
+		return winner, f.lowestErr
 	}
 	if f.winner != nil {
 		return f.winner, f.lowestErr
@@ -373,6 +414,9 @@ func (f *fakeIssueService) Get(_ string, _ string, number int) (*github_issue.Is
 	f.api.calls = append(f.api.calls, "issue:get")
 	if err := f.errors[number]; err != nil {
 		return nil, err
+	}
+	if issue, ok := f.api.issues[number]; ok {
+		return issue, f.err
 	}
 	return f.api.issue, f.err
 }
