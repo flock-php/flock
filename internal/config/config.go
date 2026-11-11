@@ -221,7 +221,8 @@ func file(root string) string {
 	return filepath.Join(root, "config.json")
 }
 
-// Load reads <root>/config.json, falling back to Default when it does not exist.
+// Load reads <root>/config.json, falling back to Default when it does not exist. The stored TLD
+// is sanitized on the way out, so a hand-edited one that Flock refuses never reaches a caller.
 func Load(root string) (*Config, error) {
 	cfg := Default()
 
@@ -236,6 +237,19 @@ func Load(root string) (*Config, error) {
 	if err := json.Unmarshal(data, cfg); err != nil {
 		return nil, fmt.Errorf("parse %s: %w", file(root), err)
 	}
+
+	// config.json is hand-editable, so the TLD in it is input, not a validated choice: the CLI
+	// screens every TLD it sets, and nothing screens one typed into the file. Sanitize it here,
+	// the one place every caller reads the config through, so no downstream code has to. An
+	// empty TLD is the pathological one — it puts "." into the root certificate's permitted DNS
+	// domains, which x509 refuses and the daemon then fails to start on every run, and it
+	// collides with the "no change" sentinel in `flock tld`, which reports success without
+	// provisioning anything. Anything ValidateTLD refuses falls back to the default.
+	tld := NormalizeTLD(cfg.TLD)
+	if _, err := ValidateTLD(tld); err != nil {
+		tld = "test"
+	}
+	cfg.TLD = tld
 
 	return cfg, nil
 }

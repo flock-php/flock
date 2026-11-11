@@ -1,6 +1,7 @@
 package config
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -117,5 +118,36 @@ func TestSetServerAssignsStablePortsAndValidates(t *testing.T) {
 	}
 	if err := cfg.SetServer(&a, ServerFrankenPHP, "roadrunner"); err == nil {
 		t.Error("unknown worker mode accepted")
+	}
+}
+
+// TestLoadSanitisesTheTLD: config.json is a hand-editable file, and Load is the one place that
+// makes what it says safe for everything downstream. An empty TLD is the dangerous one: it puts
+// "." into the CA's permitted DNS domains (x509 rejects the constraint, so the daemon is
+// degraded on every start) and it collides with `flock tld`'s "no change" sentinel, turning a
+// re-provision into a success message over an unprovisioned machine. A public TLD would shadow
+// real internet names. Anything ValidateTLD refuses falls back to the default; anything merely
+// unnormalized is normalized.
+func TestLoadSanitisesTheTLD(t *testing.T) {
+	for in, want := range map[string]string{
+		"":      "test",
+		"LOC ":  "loc",
+		"dev":   "test",
+		"a b":   "test",
+		".loc":  "loc",
+		"local": "local",
+	} {
+		root := t.TempDir()
+		if err := os.WriteFile(file(root), []byte(fmt.Sprintf(`{"tld": %q}`, in)), 0o600); err != nil {
+			t.Fatal(err)
+		}
+
+		cfg, err := Load(root)
+		if err != nil {
+			t.Fatalf("Load with tld %q: %v", in, err)
+		}
+		if cfg.TLD != want {
+			t.Errorf("Load with tld %q: TLD = %q, want %q", in, cfg.TLD, want)
+		}
 	}
 }
