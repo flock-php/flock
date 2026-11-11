@@ -81,7 +81,7 @@ flock site tld --inherit
 :::
 
 :::app
-A per-site domain control for the apps is on its way. Until then use the CLI, and the global **Domain** picker in **Settings → General → Network** (see [Choosing the local domain](domains.md#choosing-the-local-domain)).
+On macOS, select the site in **Settings → Sites**: the **Domain** row in its **Site** section picks the suffix — **Inherit** (the site follows the global one), **.test**, **.loc**, **.local**, or your own under **Custom…**, checked as you type. **Apply** runs the whole switch, the password prompt included: the site's `.env` files are retargeted and the new suffix's DNS and its own certificate root are provisioned. Decline the password and the config is on the new suffix already; the app tells you to run `flock install` to finish the setup. The **Add Domain…** sheet picks an alias's suffix the same way: **Inherit** rides the site's suffix, a picked suffix pins the alias. The global **Domain** picker is in **Settings → General → Network** (see [Choosing the local domain](domains.md#choosing-the-local-domain)).
 :::
 
 A site with a suffix of its own is never dragged by a global change, and neither is an alias pinned to a suffix. What a suffix switch provisions, and the rules a suffix must obey: [Per-site domains](domains.md#per-site-domains).
