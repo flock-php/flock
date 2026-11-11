@@ -12,8 +12,14 @@ import (
 )
 
 // retargetKeys are the .env keys whose values name a site's host, the ones a TLD change moves:
-// the app URL, the session cookie's domain, Sanctum's stateful-domain list and the mail sender.
-var retargetKeys = []string{"APP_URL", "SESSION_DOMAIN", "SANCTUM_STATEFUL_DOMAINS", "MAIL_FROM"}
+// the app URL, the session cookie's domain, Sanctum's stateful-domain list and the mail sender
+// — MAIL_FROM in the generic form, MAIL_FROM_ADDRESS in Laravel's, whose skeleton ships it.
+var retargetKeys = []string{"APP_URL", "SESSION_DOMAIN", "SANCTUM_STATEFUL_DOMAINS", "MAIL_FROM", "MAIL_FROM_ADDRESS"}
+
+// addressKeys are the keys whose value is a mail address: their host is the part after the
+// last '@'. MAIL_FROM_NAME is a display name: it carries no host and retargets as an ordinary
+// value at worst, never through the address branch.
+var addressKeys = []string{"MAIL_FROM", "MAIL_FROM_ADDRESS"}
 
 // RetargetDotenv rewrites the site host in one .env: in the keys of retargetKeys, oldHost
 // becomes newHost. The match is by host, not by substring: the value is the host itself (with
@@ -101,7 +107,7 @@ func swapRawValue(key, raw, oldHost, newHost string) (string, bool) {
 }
 
 // swapValue applies the host swap to one key's value: a bare host, a comma list of hosts, URLs
-// anywhere in it, and the address in MAIL_FROM.
+// anywhere in it, and the address in the mail keys (addressKeys).
 func swapValue(value, key, oldHost, newHost string) (string, bool) {
 	switch value {
 	case oldHost:
@@ -132,7 +138,7 @@ func swapValue(value, key, oldHost, newHost string) (string, bool) {
 		}
 		out = strings.Join(parts, ",")
 	}
-	if key == "MAIL_FROM" {
+	if slices.Contains(addressKeys, key) {
 		if i := strings.LastIndex(out, "@"); i >= 0 {
 			switch domain := out[i+1:]; domain {
 			case oldHost:

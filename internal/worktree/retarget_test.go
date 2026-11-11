@@ -60,7 +60,7 @@ func TestRetargetDotenvSwapsHostsAndKeepsEverythingElse(t *testing.T) {
 
 func TestRetargetDotenvKeepsHostsThatOnlyLookSimilar(t *testing.T) {
 	path := filepath.Join(t.TempDir(), ".env")
-	write(t, path, "APP_URL=https://app.test.evil.com\nSANCTUM_STATEFUL_DOMAINS=acme.test.evil.com,evil-acme.test\nMAIL_FROM=old@acme.test.evil.com\nDB_HOST=acme.test\n")
+	write(t, path, "APP_URL=https://app.test.evil.com\nSANCTUM_STATEFUL_DOMAINS=acme.test.evil.com,evil-acme.test\nMAIL_FROM=old@acme.test.evil.com\nMAIL_FROM_ADDRESS=x@acme.test.evil.com\nDB_HOST=acme.test\n")
 
 	changed, err := RetargetDotenv(path, "acme.test", "acme.loc")
 	if err != nil {
@@ -69,8 +69,46 @@ func TestRetargetDotenvKeepsHostsThatOnlyLookSimilar(t *testing.T) {
 	if len(changed) != 0 {
 		t.Errorf("changed keys: %v", changed)
 	}
-	if got := read(t, path); got != "APP_URL=https://app.test.evil.com\nSANCTUM_STATEFUL_DOMAINS=acme.test.evil.com,evil-acme.test\nMAIL_FROM=old@acme.test.evil.com\nDB_HOST=acme.test\n" {
+	if got := read(t, path); got != "APP_URL=https://app.test.evil.com\nSANCTUM_STATEFUL_DOMAINS=acme.test.evil.com,evil-acme.test\nMAIL_FROM=old@acme.test.evil.com\nMAIL_FROM_ADDRESS=x@acme.test.evil.com\nDB_HOST=acme.test\n" {
 		t.Errorf("file changed:\n%s", got)
+	}
+}
+
+// Laravel writes MAIL_FROM_ADDRESS (resolved into config('mail.from.address')), not the
+// generic MAIL_FROM: the app's mail sender is noreply@acme.test, and a suffix switch that
+// moves APP_URL, the session domain and the stateful list while the sender keeps naming
+// the retired host is a half-applied switch — the docs promise the mail sender moves too.
+func TestRetargetDotenvSwapsMailFromAddress(t *testing.T) {
+	path := filepath.Join(t.TempDir(), ".env")
+	write(t, path, "APP_NAME=Acme\nMAIL_FROM_ADDRESS=noreply@acme.test\nMAIL_FROM_NAME=\"Acme\"\n")
+
+	changed, err := RetargetDotenv(path, "acme.test", "acme.loc")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(changed, []string{"MAIL_FROM_ADDRESS"}) {
+		t.Errorf("changed: %v, want [MAIL_FROM_ADDRESS]", changed)
+	}
+	want := "APP_NAME=Acme\nMAIL_FROM_ADDRESS=noreply@acme.loc\nMAIL_FROM_NAME=\"Acme\"\n"
+	if got := read(t, path); got != want {
+		t.Errorf("got\n%s\nwant\n%s", got, want)
+	}
+}
+
+// The quoted form keeps its quoting, as every other value does.
+func TestRetargetDotenvSwapsQuotedMailFromAddress(t *testing.T) {
+	path := filepath.Join(t.TempDir(), ".env")
+	write(t, path, "MAIL_FROM_ADDRESS=\"noreply@acme.test\"\n")
+
+	changed, err := RetargetDotenv(path, "acme.test", "acme.loc")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(changed, []string{"MAIL_FROM_ADDRESS"}) {
+		t.Errorf("changed: %v, want [MAIL_FROM_ADDRESS]", changed)
+	}
+	if got := read(t, path); got != "MAIL_FROM_ADDRESS=\"noreply@acme.loc\"\n" {
+		t.Errorf("got %q", got)
 	}
 }
 
