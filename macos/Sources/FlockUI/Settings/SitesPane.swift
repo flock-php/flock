@@ -1810,16 +1810,14 @@ private struct RenameHostSheet: View {
             HStack(spacing: 12) {
                 Text("Name").foregroundStyle(.secondary)
                     .frame(width: 48, alignment: .leading)
-                Spacer()
                 // The typed name plus the suffix it will serve under — the permanent tail makes
                 // the full domain visible while typing; it is grey and uneditable on purpose.
-                // The box is at least 230 wide and grows with the name, and it sits flush with
-                // the buttons: one right edge for the whole form.
+                // The field fills the row, so its right edge, the suffix and the buttons share
+                // one line; long names scroll inside the field, as fields do.
                 HStack(spacing: 0) {
                     TextField(site.name, text: draftBinding)
                         .textFieldStyle(.plain)
                         .multilineTextAlignment(.trailing)
-                        .fixedSize()
                         .padding(.leading, 8)
                     Text(".\(site.tld.isEmpty ? (model.status?.dns.tld ?? "test") : site.tld)")
                         .foregroundStyle(.secondary)
@@ -1827,7 +1825,6 @@ private struct RenameHostSheet: View {
                         .allowsHitTesting(false)
                 }
                 .padding(.vertical, 5)
-                .frame(minWidth: 230)
                 .background(RoundedRectangle(cornerRadius: 6).fill(Color(nsColor: .textBackgroundColor)))
                 .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color(nsColor: .separatorColor)))
             }
