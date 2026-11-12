@@ -162,6 +162,54 @@ struct ClientTests {
         #expect(requests[2].body == #"{"secured":false}"#)
     }
 
+    @Test func addsAProxyWithItsCommandsInOneRequest() async throws {
+        StubProtocol.reset { _ in (200, #"{"version":"dev","pid":1,"started_at":"2026-10-13T14:10:01Z"}"#) }
+        let client = client(try apiJSON(token: "t"))
+
+        _ = try await client.proxy(name: "s3", upstream: "9000", command: "docker compose up -d", dir: "/code/s3", stopCommand: "docker compose stop")
+
+        let requests = StubProtocol.requests
+        #expect(requests.map(\.method) == ["POST"])
+        let body = try JSONSerialization.jsonObject(with: Data(requests[0].body.utf8)) as? [String: Any]
+        #expect(body?.keys.sorted() == ["command", "dir", "name", "stop_command", "upstream"])
+        #expect(body?["stop_command"] as? String == "docker compose stop" && body?["dir"] as? String == "/code/s3")
+    }
+
+    @Test func talksToTheProxyCommandEndpoints() async throws {
+        StubProtocol.reset { _ in (200, #"{"version":"dev","pid":1,"started_at":"2026-10-13T14:10:01Z"}"#) }
+        let client = client(try apiJSON(token: "t"))
+
+        _ = try await client.updateProxy("s3", ProxyChange(command: "docker compose up -d", dir: "/code/s3", stopCommand: "docker compose stop"))
+        _ = try await client.updateProxy("s3", ProxyChange(command: ""))
+        _ = try await client.startProxy("s3")
+        _ = try await client.stopProxy("s3")
+        try await client.clearServiceLog("proxy-s3")
+
+        let requests = StubProtocol.requests
+        #expect(requests.map(\.method) == ["PATCH", "PATCH", "POST", "POST", "DELETE"])
+        #expect(requests.map { URL(string: $0.url)?.path ?? "" } ==
+                ["/v1/proxies/s3", "/v1/proxies/s3", "/v1/proxies/s3/start", "/v1/proxies/s3/stop", "/v1/logs/services/proxy-s3"])
+        let change = try JSONSerialization.jsonObject(with: Data(requests[0].body.utf8)) as? [String: Any]
+        #expect(change?.keys.sorted() == ["command", "dir", "stop_command"])
+        #expect(change?["stop_command"] as? String == "docker compose stop")
+        // Removing the command sends only that.
+        #expect(requests[1].body == #"{"command":""}"#)
+    }
+
+    @Test func talksToTheNodeSiteEndpoints() async throws {
+        StubProtocol.reset { _ in (200, #"{"version":"dev","pid":1,"started_at":"2026-10-13T14:10:01Z"}"#) }
+        let client = client(try apiJSON(token: "t"))
+
+        _ = try await client.updateSite("web", SiteChange(type: "node"))
+        _ = try await client.restartSite("web")
+        _ = try await client.stopSite("web")
+
+        let requests = StubProtocol.requests
+        #expect(requests.map(\.method) == ["PATCH", "POST", "POST"])
+        #expect(requests.map { URL(string: $0.url)?.path ?? "" } == ["/v1/sites/web", "/v1/sites/web/restart", "/v1/sites/web/stop"])
+        #expect(requests[0].body == #"{"type":"node"}"#)
+    }
+
     @Test func givesSlowEndpointsLongerThanTheDefault() async throws {
         StubProtocol.reset { request in
             request.url.contains("/php/") ? (200, #"{"versions":[]}"#) : request.url.contains("/node/") ? (200, #"{"versions":[]}"#)

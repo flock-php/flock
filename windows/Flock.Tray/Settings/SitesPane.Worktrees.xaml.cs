@@ -152,12 +152,21 @@ internal sealed partial class SitesPane
             Field(Strings.Sites_Site, site)));
 
         // Settings: the site's, so they are changed there.
-        var settings = Section(Strings.Worktree_Settings,
-            Field("PHP", Ui.Text($"PHP {worktree.Php}", wrap: false)),
-            Field("Node.js", Ui.Text(worktree.Node is { Length: > 0 } node ? $"Node {node}" : Strings.Worktree_None, wrap: false)),
-            Field("HTTPS", Ui.Text(worktree.Secured ? Strings.Worktree_On : Strings.Worktree_Off, wrap: false)));
-        settings.Children.Add(Ui.Caption(Localization.Format(Strings.Worktree_UsesSiteSettings, parent), Ui.TertiaryText));
+        var settings = Section(Strings.Worktree_Settings);
+        if (!worktree.IsNode)
+        {
+            settings.Children.Add(Field("PHP", Ui.Text($"PHP {worktree.Php}", wrap: false)));
+        }
+        settings.Children.Add(Field("Node.js", Ui.Text(worktree.Node is { Length: > 0 } node ? $"Node {node}" : Strings.Worktree_None, wrap: false)));
+        settings.Children.Add(Field("HTTPS", Ui.Text(worktree.Secured ? Strings.Worktree_On : Strings.Worktree_Off, wrap: false)));
+        settings.Children.Add(Ui.Caption(worktree.IsNode
+            ? Localization.Format(Strings.Worktree_UsesSiteSettingsNode, parent)
+            : Localization.Format(Strings.Worktree_UsesSiteSettings, parent), Ui.TertiaryText));
         panel.Children.Add(settings);
+        if (worktree.IsNode)
+        {
+            panel.Children.Add(DevServer(worktree));
+        }
 
         panel.Children.Add(WorktreeDatabase(worktree));
         panel.Children.Add(WorktreeSetup(worktree));

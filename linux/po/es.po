@@ -44,6 +44,10 @@ msgstr "*.{tld} no se resuelve: {problem}. Linux no tiene el archivo hosts como 
 msgid ".flockrc's Node {pinned} wins over {other}."
 msgstr "El Node {pinned} de .flockrc tiene prioridad sobre {other}."
 
+#. What a proxy's upstream can be
+msgid "3000, host:port or URL. A port means 127.0.0.1."
+msgstr "3000, host:puerto o URL. Un puerto solo significa 127.0.0.1."
+
 msgid "A copy of the site's"
 msgstr "Una copia de la del sitio"
 
@@ -90,6 +94,9 @@ msgstr "Activa"
 
 msgid "Add"
 msgstr "Añadir"
+
+msgid "Add Commands…"
+msgstr "Añadir comandos…"
 
 msgid "Add Domain…"
 msgstr "Añadir dominio…"
@@ -286,6 +293,10 @@ msgstr "Comprobando…"
 msgid "Choose"
 msgstr "Elegir"
 
+#. The title of a folder picker
+msgid "Choose Folder"
+msgstr "Elegir carpeta"
+
 msgid "Choose Folder…"
 msgstr "Elegir carpeta…"
 
@@ -295,6 +306,10 @@ msgstr "Elige la carpeta con el index.php de la app en {site}"
 #. {root}: the configured folder
 msgid "Choose the folder with the app's index.php, or create {root}."
 msgstr "Elige la carpeta con el index.php de la app o crea {root}."
+
+#. Opens a folder picker
+msgid "Choose…"
+msgstr "Elegir…"
 
 msgid "Classic"
 msgstr "Clásico"
@@ -317,6 +332,22 @@ msgstr "Puerto del cliente"
 
 msgid "Close"
 msgstr "Cerrar"
+
+#. The command a dev server runs, e.g. npm run dev
+msgid "Command"
+msgstr "Comando"
+
+#. Heading: the commands that start and stop a proxy's server
+msgid "Commands"
+msgstr "Comandos"
+
+#. The commands that start and stop a proxy's server
+msgid "Commands (optional)"
+msgstr "Comandos (opcional)"
+
+#. {proxy}: the proxy's name
+msgid "Commands of {proxy}"
+msgstr "Comandos de {proxy}"
 
 msgid "Connect your IDE"
 msgstr "Conecta tu IDE"
@@ -434,6 +465,10 @@ msgstr "Detectar puntos de interrupción de PhpStorm"
 msgid "Detect Xdebug requests"
 msgstr "Detectar solicitudes de Xdebug"
 
+#. Heading: a Node.js site's dev server
+msgid "Dev server"
+msgstr "Servidor de desarrollo"
+
 msgid "Dismiss"
 msgstr "Descartar"
 
@@ -507,8 +542,12 @@ msgid "Every name, any subdomain included, is resolved by Flock's DNS server thr
 msgstr "Cada nombre, incluido cualquier subdominio, lo resuelve el servidor DNS de Flock a través de systemd-resolved."
 
 #. {domain}: the domain
-msgid "Every request passes to the upstream with its Host header, WebSocket upgrades (hot reload) included. Flock doesn't start the server, so start it as usual. Until it answers, {domain} shows a page saying so."
-msgstr "Cada solicitud pasa al destino con su encabezado Host, incluidas las conexiones WebSocket (recarga en caliente). Flock no inicia el servidor, así que inícialo como siempre. Hasta que responda, {domain} muestra una página que lo indica."
+msgid "Every request passes to the upstream with its Host header, WebSocket upgrades (hot reload) included. Flock doesn't start the server, so start it as usual, or give it commands below. Until it answers, {domain} shows a page saying so."
+msgstr "Cada solicitud pasa al destino con su encabezado Host, incluidas las conexiones WebSocket (recarga en caliente). Flock no inicia el servidor, así que inícialo como siempre o dale comandos abajo. Hasta que responda, {domain} muestra una página que lo indica."
+
+#. {domain}: the domain
+msgid "Every request passes to the upstream with its Host header, WebSocket upgrades (hot reload) included. Until the server answers, {domain} shows a page saying so."
+msgstr "Cada solicitud pasa al destino con su encabezado Host, incluidas las conexiones WebSocket (recarga en caliente). Hasta que el servidor responda, {domain} muestra una página que lo indica."
 
 msgid "Every service Flock offers: MySQL, Redis, Meilisearch and more"
 msgstr "Todos los servicios que ofrece Flock: MySQL, Redis, Meilisearch y más"
@@ -529,6 +568,14 @@ msgstr "Extensiones de PostgreSQL {version}: PostGIS, pgRouting, pgvector, Times
 
 msgid "Extra domains: subdomains and aliases"
 msgstr "Dominios adicionales: subdominios y alias"
+
+#. The state of a proxy's server
+msgid "Failed"
+msgstr "Falló"
+
+#. {problem}: why it failed (from the daemon)
+msgid "Failed: {problem}"
+msgstr "Falló: {problem}"
 
 msgid "Flock Docs"
 msgstr "Documentación de Flock"
@@ -615,12 +662,11 @@ msgstr "Flock ejecuta su hook before_delete y elimina {path} y su base de datos 
 msgid "Flock runs its before_delete hook and deletes {path}."
 msgstr "Flock ejecuta su hook before_delete y elimina {path}."
 
+msgid "Flock runs the project's dev script when the site is visited, and stops it after 30 minutes without visits."
+msgstr "Flock ejecuta el script dev del proyecto cuando se visita el sitio y lo detiene tras 30 minutos sin visitas."
+
 msgid "Flock runs your Laravel sites, PHP, mail and databases on this computer. Setting it up takes a moment:"
 msgstr "Flock ejecuta tus sitios Laravel, PHP, el correo y las bases de datos en este equipo. Configurarlo lleva un momento:"
-
-#. {tld}: the TLD
-msgid "Flock serves <name>.{tld} from a server of its own, e.g. a Next.js, Nuxt or Vite dev server. A port means 127.0.0.1."
-msgstr "Flock sirve <nombre>.{tld} desde un servidor propio, p. ej. un servidor de desarrollo de Next.js, Nuxt o Vite. Un puerto solo significa 127.0.0.1."
 
 msgid "Flock stops and is removed from your PATH, together with its PHP and Node.js versions, certificates, logs and caches. Linux asks for your password to remove the *.test DNS setup and Flock's trusted certificate.\n\nYour sites' settings and databases stay in {folder}, so reinstalling picks up where you left off — unless you also delete them."
 msgstr "Flock se detiene y se quita de tu PATH, junto con sus versiones de PHP y Node.js, certificados, registros y cachés. Linux te pide la contraseña para quitar la configuración DNS de *.test y el certificado de confianza de Flock.\n\nLos ajustes y las bases de datos de tus sitios se quedan en {folder}, así que al reinstalar seguirás donde lo dejaste, a menos que también los elimines."
@@ -670,6 +716,9 @@ msgstr "General"
 
 msgid "Get new versions of Flock, PHP and services earlier, including pre-releases. They may not work yet."
 msgstr "Recibe antes las nuevas versiones de Flock, PHP y los servicios, incluidas las preliminares. Puede que aún no funcionen."
+
+msgid "Give Flock the commands that start and stop the server, so you can start it here."
+msgstr "Dale a Flock los comandos que inician y detienen el servidor para poder iniciarlo aquí."
 
 msgid "Give {worktree} a copy of the database?"
 msgstr "¿Dar a {worktree} una copia de la base de datos?"
@@ -835,8 +884,8 @@ msgstr "Más"
 msgid "More Services ({count})…"
 msgstr "Más servicios ({count})…"
 
-msgid "Name, e.g. my-app"
-msgstr "Nombre, p. ej. my-app"
+msgid "Name"
+msgstr "Nombre"
 
 msgid "Needs attention"
 msgstr "Requiere atención"
@@ -970,6 +1019,10 @@ msgstr "Aceptar"
 msgid "Official Node.js builds, the newest release of each major. A project that pins a version in .nvmrc gets that major offered when you run node, npm or npx there. Global packages (npm install -g) belong to a Node line and survive its updates; those of the default version are on your PATH."
 msgstr "Compilaciones oficiales de Node.js, la versión más reciente de cada versión principal. A un proyecto que fija una versión en .nvmrc se le ofrece esa versión principal cuando ejecutas node, npm o npx en él. Los paquetes globales (npm install -g) pertenecen a una línea de Node y sobreviven a sus actualizaciones; los de la versión predeterminada están en tu PATH."
 
+#. Under the Stop command's field
+msgid "Only for a server that runs in the background, like docker compose up -d."
+msgstr "Solo para un servidor que se ejecuta en segundo plano, como docker compose up -d."
+
 #. {emails}: email addresses
 msgid "Only for: {emails}"
 msgstr "Solo para: {emails}"
@@ -991,6 +1044,9 @@ msgstr "Abrir Flock al iniciar sesión"
 
 msgid "Open Flock when I log in"
 msgstr "Abrir Flock al iniciar sesión"
+
+msgid "Open Log"
+msgstr "Abrir registro"
 
 msgid "Open Mail"
 msgstr "Abrir Correo"
@@ -1031,6 +1087,10 @@ msgstr "Abre {name}"
 
 msgid "Other clients"
 msgstr "Otros clientes"
+
+#. Heading above a server's output (its log)
+msgid "Output"
+msgstr "Salida"
 
 msgid "PHP extensions"
 msgstr "Extensiones de PHP"
@@ -1110,9 +1170,6 @@ msgstr "Puerto {port}"
 
 msgid "Port, host:port or URL"
 msgstr "Puerto, host:puerto o URL"
-
-msgid "Port, host:port or URL, e.g. 3000"
-msgstr "Puerto, host:puerto o URL, p. ej. 3000"
 
 msgid "PostgreSQL Only"
 msgstr "Solo PostgreSQL"
@@ -1214,6 +1271,9 @@ msgstr "Quitar"
 msgid "Remove Anyway"
 msgstr "Quitar de todos modos"
 
+msgid "Remove Commands"
+msgstr "Quitar comandos"
+
 msgid "Remove proxy"
 msgstr "Quitar proxy"
 
@@ -1292,6 +1352,10 @@ msgstr "En ejecución"
 msgid "Running FrankenPHP {version} with PHP {php}"
 msgstr "Ejecutando FrankenPHP {version} con PHP {php}"
 
+#. {port}: the port
+msgid "Running on port {port}"
+msgstr "En ejecución en el puerto {port}"
+
 msgid "Running · {version}"
 msgstr "En ejecución · {version}"
 
@@ -1310,6 +1374,9 @@ msgstr "Se ejecuta en"
 
 msgid "SMTP server"
 msgstr "Servidor SMTP"
+
+msgid "Save"
+msgstr "Guardar"
 
 msgid "Save…"
 msgstr "Guardar…"
@@ -1330,8 +1397,9 @@ msgstr "Proteger"
 msgid "Send dump() and dd() output, queries, logs, views and jobs to Flock instead of the page or terminal — no changes to your projects."
 msgstr "Envía la salida de dump() y dd(), las consultas, los registros, las vistas y los trabajos a Flock en lugar de a la página o la terminal, sin cambiar tus proyectos."
 
-msgid "Serve a server of its own, e.g. a Node.js dev server on a port, at a .{tld} domain"
-msgstr "Servir un servidor propio, p. ej. un servidor de desarrollo de Node.js en un puerto, en un dominio .{tld}"
+#. {tld}: the TLD
+msgid "Serve a server of its own, e.g. a dashboard, an object store, a Docker container or a Go or Python app, at a .{tld} domain"
+msgstr "Servir un servidor propio, p. ej. un panel, un almacén de objetos, un contenedor de Docker o una app de Go o Python, en un dominio .{tld}"
 
 #. {site}: the site
 msgid "Serve {site} over HTTPS?"
@@ -1464,6 +1532,10 @@ msgstr "Los sitios usan los puertos {http} (HTTP) y {https} (HTTPS), definidos e
 msgid "Sites you added one by one, plus every folder inside your project folders."
 msgstr "Los sitios que añadiste uno a uno, más cada carpeta dentro de tus carpetas de proyectos."
 
+#. A dev server's state
+msgid "Sleeping · starts on the next visit"
+msgstr "En reposo · se inicia en la próxima visita"
+
 msgid "Software Updater"
 msgstr "Actualizador de software"
 
@@ -1524,6 +1596,14 @@ msgstr "¿Detener {service}?"
 
 msgid "Stopped"
 msgstr "Detenido"
+
+#. {problem}: why it stopped (from the daemon)
+msgid "Stopped: {problem}"
+msgstr "Detenido: {problem}"
+
+#. A server's state
+msgid "Stopping…"
+msgstr "Deteniendo…"
 
 msgid "Stops Flock and removes it from this computer. Your sites, databases and settings are kept."
 msgstr "Detiene Flock y lo quita de este equipo. Tus sitios, bases de datos y ajustes se conservan."
@@ -1640,6 +1720,10 @@ msgstr "Desactívalo para volver a ver los dumps en la página."
 
 msgid "Turns the app's debug mode on for this share, so visitors see stack traces. Only for people you trust."
 msgstr "Activa el modo de depuración de la app para este enlace compartido, así que los visitantes ven las trazas de pila. Solo para personas de confianza."
+
+#. A site's type: PHP or Node.js
+msgid "Type"
+msgstr "Tipo"
 
 msgid "URL"
 msgstr "URL"
@@ -1883,6 +1967,10 @@ msgstr "caído"
 
 msgid "dump() and dd() output, queries, logs, views and jobs from your sites and artisan commands appear here."
 msgstr "Aquí aparecen la salida de dump() y dd(), las consultas, los registros, las vistas y los trabajos de tus sitios y comandos de artisan."
+
+#. {tld}: the TLD. The name of a new proxy and its domain
+msgid "e.g. my-app → my-app.{tld}"
+msgstr "p. ej. my-app → my-app.{tld}"
 
 msgctxt "database"
 msgid "fresh"

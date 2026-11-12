@@ -38,7 +38,7 @@ type Config struct {
 	Channel string   `json:"channel,omitempty"`
 	Parked  []string `json:"parked"`
 	Sites   []Site   `json:"sites"`
-	// Proxies are names served by a server of their own, e.g. a Node.js dev server (see Proxy).
+	// Proxies are names served by a server of their own, e.g. a dashboard or a Docker container (see Proxy).
 	Proxies []Proxy `json:"proxies,omitempty"`
 
 	// Worktrees are the git worktrees Flock sets up (see package worktree). WorktreesSince is when
@@ -117,8 +117,11 @@ func (s *Services) SetRunning(id string, on bool) {
 
 // Site is a directory served as <name>.<tld> and its subdomains (up to MaxDepth levels).
 type Site struct {
-	Name    string `json:"name"`
-	Path    string `json:"path"`
+	Name string `json:"name"`
+	Path string `json:"path"`
+	// Type is what the site is: TypePHP or TypeNode. Sites stored before types existed have none,
+	// which means TypePHP (see Kind); Load fills it in, so they're saved with it.
+	Type    string `json:"type,omitempty"`
 	PHP     string `json:"php,omitempty"`  // "8.5"; empty means Config.DefaultPHP
 	Node    string `json:"node,omitempty"` // major, e.g. "22"; empty means Config.DefaultNode
 	Secured bool   `json:"secured"`
@@ -162,12 +165,15 @@ const FirstSitePort = 21000
 func SitePortID(site string) string { return "frankenphp-" + site }
 
 // FrankenPHP reports whether the site runs on FrankenPHP.
-func (s Site) FrankenPHP() bool { return s.Server == ServerFrankenPHP }
+func (s Site) FrankenPHP() bool { return s.Kind() == TypePHP && s.Server == ServerFrankenPHP }
 
 // SetServer switches site to server (ServerFastCGI, "" or ServerFrankenPHP) with worker ("" or
 // WorkerOctane), giving it a loopback port for FrankenPHP the first time. The site becomes linked
 // so the setting can be stored; the caller saves it with Upsert.
 func (c *Config) SetServer(site *Site, server, worker string) error {
+	if site.Kind() != TypePHP {
+		return fmt.Errorf("%s is a %s site: only PHP sites run on PHP-FPM or FrankenPHP", site.Name, TypeName(site.Kind()))
+	}
 	switch server {
 	case ServerFastCGI, "":
 		server = ""
@@ -235,6 +241,9 @@ func Load(root string) (*Config, error) {
 
 	if err := json.Unmarshal(data, cfg); err != nil {
 		return nil, fmt.Errorf("parse %s: %w", file(root), err)
+	}
+	for i := range cfg.Sites {
+		cfg.Sites[i].Type = cfg.Sites[i].Kind()
 	}
 
 	return cfg, nil
@@ -323,7 +332,8 @@ func (c *Config) AllSites() []Site {
 			if _, proxied := c.FindProxy(name); proxied {
 				continue
 			}
-			byName[name] = Site{Name: name, Path: filepath.Join(dir, e.Name()), Parked: true}
+			path := filepath.Join(dir, e.Name())
+			byName[name] = Site{Name: name, Path: path, Type: DetectType(path), Parked: true}
 		}
 	}
 
@@ -378,11 +388,19 @@ func siteForDir(sites []Site, dir string, pathOf func(Site) string) (Site, bool)
 	return best, found
 }
 
-// Upsert adds or replaces a linked site by name. A worktree has no settings of its own to store:
-// it follows its parent site.
+// Upsert adds or replaces a linked site by name. A site without a type gets the one its folder
+// suggests (see DetectType). A worktree has no settings of its own to store: it follows its
+// parent site.
 func (c *Config) Upsert(site Site) error {
 	if site.IsWorktree() {
 		return fmt.Errorf("%s is a git worktree of %s and uses its settings — change them on %s", site.Name, site.Parent, site.Parent)
+	}
+	switch site.Type {
+	case "":
+		site.Type = DetectType(site.Path)
+	case TypePHP, TypeNode:
+	default:
+		return fmt.Errorf("unknown site type %q (php or node)", site.Type)
 	}
 	if _, ok := c.FindProxy(site.Name); ok {
 		return fmt.Errorf("%s is a proxy's name — remove it with `flock unproxy %s` first, or choose another name", site.Name, site.Name)

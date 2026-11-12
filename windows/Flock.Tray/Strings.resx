@@ -204,6 +204,10 @@ Details are in %LocalAppData%\Flock\tray.log.</value>
     <data name="Common_Canceled" xml:space="preserve">
         <value>Canceled.</value>
     </data>
+    <data name="Common_Choose" xml:space="preserve">
+        <value>Choose…</value>
+        <comment>Opens a folder picker</comment>
+    </data>
     <data name="Common_Close" xml:space="preserve">
         <value>Close</value>
     </data>
@@ -1035,9 +1039,42 @@ Details are in %LocalAppData%\Flock\tray.log.</value>
     <data name="Process_DidNotStart" xml:space="preserve">
         <value>The process did not start.</value>
     </data>
+    <data name="Proxy_AddCommands" xml:space="preserve">
+        <value>Add Commands…</value>
+    </data>
+    <data name="Proxy_AddCommandsTitle" xml:space="preserve">
+        <value>Add commands to {0}</value>
+        <comment>{0}: the proxy</comment>
+    </data>
+    <data name="Proxy_CommandHelp" xml:space="preserve">
+        <value>Flock runs the start command when you click Start and shows its output. For a command that starts the server in the background, like docker compose up -d, add the command that stops it.</value>
+    </data>
+    <data name="Proxy_Commands" xml:space="preserve">
+        <value>Commands</value>
+        <comment>Heading: the commands that start and stop a proxy's server</comment>
+    </data>
+    <data name="Proxy_CommandsOptional" xml:space="preserve">
+        <value>Commands (optional)</value>
+        <comment>The commands that start and stop a proxy's server</comment>
+    </data>
+    <data name="Proxy_CommandsTitle" xml:space="preserve">
+        <value>Commands of {0}</value>
+        <comment>{0}: the proxy's name</comment>
+    </data>
     <data name="Proxy_NothingAnswers" xml:space="preserve">
         <value>Nothing answers at {0}. Start the server there.</value>
         <comment>{0}: the upstream address</comment>
+    </data>
+    <data name="Proxy_RemoveCommands" xml:space="preserve">
+        <value>Remove Commands</value>
+    </data>
+    <data name="Proxy_StartInSettings" xml:space="preserve">
+        <value>{0}. Start it in Settings → Sites.</value>
+        <comment>{0}: the state of the proxy's command ("Stopped", "Failed: …"); it: the proxy's server</comment>
+    </data>
+    <data name="Proxy_StopCommandHint" xml:space="preserve">
+        <value>Only for a server that runs in the background, like docker compose up -d.</value>
+        <comment>Under the Stop command's field</comment>
     </data>
     <data name="Releases_Available" xml:space="preserve">
         <value>{0} available</value>
@@ -1608,15 +1645,11 @@ Details are in %LocalAppData%\Flock\tray.log.</value>
     <data name="Sites_AddProxy" xml:space="preserve">
         <value>Add Proxy…</value>
     </data>
-    <data name="Sites_AddProxyDetails" xml:space="preserve">
-        <value>Flock serves &lt;name&gt;.{0} from a server of its own, e.g. a Next.js, Nuxt or Vite dev server. A port means 127.0.0.1.</value>
-        <comment>{0}: the TLD</comment>
+    <data name="Sites_AddProxyServerTooltip" xml:space="preserve">
+        <value>Serve a server of its own, e.g. a dashboard or a Docker container, at a .test domain</value>
     </data>
     <data name="Sites_AddProxyTitle" xml:space="preserve">
         <value>Add a proxy</value>
-    </data>
-    <data name="Sites_AddProxyTooltip" xml:space="preserve">
-        <value>Serve a server of its own, e.g. a Node.js dev server on a port, at a .test domain</value>
     </data>
     <data name="Sites_AddSite" xml:space="preserve">
         <value>Add Site…</value>
@@ -1687,12 +1720,26 @@ Details are in %LocalAppData%\Flock\tray.log.</value>
     <data name="Sites_Classic" xml:space="preserve">
         <value>Classic</value>
     </data>
+    <data name="Sites_Command" xml:space="preserve">
+        <value>Command</value>
+        <comment>The command a dev server runs, e.g. npm run dev</comment>
+    </data>
     <data name="Sites_Default" xml:space="preserve">
         <value>Default</value>
     </data>
     <data name="Sites_DefaultVersion" xml:space="preserve">
         <value>Default ({0})</value>
         <comment>{0}: the default version ("PHP 8.4")</comment>
+    </data>
+    <data name="Sites_DevServer" xml:space="preserve">
+        <value>Dev server</value>
+        <comment>Heading: a Node.js site's dev server</comment>
+    </data>
+    <data name="Sites_DevServerFirstVisit" xml:space="preserve">
+        <value>Flock starts the dev server on the site's first visit.</value>
+    </data>
+    <data name="Sites_DevServerFootnote" xml:space="preserve">
+        <value>Flock runs the project's dev script with its Node.js version when the site is visited, and stops it after 30 minutes without visits.</value>
     </data>
     <data name="Sites_DocumentRoot" xml:space="preserve">
         <value>Document root</value>
@@ -1747,6 +1794,9 @@ Details are in %LocalAppData%\Flock\tray.log.</value>
         <value>Running FrankenPHP {0} with PHP {1} · worker mode</value>
         <comment>{0}: FrankenPHP version, {1}: PHP version</comment>
     </data>
+    <data name="Sites_NoOutputYet" xml:space="preserve">
+        <value>No output yet.</value>
+    </data>
     <data name="Sites_NoSites" xml:space="preserve">
         <value>No sites</value>
     </data>
@@ -1763,6 +1813,13 @@ Details are in %LocalAppData%\Flock\tray.log.</value>
     </data>
     <data name="Sites_OctaneTooltip" xml:space="preserve">
         <value>Install Laravel Octane in the project (composer require laravel/octane) to use worker mode.</value>
+    </data>
+    <data name="Sites_OpenLog" xml:space="preserve">
+        <value>Open Log</value>
+    </data>
+    <data name="Sites_Output" xml:space="preserve">
+        <value>Output</value>
+        <comment>Heading above a server's output (its log)</comment>
     </data>
     <data name="Sites_PhpCgiMeanwhile" xml:space="preserve">
         <value>PHP-CGI serves the site meanwhile.</value>
@@ -1824,8 +1881,12 @@ Details are in %LocalAppData%\Flock\tray.log.</value>
     <data name="Sites_Proxy" xml:space="preserve">
         <value>Proxy</value>
     </data>
-    <data name="Sites_ProxyFootnote" xml:space="preserve">
-        <value>Every request passes to the upstream with its Host header, WebSocket upgrades (hot reload) included. Flock doesn't start the server, so start it as usual. Until it answers, {0} shows a page saying so.</value>
+    <data name="Sites_ProxyFootnoteCommands" xml:space="preserve">
+        <value>Every request passes to the upstream with its Host header, WebSocket upgrades (hot reload) included. Until it answers, {0} shows a page saying so.</value>
+        <comment>{0}: the domain</comment>
+    </data>
+    <data name="Sites_ProxyFootnoteNoCommands" xml:space="preserve">
+        <value>Every request passes to the upstream with its Host header, WebSocket upgrades (hot reload) included. Flock doesn't start the server, so start it as usual, or give it commands below. Until it answers, {0} shows a page saying so.</value>
         <comment>{0}: the domain</comment>
     </data>
     <data name="Sites_ProxyName" xml:space="preserve">
@@ -1923,12 +1984,20 @@ Details are in %LocalAppData%\Flock\tray.log.</value>
     <data name="Sites_Site" xml:space="preserve">
         <value>Site</value>
     </data>
+    <data name="Sites_State" xml:space="preserve">
+        <value>State</value>
+        <comment>A server's state: running, stopped…</comment>
+    </data>
     <data name="Sites_SubdomainsOnlyHere" xml:space="preserve">
         <value>Subdomains only work when you add them here: {0}.</value>
         <comment>{0}: why wildcard DNS does not work (from the daemon)</comment>
     </data>
     <data name="Sites_Subtitle" xml:space="preserve">
         <value>Sites you added one by one, plus every folder inside your project folders.</value>
+    </data>
+    <data name="Sites_Type" xml:space="preserve">
+        <value>Type</value>
+        <comment>A site's type: PHP or Node.js</comment>
     </data>
     <data name="Sites_Unpin" xml:space="preserve">
         <value>Unpin</value>
@@ -1975,8 +2044,12 @@ Details are in %LocalAppData%\Flock\tray.log.</value>
     <data name="Sites_UpstreamPlaceholder" xml:space="preserve">
         <value>Port, host:port or URL</value>
     </data>
-    <data name="Sites_UpstreamPlaceholderExample" xml:space="preserve">
-        <value>Port, host:port or URL, e.g. 3000</value>
+    <data name="Sites_UpstreamPlaceholderShort" xml:space="preserve">
+        <value>3000, host:port or URL</value>
+        <comment>Placeholder of a proxy's upstream field</comment>
+    </data>
+    <data name="Sites_UpstreamPortMeans" xml:space="preserve">
+        <value>A port means 127.0.0.1.</value>
     </data>
     <data name="Sites_UseFile" xml:space="preserve">
         <value>Use {0}</value>
@@ -2004,6 +2077,9 @@ Details are in %LocalAppData%\Flock\tray.log.</value>
     </data>
     <data name="Sites_VersionsFootnote" xml:space="preserve">
         <value>A version picked here applies on this machine only. To set it for everyone working on the project, pin it (…): PHP goes into .flockrc, Node.js into .nvmrc.</value>
+    </data>
+    <data name="Sites_VersionsFootnoteNode" xml:space="preserve">
+        <value>A version picked here applies on this machine only. To set it for everyone working on the project, pin it (…) into .nvmrc.</value>
     </data>
     <data name="Size_Bytes_one" xml:space="preserve">
         <value>{0} byte</value>
@@ -2371,6 +2447,10 @@ You can run `flock install` in a terminal, or reinstall Flock.</value>
     </data>
     <data name="Worktree_UsesSiteSettings" xml:space="preserve">
         <value>Uses {0}'s settings: PHP, Node.js, HTTPS and the document root (versions the branch pins apply too). Change them on {0}.</value>
+        <comment>{0}: the site</comment>
+    </data>
+    <data name="Worktree_UsesSiteSettingsNode" xml:space="preserve">
+        <value>Uses {0}'s settings: Node.js and HTTPS (a version the branch pins applies too). Change them on {0}.</value>
         <comment>{0}: the site</comment>
     </data>
     <data name="Worktree_Waiting" xml:space="preserve">

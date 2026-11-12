@@ -60,11 +60,19 @@ func (p *serverProbe) get(root, upstream string) (bool, string) {
 	return running, server
 }
 
-// probeUpstream connects to upstream and, when it's on this machine, names the program listening.
-func probeUpstream(root, upstream string) (bool, string) {
+// forget drops the last probe of upstream, so the next status probes it again: a server Flock just
+// started or stopped shouldn't show as it was for up to proxyProbeTTL.
+func (p *serverProbe) forget(upstream string) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	delete(p.seen, upstream)
+}
+
+// upstreamAddr is the host:port of upstream.
+func upstreamAddr(upstream string) (*url.URL, string, bool) {
 	u, err := url.Parse(upstream)
 	if err != nil {
-		return false, ""
+		return nil, "", false
 	}
 	port := u.Port()
 	if port == "" {
@@ -73,12 +81,29 @@ func probeUpstream(root, upstream string) (bool, string) {
 			port = "443"
 		}
 	}
+	return u, port, true
+}
+
+// answers reports whether something accepts connections at upstream.
+func answers(upstream string) bool {
+	u, port, ok := upstreamAddr(upstream)
+	if !ok {
+		return false
+	}
 	conn, err := net.DialTimeout("tcp", net.JoinHostPort(u.Hostname(), port), 300*time.Millisecond)
 	if err != nil {
-		return false, ""
+		return false
 	}
 	conn.Close()
+	return true
+}
 
+// probeUpstream connects to upstream and, when it's on this machine, names the program listening.
+func probeUpstream(root, upstream string) (bool, string) {
+	if !answers(upstream) {
+		return false, ""
+	}
+	u, port, _ := upstreamAddr(upstream)
 	if !isLoopback(u.Hostname()) {
 		return true, ""
 	}

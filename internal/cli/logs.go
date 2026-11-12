@@ -42,8 +42,8 @@ func newLogsCommand() *cobra.Command {
 			}
 
 			name := strings.TrimSuffix(args[0], ".log")
-			path := filepath.Join(dir, name+".log")
-			if _, err := os.Stat(path); err != nil {
+			path, ok := logFor(dir, name)
+			if !ok {
 				return fmt.Errorf("no log named %q (available: %s)", name, strings.Join(names, ", "))
 			}
 
@@ -55,6 +55,29 @@ func newLogsCommand() *cobra.Command {
 	cmd.Flags().BoolVarP(&follow, "follow", "f", false, "keep printing new lines")
 
 	return cmd
+}
+
+// serverLogs are the prefixes of the logs of what Flock runs for a site or proxy, so `flock logs
+// <name>` finds them by the site's or proxy's name: its FrankenPHP, its Node.js dev server, or its
+// proxy's command.
+var serverLogs = []string{"frankenphp-", "node-", "proxy-"}
+
+// logFor finds the log name stands for: the log of that name, else the most recently written log
+// of a site or proxy of that name (a site that changed its type has more than one).
+func logFor(dir, name string) (string, bool) {
+	path := filepath.Join(dir, name+".log")
+	if _, err := os.Stat(path); err == nil {
+		return path, true
+	}
+	var found string
+	var newest time.Time
+	for _, prefix := range serverLogs {
+		candidate := filepath.Join(dir, prefix+name+".log")
+		if info, err := os.Stat(candidate); err == nil && (found == "" || info.ModTime().After(newest)) {
+			found, newest = candidate, info.ModTime()
+		}
+	}
+	return found, found != ""
 }
 
 func logNames(dir string) ([]string, error) {

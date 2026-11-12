@@ -59,7 +59,7 @@ type Status struct {
 	Defaults *DefaultsStatus `json:"defaults,omitempty"`
 }
 
-// ProxyStatus is a name served by a server of its own, e.g. a Node.js dev server (see config.Proxy).
+// ProxyStatus is a name served by a server of its own, e.g. a dashboard or a Docker container (see config.Proxy).
 type ProxyStatus struct {
 	Name     string `json:"name"`
 	Domain   string `json:"domain"`
@@ -71,6 +71,38 @@ type ProxyStatus struct {
 	// machine: "Node.js 22.23.4" (one of Flock's versions), "Node.js", or the program's name.
 	Running bool   `json:"running"`
 	Server  string `json:"server,omitempty"`
+	// Command is set when Flock starts and stops the proxy's server (see config.Proxy.Command).
+	Command *ProxyCommand `json:"command,omitempty"`
+}
+
+// ProxyCommand is the command that starts a proxy's server, and how that went.
+type ProxyCommand struct {
+	Command     string `json:"command"`
+	Dir         string `json:"dir"`
+	StopCommand string `json:"stop_command,omitempty"` // set when the command starts the server in the background
+	State       string `json:"state"`                  // ProxyStopped, ProxyStarting, ProxyRunning, ProxyStopping or ProxyFailed
+	Problem     string `json:"problem,omitempty"`      // why it failed, or why it's still starting
+	Log         string `json:"log"`                    // name for /v1/logs/services/{name}: the commands' output
+}
+
+// States of a ProxyCommand. Stopped is also a proxy whose server Flock didn't start, even when
+// something answers at its upstream (see ProxyStatus.Running).
+const (
+	ProxyStopped  = "stopped"
+	ProxyStarting = "starting"
+	ProxyRunning  = "running"
+	ProxyStopping = "stopping"
+	ProxyFailed   = "failed"
+)
+
+// ProxyChange is a POST /v1/proxies or PATCH /v1/proxies/{name} body; nil fields stay as they are.
+// An empty Command removes the command, its folder and its stop command.
+type ProxyChange struct {
+	Upstream    *string `json:"upstream,omitempty"`
+	Secured     *bool   `json:"secured,omitempty"`
+	Command     *string `json:"command,omitempty"`
+	Dir         *string `json:"dir,omitempty"`
+	StopCommand *string `json:"stop_command,omitempty"`
 }
 
 // DefaultsStatus is the first run's install of the default PHP and Node.js.
@@ -164,6 +196,10 @@ type SiteStatus struct {
 	// FrankenPHP is the state of the site's FrankenPHP process, when Server is "frankenphp". Until
 	// it runs, the site is served through FastCGI.
 	FrankenPHP *SiteFrankenPHP `json:"frankenphp,omitempty"`
+	// Type is what the site is: "php" or "node" (see config.Site.Type). A Node.js site has
+	// NodeServer instead of the PHP settings (PHP, Root, Server, FrankenPHP).
+	Type       string          `json:"type"`
+	NodeServer *SiteNodeServer `json:"node_server,omitempty"`
 	// Boost is whether the project uses Laravel Boost and has Flock's guideline (see package boost):
 	// "" (no Boost), "missing", "current", "outdated" or "custom".
 	Boost string `json:"boost,omitempty"`
@@ -177,6 +213,24 @@ const (
 	FrankenPHPInstalling  = "installing"  // the build for the site's PHP version is downloading
 	FrankenPHPFailed      = "failed"      // see Problem; the site is served through FastCGI
 	FrankenPHPUnavailable = "unavailable" // no build for this platform or PHP version; see Problem
+)
+
+// SiteNodeServer is the dev server of a Node.js site. Flock starts it on the site's first request.
+type SiteNodeServer struct {
+	State   string `json:"state"` // NodeSleeping, NodeStarting, NodeRunning or NodeFailed
+	Port    int    `json:"port"`  // the loopback port it gets (PORT and --port), "localhost" for both IPv4 and IPv6
+	Command string `json:"command"`
+	Problem string `json:"problem,omitempty"` // why it failed or can't start
+	Log     string `json:"log"`               // name for /v1/logs/services/{name}: its output
+}
+
+// States of a SiteNodeServer: not running until a request comes, starting (it runs but doesn't
+// answer yet), running, or exited (it's started again after a while).
+const (
+	NodeSleeping = "sleeping"
+	NodeStarting = "starting"
+	NodeRunning  = "running"
+	NodeFailed   = "failed"
 )
 
 // SiteFrankenPHP is a site's FrankenPHP process.
@@ -249,6 +303,11 @@ type Backend interface {
 	Binaries() *binaries.Catalog
 	// RestartSite restarts a FrankenPHP site's process, e.g. so Octane's workers load changed code.
 	RestartSite(name string) error
+	// StopSite puts a Node.js site's dev server to sleep until the site's next request.
+	StopSite(name string) error
+	// StartProxy and StopProxy run a proxy's command and stop its server (see config.Proxy.Command).
+	StartProxy(name string) error
+	StopProxy(name string) error
 	// Shares runs the sites' tunnels (nil when unavailable); StartShare starts one after checking
 	// that the site can be shared, with the app's debug mode on for visitors when debug is set.
 	Shares() *share.Manager

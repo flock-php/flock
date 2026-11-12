@@ -183,6 +183,37 @@ public sealed class SitesWorkflowTests : IDisposable
     }
 
     [Fact]
+    public void WhatFlockRunsRerendersTheDetailAndShowsAsADot()
+    {
+        var model = new SitesViewModel(service);
+        Status.Site Node(string state) => new()
+        {
+            Name = "web", Domain = "web.test", Path = "C:\\code\\web", Type = Status.SiteType.Node,
+            NodeServer = new() { State = state, Port = 22417, Command = "npm run dev -- --port 22417", Log = "node-web" },
+        };
+        Status.Proxy Proxy(string state) => new()
+        {
+            Name = "s3", Domain = "s3.test", Upstream = "http://127.0.0.1:9000",
+            Command = new() { Command = "docker compose up -d", Dir = "C:\\code\\s3", State = state, Log = "proxy-s3" },
+        };
+        model.Apply(new Status { Sites = [Node(Status.NodeServerState.Sleeping), Site("shop", "8.4")], Proxies = [Proxy(Status.ProxyState.Stopped)] });
+
+        var web = model.Sites[0];
+        Assert.Equal((true, "Neutral", "Sleeping · starts on the next visit"), (web.HasDot, web.Dot, web.DotTooltip));
+        // A PHP site has no dot.
+        Assert.False(model.Sites[1].HasDot);
+
+        // The dev server falling asleep or starting rerenders the details (the status poll brings it).
+        Assert.True(model.Apply(new Status { Sites = [Node(Status.NodeServerState.Running), Site("shop", "8.4")], Proxies = [Proxy(Status.ProxyState.Stopped)] }));
+        Assert.Equal("Success", web.Dot);
+
+        model.Select("s3");
+        Assert.True(model.Apply(new Status { Sites = [Node(Status.NodeServerState.Running), Site("shop", "8.4")], Proxies = [Proxy(Status.ProxyState.Failed)] }));
+        Assert.Equal("Critical", model.Proxies[0].Dot);
+        Assert.False(model.Apply(new Status { Sites = [Node(Status.NodeServerState.Running), Site("shop", "8.4")], Proxies = [Proxy(Status.ProxyState.Failed)] }));
+    }
+
+    [Fact]
     public void OneSelectionCoversSitesAndProxies()
     {
         var model = new SitesViewModel(service);

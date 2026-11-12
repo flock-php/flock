@@ -150,6 +150,23 @@ func (f *fakeDaemon) Proxy(_ context.Context, name, upstream string, secured *bo
 	return st, nil
 }
 
+func (f *fakeDaemon) UpdateProxy(_ context.Context, name string, c api.ProxyChange) (api.Status, error) {
+	f.record("update proxy", name, c)
+	return f.status, nil
+}
+
+func (f *fakeDaemon) StartProxy(_ context.Context, name string) (api.Status, error) {
+	f.record("start proxy", name)
+	st := f.status
+	st.Proxies = []api.ProxyStatus{{Name: name, Command: &api.ProxyCommand{Command: "npm run dev", State: api.ProxyStarting, Log: "proxy-" + name}}}
+	return st, nil
+}
+
+func (f *fakeDaemon) StopProxy(_ context.Context, name string) (api.Status, error) {
+	f.record("stop proxy", name)
+	return f.status, nil
+}
+
 func (f *fakeDaemon) UpdateSite(_ context.Context, name string, c api.SiteChange) (api.Status, error) {
 	f.record("update", name, c)
 	return f.status, nil
@@ -172,6 +189,11 @@ func (f *fakeDaemon) UnpinSite(_ context.Context, name, tool string) (api.Status
 
 func (f *fakeDaemon) RestartSite(_ context.Context, name string) (api.Status, error) {
 	f.record("restart", name)
+	return f.status, nil
+}
+
+func (f *fakeDaemon) StopSite(_ context.Context, name string) (api.Status, error) {
+	f.record("stop", name)
 	return f.status, nil
 }
 
@@ -282,13 +304,13 @@ func TestToolsAndAnnotations(t *testing.T) {
 			t.Errorf("%s should be a read-only tool", name)
 		}
 	}
-	for _, name := range []string{"service", "install_version", "link_site", "proxy_site", "update_site", "set_debugging", "create_database", "postgres_extension",
+	for _, name := range []string{"service", "install_version", "link_site", "proxy_site", "proxy_server", "update_site", "set_debugging", "create_database", "postgres_extension",
 		"create_worktree", "setup_worktree"} {
 		if ro, ok := readOnly[name]; !ok || ro {
 			t.Errorf("%s should be a tool that changes things (listed: %v)", name, ok)
 		}
 	}
-	if len(res.Tools) != 24 {
+	if len(res.Tools) != 25 {
 		t.Errorf("got %d tools", len(res.Tools))
 	}
 }
@@ -490,8 +512,10 @@ func TestUpdateSiteActions(t *testing.T) {
 		{map[string]any{"action": "pin", "tool": "php"}, `pin ["shop","php",""]`},
 		{map[string]any{"action": "unsecure"}, `update ["shop",{"secured":false}]`},
 		{map[string]any{"action": "set_server", "server": "frankenphp", "worker": "octane"}, `update ["shop",{"server":"frankenphp","worker":"octane"}]`},
+		{map[string]any{"action": "set_type", "type": "node"}, `update ["shop",{"type":"node"}]`},
 		{map[string]any{"action": "add_domain", "domain": "tenant2"}, `domain ["shop","tenant2"]`},
 		{map[string]any{"action": "restart", "site": "shop.test"}, `restart ["shop"]`},
+		{map[string]any{"action": "stop"}, `stop ["shop"]`},
 	} {
 		d.changes = nil
 		if e := callTool(t, cs, "update_site", c.args, nil); e != "" {
@@ -541,6 +565,20 @@ func TestProxySite(t *testing.T) {
 	}
 	if e := callTool(t, cs, "proxy_site", map[string]any{"name": "softpack"}, nil); !strings.Contains(e, "upstream") {
 		t.Fatalf("a proxy needs an upstream: %q", e)
+	}
+
+	// A command runs in the project the server was started in, unless a folder is given.
+	if e := callTool(t, cs, "proxy_site", map[string]any{"name": "softpack", "upstream": "3000", "command": "npm run dev"}, &out); e != "" {
+		t.Fatal(e)
+	}
+	if got, want := d.changes[len(d.changes)-1], `update proxy ["softpack",{"command":"npm run dev","dir":`+jsonString(opts.Dir)+`}]`; got != want {
+		t.Fatalf("got %s, want %s", got, want)
+	}
+	if e := callTool(t, cs, "proxy_server", map[string]any{"name": "softpack", "action": "start"}, &out); e != "" || out.Proxy == nil || !strings.Contains(out.Message, "proxy-softpack") {
+		t.Fatalf("start: %q %+v", e, out)
+	}
+	if e := callTool(t, cs, "proxy_server", map[string]any{"name": "softpack", "action": "restart"}, nil); e == "" {
+		t.Fatal("an unknown action was taken")
 	}
 
 	d.status.Proxies = []api.ProxyStatus{{Name: "softpack", URL: "http://softpack.test", Upstream: "http://127.0.0.1:3000"}}

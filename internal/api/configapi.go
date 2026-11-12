@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"time"
 
 	"flock/internal/binaries"
@@ -191,6 +192,39 @@ func decodeBody(r *http.Request, v any) error {
 	return nil
 }
 
+// applyProxyChange changes p as c says and stores it. A command's folder must exist.
+func applyProxyChange(cfg *config.Config, p config.Proxy, c ProxyChange) error {
+	if c.Upstream != nil {
+		upstream, err := config.NormalizeUpstream(*c.Upstream)
+		if err != nil {
+			return invalid("%v", err)
+		}
+		p.Upstream = upstream
+	}
+	if c.Secured != nil {
+		p.Secured = *c.Secured
+	}
+	if c.Command != nil {
+		p.Command = strings.TrimSpace(*c.Command)
+	}
+	if c.StopCommand != nil {
+		p.StopCommand = strings.TrimSpace(*c.StopCommand)
+	}
+	if c.Dir != nil {
+		p.Dir = filepath.Clean(strings.TrimSpace(*c.Dir))
+		if info, err := os.Stat(p.Dir); err != nil || !info.IsDir() {
+			return invalid("%s is not a folder", *c.Dir)
+		}
+	}
+	if p.Command == "" {
+		p.Dir, p.StopCommand = "", ""
+	}
+	if err := cfg.UpsertProxy(p); err != nil {
+		return invalid("%v", err)
+	}
+	return nil
+}
+
 func registerConfig(mux *http.ServeMux, b Backend) {
 	// mutate runs change through the backend and answers with the new status.
 	mutate := func(w http.ResponseWriter, change func(*config.Config) error) {
@@ -241,6 +275,7 @@ func registerConfig(mux *http.ServeMux, b Backend) {
 
 	mux.HandleFunc("PATCH /v1/sites/{name}", func(w http.ResponseWriter, r *http.Request) {
 		var body struct {
+			Type    *string `json:"type"` // "php" or "node"
 			Secured *bool   `json:"secured"`
 			PHP     *string `json:"php"`
 			Node    *string `json:"node"`
@@ -259,6 +294,11 @@ func registerConfig(mux *http.ServeMux, b Backend) {
 			site, ok := cfg.FindSite(r.PathValue("name"))
 			if !ok {
 				return invalid("no site named %s", r.PathValue("name"))
+			}
+			if body.Type != nil {
+				if err := cfg.SetType(&site, *body.Type); err != nil {
+					return invalid("%v", err)
+				}
 			}
 			if body.Secured != nil {
 				site.Secured = *body.Secured
@@ -407,40 +447,31 @@ func registerConfig(mux *http.ServeMux, b Backend) {
 		})
 	})
 
-	// A proxy passes its name to a server of its own (see config.Proxy). Secured is kept when left out.
+	// A proxy passes its name to a server of its own (see config.Proxy). Posting a proxy's name
+	// again changes it; what's left out is kept (a new proxy is served over HTTP, without a command).
 	mux.HandleFunc("POST /v1/proxies", func(w http.ResponseWriter, r *http.Request) {
 		var body struct {
-			Name     string `json:"name"`
-			Upstream string `json:"upstream"`
-			Secured  *bool  `json:"secured"`
+			Name string `json:"name"`
+			ProxyChange
 		}
 		if err := decodeBody(r, &body); err != nil {
 			writeError(w, http.StatusBadRequest, err)
 			return
 		}
 		mutate(w, func(cfg *config.Config) error {
-			upstream, err := config.NormalizeUpstream(body.Upstream)
-			if err != nil {
-				return invalid("%v", err)
+			if body.Upstream == nil {
+				return invalid("give the proxy's upstream: a port (3000), host:port or URL")
 			}
-			p := config.Proxy{Name: config.SiteName(body.Name), Upstream: upstream}
+			p := config.Proxy{Name: config.SiteName(body.Name)}
 			if existing, ok := cfg.FindProxy(p.Name); ok {
-				p.Secured = existing.Secured
+				p = existing
 			}
-			if body.Secured != nil {
-				p.Secured = *body.Secured
-			}
-			if err := cfg.UpsertProxy(p); err != nil {
-				return invalid("%v", err)
-			}
-			return nil
+			return applyProxyChange(cfg, p, body.ProxyChange)
 		})
 	})
 
 	mux.HandleFunc("PATCH /v1/proxies/{name}", func(w http.ResponseWriter, r *http.Request) {
-		var body struct {
-			Secured *bool `json:"secured"`
-		}
+		var body ProxyChange
 		if err := decodeBody(r, &body); err != nil {
 			writeError(w, http.StatusBadRequest, err)
 			return
@@ -450,15 +481,21 @@ func registerConfig(mux *http.ServeMux, b Backend) {
 			if !ok {
 				return invalid("no proxy named %q", r.PathValue("name"))
 			}
-			if body.Secured != nil {
-				p.Secured = *body.Secured
-			}
-			if err := cfg.UpsertProxy(p); err != nil {
-				return invalid("%v", err)
-			}
-			return nil
+			return applyProxyChange(cfg, p, body)
 		})
 	})
+
+	proxyAction := func(do func(string) error) http.HandlerFunc {
+		return func(w http.ResponseWriter, r *http.Request) {
+			if err := do(r.PathValue("name")); err != nil {
+				writeError(w, statusFor(err), err)
+				return
+			}
+			writeJSON(w, http.StatusOK, b.Status())
+		}
+	}
+	mux.HandleFunc("POST /v1/proxies/{name}/start", proxyAction(b.StartProxy))
+	mux.HandleFunc("POST /v1/proxies/{name}/stop", proxyAction(b.StopProxy))
 
 	mux.HandleFunc("DELETE /v1/proxies/{name}", func(w http.ResponseWriter, r *http.Request) {
 		mutate(w, func(cfg *config.Config) error {
@@ -590,6 +627,7 @@ func registerConfig(mux *http.ServeMux, b Backend) {
 
 // SiteChange is a PATCH /v1/sites/{name} body; nil fields stay as they are.
 type SiteChange struct {
+	Type    *string `json:"type,omitempty"` // "php" or "node"
 	Secured *bool   `json:"secured,omitempty"`
 	PHP     *string `json:"php,omitempty"`
 	Node    *string `json:"node,omitempty"`
@@ -646,6 +684,27 @@ func (c *Client) Proxy(ctx context.Context, name, upstream string, secured *bool
 func (c *Client) SecureProxy(ctx context.Context, name string, on bool) (Status, error) {
 	var out Status
 	err := c.send(ctx, http.MethodPatch, "/v1/proxies/"+url.PathEscape(name), map[string]bool{"secured": on}, &out)
+	return out, err
+}
+
+// UpdateProxy changes a proxy's settings, e.g. the command that starts its server.
+func (c *Client) UpdateProxy(ctx context.Context, name string, change ProxyChange) (Status, error) {
+	var out Status
+	err := c.timeout(time.Minute).send(ctx, http.MethodPatch, "/v1/proxies/"+url.PathEscape(name), change, &out)
+	return out, err
+}
+
+// StartProxy runs a proxy's command, which starts its server.
+func (c *Client) StartProxy(ctx context.Context, name string) (Status, error) {
+	var out Status
+	err := c.do(ctx, http.MethodPost, "/v1/proxies/"+url.PathEscape(name)+"/start", &out)
+	return out, err
+}
+
+// StopProxy stops a proxy's server that Flock started. It waits for it to exit.
+func (c *Client) StopProxy(ctx context.Context, name string) (Status, error) {
+	var out Status
+	err := c.timeout(time.Minute).do(ctx, http.MethodPost, "/v1/proxies/"+url.PathEscape(name)+"/stop", &out)
 	return out, err
 }
 

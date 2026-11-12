@@ -944,6 +944,23 @@
         }
       }
     },
+    "3000, host:port or URL" : {
+      "comment" : "Placeholder of a proxy's upstream field",
+      "localizations" : {
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "3000, hostitel:port nebo URL"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "3000, host:puerto o URL"
+          }
+        }
+      }
+    },
     "A copy of the site's" : {
       "localizations" : {
         "cs" : {
@@ -1089,6 +1106,22 @@
         }
       }
     },
+    "A port means 127.0.0.1." : {
+      "localizations" : {
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Samotný port znamená 127.0.0.1."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Un puerto solo significa 127.0.0.1."
+          }
+        }
+      }
+    },
     "A port means 127.0.0.1; give a host and port (localhost:5173) or a URL (https://127.0.0.1:8443) for anything else." : {
       "localizations" : {
         "cs" : {
@@ -1101,6 +1134,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Un puerto solo significa 127.0.0.1; para cualquier otra cosa, indica un host y un puerto (localhost:5173) o una URL (https://127.0.0.1:8443)."
+          }
+        }
+      }
+    },
+    "A version picked here applies on this machine only. To set it for everyone working on the project, pin it (%@): Node.js goes into .nvmrc." : {
+      "comment" : "{0}: the pin icon",
+      "localizations" : {
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Verze zvolená zde platí jen na tomto počítači. Chcete-li ji nastavit všem, kdo na projektu pracují, připněte ji (%@): Node.js se zapíše do .nvmrc."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "La versión que elijas aquí solo se aplica en este equipo. Para fijarla para todo el que trabaje en el proyecto, fíjala (%@): Node.js va a .nvmrc."
           }
         }
       }
@@ -1213,6 +1263,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Añadir"
+          }
+        }
+      }
+    },
+    "Add Commands…" : {
+      "localizations" : {
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Přidat příkazy…"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Añadir comandos…"
           }
         }
       }
@@ -2137,6 +2203,23 @@
         }
       }
     },
+    "Choose…" : {
+      "comment" : "Opens a folder picker",
+      "localizations" : {
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Vybrat…"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Elegir…"
+          }
+        }
+      }
+    },
     "Classic" : {
       "localizations" : {
         "cs" : {
@@ -2246,6 +2329,74 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Cerrar"
+          }
+        }
+      }
+    },
+    "Command" : {
+      "comment" : "The command a dev server runs, e.g. npm run dev",
+      "localizations" : {
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Příkaz"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Comando"
+          }
+        }
+      }
+    },
+    "Commands" : {
+      "comment" : "Heading: the commands that start and stop a proxy's server",
+      "localizations" : {
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Příkazy"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Comandos"
+          }
+        }
+      }
+    },
+    "Commands (optional)" : {
+      "comment" : "The commands that start and stop a proxy's server",
+      "localizations" : {
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Příkazy (volitelné)"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Comandos (opcional)"
+          }
+        }
+      }
+    },
+    "Commands of %@" : {
+      "comment" : "{proxy}: the proxy's name",
+      "localizations" : {
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Příkazy pro %@"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Comandos de %@"
           }
         }
       }
@@ -2918,6 +3069,23 @@
         }
       }
     },
+    "Dev server" : {
+      "comment" : "Heading: a Node.js site's dev server",
+      "localizations" : {
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Vývojový server"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Servidor de desarrollo"
+          }
+        }
+      }
+    },
     "Discord" : {
       "shouldTranslate" : false
     },
@@ -3550,19 +3718,36 @@
         }
       }
     },
-    "Every request passes to the upstream with its Host header, WebSocket upgrades (hot reload) included. Flock doesn't start the server, so start it as usual. Until it answers, %@ shows a page saying so." : {
+    "Every request passes to the upstream with its Host header, WebSocket upgrades (hot reload) included. Flock doesn't start the server, so start it as usual, or give it commands below. Until it answers, %@ shows a page saying so." : {
       "comment" : "{domain}: the domain",
       "localizations" : {
         "cs" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Každý požadavek se předá cíli i s hlavičkou Host, včetně přechodu na WebSocket (hot reload). Flock server nespouští, takže ho spusťte jako obvykle. Dokud neodpovídá, %@ zobrazuje stránku s touto informací."
+            "value" : "Každý požadavek se předá cíli i s hlavičkou Host, včetně přechodu na WebSocket (hot reload). Flock server nespouští, takže ho spusťte jako obvykle, nebo mu níže zadejte příkazy. Dokud neodpovídá, %@ zobrazuje stránku s touto informací."
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Cada solicitud pasa al destino con su encabezado Host, incluidas las conexiones WebSocket (recarga en caliente). Flock no inicia el servidor, así que inícialo como siempre. Hasta que responda, %@ muestra una página que lo indica."
+            "value" : "Cada solicitud pasa al destino con su encabezado Host, incluidas las conexiones WebSocket (recarga en caliente). Flock no inicia el servidor, así que inícialo como siempre o dale comandos abajo. Hasta que responda, %@ muestra una página que lo indica."
+          }
+        }
+      }
+    },
+    "Every request passes to the upstream with its Host header, WebSocket upgrades (hot reload) included. Until it answers, %@ shows a page saying so." : {
+      "comment" : "{domain}: the domain",
+      "localizations" : {
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Každý požadavek se předá cíli i s hlavičkou Host, včetně přechodu na WebSocket (hot reload). Dokud neodpovídá, %@ zobrazuje stránku s touto informací."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cada solicitud pasa al destino con su encabezado Host, incluidas las conexiones WebSocket (recarga en caliente). Hasta que responda, %@ muestra una página que lo indica."
           }
         }
       }
@@ -3713,6 +3898,40 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Dominios adicionales: subdominios y alias"
+          }
+        }
+      }
+    },
+    "Failed" : {
+      "comment" : "The state of a proxy's server",
+      "localizations" : {
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Selhalo"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Falló"
+          }
+        }
+      }
+    },
+    "Failed: %@" : {
+      "comment" : "{problem}: why it failed (from the daemon)",
+      "localizations" : {
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Selhalo: %@"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Falló: %@"
           }
         }
       }
@@ -4241,6 +4460,22 @@
         }
       }
     },
+    "Flock runs the start command when you click Start and shows its output. For a command that starts the server in the background, like docker compose up -d, add the command that stops it." : {
+      "localizations" : {
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Flock spustí spouštěcí příkaz, když kliknete na Spustit, a zobrazí jeho výstup. U příkazu, který spouští server na pozadí, jako docker compose up -d, přidejte příkaz, který ho zastaví."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Flock ejecuta el comando de inicio cuando haces clic en Iniciar y muestra su salida. Para un comando que inicia el servidor en segundo plano, como docker compose up -d, añade el comando que lo detiene."
+          }
+        }
+      }
+    },
     "Flock runs your Laravel sites, PHP, mail and databases on this Mac. Setting it up takes a moment:" : {
       "localizations" : {
         "cs" : {
@@ -4253,23 +4488,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Flock ejecuta en este Mac tus sitios Laravel, PHP, el correo y las bases de datos. Configurarlo lleva un momento:"
-          }
-        }
-      }
-    },
-    "Flock serves <name>.%@ from a server of its own, e.g. a Next.js, Nuxt or Vite dev server. A port means 127.0.0.1." : {
-      "comment" : "{tld}: the TLD",
-      "localizations" : {
-        "cs" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Flock obsluhuje <název>.%@ z vlastního serveru, např. vývojového serveru Next.js, Nuxt nebo Vite. Samotný port znamená 127.0.0.1."
-          }
-        },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Flock sirve <nombre>.%@ desde un servidor propio, p. ej. un servidor de desarrollo de Next.js, Nuxt o Vite. Un puerto solo significa 127.0.0.1."
           }
         }
       }
@@ -4290,6 +4508,22 @@
         }
       }
     },
+    "Flock starts the dev server when the site is first visited, and stops it after 30 minutes without requests. An open tab with hot reload keeps it running." : {
+      "localizations" : {
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Flock spustí vývojový server při první návštěvě webu a zastaví ho po 30 minutách bez požadavků. Otevřená karta s hot reloadem ho udržuje v běhu."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Flock inicia el servidor de desarrollo cuando se visita el sitio por primera vez y lo detiene tras 30 minutos sin solicitudes. Una pestaña abierta con recarga en caliente lo mantiene en ejecución."
+          }
+        }
+      }
+    },
     "Flock stops and is removed from your PATH, together with its PHP and Node.js versions, certificates, logs and caches. macOS asks for your password to remove the *.test DNS setup and Flock's trusted certificate. Then this app moves itself to the Trash." : {
       "localizations" : {
         "cs" : {
@@ -4302,6 +4536,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Flock se detiene y se quita de tu PATH, junto con sus versiones de PHP y Node.js, certificados, registros y cachés. macOS te pide la contraseña para quitar la configuración DNS de *.test y el certificado de confianza de Flock. Después, esta app se mueve a la Papelera."
+          }
+        }
+      }
+    },
+    "Flock stops serving %@, and stops its server if Flock started it." : {
+      "comment" : "{domain}: the domain",
+      "localizations" : {
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Flock přestane obsluhovat %@ a zastaví jeho server, pokud ho spustil Flock."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Flock deja de servir %@ y detiene su servidor si lo inició Flock."
           }
         }
       }
@@ -5644,22 +5895,6 @@
         }
       }
     },
-    "Name, e.g. my-app" : {
-      "localizations" : {
-        "cs" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Název, např. my-app"
-          }
-        },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Nombre, p. ej. my-app"
-          }
-        }
-      }
-    },
     "Needs attention" : {
       "localizations" : {
         "cs" : {
@@ -6022,6 +6257,9 @@
     "Node.js" : {
       "shouldTranslate" : false
     },
+    "Node.js %@" : {
+      "shouldTranslate" : false
+    },
     "None yet" : {
       "localizations" : {
         "cs" : {
@@ -6332,6 +6570,23 @@
         }
       }
     },
+    "Only for a server that runs in the background, like docker compose up -d." : {
+      "comment" : "Under the Stop command's field",
+      "localizations" : {
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Jen pro server, který běží na pozadí, jako docker compose up -d."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Solo para un servidor que se ejecuta en segundo plano, como docker compose up -d."
+          }
+        }
+      }
+    },
     "Only for: %@" : {
       "comment" : "{emails}: email addresses",
       "localizations" : {
@@ -6458,6 +6713,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Abrir la app de la barra de menús de Flock al iniciar sesión"
+          }
+        }
+      }
+    },
+    "Open Log" : {
+      "localizations" : {
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Otevřít log"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Abrir registro"
           }
         }
       }
@@ -6602,6 +6873,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Otros clientes"
+          }
+        }
+      }
+    },
+    "Output" : {
+      "comment" : "Heading above a server's output (its log)",
+      "localizations" : {
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Výstup"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Salida"
           }
         }
       }
@@ -7037,22 +7325,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Puerto, host:puerto o URL"
-          }
-        }
-      }
-    },
-    "Port, host:port or URL, e.g. 3000" : {
-      "localizations" : {
-        "cs" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Port, hostitel:port nebo URL, např. 3000"
-          }
-        },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Puerto, host:puerto o URL, p. ej. 3000"
           }
         }
       }
@@ -7723,6 +7995,22 @@
         }
       }
     },
+    "Remove Commands" : {
+      "localizations" : {
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Odebrat příkazy"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Quitar comandos"
+          }
+        }
+      }
+    },
     "Remove proxy" : {
       "localizations" : {
         "cs" : {
@@ -8078,6 +8366,23 @@
         }
       }
     },
+    "Running on port %lld" : {
+      "comment" : "{port}: the port",
+      "localizations" : {
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Běží na portu %lld"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "En ejecución en el puerto %lld"
+          }
+        }
+      }
+    },
     "Runs %@ %@" : {
       "localizations" : {
         "cs" : {
@@ -8337,18 +8642,19 @@
         }
       }
     },
-    "Serve a server of its own, e.g. a Node.js dev server on a port, at a .%@ domain" : {
+    "Serve a server of its own, e.g. a dashboard, an object store, a Docker container or a Go or Python app, at a .%@ domain" : {
+      "comment" : "{tld}: the TLD",
       "localizations" : {
         "cs" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Obsluhovat vlastní server, např. vývojový server Node.js na portu, na doméně .%@"
+            "value" : "Obsluhovat vlastní server, např. dashboard, úložiště objektů, kontejner Dockeru nebo aplikaci v Go či Pythonu, na doméně .%@"
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Servir un servidor propio, p. ej. un servidor de desarrollo de Node.js en un puerto, en un dominio .%@"
+            "value" : "Servir un servidor propio, p. ej. un panel, un almacén de objetos, un contenedor de Docker o una app de Go o Python, en un dominio .%@"
           }
         }
       }
@@ -9189,6 +9495,23 @@
         }
       }
     },
+    "Sleeping · starts on the next visit" : {
+      "comment" : "A dev server's state",
+      "localizations" : {
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Spí · spustí se při další návštěvě"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "En reposo · se inicia en la próxima visita"
+          }
+        }
+      }
+    },
     "Something went wrong. The output below says what; you can try again." : {
       "localizations" : {
         "cs" : {
@@ -9506,6 +9829,40 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Detenido"
+          }
+        }
+      }
+    },
+    "Stopped: %@" : {
+      "comment" : "{problem}: why it stopped (from the daemon)",
+      "localizations" : {
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Zastaveno: %@"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Detenido: %@"
+          }
+        }
+      }
+    },
+    "Stopping…" : {
+      "comment" : "A server's state",
+      "localizations" : {
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Zastavuje se…"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Deteniendo…"
           }
         }
       }
@@ -10368,6 +10725,23 @@
         }
       }
     },
+    "Type" : {
+      "comment" : "A site's type: PHP or Node.js",
+      "localizations" : {
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Typ"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tipo"
+          }
+        }
+      }
+    },
     "Uninstall" : {
       "localizations" : {
         "cs" : {
@@ -11142,6 +11516,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Usar .flockrc (%@)"
+          }
+        }
+      }
+    },
+    "Uses %@'s settings: Node.js and HTTPS (a version the branch pins apply too). Change them on %@." : {
+      "comment" : "{site}: the site",
+      "localizations" : {
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Používá nastavení webu %1$@: Node.js a HTTPS (platí i verze připnutá ve větvi). Změníte je u webu %2$@."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Usa los ajustes de %1$@: Node.js y HTTPS (también se aplica la versión que fija la rama). Cámbialos en %2$@."
           }
         }
       }

@@ -214,6 +214,36 @@
         <value>Flock has no site called {0}</value>
         <comment>{0}: the site</comment>
     </data>
+    <data name="Server_Failed" xml:space="preserve">
+        <value>Failed</value>
+        <comment>The state of a proxy's server</comment>
+    </data>
+    <data name="Server_FailedBecause" xml:space="preserve">
+        <value>Failed: {0}</value>
+        <comment>{0}: why it failed (from the daemon)</comment>
+    </data>
+    <data name="Server_RunningOnPort" xml:space="preserve">
+        <value>Running on port {0}</value>
+        <comment>{0}: the port</comment>
+    </data>
+    <data name="Server_Sleeping" xml:space="preserve">
+        <value>Sleeping · starts on the next visit</value>
+        <comment>A dev server's state</comment>
+    </data>
+    <data name="Server_Starting" xml:space="preserve">
+        <value>Starting…</value>
+    </data>
+    <data name="Server_Stopped" xml:space="preserve">
+        <value>Stopped</value>
+    </data>
+    <data name="Server_StoppedBecause" xml:space="preserve">
+        <value>Stopped: {0}</value>
+        <comment>{0}: why it stopped (from the daemon)</comment>
+    </data>
+    <data name="Server_Stopping" xml:space="preserve">
+        <value>Stopping…</value>
+        <comment>A server's state</comment>
+    </data>
     <data name="Timeline_Job" xml:space="preserve">
         <value>Job</value>
         <comment>Badge of a queued job (shown in capitals)</comment>

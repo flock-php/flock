@@ -98,10 +98,17 @@ struct WorktreeDetail: View {
                 field("Site") {
                     Button(parent, action: selectParent).buttonStyle(.link)
                 }
-                field("Versions") { Text("PHP \(worktree.php)" + (worktree.node.map { " · Node.js \($0)" } ?? "")) }
-                Text("A worktree uses \(parent)'s settings: its PHP and Node.js versions, HTTPS and document root. Change them on \(parent).")
+                field("Versions") {
+                    Text(worktree.isNode ? "Node.js \(worktree.node ?? "")" : "PHP \(worktree.php)" + (worktree.node.map { " · Node.js \($0)" } ?? ""))
+                }
+                Text(worktree.isNode
+                     ? "Uses \(parent)'s settings: Node.js and HTTPS (a version the branch pins apply too). Change them on \(parent)."
+                     : "A worktree uses \(parent)'s settings: its PHP and Node.js versions, HTTPS and document root. Change them on \(parent).")
                     .font(.caption).foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
+            }
+            if worktree.isNode {
+                NodeDevServerSection(site: worktree)
             }
             section("Database") {
                 field("Database") {

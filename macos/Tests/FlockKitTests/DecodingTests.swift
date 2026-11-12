@@ -231,6 +231,51 @@ private func decode<T: Decodable>(_ type: T.Type, _ json: String) throws -> T {
     #expect(!legacy.supportsFrankenPHP && shop.supportsFrankenPHP)
 }
 
+@Test func decodesANodeSiteAndItsDevServer() throws {
+    let status = try decode(Status.self, """
+    {"version":"dev","pid":1,"started_at":"2026-10-13T14:10:01Z",
+     "sites":[{"name":"web","domain":"web.test","path":"/code/web","node":"22","type":"node",
+               "node_server":{"state":"running","port":22417,"command":"npm run dev -- --port 22417","log":"node-web"}},
+              {"name":"next","domain":"next.test","path":"/code/next","type":"node",
+               "node_server":{"state":"failed","port":22001,"command":"npm run dev -- --port 22001","problem":"node_modules is missing: run npm install in the project","log":"node-next"}},
+              {"name":"shop","domain":"shop.test","path":"/code/shop","php":"8.4","type":"php"},
+              {"name":"legacy","domain":"legacy.test","path":"/code/legacy","php":"8.1"}]}
+    """)
+
+    let web = status.sites[0]
+    #expect(web.type == .node && web.isNode)
+    let server = try #require(web.nodeServer)
+    #expect(server.state == .running && server.port == 22417 && server.log == "node-web" && server.problem == nil)
+    #expect(server.command == "npm run dev -- --port 22417")
+
+    #expect(status.sites[1].nodeServer?.state == .failed && status.sites[1].nodeServer?.problem?.contains("npm install") == true)
+
+    // A PHP site, and one from a daemon before types: PHP, without a dev server.
+    #expect(status.sites[2].type == .php && status.sites[2].nodeServer == nil)
+    #expect(status.sites[3].type == .php && !status.sites[3].isNode)
+}
+
+@Test func decodesAProxysCommand() throws {
+    let status = try decode(Status.self, """
+    {"version":"dev","pid":1,"started_at":"2026-10-13T14:10:01Z",
+     "proxies":[{"name":"admin","domain":"admin.test","upstream":"http://127.0.0.1:8000","secured":false,"running":true,
+                 "command":{"command":"python manage.py runserver 8000","dir":"/code/admin","state":"running","log":"proxy-admin"}},
+                {"name":"s3","domain":"s3.test","upstream":"http://127.0.0.1:9000","secured":false,"running":false,
+                 "command":{"command":"docker compose up -d","dir":"/code/s3","stop_command":"docker compose stop","state":"failed",
+                            "problem":"`docker compose up -d` failed: exit status 1 — see its output","log":"proxy-s3"}},
+                {"name":"plain","domain":"plain.test","upstream":"http://127.0.0.1:3000","secured":false,"running":false}]}
+    """)
+
+    let admin = try #require(status.proxies[0].command)
+    #expect(admin.command == "python manage.py runserver 8000" && admin.dir == "/code/admin")
+    #expect(admin.state == .running && admin.stopCommand == nil && admin.log == "proxy-admin")
+
+    let s3 = try #require(status.proxies[1].command)
+    #expect(s3.stopCommand == "docker compose stop" && s3.state == .failed && s3.problem?.contains("failed") == true)
+
+    #expect(status.proxies[2].command == nil)
+}
+
 @Test func tellsWhichPHPVersionsFrankenPHPSupports() {
     #expect(Status.Site.frankenPHPSupports("8.2") && Status.Site.frankenPHPSupports("8.4.14") && Status.Site.frankenPHPSupports("9.0"))
     #expect(!Status.Site.frankenPHPSupports("8.1") && !Status.Site.frankenPHPSupports("7.4"))

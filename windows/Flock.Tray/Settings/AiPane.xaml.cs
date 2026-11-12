@@ -38,6 +38,20 @@ internal sealed partial class AiPane : UserControl, ISettingsPane
     }
 }
 
+/// <summary>A state dot's tone ("Success", "Caution", "Critical", "Neutral"; see Ui.StateDot) as its brush.</summary>
+internal sealed class ToneBrushConverter : IValueConverter
+{
+    public object Convert(object value, Type targetType, object parameter, string language)
+    {
+        var tone = value is string name && Enum.TryParse<Ui.Tone>(name, out var parsed) ? parsed : Ui.Tone.Neutral;
+        return Ui.StateDot(tone).Fill;
+    }
+    public object ConvertBack(object value, Type targetType, object parameter, string language)
+    {
+        throw new NotSupportedException();
+    }
+}
+
 internal sealed class BooleanVisibilityConverter : IValueConverter
 {
     public object Convert(object value, Type targetType, object parameter, string language)

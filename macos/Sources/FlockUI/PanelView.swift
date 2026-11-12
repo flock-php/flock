@@ -405,16 +405,14 @@ private struct SiteRow: View {
                     .font(.caption)
                     .foregroundStyle(site.secured ? Color.green : Color.secondary)
                     .frame(width: 14)
-                VStack(alignment: .leading, spacing: 1) {
-                    Text(site.domain).font(.callout)
-                    if let problem = site.problem {
-                        Text(problem).font(.caption2).foregroundStyle(.red)
-                    } else if let notice = site.notice {
-                        Label(notice, systemImage: "exclamationmark.triangle.fill")
-                            .font(.caption2).foregroundStyle(.orange)
-                    }
-                }
+                Text(site.domain).font(.callout)
                 Spacer()
+                if let problem = site.rowProblem {
+                    ProblemIcon(text: problem)
+                }
+                if let dot = site.stateDot {
+                    StateDot(color: dot.color).help(dot.help)
+                }
                 if site.debugging {
                     Label("Debugging", systemImage: "ladybug.fill")
                         .labelStyle(.iconOnly)
@@ -425,10 +423,10 @@ private struct SiteRow: View {
                     Badge(text: "Shared", color: .green)
                         .help(site.share?.url ?? "")
                 }
-                if site.server == .frankenphp {
+                if !site.isNode, site.server == .frankenphp {
                     Badge(text: site.worker == .octane ? "Octane" : "FrankenPHP", color: .secondary)
                 }
-                Text("PHP \(site.php)")
+                Text(site.isNode ? "Node.js \(site.node ?? "")" : "PHP \(site.php)")
                     .font(.caption2.monospacedDigit())
                     .foregroundStyle(.secondary)
             }
@@ -469,16 +467,12 @@ private struct ProxyRow: View {
                     .font(.caption)
                     .foregroundStyle(proxy.secured ? Color.green : Color.secondary)
                     .frame(width: 14)
-                VStack(alignment: .leading, spacing: 1) {
-                    Text(proxy.domain).font(.callout)
-                    if let problem = proxy.problem {
-                        Text(problem).font(.caption2).foregroundStyle(.red)
-                    }
-                }
+                Text(proxy.domain).font(.callout)
                 Spacer()
-                Circle()
-                    .fill(proxy.running ? Color.green : Color.secondary.opacity(0.5))
-                    .frame(width: 6, height: 6)
+                if let problem = proxy.problem {
+                    ProblemIcon(text: problem)
+                }
+                StateDot(color: proxy.stateDot.color).help(proxy.stateDot.help)
                 Text(proxy.running ? proxy.server ?? String(localized: "Running") : String(localized: "Not running"))
                     .font(.caption2.monospacedDigit())
                     .foregroundStyle(.secondary)

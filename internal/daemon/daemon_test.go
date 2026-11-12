@@ -26,6 +26,9 @@ import (
 // TestMain keeps the daemons offline: without the package manifest, the first run doesn't
 // download PHP and Node.js, and versions count as offered.
 func TestMain(m *testing.M) {
+	if len(os.Args) > 1 && strings.HasPrefix(os.Args[1], "flock-test-") {
+		os.Exit(testCommand(os.Args[1]))
+	}
 	binaries.Bases = nil
 	os.Exit(m.Run())
 }

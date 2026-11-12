@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
 	"time"
 
 	"flock/internal/config"
@@ -105,6 +106,20 @@ func registerFrankenPHP(mux *http.ServeMux, b Backend) {
 		}
 		writeJSON(w, http.StatusOK, b.Status())
 	})
+	mux.HandleFunc("POST /v1/sites/{name}/stop", func(w http.ResponseWriter, r *http.Request) {
+		if err := b.StopSite(r.PathValue("name")); err != nil {
+			writeError(w, statusFor(err), err)
+			return
+		}
+		writeJSON(w, http.StatusOK, b.Status())
+	})
+}
+
+// StopSite puts a Node.js site's dev server to sleep until the site's next request.
+func (c *Client) StopSite(ctx context.Context, name string) (Status, error) {
+	var out Status
+	err := c.timeout(time.Minute).do(ctx, http.MethodPost, "/v1/sites/"+url.PathEscape(name)+"/stop", &out)
+	return out, err
 }
 
 // FrankenPHP fetches every FrankenPHP build.

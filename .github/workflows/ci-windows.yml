@@ -46,7 +46,7 @@ jobs:
         name: Windows (x64)
         if: github.event_name != 'pull_request'
         runs-on: windows-2025
-        environment: ${{ (github.event_name == 'merge_group' || inputs.version != '') && 'release' || '' }}
+        environment: ${{ (github.event_name == 'merge_group' || (inputs.version != '' && !startsWith(inputs.version, 'dev-'))) && 'release' || '' }}
         permissions:
             contents: read
             id-token: write
@@ -74,7 +74,7 @@ jobs:
                     }
 
             -   name: Require signing
-                if: env.SIGNING != 'true' && (github.event_name == 'merge_group' || inputs.version != '')
+                if: env.SIGNING != 'true' && (github.event_name == 'merge_group' || (inputs.version != '' && !startsWith(inputs.version, 'dev-')))
                 run: echo "::error::the ARTIFACT_SIGNING_* variables are not set" && exit 1
 
             -   uses: azure/login@a641126d1b8aa4d1fa005f4f92df94a3a4c4c906 # v3.1.0

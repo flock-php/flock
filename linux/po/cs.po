@@ -44,6 +44,10 @@ msgstr "*.{tld} se nepřekládá: {problem}. Linux nemá záložní soubor hosts
 msgid ".flockrc's Node {pinned} wins over {other}."
 msgstr "Node {pinned} z .flockrc má přednost před {other}."
 
+#. What a proxy's upstream can be
+msgid "3000, host:port or URL. A port means 127.0.0.1."
+msgstr "3000, hostitel:port nebo URL. Samotný port znamená 127.0.0.1."
+
 msgid "A copy of the site's"
 msgstr "Kopie databáze webu"
 
@@ -90,6 +94,9 @@ msgstr "Aktivní"
 
 msgid "Add"
 msgstr "Přidat"
+
+msgid "Add Commands…"
+msgstr "Přidat příkazy…"
 
 msgid "Add Domain…"
 msgstr "Přidat doménu…"
@@ -290,6 +297,10 @@ msgstr "Kontroluje se…"
 msgid "Choose"
 msgstr "Vybrat"
 
+#. The title of a folder picker
+msgid "Choose Folder"
+msgstr "Vybrat složku"
+
 msgid "Choose Folder…"
 msgstr "Vybrat složku…"
 
@@ -299,6 +310,10 @@ msgstr "Vyberte složku s index.php aplikace ve webu {site}"
 #. {root}: the configured folder
 msgid "Choose the folder with the app's index.php, or create {root}."
 msgstr "Vyberte složku se souborem index.php aplikace, nebo vytvořte {root}."
+
+#. Opens a folder picker
+msgid "Choose…"
+msgstr "Vybrat…"
 
 msgid "Classic"
 msgstr "Klasický"
@@ -321,6 +336,22 @@ msgstr "Port klienta"
 
 msgid "Close"
 msgstr "Zavřít"
+
+#. The command a dev server runs, e.g. npm run dev
+msgid "Command"
+msgstr "Příkaz"
+
+#. Heading: the commands that start and stop a proxy's server
+msgid "Commands"
+msgstr "Příkazy"
+
+#. The commands that start and stop a proxy's server
+msgid "Commands (optional)"
+msgstr "Příkazy (volitelné)"
+
+#. {proxy}: the proxy's name
+msgid "Commands of {proxy}"
+msgstr "Příkazy pro {proxy}"
 
 msgid "Connect your IDE"
 msgstr "Připojte své IDE"
@@ -438,6 +469,10 @@ msgstr "Rozpoznávat breakpointy z PhpStormu"
 msgid "Detect Xdebug requests"
 msgstr "Rozpoznávat požadavky na Xdebug"
 
+#. Heading: a Node.js site's dev server
+msgid "Dev server"
+msgstr "Vývojový server"
+
 msgid "Dismiss"
 msgstr "Zavřít"
 
@@ -511,8 +546,12 @@ msgid "Every name, any subdomain included, is resolved by Flock's DNS server thr
 msgstr "Každý název včetně libovolné subdomény překládá DNS server Flocku přes systemd-resolved."
 
 #. {domain}: the domain
-msgid "Every request passes to the upstream with its Host header, WebSocket upgrades (hot reload) included. Flock doesn't start the server, so start it as usual. Until it answers, {domain} shows a page saying so."
-msgstr "Každý požadavek se předá cíli i s hlavičkou Host, včetně přechodu na WebSocket (hot reload). Flock server nespouští, takže ho spusťte jako obvykle. Dokud neodpovídá, {domain} zobrazuje stránku s touto informací."
+msgid "Every request passes to the upstream with its Host header, WebSocket upgrades (hot reload) included. Flock doesn't start the server, so start it as usual, or give it commands below. Until it answers, {domain} shows a page saying so."
+msgstr "Každý požadavek se předá cíli i s hlavičkou Host, včetně přechodu na WebSocket (hot reload). Flock server nespouští, takže ho spusťte jako obvykle, nebo mu níže zadejte příkazy. Dokud neodpovídá, {domain} zobrazuje stránku s touto informací."
+
+#. {domain}: the domain
+msgid "Every request passes to the upstream with its Host header, WebSocket upgrades (hot reload) included. Until the server answers, {domain} shows a page saying so."
+msgstr "Každý požadavek se předá cíli i s hlavičkou Host, včetně přechodu na WebSocket (hot reload). Dokud server neodpovídá, {domain} zobrazuje stránku s touto informací."
 
 msgid "Every service Flock offers: MySQL, Redis, Meilisearch and more"
 msgstr "Všechny služby, které Flock nabízí: MySQL, Redis, Meilisearch a další"
@@ -534,6 +573,14 @@ msgstr "Rozšíření PostgreSQL {version}: PostGIS, pgRouting, pgvector, Timesc
 
 msgid "Extra domains: subdomains and aliases"
 msgstr "Další domény: subdomény a aliasy"
+
+#. The state of a proxy's server
+msgid "Failed"
+msgstr "Selhalo"
+
+#. {problem}: why it failed (from the daemon)
+msgid "Failed: {problem}"
+msgstr "Selhalo: {problem}"
 
 msgid "Flock Docs"
 msgstr "Dokumentace Flocku"
@@ -621,12 +668,11 @@ msgstr "Flock spustí jeho hook before_delete a smaže {path} i jeho databázi {
 msgid "Flock runs its before_delete hook and deletes {path}."
 msgstr "Flock spustí jeho hook before_delete a smaže {path}."
 
+msgid "Flock runs the project's dev script when the site is visited, and stops it after 30 minutes without visits."
+msgstr "Flock spustí skript dev projektu, když někdo web navštíví, a po 30 minutách bez návštěv ho zastaví."
+
 msgid "Flock runs your Laravel sites, PHP, mail and databases on this computer. Setting it up takes a moment:"
 msgstr "Flock na tomto počítači provozuje vaše weby v Laravelu, PHP, poštu a databáze. Nastavení chvíli potrvá:"
-
-#. {tld}: the TLD
-msgid "Flock serves <name>.{tld} from a server of its own, e.g. a Next.js, Nuxt or Vite dev server. A port means 127.0.0.1."
-msgstr "Flock obsluhuje <název>.{tld} z vlastního serveru, např. vývojového serveru Next.js, Nuxt nebo Vite. Samotný port znamená 127.0.0.1."
 
 msgid "Flock stops and is removed from your PATH, together with its PHP and Node.js versions, certificates, logs and caches. Linux asks for your password to remove the *.test DNS setup and Flock's trusted certificate.\n\nYour sites' settings and databases stay in {folder}, so reinstalling picks up where you left off — unless you also delete them."
 msgstr "Flock se zastaví a odebere se z vaší PATH spolu se svými verzemi PHP a Node.js, certifikáty, logy a mezipamětí. Linux se zeptá na heslo, aby odebral nastavení DNS pro *.test a důvěryhodný certifikát Flocku.\n\nNastavení a databáze vašich webů zůstanou ve složce {folder}, takže po opětovné instalaci budete pokračovat tam, kde jste skončili — pokud je také nesmažete."
@@ -676,6 +722,9 @@ msgstr "Obecné"
 
 msgid "Get new versions of Flock, PHP and services earlier, including pre-releases. They may not work yet."
 msgstr "Získávejte nové verze Flocku, PHP a služeb dříve, včetně předběžných verzí. Nemusí ještě fungovat."
+
+msgid "Give Flock the commands that start and stop the server, so you can start it here."
+msgstr "Zadejte Flocku příkazy, které server spouštějí a zastavují, a budete ho moct spustit tady."
 
 msgid "Give {worktree} a copy of the database?"
 msgstr "Dát worktree {worktree} kopii databáze?"
@@ -841,8 +890,8 @@ msgstr "Další"
 msgid "More Services ({count})…"
 msgstr "Další služby ({count})…"
 
-msgid "Name, e.g. my-app"
-msgstr "Název, např. my-app"
+msgid "Name"
+msgstr "Název"
 
 msgid "Needs attention"
 msgstr "Vyžaduje pozornost"
@@ -976,6 +1025,10 @@ msgstr "OK"
 msgid "Official Node.js builds, the newest release of each major. A project that pins a version in .nvmrc gets that major offered when you run node, npm or npx there. Global packages (npm install -g) belong to a Node line and survive its updates; those of the default version are on your PATH."
 msgstr "Oficiální sestavení Node.js, nejnovější vydání každé hlavní verze. Projektu, který má verzi připnutou v .nvmrc, se tato hlavní verze nabídne, když v něm spustíte node, npm nebo npx. Globální balíčky (npm install -g) patří k řadě Node a přežijí její aktualizace; ty z výchozí verze jsou v PATH."
 
+#. Under the Stop command's field
+msgid "Only for a server that runs in the background, like docker compose up -d."
+msgstr "Jen pro server, který běží na pozadí, jako docker compose up -d."
+
 #. {emails}: email addresses
 msgid "Only for: {emails}"
 msgstr "Jen pro: {emails}"
@@ -997,6 +1050,9 @@ msgstr "Otevírat Flock po přihlášení"
 
 msgid "Open Flock when I log in"
 msgstr "Otevřít Flock po přihlášení"
+
+msgid "Open Log"
+msgstr "Otevřít log"
 
 msgid "Open Mail"
 msgstr "Otevřít poštu"
@@ -1037,6 +1093,10 @@ msgstr "Otevře {name}"
 
 msgid "Other clients"
 msgstr "Další klienti"
+
+#. Heading above a server's output (its log)
+msgid "Output"
+msgstr "Výstup"
 
 msgid "PHP extensions"
 msgstr "Rozšíření PHP"
@@ -1118,9 +1178,6 @@ msgstr "Port {port}"
 
 msgid "Port, host:port or URL"
 msgstr "Port, hostitel:port nebo URL"
-
-msgid "Port, host:port or URL, e.g. 3000"
-msgstr "Port, hostitel:port nebo URL, např. 3000"
 
 msgid "PostgreSQL Only"
 msgstr "Jen PostgreSQL"
@@ -1222,6 +1279,9 @@ msgstr "Odebrat"
 msgid "Remove Anyway"
 msgstr "Přesto odebrat"
 
+msgid "Remove Commands"
+msgstr "Odebrat příkazy"
+
 msgid "Remove proxy"
 msgstr "Odebrat proxy"
 
@@ -1300,6 +1360,10 @@ msgstr "Běží"
 msgid "Running FrankenPHP {version} with PHP {php}"
 msgstr "Běží FrankenPHP {version} s PHP {php}"
 
+#. {port}: the port
+msgid "Running on port {port}"
+msgstr "Běží na portu {port}"
+
 msgid "Running · {version}"
 msgstr "Běží · {version}"
 
@@ -1318,6 +1382,9 @@ msgstr "Běží na"
 
 msgid "SMTP server"
 msgstr "Server SMTP"
+
+msgid "Save"
+msgstr "Uložit"
 
 msgid "Save…"
 msgstr "Uložit…"
@@ -1338,8 +1405,9 @@ msgstr "Zabezpečit"
 msgid "Send dump() and dd() output, queries, logs, views and jobs to Flock instead of the page or terminal — no changes to your projects."
 msgstr "Posílejte výstup dump() a dd(), dotazy, logy, pohledy a úlohy do Flocku místo na stránku nebo do terminálu — bez úprav vašich projektů."
 
-msgid "Serve a server of its own, e.g. a Node.js dev server on a port, at a .{tld} domain"
-msgstr "Obsluhovat vlastní server, např. vývojový server Node.js na portu, na doméně .{tld}"
+#. {tld}: the TLD
+msgid "Serve a server of its own, e.g. a dashboard, an object store, a Docker container or a Go or Python app, at a .{tld} domain"
+msgstr "Obsluhovat vlastní server, např. dashboard, úložiště objektů, kontejner Dockeru nebo aplikaci v Go či Pythonu, na doméně .{tld}"
 
 #. {site}: the site
 msgid "Serve {site} over HTTPS?"
@@ -1472,6 +1540,10 @@ msgstr "Weby používají porty {http} (HTTP) a {https} (HTTPS) nastavené v con
 msgid "Sites you added one by one, plus every folder inside your project folders."
 msgstr "Weby přidané jednotlivě a každá složka uvnitř vašich složek projektů."
 
+#. A dev server's state
+msgid "Sleeping · starts on the next visit"
+msgstr "Spí · spustí se při další návštěvě"
+
 msgid "Software Updater"
 msgstr "Aktualizace softwaru"
 
@@ -1532,6 +1604,14 @@ msgstr "Zastavit {service}?"
 
 msgid "Stopped"
 msgstr "Zastaveno"
+
+#. {problem}: why it stopped (from the daemon)
+msgid "Stopped: {problem}"
+msgstr "Zastaveno: {problem}"
+
+#. A server's state
+msgid "Stopping…"
+msgstr "Zastavuje se…"
 
 msgid "Stops Flock and removes it from this computer. Your sites, databases and settings are kept."
 msgstr "Zastaví Flock a odebere ho z tohoto počítače. Vaše weby, databáze a nastavení zůstanou zachované."
@@ -1648,6 +1728,10 @@ msgstr "Po vypnutí uvidíte dumpy opět na stránce."
 
 msgid "Turns the app's debug mode on for this share, so visitors see stack traces. Only for people you trust."
 msgstr "Zapne pro toto sdílení ladicí režim aplikace, takže návštěvníci uvidí výpisy zásobníku. Jen pro lidi, kterým důvěřujete."
+
+#. A site's type: PHP or Node.js
+msgid "Type"
+msgstr "Typ"
 
 msgid "URL"
 msgstr "URL"
@@ -1891,6 +1975,10 @@ msgstr "nefunguje"
 
 msgid "dump() and dd() output, queries, logs, views and jobs from your sites and artisan commands appear here."
 msgstr "Zde se objeví výstup dump() a dd(), dotazy, logy, pohledy a úlohy z vašich webů a příkazů artisan."
+
+#. {tld}: the TLD. The name of a new proxy and its domain
+msgid "e.g. my-app → my-app.{tld}"
+msgstr "např. my-app → my-app.{tld}"
 
 msgctxt "database"
 msgid "fresh"

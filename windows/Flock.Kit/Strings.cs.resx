@@ -187,6 +187,30 @@
     <data name="SecureLink_UnknownTitle" xml:space="preserve">
         <value>Flock nemá web s názvem {0}</value>
     </data>
+    <data name="Server_Failed" xml:space="preserve">
+        <value>Selhalo</value>
+    </data>
+    <data name="Server_FailedBecause" xml:space="preserve">
+        <value>Selhalo: {0}</value>
+    </data>
+    <data name="Server_RunningOnPort" xml:space="preserve">
+        <value>Běží na portu {0}</value>
+    </data>
+    <data name="Server_Sleeping" xml:space="preserve">
+        <value>Spí · spustí se při další návštěvě</value>
+    </data>
+    <data name="Server_Starting" xml:space="preserve">
+        <value>Spouští se…</value>
+    </data>
+    <data name="Server_Stopped" xml:space="preserve">
+        <value>Zastaveno</value>
+    </data>
+    <data name="Server_StoppedBecause" xml:space="preserve">
+        <value>Zastaveno: {0}</value>
+    </data>
+    <data name="Server_Stopping" xml:space="preserve">
+        <value>Zastavuje se…</value>
+    </data>
     <data name="Timeline_Job" xml:space="preserve">
         <value>Úloha</value>
     </data>

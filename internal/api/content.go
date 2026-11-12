@@ -213,10 +213,30 @@ func registerLogs(mux *http.ServeMux, b Backend) {
 		writeJSON(w, http.StatusOK, map[string][]string{"services": services, "sites": sites})
 	})
 
+	validLog := func(w http.ResponseWriter, name string) bool {
+		if name == "" || strings.ContainsAny(name, `/\`) || strings.HasPrefix(name, ".") {
+			writeError(w, http.StatusBadRequest, fmt.Errorf("invalid log name %q", name))
+			return false
+		}
+		return true
+	}
+
+	// Empties a service's log, e.g. the output of a proxy's command.
+	mux.HandleFunc("DELETE /v1/logs/services/{name}", func(w http.ResponseWriter, r *http.Request) {
+		name := r.PathValue("name")
+		if !validLog(w, name) {
+			return
+		}
+		if err := os.Truncate(filepath.Join(logDir(), name+".log"), 0); err != nil && !errors.Is(err, os.ErrNotExist) {
+			writeError(w, http.StatusInternalServerError, err)
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
+	})
+
 	mux.HandleFunc("GET /v1/logs/services/{name}", func(w http.ResponseWriter, r *http.Request) {
 		name := r.PathValue("name")
-		if strings.ContainsAny(name, `/\`) || strings.HasPrefix(name, ".") {
-			writeError(w, http.StatusBadRequest, fmt.Errorf("invalid log name %q", name))
+		if !validLog(w, name) {
 			return
 		}
 		lines := 300

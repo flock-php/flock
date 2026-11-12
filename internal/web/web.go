@@ -42,14 +42,17 @@ type Site struct {
 	// of a proxied name (config.Proxy: "http://127.0.0.1:3000", no Root). When set, requests go there
 	// instead of to FPM; those that ask for Xdebug still go to DebugFPM.
 	Proxy string
+	// Node is set on a Node.js site: its name, which every request passes to Config.Wake first
+	// (starting its dev server, at Proxy, when it isn't running).
+	Node string
 	// CertFile and KeyFile (from certs.SiteCert, covering Domain and *.Domain) are set when the site
 	// is secured. Deeper subdomains and aliases get certificates from Config.Issue.
 	CertFile string
 	KeyFile  string
 }
 
-// proxied reports whether the site is a proxied name (config.Proxy) rather than a PHP site.
-func (s Site) proxied() bool { return s.Root == "" && s.Proxy != "" }
+// proxied reports whether the site is a proxied name (config.Proxy) rather than a site.
+func (s Site) proxied() bool { return s.Root == "" && s.Proxy != "" && s.Node == "" }
 
 // Waiting is a linked site that can't be served because its PHP isn't installed: its names get
 // Flock's page saying so (and offering the install) instead of the "not linked" page.
@@ -102,6 +105,8 @@ type Config struct {
 	// TLD limits the names HTTPS answers for; Issue makes a certificate for one of them.
 	TLD   string
 	Issue func(name string) (*tls.Certificate, error)
+	// Wake is told of the requests to Node.js sites (see Site.Node).
+	Wake WakeFunc
 }
 
 // hosts are the names one of a site's names (its domain or an alias) answers to: the name itself
@@ -247,6 +252,14 @@ func unlinked(cfg Config) string {
 // of the upstream's own (reverse_proxy passes those through, whatever their status). PHP sites
 // served by FrankenPHP proxy too, but keep Caddy's plain 502.
 func upstreamDown(s Site, cfg Config) string {
+	if s.Node != "" {
+		// A Node.js site's dev server is starting (flock_wake sets its state and problem).
+		return fmt.Sprintf("\thandle_errors 502 {\n\t\tvars flock_node_site %s\n"+
+			// The state in X-Flock-Page, so the waiting page reloads once it changes (to say why it failed).
+			"\t\troot * %s\n\t\trewrite * /unlinked.html\n\t\theader Cache-Control no-store\n\t\theader X-Flock-Page node-{http.vars.flock_node_state}\n"+
+			"\t\ttemplates\n\t\tfile_server {\n\t\t\tstatus 503\n\t\t}\n\t}\n",
+			quote(s.Node), quote(pagesDir(cfg)))
+	}
 	if !s.proxied() {
 		return ""
 	}
@@ -282,6 +295,9 @@ func dispatch(s Site, indent string) string {
 	serve := func(indent string) string { return php(s.FPM, indent) }
 	if s.Proxy != "" {
 		serve = func(indent string) string { return proxy(s.Proxy, indent) }
+	}
+	if s.Node != "" {
+		return fmt.Sprintf("%sflock_wake %s\n", indent, quote(s.Node)) + proxy(s.Proxy, indent)
 	}
 	switch {
 	case len(s.DebugFPM) == 0:
@@ -453,6 +469,9 @@ func Apply(cfg Config) error {
 		return err
 	}
 	previous := currentCerts.Swap(source)
+	if cfg.Wake != nil {
+		currentWake.Store(&cfg.Wake)
+	}
 	if err := caddy.Load(json, true); err != nil {
 		currentCerts.Store(previous)
 		return err

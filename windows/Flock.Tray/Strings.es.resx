@@ -189,6 +189,9 @@ Encontrarás los detalles en %LocalAppData%\Flock\tray.log.</value>
     <data name="Common_Canceled" xml:space="preserve">
         <value>Cancelado.</value>
     </data>
+    <data name="Common_Choose" xml:space="preserve">
+        <value>Elegir…</value>
+    </data>
     <data name="Common_Close" xml:space="preserve">
         <value>Cerrar</value>
     </data>
@@ -968,8 +971,35 @@ Encontrarás los detalles en %LocalAppData%\Flock\tray.log.</value>
     <data name="Process_DidNotStart" xml:space="preserve">
         <value>El proceso no se inició.</value>
     </data>
+    <data name="Proxy_AddCommands" xml:space="preserve">
+        <value>Añadir comandos…</value>
+    </data>
+    <data name="Proxy_AddCommandsTitle" xml:space="preserve">
+        <value>Añadir comandos a {0}</value>
+    </data>
+    <data name="Proxy_CommandHelp" xml:space="preserve">
+        <value>Flock ejecuta el comando de inicio cuando haces clic en Iniciar y muestra su salida. Para un comando que inicia el servidor en segundo plano, como docker compose up -d, añade el comando que lo detiene.</value>
+    </data>
+    <data name="Proxy_Commands" xml:space="preserve">
+        <value>Comandos</value>
+    </data>
+    <data name="Proxy_CommandsOptional" xml:space="preserve">
+        <value>Comandos (opcional)</value>
+    </data>
+    <data name="Proxy_CommandsTitle" xml:space="preserve">
+        <value>Comandos de {0}</value>
+    </data>
     <data name="Proxy_NothingAnswers" xml:space="preserve">
         <value>No responde nada en {0}. Inicia allí el servidor.</value>
+    </data>
+    <data name="Proxy_RemoveCommands" xml:space="preserve">
+        <value>Quitar comandos</value>
+    </data>
+    <data name="Proxy_StartInSettings" xml:space="preserve">
+        <value>{0}. Inícialo en Configuración → Sitios.</value>
+    </data>
+    <data name="Proxy_StopCommandHint" xml:space="preserve">
+        <value>Solo para un servidor que se ejecuta en segundo plano, como docker compose up -d.</value>
     </data>
     <data name="Releases_Available" xml:space="preserve">
         <value>{0} disponible</value>
@@ -1481,14 +1511,11 @@ Encontrarás los detalles en %LocalAppData%\Flock\tray.log.</value>
     <data name="Sites_AddProxy" xml:space="preserve">
         <value>Añadir proxy…</value>
     </data>
-    <data name="Sites_AddProxyDetails" xml:space="preserve">
-        <value>Flock sirve &lt;nombre&gt;.{0} desde un servidor propio, p. ej. un servidor de desarrollo de Next.js, Nuxt o Vite. Un puerto solo significa 127.0.0.1.</value>
+    <data name="Sites_AddProxyServerTooltip" xml:space="preserve">
+        <value>Servir un servidor propio, p. ej. un panel o un contenedor de Docker, en un dominio .test</value>
     </data>
     <data name="Sites_AddProxyTitle" xml:space="preserve">
         <value>Añadir un proxy</value>
-    </data>
-    <data name="Sites_AddProxyTooltip" xml:space="preserve">
-        <value>Sirve un servidor propio, p. ej. un servidor de desarrollo de Node.js en un puerto, en un dominio .test</value>
     </data>
     <data name="Sites_AddSite" xml:space="preserve">
         <value>Añadir sitio…</value>
@@ -1553,11 +1580,23 @@ Encontrarás los detalles en %LocalAppData%\Flock\tray.log.</value>
     <data name="Sites_Classic" xml:space="preserve">
         <value>Clásico</value>
     </data>
+    <data name="Sites_Command" xml:space="preserve">
+        <value>Comando</value>
+    </data>
     <data name="Sites_Default" xml:space="preserve">
         <value>Predeterminada</value>
     </data>
     <data name="Sites_DefaultVersion" xml:space="preserve">
         <value>Predeterminada ({0})</value>
+    </data>
+    <data name="Sites_DevServer" xml:space="preserve">
+        <value>Servidor de desarrollo</value>
+    </data>
+    <data name="Sites_DevServerFirstVisit" xml:space="preserve">
+        <value>Flock inicia el servidor de desarrollo con la primera visita al sitio.</value>
+    </data>
+    <data name="Sites_DevServerFootnote" xml:space="preserve">
+        <value>Flock ejecuta el script dev del proyecto con su versión de Node.js cuando se visita el sitio y lo detiene tras 30 minutos sin visitas.</value>
     </data>
     <data name="Sites_DocumentRoot" xml:space="preserve">
         <value>Raíz de documentos</value>
@@ -1604,6 +1643,9 @@ Encontrarás los detalles en %LocalAppData%\Flock\tray.log.</value>
     <data name="Sites_FrankenPhpRunningWorker" xml:space="preserve">
         <value>Ejecutando FrankenPHP {0} con PHP {1} · modo worker</value>
     </data>
+    <data name="Sites_NoOutputYet" xml:space="preserve">
+        <value>Todavía no hay salida.</value>
+    </data>
     <data name="Sites_NoSites" xml:space="preserve">
         <value>No hay sitios</value>
     </data>
@@ -1618,6 +1660,12 @@ Encontrarás los detalles en %LocalAppData%\Flock\tray.log.</value>
     </data>
     <data name="Sites_OctaneTooltip" xml:space="preserve">
         <value>Instala Laravel Octane en el proyecto (composer require laravel/octane) para usar el modo worker.</value>
+    </data>
+    <data name="Sites_OpenLog" xml:space="preserve">
+        <value>Abrir registro</value>
+    </data>
+    <data name="Sites_Output" xml:space="preserve">
+        <value>Salida</value>
     </data>
     <data name="Sites_PhpCgiMeanwhile" xml:space="preserve">
         <value>Mientras tanto, PHP-CGI sirve el sitio.</value>
@@ -1670,8 +1718,11 @@ Encontrarás los detalles en %LocalAppData%\Flock\tray.log.</value>
     <data name="Sites_Proxy" xml:space="preserve">
         <value>Proxy</value>
     </data>
-    <data name="Sites_ProxyFootnote" xml:space="preserve">
-        <value>Cada solicitud pasa al destino con su encabezado Host, incluidas las conexiones WebSocket (recarga en caliente). Flock no inicia el servidor, así que inícialo como siempre. Hasta que responda, {0} muestra una página que lo indica.</value>
+    <data name="Sites_ProxyFootnoteCommands" xml:space="preserve">
+        <value>Cada solicitud pasa al destino con su encabezado Host, incluidas las conexiones WebSocket (recarga en caliente). Hasta que responda, {0} muestra una página que lo indica.</value>
+    </data>
+    <data name="Sites_ProxyFootnoteNoCommands" xml:space="preserve">
+        <value>Cada solicitud pasa al destino con su encabezado Host, incluidas las conexiones WebSocket (recarga en caliente). Flock no inicia el servidor, así que inícialo como siempre o dale comandos abajo. Hasta que responda, {0} muestra una página que lo indica.</value>
     </data>
     <data name="Sites_ProxyName" xml:space="preserve">
         <value>Nombre</value>
@@ -1757,11 +1808,17 @@ Encontrarás los detalles en %LocalAppData%\Flock\tray.log.</value>
     <data name="Sites_Site" xml:space="preserve">
         <value>Sitio</value>
     </data>
+    <data name="Sites_State" xml:space="preserve">
+        <value>Estado</value>
+    </data>
     <data name="Sites_SubdomainsOnlyHere" xml:space="preserve">
         <value>Los subdominios solo funcionan si los añades aquí: {0}.</value>
     </data>
     <data name="Sites_Subtitle" xml:space="preserve">
         <value>Los sitios que añadiste uno a uno, más cada carpeta dentro de tus carpetas de proyectos.</value>
+    </data>
+    <data name="Sites_Type" xml:space="preserve">
+        <value>Tipo</value>
     </data>
     <data name="Sites_Unpin" xml:space="preserve">
         <value>Dejar de fijar</value>
@@ -1799,8 +1856,11 @@ Encontrarás los detalles en %LocalAppData%\Flock\tray.log.</value>
     <data name="Sites_UpstreamPlaceholder" xml:space="preserve">
         <value>Puerto, host:puerto o URL</value>
     </data>
-    <data name="Sites_UpstreamPlaceholderExample" xml:space="preserve">
-        <value>Puerto, host:puerto o URL, p. ej. 3000</value>
+    <data name="Sites_UpstreamPlaceholderShort" xml:space="preserve">
+        <value>3000, host:puerto o URL</value>
+    </data>
+    <data name="Sites_UpstreamPortMeans" xml:space="preserve">
+        <value>Un puerto solo significa 127.0.0.1.</value>
     </data>
     <data name="Sites_UseFile" xml:space="preserve">
         <value>Usar {0}</value>
@@ -1822,6 +1882,9 @@ Encontrarás los detalles en %LocalAppData%\Flock\tray.log.</value>
     </data>
     <data name="Sites_VersionsFootnote" xml:space="preserve">
         <value>La versión que elijas aquí solo se aplica en este equipo. Para definirla para todos los que trabajan en el proyecto, fíjala (…): PHP va en .flockrc y Node.js en .nvmrc.</value>
+    </data>
+    <data name="Sites_VersionsFootnoteNode" xml:space="preserve">
+        <value>La versión que elijas aquí solo se aplica en este equipo. Para definirla para todos los que trabajan en el proyecto, fíjala (…) en .nvmrc.</value>
     </data>
     <data name="Size_Bytes_one" xml:space="preserve">
         <value>{0} byte</value>
@@ -2154,6 +2217,9 @@ Puedes ejecutar `flock install` en una terminal o reinstalar Flock.</value>
     </data>
     <data name="Worktree_UsesSiteSettings" xml:space="preserve">
         <value>Usa la configuración de {0}: PHP, Node.js, HTTPS y la raíz de documentos (también se aplican las versiones que fija la rama). Cámbiala en {0}.</value>
+    </data>
+    <data name="Worktree_UsesSiteSettingsNode" xml:space="preserve">
+        <value>Usa la configuración de {0}: Node.js y HTTPS (también se aplica la versión que fija la rama). Cámbiala en {0}.</value>
     </data>
     <data name="Worktree_Waiting" xml:space="preserve">
         <value>Esperando a que termine otra preparación…</value>

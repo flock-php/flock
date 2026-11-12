@@ -65,11 +65,19 @@ func (s *server) addWriteTools(srv *mcp.Server) {
 
 	mcp.AddTool(srv, &mcp.Tool{
 		Name: "proxy_site",
-		Description: "Serve a server of its own, e.g. a Node.js dev server (Next.js, Nuxt, Vite) or an object store, at " +
+		Description: "Serve a server of its own, e.g. a dashboard, an object store, a Docker container or a Go or Python app, at " +
 			"http(s)://<name>.test: every request, WebSocket upgrades included, passes to the upstream with its Host header. " +
-			"Proxying a name again changes its upstream. Start the server itself as usual (e.g. npm run dev).",
+			"Proxying a name again changes its upstream. With a command, Flock can start and stop the server " +
+			"(proxy_server); without one, start the server yourself.",
 		Annotations: additive(true),
 	}, s.proxySite)
+
+	mcp.AddTool(srv, &mcp.Tool{
+		Name:        "proxy_server",
+		Description: "Start or stop the server of a proxy that has a command (see proxy_site); its output is the service log the proxy's command names.",
+		Annotations: additive(false),
+		InputSchema: schema[proxyServerIn](map[string][]any{"action": {"start", "stop"}}),
+	}, s.proxyServer)
 
 	mcp.AddTool(srv, &mcp.Tool{
 		Name: "update_site",
@@ -80,10 +88,13 @@ func (s *server) addWriteTools(srv *mcp.Server) {
 			"working on the project gets it); pin without a version pins the one the site uses now.\n" +
 			"- add_domain (domain): an extra domain, a subdomain (\"tenant1\" → tenant1.<site>.test) or an alias (\"my-app-2.test\").\n" +
 			"- set_server (server, worker): run PHP through FastCGI (PHP-FPM) or FrankenPHP, optionally in Octane's worker mode.\n" +
-			"- restart: restart a FrankenPHP site's process, e.g. so Octane workers load changed code.",
+			"- set_type (type): serve it as a php site or as a node app, whose dev server (npm run dev) Flock starts on the first visit.\n" +
+			"- restart: restart a FrankenPHP site's process, e.g. so Octane workers load changed code, or a Node.js app's dev server.\n" +
+			"- stop: stop a Node.js app's dev server until the site's next request (it also stops after 30 idle minutes).",
 		Annotations: additive(false),
 		InputSchema: schema[updateSiteIn](map[string][]any{
-			"action": {"secure", "unsecure", "isolate", "unisolate", "pin", "unpin", "add_domain", "set_server", "restart"},
+			"action": {"secure", "unsecure", "isolate", "unisolate", "pin", "unpin", "add_domain", "set_server", "set_type", "restart", "stop"},
+			"type":   {"php", "node"},
 			"tool":   {"php", "node"},
 			"server": {"fastcgi", "frankenphp"},
 			"worker": {"classic", "octane"},
@@ -648,9 +659,12 @@ func (s *server) linkSite(ctx context.Context, _ *mcp.CallToolRequest, in linkSi
 }
 
 type proxySiteIn struct {
-	Name     string `json:"name" jsonschema:"the proxy's name, which makes its domain <name>.test"`
-	Upstream string `json:"upstream" jsonschema:"where requests go: a port on 127.0.0.1 (3000), host:port (localhost:5173) or a URL (https://127.0.0.1:8443)"`
-	Secure   *bool  `json:"secure,omitempty" jsonschema:"serve over HTTPS; left out, a new proxy is served over HTTP and an existing one keeps its setting"`
+	Name        string  `json:"name" jsonschema:"the proxy's name, which makes its domain <name>.test"`
+	Upstream    string  `json:"upstream" jsonschema:"where requests go: a port on 127.0.0.1 (3000), host:port (localhost:5173) or a URL (https://127.0.0.1:8443)"`
+	Secure      *bool   `json:"secure,omitempty" jsonschema:"serve over HTTPS; left out, a new proxy is served over HTTP and an existing one keeps its setting"`
+	Command     *string `json:"command,omitempty" jsonschema:"the command that starts the server (one line), so proxy_server can start and stop it; empty removes it; left out, it stays as it is"`
+	Dir         string  `json:"dir,omitempty" jsonschema:"the absolute folder the command runs in; left out, the project Flock was started in"`
+	StopCommand *string `json:"stop_command,omitempty" jsonschema:"for a command that starts the server in the background and exits (docker compose up -d): the command that stops it"`
 }
 
 type proxySiteOut struct {
@@ -667,6 +681,19 @@ func (s *server) proxySite(ctx context.Context, _ *mcp.CallToolRequest, in proxy
 		return nil, proxySiteOut{}, err
 	}
 	name := config.SiteName(in.Name)
+	if in.Command != nil || in.StopCommand != nil || in.Dir != "" {
+		change := api.ProxyChange{Command: in.Command, StopCommand: in.StopCommand}
+		dir := in.Dir
+		if dir == "" && in.Command != nil && *in.Command != "" {
+			dir = s.Dir
+		}
+		if dir != "" {
+			change.Dir = &dir
+		}
+		if st, err = s.Daemon.UpdateProxy(ctx, name, change); err != nil {
+			return nil, proxySiteOut{}, err
+		}
+	}
 	for _, p := range st.Proxies {
 		if p.Name == name {
 			if p.Problem != "" {
@@ -678,6 +705,39 @@ func (s *server) proxySite(ctx context.Context, _ *mcp.CallToolRequest, in proxy
 	return nil, proxySiteOut{Message: "Proxied " + name + "."}, nil
 }
 
+type proxyServerIn struct {
+	Name   string `json:"name" jsonschema:"the proxy's name"`
+	Action string `json:"action" jsonschema:"start or stop"`
+}
+
+func (s *server) proxyServer(ctx context.Context, _ *mcp.CallToolRequest, in proxyServerIn) (*mcp.CallToolResult, proxySiteOut, error) {
+	var (
+		st  api.Status
+		err error
+	)
+	switch in.Action {
+	case "start":
+		st, err = s.Daemon.StartProxy(ctx, in.Name)
+	case "stop":
+		st, err = s.Daemon.StopProxy(ctx, in.Name)
+	default:
+		return nil, proxySiteOut{}, fmt.Errorf("unknown action %q: start or stop", in.Action)
+	}
+	if err != nil {
+		return nil, proxySiteOut{}, err
+	}
+	for _, p := range st.Proxies {
+		if p.Name == in.Name && p.Command != nil {
+			msg := fmt.Sprintf("%s's server is %s.", p.Name, p.Command.State)
+			if in.Action == "start" {
+				msg = fmt.Sprintf("Starting %s's server; its output is the service log %s, and the proxy's command shows when it runs.", p.Name, p.Command.Log)
+			}
+			return nil, proxySiteOut{Message: msg, Proxy: &p}, nil
+		}
+	}
+	return nil, proxySiteOut{Message: "Done."}, nil
+}
+
 type updateSiteIn struct {
 	siteArg
 	Action  string `json:"action" jsonschema:"what to change; see the tool's description"`
@@ -686,6 +746,7 @@ type updateSiteIn struct {
 	Domain  string `json:"domain,omitempty" jsonschema:"add_domain: a subdomain (tenant1) or an alias (my-app-2.test)"`
 	Server  string `json:"server,omitempty" jsonschema:"set_server: fastcgi or frankenphp"`
 	Worker  string `json:"worker,omitempty" jsonschema:"set_server with frankenphp: classic (the default) or octane (Laravel Octane's worker mode)"`
+	Type    string `json:"type,omitempty" jsonschema:"set_type: php or node"`
 }
 
 func (s *server) updateSite(ctx context.Context, _ *mcp.CallToolRequest, in updateSiteIn) (*mcp.CallToolResult, siteActionOut, error) {
@@ -756,9 +817,18 @@ func (s *server) updateSite(ctx context.Context, _ *mcp.CallToolRequest, in upda
 		}
 		st, err = s.Daemon.UpdateSite(ctx, site.Name, change)
 		msg = fmt.Sprintf("%s now runs on %s.", site.Name, in.Server)
+	case "set_type":
+		if in.Type != config.TypePHP && in.Type != config.TypeNode {
+			return nil, siteActionOut{}, errors.New("set_type needs type: php or node")
+		}
+		st, err = s.Daemon.UpdateSite(ctx, site.Name, api.SiteChange{Type: &in.Type})
+		msg = fmt.Sprintf("%s is served as a %s site.", site.Name, config.TypeName(in.Type))
 	case "restart":
 		st, err = s.Daemon.RestartSite(ctx, site.Name)
 		msg = fmt.Sprintf("Restarted %s.", site.Name)
+	case "stop":
+		st, err = s.Daemon.StopSite(ctx, site.Name)
+		msg = fmt.Sprintf("Stopped %s's dev server; the next request starts it again.", site.Name)
 	default:
 		return nil, siteActionOut{}, fmt.Errorf("unknown action %q", in.Action)
 	}

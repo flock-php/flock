@@ -193,7 +193,7 @@ func (c *Config) worktreeSites(byName map[string]Site) {
 			// Settings follow the parent; the server too, except FrankenPHP, whose process and
 			// port are the parent's own.
 			byName[name] = Site{
-				Name: name, Path: wt.Path, PHP: parent.PHP, Node: parent.Node, Secured: parent.Secured,
+				Name: name, Path: wt.Path, Type: parent.Kind(), PHP: parent.PHP, Node: parent.Node, Secured: parent.Secured,
 				Root: parent.Root, Parent: parent.Name, Branch: wt.Branch,
 			}
 		}

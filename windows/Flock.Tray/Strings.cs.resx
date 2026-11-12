@@ -189,6 +189,9 @@ Podrobnosti najdete v %LocalAppData%\Flock\tray.log.</value>
     <data name="Common_Canceled" xml:space="preserve">
         <value>Zrušeno.</value>
     </data>
+    <data name="Common_Choose" xml:space="preserve">
+        <value>Vybrat…</value>
+    </data>
     <data name="Common_Close" xml:space="preserve">
         <value>Zavřít</value>
     </data>
@@ -971,8 +974,35 @@ Podrobnosti najdete v %LocalAppData%\Flock\tray.log.</value>
     <data name="Process_DidNotStart" xml:space="preserve">
         <value>Proces se nespustil.</value>
     </data>
+    <data name="Proxy_AddCommands" xml:space="preserve">
+        <value>Přidat příkazy…</value>
+    </data>
+    <data name="Proxy_AddCommandsTitle" xml:space="preserve">
+        <value>Přidat příkazy k {0}</value>
+    </data>
+    <data name="Proxy_CommandHelp" xml:space="preserve">
+        <value>Flock spustí spouštěcí příkaz, když kliknete na Spustit, a zobrazí jeho výstup. U příkazu, který spouští server na pozadí, jako docker compose up -d, přidejte příkaz, který ho zastaví.</value>
+    </data>
+    <data name="Proxy_Commands" xml:space="preserve">
+        <value>Příkazy</value>
+    </data>
+    <data name="Proxy_CommandsOptional" xml:space="preserve">
+        <value>Příkazy (volitelné)</value>
+    </data>
+    <data name="Proxy_CommandsTitle" xml:space="preserve">
+        <value>Příkazy pro {0}</value>
+    </data>
     <data name="Proxy_NothingAnswers" xml:space="preserve">
         <value>Na {0} nic neodpovídá. Spusťte tam server.</value>
+    </data>
+    <data name="Proxy_RemoveCommands" xml:space="preserve">
+        <value>Odebrat příkazy</value>
+    </data>
+    <data name="Proxy_StartInSettings" xml:space="preserve">
+        <value>{0}. Spusťte ho v Nastavení → Weby.</value>
+    </data>
+    <data name="Proxy_StopCommandHint" xml:space="preserve">
+        <value>Jen pro server, který běží na pozadí, jako docker compose up -d.</value>
     </data>
     <data name="Releases_Available" xml:space="preserve">
         <value>k dispozici {0}</value>
@@ -1496,14 +1526,11 @@ Podrobnosti najdete v %LocalAppData%\Flock\tray.log.</value>
     <data name="Sites_AddProxy" xml:space="preserve">
         <value>Přidat proxy…</value>
     </data>
-    <data name="Sites_AddProxyDetails" xml:space="preserve">
-        <value>Flock obsluhuje &lt;název&gt;.{0} z vlastního serveru, např. vývojového serveru Next.js, Nuxt nebo Vite. Samotný port znamená 127.0.0.1.</value>
+    <data name="Sites_AddProxyServerTooltip" xml:space="preserve">
+        <value>Obsluhovat vlastní server, např. dashboard nebo kontejner Dockeru, na doméně .test</value>
     </data>
     <data name="Sites_AddProxyTitle" xml:space="preserve">
         <value>Přidat proxy</value>
-    </data>
-    <data name="Sites_AddProxyTooltip" xml:space="preserve">
-        <value>Obsluhovat vlastní server, např. vývojový server Node.js na nějakém portu, na doméně .test</value>
     </data>
     <data name="Sites_AddSite" xml:space="preserve">
         <value>Přidat web…</value>
@@ -1568,11 +1595,23 @@ Podrobnosti najdete v %LocalAppData%\Flock\tray.log.</value>
     <data name="Sites_Classic" xml:space="preserve">
         <value>Klasický</value>
     </data>
+    <data name="Sites_Command" xml:space="preserve">
+        <value>Příkaz</value>
+    </data>
     <data name="Sites_Default" xml:space="preserve">
         <value>Výchozí</value>
     </data>
     <data name="Sites_DefaultVersion" xml:space="preserve">
         <value>Výchozí ({0})</value>
+    </data>
+    <data name="Sites_DevServer" xml:space="preserve">
+        <value>Vývojový server</value>
+    </data>
+    <data name="Sites_DevServerFirstVisit" xml:space="preserve">
+        <value>Flock spustí vývojový server při první návštěvě webu.</value>
+    </data>
+    <data name="Sites_DevServerFootnote" xml:space="preserve">
+        <value>Flock spustí skript dev projektu s jeho verzí Node.js, když někdo web navštíví, a po 30 minutách bez návštěv ho zastaví.</value>
     </data>
     <data name="Sites_DocumentRoot" xml:space="preserve">
         <value>Kořenová složka webu</value>
@@ -1619,6 +1658,9 @@ Podrobnosti najdete v %LocalAppData%\Flock\tray.log.</value>
     <data name="Sites_FrankenPhpRunningWorker" xml:space="preserve">
         <value>Běží FrankenPHP {0} s PHP {1} · režim workerů</value>
     </data>
+    <data name="Sites_NoOutputYet" xml:space="preserve">
+        <value>Zatím žádný výstup.</value>
+    </data>
     <data name="Sites_NoSites" xml:space="preserve">
         <value>Žádné weby</value>
     </data>
@@ -1633,6 +1675,12 @@ Podrobnosti najdete v %LocalAppData%\Flock\tray.log.</value>
     </data>
     <data name="Sites_OctaneTooltip" xml:space="preserve">
         <value>Pro režim workerů nainstalujte do projektu Laravel Octane (composer require laravel/octane).</value>
+    </data>
+    <data name="Sites_OpenLog" xml:space="preserve">
+        <value>Otevřít log</value>
+    </data>
+    <data name="Sites_Output" xml:space="preserve">
+        <value>Výstup</value>
     </data>
     <data name="Sites_PhpCgiMeanwhile" xml:space="preserve">
         <value>Mezitím web obsluhuje PHP-CGI.</value>
@@ -1685,8 +1733,11 @@ Podrobnosti najdete v %LocalAppData%\Flock\tray.log.</value>
     <data name="Sites_Proxy" xml:space="preserve">
         <value>Proxy</value>
     </data>
-    <data name="Sites_ProxyFootnote" xml:space="preserve">
-        <value>Každý požadavek se předá cíli i s hlavičkou Host, včetně přechodu na WebSocket (hot reload). Flock server nespouští, takže ho spusťte jako obvykle. Dokud neodpovídá, {0} zobrazuje stránku s touto informací.</value>
+    <data name="Sites_ProxyFootnoteCommands" xml:space="preserve">
+        <value>Každý požadavek se předá cíli i s hlavičkou Host, včetně přechodu na WebSocket (hot reload). Dokud neodpovídá, {0} zobrazuje stránku s touto informací.</value>
+    </data>
+    <data name="Sites_ProxyFootnoteNoCommands" xml:space="preserve">
+        <value>Každý požadavek se předá cíli i s hlavičkou Host, včetně přechodu na WebSocket (hot reload). Flock server nespouští, takže ho spusťte jako obvykle, nebo mu níže zadejte příkazy. Dokud neodpovídá, {0} zobrazuje stránku s touto informací.</value>
     </data>
     <data name="Sites_ProxyName" xml:space="preserve">
         <value>Název</value>
@@ -1772,11 +1823,17 @@ Podrobnosti najdete v %LocalAppData%\Flock\tray.log.</value>
     <data name="Sites_Site" xml:space="preserve">
         <value>Web</value>
     </data>
+    <data name="Sites_State" xml:space="preserve">
+        <value>Stav</value>
+    </data>
     <data name="Sites_SubdomainsOnlyHere" xml:space="preserve">
         <value>Subdomény fungují, jen když je přidáte sem: {0}.</value>
     </data>
     <data name="Sites_Subtitle" xml:space="preserve">
         <value>Weby přidané jednotlivě a každá složka uvnitř vašich složek projektů.</value>
+    </data>
+    <data name="Sites_Type" xml:space="preserve">
+        <value>Typ</value>
     </data>
     <data name="Sites_Unpin" xml:space="preserve">
         <value>Odepnout</value>
@@ -1814,8 +1871,11 @@ Podrobnosti najdete v %LocalAppData%\Flock\tray.log.</value>
     <data name="Sites_UpstreamPlaceholder" xml:space="preserve">
         <value>Port, hostitel:port nebo URL</value>
     </data>
-    <data name="Sites_UpstreamPlaceholderExample" xml:space="preserve">
-        <value>Port, hostitel:port nebo URL, např. 3000</value>
+    <data name="Sites_UpstreamPlaceholderShort" xml:space="preserve">
+        <value>3000, hostitel:port nebo URL</value>
+    </data>
+    <data name="Sites_UpstreamPortMeans" xml:space="preserve">
+        <value>Samotný port znamená 127.0.0.1.</value>
     </data>
     <data name="Sites_UseFile" xml:space="preserve">
         <value>Použít {0}</value>
@@ -1837,6 +1897,9 @@ Podrobnosti najdete v %LocalAppData%\Flock\tray.log.</value>
     </data>
     <data name="Sites_VersionsFootnote" xml:space="preserve">
         <value>Verze zvolená zde platí jen na tomto počítači. Chcete-li ji nastavit všem, kdo na projektu pracují, připněte ji (…): PHP se zapíše do .flockrc, Node.js do .nvmrc.</value>
+    </data>
+    <data name="Sites_VersionsFootnoteNode" xml:space="preserve">
+        <value>Verze zvolená zde platí jen na tomto počítači. Chcete-li ji nastavit všem, kdo na projektu pracují, připněte ji (…) do .nvmrc.</value>
     </data>
     <data name="Size_Bytes_few" xml:space="preserve">
         <value>{0} bajty</value>
@@ -2178,6 +2241,9 @@ Můžete v terminálu spustit `flock install`, nebo Flock znovu nainstalovat.</v
     </data>
     <data name="Worktree_UsesSiteSettings" xml:space="preserve">
         <value>Používá nastavení webu {0}: PHP, Node.js, HTTPS a kořenovou složku (platí i verze připnuté ve větvi). Změníte je u webu {0}.</value>
+    </data>
+    <data name="Worktree_UsesSiteSettingsNode" xml:space="preserve">
+        <value>Používá nastavení webu {0}: Node.js a HTTPS (platí i verze připnutá ve větvi). Změníte je u webu {0}.</value>
     </data>
     <data name="Worktree_Waiting" xml:space="preserve">
         <value>Čeká se na dokončení jiné přípravy…</value>

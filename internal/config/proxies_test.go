@@ -113,7 +113,9 @@ func TestAProxyServesAParkedDirectoryOfTheSameName(t *testing.T) {
 func TestProxiesRoundTrip(t *testing.T) {
 	root := t.TempDir()
 	cfg := Default()
-	if err := cfg.UpsertProxy(Proxy{Name: "s3", Upstream: "http://127.0.0.1:9000", Secured: true}); err != nil {
+	dir := t.TempDir()
+	if err := cfg.UpsertProxy(Proxy{Name: "s3", Upstream: "http://127.0.0.1:9000", Secured: true,
+		Command: "docker compose up -d", Dir: dir, StopCommand: "docker compose stop"}); err != nil {
 		t.Fatal(err)
 	}
 	if err := cfg.Save(root); err != nil {
@@ -123,7 +125,32 @@ func TestProxiesRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if p, ok := loaded.FindProxy("s3"); !ok || p != cfg.Proxies[0] || loaded.ProxyDomain(p) != "s3.test" {
+	if p, ok := loaded.FindProxy("s3"); !ok || p != cfg.Proxies[0] || loaded.ProxyDomain(p) != "s3.test" || !p.Background() {
 		t.Fatalf("got %+v", loaded.Proxies)
+	}
+}
+
+func TestProxyCommandsNeedAnAbsoluteFolderAndOneLine(t *testing.T) {
+	cfg := Default()
+	dir := t.TempDir()
+	for _, tc := range []struct {
+		name string
+		p    Proxy
+		ok   bool
+	}{
+		{"no command", Proxy{}, true},
+		{"command in a folder", Proxy{Command: "npm run dev", Dir: dir}, true},
+		{"command without a folder", Proxy{Command: "npm run dev"}, false},
+		{"relative folder", Proxy{Command: "npm run dev", Dir: "app"}, false},
+		{"two lines", Proxy{Command: "npm i\nnpm run dev", Dir: dir}, false},
+		{"stop command of two lines", Proxy{Command: "up", StopCommand: "a\nb", Dir: dir}, false},
+		{"stop command without a command", Proxy{StopCommand: "docker compose stop", Dir: dir}, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			tc.p.Name, tc.p.Upstream = "app", "http://127.0.0.1:3000"
+			if err := cfg.UpsertProxy(tc.p); (err == nil) != tc.ok {
+				t.Fatalf("UpsertProxy = %v, want ok %v", err, tc.ok)
+			}
+		})
 	}
 }

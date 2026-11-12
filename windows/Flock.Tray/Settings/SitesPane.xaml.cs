@@ -27,6 +27,9 @@ internal sealed partial class SitesPane : UserControl, ISettingsPane
     private readonly HashSet<string> restarting = [];
     private readonly SitesViewModel viewModel;
     private bool active;
+    // The output of the selected Node.js site's dev server or proxy's command (see Output).
+    private OutputPanel? output;
+    private bool outputShown;
     private CancellationTokenSource? activeLifetime;
     private Task pendingSecure = Task.CompletedTask;
 
@@ -59,12 +62,14 @@ internal sealed partial class SitesPane : UserControl, ISettingsPane
         activeLifetime?.Dispose();
         activeLifetime = CancellationTokenSource.CreateLinkedTokenSource(hidden);
         ApplyStatus();
+        RefreshDetail(); // the output reads again
         await HandlePendingSecureAsync(hidden);
     }
 
     public Task ReleaseAsync()
     {
         active = false;
+        output?.Stop();
         activeLifetime?.Cancel();
         Model.Changed -= StateChanged;
         viewModel.SelectionChanged -= UpdateRetained;
@@ -74,6 +79,7 @@ internal sealed partial class SitesPane : UserControl, ISettingsPane
     public void Hidden()
     {
         active = false;
+        output?.Stop();
         activeLifetime?.Cancel();
     }
 
@@ -243,6 +249,16 @@ internal sealed partial class SitesPane : UserControl, ISettingsPane
 
     private void RefreshDetail()
     {
+        outputShown = false;
+        ShowDetail();
+        if (!outputShown)
+        {
+            output?.Stop();
+        }
+    }
+
+    private void ShowDetail()
+    {
         if (!loaded)
         {
             return;
@@ -302,14 +318,22 @@ internal sealed partial class SitesPane : UserControl, ISettingsPane
     private async Task AddProxyAsync()
     {
         var tld = Model.Status?.Dns.Tld is { Length: > 0 } t ? t : "test";
-        var name = new TextBox { Header = Strings.Sites_ProxyName, PlaceholderText = "my-app" };
-        var upstream = new TextBox { Header = Strings.Sites_Upstream, PlaceholderText = Strings.Sites_UpstreamPlaceholderExample };
+        // The placeholders say what the fields take, so the form fits the smallest window (with the
+        // commands open, it scrolls there).
+        var name = new TextBox { Header = Strings.Sites_ProxyName, PlaceholderText = $"my-app → my-app.{tld}" };
+        var upstream = new TextBox { Header = Strings.Sites_Upstream, PlaceholderText = Strings.Sites_UpstreamPlaceholderShort };
+        ToolTipService.SetToolTip(upstream, Strings.Sites_UpstreamPortMeans);
+        // Optional, so collapsed: most proxies point at a server that runs anyway.
+        var commands = NewCommandFields(null);
+        var expander = new Expander
+        {
+            Header = Strings.Proxy_CommandsOptional, Content = commands.Panel, IsExpanded = false,
+            HorizontalAlignment = HorizontalAlignment.Stretch, HorizontalContentAlignment = HorizontalAlignment.Stretch,
+        };
         var dialog = new ContentDialog
         {
             Title = Strings.Sites_AddProxyTitle,
-            Content = Ui.Column(12,
-                Ui.Text(Localization.Format(Strings.Sites_AddProxyDetails, tld)),
-                name, upstream),
+            Content = Ui.DialogForm(Window.XamlRoot, Ui.Column(12, name, upstream, expander)),
             PrimaryButtonText = Strings.Common_Add,
             CloseButtonText = Strings.Common_Cancel,
             DefaultButton = ContentDialogButton.Primary,
@@ -325,7 +349,8 @@ internal sealed partial class SitesPane : UserControl, ISettingsPane
         {
             return;
         }
-        if (await Model.Sites.ProxyAsync(proxyName, proxyUpstream) == OperationOutcome.Succeeded)
+        var change = commands.Change;
+        if (await Model.Sites.ProxyAsync(proxyName, proxyUpstream, change.Command is { Length: > 0 } ? change : null) == OperationOutcome.Succeeded)
         {
             Select(proxyName);
         }
@@ -385,7 +410,10 @@ internal sealed partial class SitesPane : UserControl, ISettingsPane
             Field(Strings.Sites_Server, server),
             Field("HTTPS", https),
             Field(Strings.Sites_Upstream, Ui.Row(8, upstream, change)),
-            Ui.Caption(Localization.Format(Strings.Sites_ProxyFootnote, proxy.Domain), Ui.TertiaryText)));
+            Ui.Caption(
+                Localization.Format(proxy.Command is null ? Strings.Sites_ProxyFootnoteNoCommands : Strings.Sites_ProxyFootnoteCommands, proxy.Domain),
+                Ui.TertiaryText)));
+        panel.Children.Add(ProxyCommandSection(proxy));
 
         var card = Ui.Card(panel, new Thickness(20, 16, 16, 20));
         card.VerticalAlignment = VerticalAlignment.Top;
@@ -438,8 +466,12 @@ internal sealed partial class SitesPane : UserControl, ISettingsPane
 
         var open = Ui.IconButton(Ui.GlyphOpen, Localization.Format(Strings.Common_OpenTarget, site.Url ?? site.Domain), () => Model.Open(site));
         open.IsEnabled = site.Url is not null;
-        var actions = Ui.Row(0, open, Ui.IconButton(Ui.GlyphFolder, Strings.Common_ShowInExplorer, () => Model.Reveal(site.Path)),
-            Ui.IconButton(Ui.GlyphPuzzle, Strings.Sites_PhpExtensions, () => Start("extensions:" + site.Name, () => ShowExtensions(site))), More(site));
+        var actions = Ui.Row(0, open, Ui.IconButton(Ui.GlyphFolder, Strings.Common_ShowInExplorer, () => Model.Reveal(site.Path)));
+        if (!site.IsNode)
+        {
+            actions.Children.Add(Ui.IconButton(Ui.GlyphPuzzle, Strings.Sites_PhpExtensions, () => Start("extensions:" + site.Name, () => ShowExtensions(site))));
+        }
+        actions.Children.Add(More(site));
         if (!site.Parked)
         {
             actions.Children.Add(Ui.IconButton(Ui.GlyphDelete, Strings.Sites_RemoveSite, () => Start(site.Name, () => RemoveSiteAsync(site))));
@@ -484,41 +516,50 @@ internal sealed partial class SitesPane : UserControl, ISettingsPane
         var addDomain = Ui.Link(Strings.Sites_AddDomain, () => Start(site.Name, () => AddDomain(site)));
         addDomain.Padding = new Thickness(0);
         domains.Children.Add(addDomain);
-        var siteSection = Section(Strings.Sites_Site, Field("HTTPS", https), Field(Strings.Sites_Domains, domains));
+        var siteSection = Section(Strings.Sites_Site, Field(Strings.Sites_Type, TypePicker(site)), Field("HTTPS", https), Field(Strings.Sites_Domains, domains));
         if (Model.Status?.Dns is { Wildcard: false, WildcardProblem.Length: > 0 } dns)
         {
             siteSection.Children.Add(Ui.Caption(Localization.Format(Strings.Sites_SubdomainsOnlyHere, dns.WildcardProblem), Ui.Caution));
         }
-        siteSection.Children.Add(Field(Strings.Sites_Root, RootPicker(site)));
-        foreach (var hint in RootHints(site))
+        // A Node.js app is served by its dev server, not from a folder.
+        if (!site.IsNode)
         {
-            siteSection.Children.Add(hint);
+            siteSection.Children.Add(Field(Strings.Sites_Root, RootPicker(site)));
+            foreach (var hint in RootHints(site))
+            {
+                siteSection.Children.Add(hint);
+            }
+            siteSection.Children.Add(Ui.Caption(Strings.Sites_RootFootnote, Ui.TertiaryText));
         }
-        siteSection.Children.Add(Ui.Caption(
-            Strings.Sites_RootFootnote, Ui.TertiaryText));
         panel.Children.Add(siteSection);
         panel.Children.Add(Share(site));
 
-        // Versions: PHP and Node.js, with what pins or isolates them.
-        var phpPicker = Picker("PHP", php, site.PhpSource, site.PhpPinned, site.PhpFile, config?.DefaultPhp ?? "",
-            config?.Php.Select(p => p.Version).ToList() ?? [],
-            version => new SiteChange(Php: version), site.Name, value => row?.SetDraftPhp(value));
+        // Versions: PHP and Node.js, with what pins or isolates them (a Node.js app has no PHP).
         var nodePicker = Picker("Node", node, site.NodeSource, Major(site.NodePinned), site.NodeFile, config?.DefaultNode ?? "",
             config?.NodeMajors ?? [],
             version => new SiteChange(Node: version), site.Name, value => row?.SetDraftNode(value));
-        var versions = Section(Strings.Versions_Versions, Field("PHP", phpPicker), Field("Node.js", nodePicker));
+        var versions = Section(Strings.Versions_Versions);
+        if (!site.IsNode)
+        {
+            var phpPicker = Picker("PHP", php, site.PhpSource, site.PhpPinned, site.PhpFile, config?.DefaultPhp ?? "",
+                config?.Php.Select(p => p.Version).ToList() ?? [],
+                version => new SiteChange(Php: version), site.Name, value => row?.SetDraftPhp(value));
+            versions.Children.Add(Field("PHP", phpPicker));
+        }
+        versions.Children.Add(Field("Node.js", nodePicker));
         foreach (var hint in Hints(site))
         {
             versions.Children.Add(hint);
         }
-        versions.Children.Add(Ui.Caption(
-            Strings.Sites_VersionsFootnote,
+        versions.Children.Add(Ui.Caption(site.IsNode
+                ? Strings.Sites_VersionsFootnoteNode
+                : Strings.Sites_VersionsFootnote,
             Ui.TertiaryText));
         panel.Children.Add(versions);
 
-        panel.Children.Add(Server(site, row));
+        panel.Children.Add(site.IsNode ? DevServer(site) : Server(site, row));
 
-        if (Boost(site) is { } boost)
+        if (!site.IsNode && Boost(site) is { } boost)
         {
             panel.Children.Add(Section("Laravel Boost", boost));
         }
@@ -1072,7 +1113,7 @@ internal sealed partial class SitesPane : UserControl, ISettingsPane
             menu.Items.Add(Item(Localization.Format(Strings.Sites_PinNodeItem, nodeMajor), () => Start(site.Name, () => Pin(site, "node", nodeMajor,
                 Localization.Format(Strings.Sites_PinNodeDetails, nodeMajor, nodeFile, site.Path)))));
         }
-        if (site.RootState is "" or Status.DocumentRootState.Empty && site.RootSource != Status.VersionSource.Project)
+        if (!site.IsNode && site.RootState is "" or Status.DocumentRootState.Empty && site.RootSource != Status.VersionSource.Project)
         {
             menu.Items.Add(Item(Localization.Format(Strings.Sites_PinRootItem, RootLabel(site.Root)), () => Start(site.Name, () => Pin(site, "root", site.Root,
                 Localization.Format(Strings.Sites_PinRootDetails, site.Root, site.Path, RootLabel(site.Root))))));

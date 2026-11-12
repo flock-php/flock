@@ -161,6 +161,8 @@ public sealed class Status
         /// <summary>Something answers at the upstream; Server names it when it runs on this machine, e.g. "Node.js 22.23.4".</summary>
         public bool Running { get; init; }
         public string? Server { get; init; }
+        /// <summary>The command Flock starts the server with, when the proxy has one.</summary>
+        public ProxyCommand? Command { get; init; }
 
         /// <summary>The upstream without the http:// Flock adds: 127.0.0.1:3000.</summary>
         [JsonIgnore]
@@ -169,6 +171,94 @@ public sealed class Status
         /// <summary>What answers at the upstream: the server's name, "Running" or "Not running".</summary>
         [JsonIgnore]
         public string ServerLabel => Running ? Server is { Length: > 0 } server ? server : Strings.Proxy_Running : Strings.Proxy_NotRunning;
+    }
+
+    /// <summary>The command that starts a proxy's server, and how that went.</summary>
+    public sealed class ProxyCommand
+    {
+        public string Command { get; init; } = "";
+        /// <summary>The folder it runs in.</summary>
+        public string Dir { get; init; } = "";
+        /// <summary>Set when the command starts the server in the background: the command that stops it.</summary>
+        public string StopCommand { get; init; } = "";
+        /// <summary>One of ProxyState.</summary>
+        public string State { get; init; } = ProxyState.Stopped;
+        /// <summary>Why it failed, or why it's still starting.</summary>
+        public string Problem { get; init; } = "";
+        /// <summary>Name for /v1/logs/services/{name}: the commands' output.</summary>
+        public string Log { get; init; } = "";
+
+        [JsonIgnore]
+        public bool CanStart => State is ProxyState.Stopped or ProxyState.Failed;
+
+        [JsonIgnore]
+        public bool CanStop => State is ProxyState.Starting or ProxyState.Running;
+
+        [JsonIgnore]
+        public string StateLabel => State switch
+        {
+            ProxyState.Starting => Strings.Server_Starting,
+            ProxyState.Running => Strings.Proxy_Running,
+            ProxyState.Stopping => Strings.Server_Stopping,
+            ProxyState.Failed => Problem.Length > 0 ? Localization.Format(Strings.Server_FailedBecause, Problem) : Strings.Server_Failed,
+            _ => Strings.Server_Stopped,
+        };
+    }
+
+    /// <summary>Values of ProxyCommand.State.</summary>
+    public static class ProxyState
+    {
+        public const string Stopped = "stopped";
+        public const string Starting = "starting";
+        public const string Running = "running";
+        public const string Stopping = "stopping";
+        public const string Failed = "failed";
+    }
+
+    /// <summary>A Node.js site's dev server, which Flock starts on the site's first request.</summary>
+    public sealed class SiteNodeServer
+    {
+        /// <summary>One of NodeServerState.</summary>
+        public string State { get; init; } = NodeServerState.Sleeping;
+        public int Port { get; init; }
+        public string Command { get; init; } = "";
+        public string Problem { get; init; } = "";
+        /// <summary>Name for /v1/logs/services/{name}: its output.</summary>
+        public string Log { get; init; } = "";
+
+        [JsonIgnore]
+        public bool CanStart => State is NodeServerState.Sleeping or NodeServerState.Failed;
+
+        [JsonIgnore]
+        public bool CanStop => State is NodeServerState.Starting or NodeServerState.Running;
+
+        [JsonIgnore]
+        public bool CanRestart => State == NodeServerState.Running;
+
+        [JsonIgnore]
+        public string StateLabel => State switch
+        {
+            NodeServerState.Starting => Strings.Server_Starting,
+            NodeServerState.Running => Localization.Format(Strings.Server_RunningOnPort, Port),
+            NodeServerState.Failed => Problem.Length > 0 ? Localization.Format(Strings.Server_StoppedBecause, Problem) : Strings.Server_Stopped,
+            _ => Strings.Server_Sleeping,
+        };
+    }
+
+    /// <summary>Values of SiteNodeServer.State.</summary>
+    public static class NodeServerState
+    {
+        public const string Sleeping = "sleeping";
+        public const string Starting = "starting";
+        public const string Running = "running";
+        public const string Failed = "failed";
+    }
+
+    /// <summary>Values of Site.Type.</summary>
+    public static class SiteType
+    {
+        public const string Php = "php";
+        public const string Node = "node";
     }
 
     /// <summary>One of a site's extra domains: a subdomain ("tenant1") or an alias ("my-app-2.test").</summary>
@@ -232,6 +322,13 @@ public sealed class Status
         /// <summary>The site's FrankenPHP process, when Server is FrankenPHP.</summary>
         [JsonPropertyName("frankenphp")]
         public SiteFrankenPhp? FrankenPhp { get; init; }
+        /// <summary>What the site is: SiteType.Php (also when an older daemon leaves it out) or SiteType.Node.</summary>
+        public string Type { get; init; } = SiteType.Php;
+        /// <summary>A Node.js site's dev server.</summary>
+        public SiteNodeServer? NodeServer { get; init; }
+
+        [JsonIgnore]
+        public bool IsNode => Type == SiteType.Node;
         /// <summary>Whether the project uses Laravel Boost and has Flock's guideline: "" (no Boost) or one of BoostState.</summary>
         public string Boost { get; init; } = "";
         /// <summary>The site's tunnel (`flock share`), while there is one.</summary>
