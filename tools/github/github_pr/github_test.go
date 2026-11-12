@@ -87,7 +87,7 @@ func TestServicePropagatesLinkedIssueGraphQLErrors(t *testing.T) {
 			w.WriteHeader(http.StatusNotFound)
 			return
 		}
-		_, _ = io.WriteString(w, `{"errors":[{"message":"linked issue access denied"}]}`)
+		_, _ = io.WriteString(w, `{"errors":[{"message":"linked issue access denied"}],"data":{"repository":{"pullRequest":{"closingIssuesReferences":{"nodes":[{"number":73}],"pageInfo":{"hasNextPage":false}}}}}}`)
 	}))
 	defer server.Close()
 
@@ -146,13 +146,14 @@ func TestServiceGetsPullRequestsFilesAndUpdates(t *testing.T) {
 
 func TestServiceGetsMergeQueueEnqueuer(t *testing.T) {
 	for _, tt := range []struct {
-		name string
-		body string
-		want string
-		fail bool
+		name    string
+		body    string
+		want    string
+		wantErr string
 	}{
 		{name: "enqueued", body: `{"data":{"repository":{"pullRequest":{"mergeQueueEntry":{"enqueuer":{"login":"maintainer"}}}}}}`, want: "maintainer"},
-		{name: "not enqueued", body: `{"data":{"repository":{"pullRequest":{"mergeQueueEntry":null}}}}`, fail: true},
+		{name: "not enqueued", body: `{"data":{"repository":{"pullRequest":{"mergeQueueEntry":null}}}}`, wantErr: "pull request #87 is not in the merge queue"},
+		{name: "graphql error wins over partial data", body: `{"errors":[{"message":"merge queue access denied"}],"data":{"repository":{"pullRequest":{"mergeQueueEntry":{"enqueuer":{"login":"maintainer"}}}}}}`, wantErr: "get merge queue enqueuer for pull request #87: merge queue access denied"},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -164,10 +165,10 @@ func TestServiceGetsMergeQueueEnqueuer(t *testing.T) {
 				t.Fatal(err)
 			}
 			got, err := New(client).GetMergeQueueEnqueuer("flock-php", "flock", 87)
-			if tt.fail && err == nil {
-				t.Fatal("GetMergeQueueEnqueuer() returned nil error")
+			if tt.wantErr != "" && (err == nil || err.Error() != tt.wantErr) {
+				t.Fatalf("GetMergeQueueEnqueuer() error = %v, want %q", err, tt.wantErr)
 			}
-			if !tt.fail && (err != nil || got != tt.want) {
+			if tt.wantErr == "" && (err != nil || got != tt.want) {
 				t.Fatalf("GetMergeQueueEnqueuer() = %q, %v", got, err)
 			}
 		})

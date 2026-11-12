@@ -67,6 +67,38 @@ func TestRunStopsOnServiceErrors(t *testing.T) {
 	}
 }
 
+func TestRunStopsBeforeSideEffectsForInvalidQueueRef(t *testing.T) {
+	api := &fakeService{}
+	if err := Execute(Dependencies{MergeGroups: api, PullRequests: api, Repositories: api}, "flock-php", "flock", Event{HeadRef: "refs/heads/main", HeadSHA: "abc", RunID: 7}); err == nil {
+		t.Fatal("Execute() returned nil error")
+	}
+	if len(api.calls) != 0 || api.commented || api.cancelled {
+		t.Fatalf("calls = %v, commented = %t, cancelled = %t", api.calls, api.commented, api.cancelled)
+	}
+}
+
+func TestEvaluateAuthorization(t *testing.T) {
+	for _, tt := range []struct {
+		role string
+		want authorizationState
+	}{
+		{role: "admin", want: allowMerge},
+		{role: "maintain", want: allowMerge},
+		{role: "write", want: rejectMerge},
+	} {
+		if got := evaluateAuthorization(tt.role); got != tt.want {
+			t.Fatalf("evaluateAuthorization(%q) = %d, want %d", tt.role, got, tt.want)
+		}
+	}
+}
+
+func TestAuthorizationApplyRejectsUnknownState(t *testing.T) {
+	err := (authorizationTransition{state: authorizationState(99)}).apply(Dependencies{}, "flock-php", "flock")
+	if err == nil {
+		t.Fatal("apply() returned nil error")
+	}
+}
+
 func TestPullRequestNumber(t *testing.T) {
 	number, err := PullRequestNumber(ref)
 	if err != nil || number != 123 {

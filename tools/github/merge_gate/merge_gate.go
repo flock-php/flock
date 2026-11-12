@@ -38,6 +38,22 @@ type Event struct {
 	RunID   int64
 }
 
+type authorizationState uint8
+
+const (
+	allowMerge authorizationState = iota
+	rejectMerge
+)
+
+type authorizationTransition struct {
+	state    authorizationState
+	number   int
+	enqueuer string
+	role     string
+	headSHA  string
+	runID    int64
+}
+
 func Execute(dependencies Dependencies, owner, repository string, event Event) error {
 	number, err := PullRequestNumber(event.HeadRef)
 	if err != nil {
@@ -51,18 +67,39 @@ func Execute(dependencies Dependencies, owner, repository string, event Event) e
 	if err != nil {
 		return err
 	}
-	if role == "admin" || role == "maintain" {
-		return nil
-	}
+	return authorizationTransition{
+		state:    evaluateAuthorization(role),
+		number:   number,
+		enqueuer: enqueuer,
+		role:     role,
+		headSHA:  event.HeadSHA,
+		runID:    event.RunID,
+	}.apply(dependencies, owner, repository)
+}
 
-	body := fmt.Sprintf("Only a repository admin or maintainer can merge, so this was taken out of the merge queue (queued by @%s). A maintainer will merge it.", enqueuer)
-	if err := dependencies.PullRequests.CreateComment(owner, repository, number, body); err != nil {
-		return err
+func evaluateAuthorization(role string) authorizationState {
+	if role == "admin" || role == "maintain" {
+		return allowMerge
 	}
-	if err := dependencies.MergeGroups.CancelOtherRuns(owner, repository, event.HeadSHA, event.RunID); err != nil {
-		return err
+	return rejectMerge
+}
+
+func (t authorizationTransition) apply(dependencies Dependencies, owner, repository string) error {
+	switch t.state {
+	case allowMerge:
+		return nil
+	case rejectMerge:
+		body := fmt.Sprintf("Only a repository admin or maintainer can merge, so this was taken out of the merge queue (queued by @%s). A maintainer will merge it.", t.enqueuer)
+		if err := dependencies.PullRequests.CreateComment(owner, repository, t.number, body); err != nil {
+			return err
+		}
+		if err := dependencies.MergeGroups.CancelOtherRuns(owner, repository, t.headSHA, t.runID); err != nil {
+			return err
+		}
+		return fmt.Errorf("%w: @%s has the %q role", ErrNotAllowed, t.enqueuer, t.role)
+	default:
+		return fmt.Errorf("unknown merge authorization state %d", t.state)
 	}
-	return fmt.Errorf("%w: @%s has the %q role", ErrNotAllowed, enqueuer, role)
 }
 
 // PullRequestNumber reads the pull request number from a merge queue ref such as

@@ -8,10 +8,11 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/go-github/v93/github"
+
 	"flock/tools/github/github_issue"
 	"flock/tools/github/github_pr"
 	"flock/tools/github/issue_reference"
-	"github.com/google/go-github/v93/github"
 )
 
 type PullRequestGateService interface {
@@ -48,18 +49,38 @@ type Result struct {
 	ClaimedBy     string
 }
 
-type action string
+type gateTransitionState uint8
 
 const (
-	allow           action = "allow"
-	closeWrongBase  action = "close-wrong-base"
-	closeUnapproved action = "close-unapproved"
+	noAction gateTransitionState = iota
+	reopen
+	approve
+	conflict
+	retryApproval
+	closeWrongBase
+	closeUnapproved
 )
 
+type gateTransition struct {
+	state       gateTransitionState
+	pullRequest *github_pr.PullRequest
+	issue       issue_reference.Reference
+	claimant    string
+}
+
 func Execute(dependencies Dependencies, owner, repository string, event Event) (Result, error) {
-	gate := pullRequestGate{dependencies: dependencies, owner: owner, repository: repository, event: event}
+	gate := pullRequestGate{
+		dependencies: dependencies,
+		owner:        owner,
+		repository:   repository,
+		event:        event,
+	}
 	for attempt := 0; ; attempt++ {
-		result, retry, err := gate.evaluate(attempt < 2)
+		transition, err := gate.evaluate(attempt < 2)
+		if err != nil {
+			return Result{}, err
+		}
+		result, retry, err := gate.apply(transition)
 		if err != nil || !retry {
 			return result, err
 		}
@@ -74,13 +95,16 @@ type pullRequestGate struct {
 	event        Event
 }
 
-func (g pullRequestGate) evaluate(retryAllowed bool) (Result, bool, error) {
+func (g pullRequestGate) evaluate(retryAllowed bool) (gateTransition, error) {
 	pr, err := g.dependencies.PullRequests.Get(g.owner, g.repository, g.event.Number)
 	if err != nil || pr == nil {
-		return Result{}, false, err
+		return gateTransition{}, err
 	}
 	if bypassesGate(pr.Author, pr.AuthorAssociation) || (pr.State == "open" && approvedPullRequest(pr) && pr.BaseRef == "main") {
-		return Result{}, false, nil
+		return gateTransition{
+			state:       noAction,
+			pullRequest: pr,
+		}, nil
 	}
 	if pr.State == "closed" {
 		return g.evaluateClosed(pr)
@@ -88,67 +112,128 @@ func (g pullRequestGate) evaluate(retryAllowed bool) (Result, bool, error) {
 	return g.evaluateOpen(pr, retryAllowed)
 }
 
-func (g pullRequestGate) evaluateClosed(pr *github_pr.PullRequest) (Result, bool, error) {
+func (g pullRequestGate) evaluateClosed(pr *github_pr.PullRequest) (gateTransition, error) {
 	if !g.event.BodyEdited || pr.Merged || pr.BaseRef != "main" {
-		return Result{}, false, nil
+		return gateTransition{
+			state:       noAction,
+			pullRequest: pr,
+		}, nil
 	}
 	closedByGate, err := g.dependencies.PullRequests.GateClosed(g.owner, g.repository, pr.Number)
-	if err != nil || !closedByGate {
-		return Result{}, false, err
-	}
-	issue, approved, _, err := firstApprovedIssue(g.dependencies.Issues, g.dependencies.PullRequests, g.owner, g.repository, pr)
 	if err != nil {
-		return Result{}, false, err
+		return gateTransition{}, err
 	}
-	if !approved {
-		return Result{}, false, nil
+	if !closedByGate {
+		return gateTransition{
+			state:       noAction,
+			pullRequest: pr,
+		}, nil
 	}
-	if err := g.dependencies.PullRequests.SetState(g.owner, g.repository, pr.Number, "open"); err != nil {
-		return Result{}, false, err
+	decision, err := firstApprovedIssue(g.dependencies.Issues, g.dependencies.PullRequests, g.owner, g.repository, pr)
+	if err != nil {
+		return gateTransition{}, err
 	}
-	comment := fmt.Sprintf("Thanks, @%s! This pull request references approved issue %s, so it has been reopened.", pr.Author.Login, issue)
-	if err := g.dependencies.PullRequests.CreateComment(g.owner, g.repository, pr.Number, comment); err != nil {
-		return Result{}, false, err
+	if decision.state != approvedLinkedIssue {
+		return gateTransition{
+			state:       noAction,
+			pullRequest: pr,
+		}, nil
 	}
-	return approvedResult(issue), false, nil
+	return gateTransition{
+		state:       reopen,
+		pullRequest: pr,
+		issue:       decision.issue,
+	}, nil
 }
 
-func (g pullRequestGate) evaluateOpen(pr *github_pr.PullRequest, retryAllowed bool) (Result, bool, error) {
+func (g pullRequestGate) evaluateOpen(pr *github_pr.PullRequest, retryAllowed bool) (gateTransition, error) {
 	if g.event.Action == "edited" && !g.event.BaseEdited {
-		return Result{}, false, nil
+		return gateTransition{
+			state:       noAction,
+			pullRequest: pr,
+		}, nil
 	}
 	if pr.BaseRef != "main" {
-		return Result{}, false, closePullRequest(g.dependencies.PullRequests, g.owner, g.repository, pr, closeWrongBase)
+		return gateTransition{
+			state:       closeWrongBase,
+			pullRequest: pr,
+		}, nil
 	}
 	files, err := g.dependencies.PullRequests.ListFiles(g.owner, g.repository, pr.Number)
 	if err != nil {
-		return Result{}, false, err
+		return gateTransition{}, err
 	}
-	decision := evaluate(files)
-	if len(files) != 0 && decision == allow {
-		return Result{}, false, nil
+	if docsOnly(files) == noAction {
+		return gateTransition{
+			state:       noAction,
+			pullRequest: pr,
+		}, nil
 	}
-	issue, approved, claimedBy, err := firstApprovedIssue(g.dependencies.Issues, g.dependencies.PullRequests, g.owner, g.repository, pr)
+	decision, err := firstApprovedIssue(g.dependencies.Issues, g.dependencies.PullRequests, g.owner, g.repository, pr)
 	if err != nil {
-		return Result{}, false, err
+		return gateTransition{}, err
 	}
-	if claimedBy != "" {
-		return Result{ApprovedIssue: &issue, ClaimedBy: claimedBy}, false, nil
+	switch decision.state {
+	case approvedLinkedIssue:
+		return gateTransition{
+			state:       approve,
+			pullRequest: pr,
+			issue:       decision.issue,
+		}, nil
+	case conflictingLinkedIssueClaim:
+		return gateTransition{
+			state:       conflict,
+			pullRequest: pr,
+			issue:       decision.issue,
+			claimant:    decision.claimant,
+		}, nil
+	default:
+		if retryAllowed && g.event.Action == "opened" {
+			return gateTransition{
+				state:       retryApproval,
+				pullRequest: pr,
+			}, nil
+		}
+		return gateTransition{
+			state:       closeUnapproved,
+			pullRequest: pr,
+		}, nil
 	}
-	if approved {
-		return approvedResult(issue), false, nil
-	}
-	if decision == allow {
+}
+
+func (g pullRequestGate) apply(transition gateTransition) (Result, bool, error) {
+	switch transition.state {
+	case noAction:
 		return Result{}, false, nil
-	}
-	if g.event.Action == "opened" && retryAllowed {
+	case reopen:
+		if err := g.dependencies.PullRequests.SetState(g.owner, g.repository, transition.pullRequest.Number, "open"); err != nil {
+			return Result{}, false, err
+		}
+		comment := fmt.Sprintf("Thanks, @%s! This pull request references approved issue %s, so it has been reopened.", transition.pullRequest.Author.Login, transition.issue)
+		if err := g.dependencies.PullRequests.CreateComment(g.owner, g.repository, transition.pullRequest.Number, comment); err != nil {
+			return Result{}, false, err
+		}
+		return approvedResult(transition.issue), false, nil
+	case approve:
+		return approvedResult(transition.issue), false, nil
+	case conflict:
+		return Result{
+			ApprovedIssue: &transition.issue,
+			ClaimedBy:     transition.claimant,
+		}, false, nil
+	case retryApproval:
 		return Result{}, true, nil
+	case closeWrongBase, closeUnapproved:
+		return Result{}, false, closePullRequest(g.dependencies.PullRequests, g.owner, g.repository, transition.pullRequest, transition.state)
+	default:
+		return Result{}, false, fmt.Errorf("unknown pull request gate transition %d", transition.state)
 	}
-	return Result{}, false, closePullRequest(g.dependencies.PullRequests, g.owner, g.repository, pr, closeUnapproved)
 }
 
 func approvedResult(issue issue_reference.Reference) Result {
-	return Result{ApprovedIssue: &issue}
+	return Result{
+		ApprovedIssue: &issue,
+	}
 }
 
 // CloseClaimedIssue closes a pull request whose approved issue was claimed after the gate read it.
@@ -174,18 +259,12 @@ func EnsureClaimComment(pullRequests PullRequestGateService, owner, repository s
 	return pullRequests.CreateComment(owner, repository, number, comment)
 }
 
-func evaluate(files []github_pr.File) action {
-	if docsOnly(files) {
-		return allow
-	}
-	return closeUnapproved
-}
-
-func firstApprovedIssue(issues IssueReader, pullRequests PullRequestGateService, owner, repository string, pr *github_pr.PullRequest) (issue_reference.Reference, bool, string, error) {
+func firstApprovedIssue(issues IssueReader, pullRequests PullRequestGateService, owner, repository string, pr *github_pr.PullRequest) (linkedIssueDecision, error) {
 	linkedIssues, err := pullRequests.ListLinkedIssues(owner, repository, pr.Number)
 	if err != nil {
-		return issue_reference.Reference{}, false, "", err
+		return linkedIssueDecision{}, err
 	}
+	var conflict linkedIssueDecision
 	for _, linkedIssue := range linkedIssues {
 		if linkedIssue.Owner != owner || linkedIssue.Repository != repository {
 			continue
@@ -196,27 +275,61 @@ func firstApprovedIssue(issues IssueReader, pullRequests PullRequestGateService,
 			if isNotFound(err) {
 				continue
 			}
-			return issue_reference.Reference{}, false, "", err
+			return linkedIssueDecision{}, err
 		}
-		if issue == nil || issue.IsPullRequest || issue.State != "open" {
+		switch github_issue.ApprovalFor(issue, pr.Author.Login) {
+		case github_issue.ApprovalDenied:
 			continue
-		}
-		claim, err := issues.FindClaim(owner, reference.Repository, reference.Number)
-		if err != nil {
-			return issue_reference.Reference{}, false, "", err
-		}
-		if claim != nil {
-			if claim.PullRequestNumber == pr.Number && claim.Author == pr.Author.Login {
-				return reference, true, "", nil
+		case github_issue.ApprovalByAssignment:
+			return linkedIssueDecision{
+				state: approvedLinkedIssue,
+				issue: reference,
+			}, nil
+		case github_issue.ApprovalRequiresAutomaticClaim:
+			claim, err := issues.FindClaim(owner, reference.Repository, reference.Number)
+			if err != nil {
+				return linkedIssueDecision{}, err
 			}
-			return reference, false, claim.Author, nil
+			if claim != nil {
+				if claim.PullRequestNumber == pr.Number && claim.Author == pr.Author.Login {
+					return linkedIssueDecision{
+						state: approvedLinkedIssue,
+						issue: reference,
+					}, nil
+				}
+				if conflict.state == noApprovedLinkedIssue {
+					conflict = linkedIssueDecision{
+						state:    conflictingLinkedIssueClaim,
+						issue:    reference,
+						claimant: claim.Author,
+					}
+				}
+				continue
+			}
+			return linkedIssueDecision{
+				state: approvedLinkedIssue,
+				issue: reference,
+			}, nil
 		}
-		if !issueApproved(issue, pr.Author.Login) {
-			continue
-		}
-		return reference, true, "", nil
 	}
-	return issue_reference.Reference{}, false, "", nil
+	if conflict.state == conflictingLinkedIssueClaim {
+		return conflict, nil
+	}
+	return linkedIssueDecision{}, nil
+}
+
+type linkedIssueState uint8
+
+const (
+	noApprovedLinkedIssue linkedIssueState = iota
+	approvedLinkedIssue
+	conflictingLinkedIssueClaim
+)
+
+type linkedIssueDecision struct {
+	state    linkedIssueState
+	issue    issue_reference.Reference
+	claimant string
 }
 
 func isNotFound(err error) bool {
@@ -232,7 +345,7 @@ func CompleteClaim(issues IssueReader, owner, repository string, number int) err
 	return issues.AddLabel(owner, repository, number, github_issue.Claimed)
 }
 
-func closePullRequest(pullRequests PullRequestGateService, owner, repository string, pr *github_pr.PullRequest, decision action) error {
+func closePullRequest(pullRequests PullRequestGateService, owner, repository string, pr *github_pr.PullRequest, decision gateTransitionState) error {
 	var reason, nextStep string
 	switch decision {
 	case closeWrongBase:
@@ -242,7 +355,7 @@ func closePullRequest(pullRequests PullRequestGateService, owner, repository str
 		reason = "Flock takes pull requests only for issues a maintainer has approved, so this one is closed."
 		nextStep = "Edit this pull request's description to reference an approved issue, then save it to reopen automatically."
 	default:
-		return fmt.Errorf("cannot close a pull request for %q", decision)
+		return fmt.Errorf("cannot close a pull request for transition %d", decision)
 	}
 	comment := fmt.Sprintf("Thanks for the PR, @%s! %s %s See [CONTRIBUTING.md](https://github.com/%s/%s/blob/main/CONTRIBUTING.md).\n\n%s", pr.Author.Login, reason, nextStep, owner, repository, github_pr.GateMarker)
 	if err := pullRequests.CreateComment(owner, repository, pr.Number, comment); err != nil {
@@ -255,23 +368,16 @@ func bypassesGate(user github_issue.User, authorAssociation string) bool {
 	return user.Type == "Bot" || authorAssociation == "OWNER" || authorAssociation == "MEMBER" || authorAssociation == "COLLABORATOR"
 }
 
-func docsOnly(files []github_pr.File) bool {
+func docsOnly(files []github_pr.File) gateTransitionState {
+	if len(files) == 0 {
+		return closeUnapproved
+	}
 	for _, file := range files {
 		if !strings.HasPrefix(file.Filename, "docs/") || (file.PreviousFilename != "" && !strings.HasPrefix(file.PreviousFilename, "docs/")) {
-			return false
+			return closeUnapproved
 		}
 	}
-	return true
-}
-
-func issueApproved(issue *github_issue.Issue, author string) bool {
-	if issue == nil || issue.IsPullRequest || issue.State != "open" {
-		return false
-	}
-	if len(issue.Assignees) != 0 {
-		return github_issue.HasAssignee(issue, author)
-	}
-	return github_issue.HasHelpWanted(issue)
+	return noAction
 }
 
 func approvedPullRequest(pr *github_pr.PullRequest) bool {

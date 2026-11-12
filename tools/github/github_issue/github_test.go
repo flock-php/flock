@@ -233,3 +233,26 @@ func TestIssueHelpers(t *testing.T) {
 		t.Fatal("HasAssignee() returned an unexpected result")
 	}
 }
+
+func TestApprovalForClassifiesCurrentIssueState(t *testing.T) {
+	tests := []struct {
+		name  string
+		issue *Issue
+		want  ApprovalState
+	}{
+		{name: "missing issue", want: ApprovalDenied},
+		{name: "closed issue", issue: &Issue{State: "closed"}, want: ApprovalDenied},
+		{name: "pull request", issue: &Issue{State: "open", IsPullRequest: true}, want: ApprovalDenied},
+		{name: "assigned author", issue: &Issue{State: "open", Assignees: []User{{Login: "contributor"}}}, want: ApprovalByAssignment},
+		{name: "assigned other author", issue: &Issue{State: "open", Assignees: []User{{Login: "other"}}, Labels: []Label{{Name: HelpWanted}}}, want: ApprovalDenied},
+		{name: "unassigned help wanted", issue: &Issue{State: "open", Labels: []Label{{Name: HelpWanted}}}, want: ApprovalRequiresAutomaticClaim},
+		{name: "unassigned without help wanted", issue: &Issue{State: "open"}, want: ApprovalDenied},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := ApprovalFor(tt.issue, "contributor"); got != tt.want {
+				t.Fatalf("ApprovalFor() = %d, want %d", got, tt.want)
+			}
+		})
+	}
+}

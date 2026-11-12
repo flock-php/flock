@@ -174,6 +174,7 @@ func TestRunReturnsMaintainerAssignedIssueForAnAssignedContributor(t *testing.T)
 		issue: &github_issue.Issue{
 			State: "open", Assignees: []github_issue.User{{Login: "contributor"}, {Login: "another-contributor"}}, Labels: []github_issue.Label{{Name: github_issue.HelpWanted}},
 		},
+		findClaimErr: errors.New("manual assignments must not read claims"),
 	}
 	result, err := Execute(Dependencies{Issues: &fakeIssueService{api: api}, PullRequests: api}, "flock-php", "flock", Event{Action: "synchronize", Number: 87})
 	if err != nil {
@@ -182,7 +183,86 @@ func TestRunReturnsMaintainerAssignedIssueForAnAssignedContributor(t *testing.T)
 	if result.ApprovedIssue == nil || result.ApprovedIssue.Number != 73 {
 		t.Fatalf("result = %+v, want approved issue flock#73", result)
 	}
-	if want := []string{"pr:get", "pr:list-files", "pr:list-linked-issues", "issue:get", "issue:find-claim"}; !reflect.DeepEqual(api.calls, want) {
+	if want := []string{"pr:get", "pr:list-files", "pr:list-linked-issues", "issue:get"}; !reflect.DeepEqual(api.calls, want) {
+		t.Fatalf("calls = %v, want %v", api.calls, want)
+	}
+}
+
+func TestRunSelectsAnApprovedLinkedIssueAfterAnEarlierConflict(t *testing.T) {
+	api := &fakeService{
+		pullRequest:  pullRequest("open", "Fixes #73 and #74"),
+		linkedIssues: []github_pr.LinkedIssue{linkedIssue(73), linkedIssue(74)},
+		issues: map[int]*github_issue.Issue{
+			73: approvedIssue(),
+			74: approvedIssue(),
+		},
+		claims: map[int]*github_issue.Claim{
+			73: {PullRequestNumber: 86, Author: "first-contributor"},
+		},
+	}
+
+	result, err := Execute(Dependencies{Issues: &fakeIssueService{api: api}, PullRequests: api}, "flock-php", "flock", Event{Action: "synchronize", Number: 87})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.ApprovedIssue == nil || result.ApprovedIssue.Number != 74 || result.ClaimedBy != "" {
+		t.Fatalf("result = %+v, want approved issue flock#74 without a conflict", result)
+	}
+	want := []string{"pr:get", "pr:list-files", "pr:list-linked-issues", "issue:get", "issue:find-claim", "issue:get", "issue:find-claim"}
+	if !reflect.DeepEqual(api.calls, want) {
+		t.Fatalf("calls = %v, want %v", api.calls, want)
+	}
+}
+
+func TestRunStopsAtAnApprovedLinkedIssueBeforeLaterConflicts(t *testing.T) {
+	api := &fakeService{
+		pullRequest:  pullRequest("open", "Fixes #73 and #74"),
+		linkedIssues: []github_pr.LinkedIssue{linkedIssue(73), linkedIssue(74)},
+		issues: map[int]*github_issue.Issue{
+			73: approvedIssue(),
+			74: approvedIssue(),
+		},
+		claims: map[int]*github_issue.Claim{
+			74: {PullRequestNumber: 86, Author: "later-contributor"},
+		},
+	}
+
+	result, err := Execute(Dependencies{Issues: &fakeIssueService{api: api}, PullRequests: api}, "flock-php", "flock", Event{Action: "synchronize", Number: 87})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.ApprovedIssue == nil || result.ApprovedIssue.Number != 73 || result.ClaimedBy != "" {
+		t.Fatalf("result = %+v, want approved issue flock#73 without a conflict", result)
+	}
+	want := []string{"pr:get", "pr:list-files", "pr:list-linked-issues", "issue:get", "issue:find-claim"}
+	if !reflect.DeepEqual(api.calls, want) {
+		t.Fatalf("calls = %v, want %v", api.calls, want)
+	}
+}
+
+func TestRunReturnsTheFirstConflictAfterScanningAllLinkedIssues(t *testing.T) {
+	api := &fakeService{
+		pullRequest:  pullRequest("open", "Fixes #73 and #74"),
+		linkedIssues: []github_pr.LinkedIssue{linkedIssue(73), linkedIssue(74)},
+		issues: map[int]*github_issue.Issue{
+			73: approvedIssue(),
+			74: approvedIssue(),
+		},
+		claims: map[int]*github_issue.Claim{
+			73: {PullRequestNumber: 86, Author: "first-contributor"},
+			74: {PullRequestNumber: 85, Author: "second-contributor"},
+		},
+	}
+
+	result, err := Execute(Dependencies{Issues: &fakeIssueService{api: api}, PullRequests: api}, "flock-php", "flock", Event{Action: "synchronize", Number: 87})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.ApprovedIssue == nil || result.ApprovedIssue.Number != 73 || result.ClaimedBy != "first-contributor" {
+		t.Fatalf("result = %+v, want the first conflict on flock#73", result)
+	}
+	want := []string{"pr:get", "pr:list-files", "pr:list-linked-issues", "issue:get", "issue:find-claim", "issue:get", "issue:find-claim"}
+	if !reflect.DeepEqual(api.calls, want) {
 		t.Fatalf("calls = %v, want %v", api.calls, want)
 	}
 }
@@ -402,6 +482,17 @@ func TestRunReturnsIssueServiceErrors(t *testing.T) {
 	}
 }
 
+func TestApplyRejectsUnknownTransition(t *testing.T) {
+	api := &fakeService{}
+	gate := pullRequestGate{dependencies: Dependencies{PullRequests: api}}
+	if _, _, err := gate.apply(gateTransition{state: gateTransitionState(99)}); err == nil {
+		t.Fatal("apply() returned nil error")
+	}
+	if len(api.calls) != 0 {
+		t.Fatalf("calls = %v, want no side effects", api.calls)
+	}
+}
+
 type fakeService struct {
 	pullRequest  *github_pr.PullRequest
 	files        []github_pr.File
@@ -409,6 +500,7 @@ type fakeService struct {
 	issue        *github_issue.Issue
 	issues       map[int]*github_issue.Issue
 	claim        *github_issue.Claim
+	claims       map[int]*github_issue.Claim
 	gateClosed   bool
 	state        string
 	commented    bool
@@ -478,8 +570,11 @@ func (f *fakeIssueService) Get(_ string, _ string, number int) (*github_issue.Is
 	}
 	return f.api.issue, f.err
 }
-func (f *fakeIssueService) FindClaim(string, string, int) (*github_issue.Claim, error) {
+func (f *fakeIssueService) FindClaim(_ string, _ string, number int) (*github_issue.Claim, error) {
 	f.api.calls = append(f.api.calls, "issue:find-claim")
+	if f.api.claims != nil {
+		return f.api.claims[number], f.api.findClaimErr
+	}
 	return f.api.claim, f.api.findClaimErr
 }
 func (f *fakeIssueService) EnsureClaimedLabel(string, string) error {

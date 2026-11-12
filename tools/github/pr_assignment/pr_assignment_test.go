@@ -91,12 +91,30 @@ func TestExecuteReportsAnotherPullRequestClaim(t *testing.T) {
 
 func TestExecuteCompletesTheOwnerRetry(t *testing.T) {
 	api := &fakeService{
-		issue: &github_issue.Issue{Number: 73, State: "open", Assignees: []github_issue.User{{Login: "contributor"}}, Labels: []github_issue.Label{{Name: github_issue.HelpWanted}}},
+		issue: &github_issue.Issue{Number: 73, State: "open", Labels: []github_issue.Label{{Name: github_issue.HelpWanted}}},
 		claim: &github_issue.Claim{PullRequestNumber: 87, Author: "contributor"},
 	}
 	result, err := Execute(Dependencies{Issues: api}, "flock-php", issue_reference.Reference{Repository: "flock", Number: 73}, 87, "contributor")
 	if err != nil || !result.AutomatedClaim || !api.claimed || !api.removed {
 		t.Fatalf("result = %+v, claimed = %t, removed = %t, err = %v", result, api.claimed, api.removed, err)
+	}
+}
+
+func TestExecuteDoesNotReadOrApplyAStaleClaimForAnAssignedAuthor(t *testing.T) {
+	api := &fakeService{
+		issue: &github_issue.Issue{
+			Number: 73, State: "open", Assignees: []github_issue.User{{Login: "contributor"}},
+			Labels: []github_issue.Label{{Name: github_issue.HelpWanted}},
+		},
+		claim: &github_issue.Claim{PullRequestNumber: 86, Author: "former-contributor"},
+	}
+
+	result, err := Execute(Dependencies{Issues: api}, "flock-php", issue_reference.Reference{Repository: "flock", Number: 73}, 87, "contributor")
+	if err != nil || result != (Result{}) {
+		t.Fatalf("Execute() = %+v, %v; want no-op", result, err)
+	}
+	if api.findClaimCalls != 0 || api.assignee != "" || api.claimed || api.removed {
+		t.Fatalf("unexpected stale-claim side effects: %+v", api)
 	}
 }
 
@@ -130,10 +148,12 @@ type fakeService struct {
 	assignErr      error
 	removeErr      error
 	labelErr       error
+	findClaimCalls int
 }
 
 func (f *fakeService) Get(string, string, int) (*github_issue.Issue, error) { return f.issue, f.getErr }
 func (f *fakeService) FindClaim(string, string, int) (*github_issue.Claim, error) {
+	f.findClaimCalls++
 	return f.claim, f.findClaimErr
 }
 func (f *fakeService) CreateClaim(_ string, _ string, _ int, pullRequestNumber int, author string) error {

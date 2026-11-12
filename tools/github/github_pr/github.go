@@ -87,7 +87,8 @@ func (s *Service) GetMergeQueueEnqueuer(owner, repository string, number int) (s
 		return "", err
 	}
 	var response struct {
-		Data struct {
+		Errors []struct{ Message string }
+		Data   struct {
 			Repository struct {
 				PullRequest struct {
 					MergeQueueEntry *struct {
@@ -99,6 +100,9 @@ func (s *Service) GetMergeQueueEnqueuer(owner, repository string, number int) (s
 	}
 	if _, err := s.client.Do(request, &response); err != nil {
 		return "", err
+	}
+	if len(response.Errors) != 0 {
+		return "", fmt.Errorf("get merge queue enqueuer for pull request #%d: %s", number, response.Errors[0].Message)
 	}
 	entry := response.Data.Repository.PullRequest.MergeQueueEntry
 	if entry == nil || entry.Enqueuer.Login == "" {

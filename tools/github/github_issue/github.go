@@ -203,6 +203,30 @@ func HasAssignee(issue *Issue, username string) bool {
 	return false
 }
 
+type ApprovalState uint8
+
+const (
+	ApprovalDenied ApprovalState = iota
+	ApprovalByAssignment
+	ApprovalRequiresAutomaticClaim
+)
+
+func ApprovalFor(issue *Issue, author string) ApprovalState {
+	if issue == nil || issue.IsPullRequest || issue.State != "open" {
+		return ApprovalDenied
+	}
+	if len(issue.Assignees) != 0 {
+		if HasAssignee(issue, author) {
+			return ApprovalByAssignment
+		}
+		return ApprovalDenied
+	}
+	if HasHelpWanted(issue) {
+		return ApprovalRequiresAutomaticClaim
+	}
+	return ApprovalDenied
+}
+
 // ParseEvent parses an issue webhook payload into owned workflow data.
 func ParseEvent(data []byte) (Event, error) {
 	var event github.IssuesEvent

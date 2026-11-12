@@ -51,29 +51,29 @@ func (c issueClaim) evaluate() (Result, error) {
 	if err != nil {
 		return Result{}, err
 	}
-	if issue == nil || issue.IsPullRequest || issue.State != "open" {
+	switch github_issue.ApprovalFor(issue, c.author) {
+	case github_issue.ApprovalDenied:
 		return Result{ApprovalWithdrawn: true}, nil
-	}
-	claim, err := c.dependencies.Issues.FindClaim(c.owner, c.issueReference.Repository, c.issueReference.Number)
-	if err != nil {
-		return Result{}, err
-	}
-	if claim != nil {
-		if claim.PullRequestNumber != c.pullRequestNumber || claim.Author != c.author {
-			return Result{ClaimedBy: claim.Author}, nil
+	case github_issue.ApprovalByAssignment:
+		return Result{}, nil
+	case github_issue.ApprovalRequiresAutomaticClaim:
+		claim, err := c.dependencies.Issues.FindClaim(c.owner, c.issueReference.Repository, c.issueReference.Number)
+		if err != nil {
+			return Result{}, err
+		}
+		if claim != nil {
+			if claim.PullRequestNumber != c.pullRequestNumber || claim.Author != c.author {
+				return Result{ClaimedBy: claim.Author}, nil
+			}
+			return c.assignClaimOwner(issue, true)
+		}
+		if err := c.dependencies.Issues.CreateClaim(c.owner, c.issueReference.Repository, c.issueReference.Number, c.pullRequestNumber, c.author); err != nil {
+			return Result{}, err
 		}
 		return c.assignClaimOwner(issue, true)
+	default:
+		return Result{}, fmt.Errorf("unknown issue approval state")
 	}
-	if !approvedFor(issue, c.author) {
-		return Result{ApprovalWithdrawn: true}, nil
-	}
-	if len(issue.Assignees) != 0 {
-		return Result{}, nil
-	}
-	if err := c.dependencies.Issues.CreateClaim(c.owner, c.issueReference.Repository, c.issueReference.Number, c.pullRequestNumber, c.author); err != nil {
-		return Result{}, err
-	}
-	return c.assignClaimOwner(issue, true)
 }
 
 func (c issueClaim) assignClaimOwner(issue *github_issue.Issue, automatedClaim bool) (Result, error) {
@@ -98,14 +98,4 @@ func markClaimed(issues IssueClaimer, owner, repository string, issue *github_is
 		return err
 	}
 	return issues.RemoveHelpWanted(owner, repository, issue)
-}
-
-func approvedFor(issue *github_issue.Issue, author string) bool {
-	if issue == nil || issue.IsPullRequest || issue.State != "open" {
-		return false
-	}
-	if len(issue.Assignees) != 0 {
-		return github_issue.HasAssignee(issue, author)
-	}
-	return github_issue.HasHelpWanted(issue)
 }
