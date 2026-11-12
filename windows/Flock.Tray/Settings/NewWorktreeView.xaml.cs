@@ -1,5 +1,6 @@
 using Flock.Kit;
 using Flock.Tray.Features.Sites;
+using Flock.Tray.ViewModels;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 namespace Flock.Tray.Settings;
@@ -21,7 +22,7 @@ internal sealed partial class NewWorktreeView : UserControl
         this.site = site;
         InitializeComponent();
         DatabaseBox.Items.Add("Project default");
-        foreach (var item in SitesPane.DatabaseChoices)
+        foreach (var item in WorktreeDetailViewModel.DatabaseChoices)
         {
             DatabaseBox.Items.Add(item);
         }
@@ -36,7 +37,7 @@ internal sealed partial class NewWorktreeView : UserControl
     public string? Start => !Exists && FromBox.SelectedIndex >= 0 && values[FromBox.SelectedIndex] is { Length: > 0 } start ? start : null;
 
     /// <summary>The database mode, or null for the project's.</summary>
-    public string? Database => DatabaseBox.SelectedIndex > 0 ? SitesPane.DatabaseModes[DatabaseBox.SelectedIndex - 1] : null;
+    public string? Database => DatabaseBox.SelectedIndex > 0 ? WorktreeDetailViewModel.DatabaseModes[DatabaseBox.SelectedIndex - 1] : null;
 
     private bool Exists => branches.Local.Contains(Branch);
 

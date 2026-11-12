@@ -95,7 +95,12 @@
             </Grid>
             <ScrollViewer Grid.Column="1" x:Name="DetailScroller" VerticalScrollBarVisibility="Auto" HorizontalScrollMode="Disabled"
                           HorizontalScrollBarVisibility="Disabled">
-                <ContentControl x:Name="DetailHost" HorizontalContentAlignment="Stretch" VerticalContentAlignment="Stretch" />
+                <!-- The selection's details: a site's, a worktree's or a proxy's (each shows itself when selected). -->
+                <Grid>
+                    <settings:SiteDetailView x:Name="SiteDetails" />
+                    <settings:WorktreeDetailView x:Name="WorktreeDetails" />
+                    <settings:ProxyDetailView x:Name="ProxyDetails" />
+                </Grid>
             </ScrollViewer>
         </Grid>
         <!-- No sites: only the empty state, centred in the whole pane. -->
