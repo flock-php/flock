@@ -109,8 +109,9 @@ struct SuffixPicker: View {
     /// Adds the leading Inherit row (the row follows `current`'s role as the global suffix).
     var allowInherit = false
 
-    /// The domains the menu offers; the config can hold any other one, which the custom field edits.
-    static let presets = ["test", "loc", "local"]
+    /// The domains the menu offers (also its menu rows, below); the config can hold any other
+    /// one, which the custom field edits.
+    static let presets = ["alt", "example", "internal", "loc", "localhost", "test"]
 
     var body: some View {
         @Bindable var model = suffixModel
@@ -122,9 +123,9 @@ struct SuffixPicker: View {
                 if allowInherit {
                     Text("Inherit (.\(current))").tag(SuffixValue.inherit)
                 }
-                Text(".test").tag("test")
-                Text(".loc").tag("loc")
-                Text(".local").tag("local")
+                ForEach(SuffixPicker.presets, id: \.self) { preset in
+                    Text(".\(preset)").tag(preset)
+                }
                 Text("Custom…").tag(SuffixValue.custom)
             }
             .pickerStyle(.menu)
