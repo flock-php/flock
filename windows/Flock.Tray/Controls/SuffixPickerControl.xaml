@@ -1,0 +1,21 @@
+<UserControl
+    x:Class="Flock.Tray.Controls.SuffixPickerControl"
+    x:Name="Root"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <StackPanel Spacing="4">
+        <StackPanel Orientation="Horizontal" Spacing="8">
+            <ComboBox x:Name="Picker" MinWidth="180" PlaceholderText="Domain" SelectionChanged="PickerChanged" />
+            <TextBox x:Name="CustomBox" Width="140" PlaceholderText="domain" Visibility="Collapsed" TextChanged="CustomChanged" />
+        </StackPanel>
+        <!-- The verdict lines, like the macOS SuffixFeedback: normalized, warning, error, and why a check couldn't run. -->
+        <TextBlock x:Name="NormalizedLine" Style="{StaticResource CaptionTextBlockStyle}" Foreground="{ThemeResource SystemFillColorSuccessBrush}"
+                   TextWrapping="Wrap" Visibility="Collapsed" />
+        <TextBlock x:Name="WarningLine" Style="{StaticResource CaptionTextBlockStyle}" Foreground="{ThemeResource SystemFillColorCautionBrush}"
+                   TextWrapping="Wrap" Visibility="Collapsed" />
+        <TextBlock x:Name="ErrorLine" Style="{StaticResource CaptionTextBlockStyle}" Foreground="{ThemeResource SystemFillColorCriticalBrush}"
+                   TextWrapping="Wrap" Visibility="Collapsed" />
+        <TextBlock x:Name="NoteLine" Style="{StaticResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                   TextWrapping="Wrap" Visibility="Collapsed" />
+    </StackPanel>
+</UserControl>
