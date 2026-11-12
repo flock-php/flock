@@ -38,24 +38,27 @@ func main() {
 	if err != nil {
 		fail(err)
 	}
+	issues := github_issue.New(client)
+	pullRequests := github_pr.New(client)
+	repositories := github_repository.New(client)
 
 	switch os.Args[1] {
 	case "pr":
 		service := PullRequestEventService{
-			Assignment: pr_assignment.Dependencies{Issues: github_issue.New(client)},
-			Gate:       pr_gate.Dependencies{Issues: github_issue.New(client), PullRequests: github_pr.New(client)},
-			Milestones: github_pr.New(client),
+			Assignment: pr_assignment.Dependencies{Issues: issues},
+			Gate:       pr_gate.Dependencies{Issues: issues, PullRequests: pullRequests},
+			Milestones: pullRequests,
 		}
 		err = service.Run(owner, repo, event)
 	case "issue":
 		service := IssueEventService{
-			Assignment: github_issue.New(client),
-			Triage:     issue_triage.Dependencies{Issues: github_issue.New(client), Repositories: github_repository.New(client)},
+			Assignment: issues,
+			Triage:     issue_triage.Dependencies{Issues: issues, Repositories: repositories},
 		}
 		err = service.Run(owner, repo, event)
 	case "merge":
 		service := MergeGroupEventService{
-			Gate: merge_gate.Dependencies{MergeGroups: github_merge_group.New(client), PullRequests: github_pr.New(client), Repositories: github_repository.New(client)},
+			Gate: merge_gate.Dependencies{MergeGroups: github_merge_group.New(client), PullRequests: pullRequests, Repositories: repositories},
 		}
 		err = service.Run(owner, repo, event)
 	}

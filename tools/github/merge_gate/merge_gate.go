@@ -8,9 +8,6 @@ import (
 	"strconv"
 )
 
-// Roles whose queue entries may merge. Org owners are admins on every repository.
-var mergerRoles = map[string]bool{"admin": true, "maintain": true}
-
 var queueRef = regexp.MustCompile(`/pr-(\d+)-[0-9a-f]+$`)
 
 // ErrNotAllowed means the pull request was queued by someone who can't merge.
@@ -54,7 +51,7 @@ func Execute(dependencies Dependencies, owner, repository string, event Event) e
 	if err != nil {
 		return err
 	}
-	if mergerRoles[role] {
+	if role == "admin" || role == "maintain" {
 		return nil
 	}
 

@@ -46,7 +46,14 @@ func Execute(dependencies Dependencies, owner, repository string, issue *github_
 }
 
 func bypassesTriage(issue *github_issue.Issue, permission string) bool {
-	return issue.User.Type == "Bot" || issue.AuthorAssociation == "OWNER" || issue.AuthorAssociation == "MEMBER" || issue.AuthorAssociation == "COLLABORATOR" || permission == "admin" || permission == "write"
+	if issue.User.Type == "Bot" {
+		return true
+	}
+	switch issue.AuthorAssociation {
+	case "OWNER", "MEMBER", "COLLABORATOR":
+		return true
+	}
+	return permission == "admin" || permission == "write"
 }
 
 // platforms returns the labels for the platforms picked in an issue form's "Platform" field, which

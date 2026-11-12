@@ -167,8 +167,7 @@ func (s *Service) AddAssignee(owner, repository string, number int, username str
 	if err != nil {
 		return nil, err
 	}
-	result := issueFromGitHub(issue)
-	return result, nil
+	return issueFromGitHub(issue), nil
 }
 
 func (s *Service) RemoveAssignee(owner, repository string, number int, username string) error {

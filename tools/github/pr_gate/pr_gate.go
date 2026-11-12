@@ -76,9 +76,11 @@ type pullRequestGate struct {
 
 func (g pullRequestGate) evaluate(retryAllowed bool) (Result, bool, error) {
 	pr, err := g.dependencies.PullRequests.Get(g.owner, g.repository, g.event.Number)
-	if err != nil || pr == nil || bypassesGate(pr.Author, pr.AuthorAssociation) ||
-		(pr.State == "open" && approvedPullRequest(pr) && pr.BaseRef == "main") {
+	if err != nil || pr == nil {
 		return Result{}, false, err
+	}
+	if bypassesGate(pr.Author, pr.AuthorAssociation) || (pr.State == "open" && approvedPullRequest(pr) && pr.BaseRef == "main") {
+		return Result{}, false, nil
 	}
 	if pr.State == "closed" {
 		return g.evaluateClosed(pr)
@@ -122,7 +124,8 @@ func (g pullRequestGate) evaluateOpen(pr *github_pr.PullRequest, retryAllowed bo
 	if err != nil {
 		return Result{}, false, err
 	}
-	if len(files) != 0 && evaluate(files) == allow {
+	decision := evaluate(files)
+	if len(files) != 0 && decision == allow {
 		return Result{}, false, nil
 	}
 	issue, approved, claimedBy, err := firstApprovedIssue(g.dependencies.Issues, g.dependencies.PullRequests, g.owner, g.repository, pr)
@@ -135,7 +138,7 @@ func (g pullRequestGate) evaluateOpen(pr *github_pr.PullRequest, retryAllowed bo
 	if approved {
 		return approvedResult(issue), false, nil
 	}
-	if evaluate(files) == allow {
+	if decision == allow {
 		return Result{}, false, nil
 	}
 	if g.event.Action == "opened" && retryAllowed {

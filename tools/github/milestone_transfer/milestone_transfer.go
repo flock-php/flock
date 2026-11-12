@@ -17,8 +17,11 @@ func Execute(pullRequests PullRequestMilestoneService, owner, repository string,
 		return nil
 	}
 	pullRequest, err := pullRequests.Get(owner, repository, pullRequestNumber)
-	if err != nil || pullRequest == nil || pullRequest.State != "open" {
+	if err != nil {
 		return err
+	}
+	if pullRequest == nil || pullRequest.State != "open" {
+		return nil
 	}
 	issues, err := pullRequests.ListLinkedIssues(owner, repository, pullRequestNumber)
 	if err != nil {

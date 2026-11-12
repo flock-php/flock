@@ -87,13 +87,10 @@ func (c issueClaim) assignClaimOwner(issue *github_issue.Issue, automatedClaim b
 	if !github_issue.HasAssignee(issue, c.author) {
 		return Result{}, fmt.Errorf("assign issue %s to @%s: GitHub did not add the assignee", c.issueReference, c.author)
 	}
-	result, err := c.markClaimed(issue)
-	result.AutomatedClaim = automatedClaim
-	return result, err
-}
-
-func (c issueClaim) markClaimed(issue *github_issue.Issue) (Result, error) {
-	return Result{}, markClaimed(c.dependencies.Issues, c.owner, c.issueReference.Repository, issue)
+	if err := markClaimed(c.dependencies.Issues, c.owner, c.issueReference.Repository, issue); err != nil {
+		return Result{}, err
+	}
+	return Result{AutomatedClaim: automatedClaim}, nil
 }
 
 func markClaimed(issues IssueClaimer, owner, repository string, issue *github_issue.Issue) error {

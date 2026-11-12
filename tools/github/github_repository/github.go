@@ -16,7 +16,7 @@ func New(client *github.Client) *Service {
 }
 
 func (s *Service) GetUserPermission(owner, repository, username string) (string, error) {
-	permission, _, err := s.client.Repositories.GetPermissionLevel(context.Background(), owner, repository, username)
+	permission, err := s.getUserPermission(owner, repository, username)
 	if err != nil {
 		return "", err
 	}
@@ -24,9 +24,14 @@ func (s *Service) GetUserPermission(owner, repository, username string) (string,
 }
 
 func (s *Service) GetUserRole(owner, repository, username string) (string, error) {
-	permission, _, err := s.client.Repositories.GetPermissionLevel(context.Background(), owner, repository, username)
+	permission, err := s.getUserPermission(owner, repository, username)
 	if err != nil {
 		return "", err
 	}
 	return permission.GetRoleName(), nil
+}
+
+func (s *Service) getUserPermission(owner, repository, username string) (*github.RepositoryPermissionLevel, error) {
+	permission, _, err := s.client.Repositories.GetPermissionLevel(context.Background(), owner, repository, username)
+	return permission, err
 }
