@@ -50,7 +50,7 @@ The rule: a full name ending in the site's suffix is an inherited alias — it m
 
 Every suffix in use is provisioned in full: DNS routing per suffix, and a dedicated name-constrained CA root per suffix (`certs/roots/<suffix>/`), each trusted in its own right by the OS. `flock install` converges the whole set — DNS, roots, trust and the PHP/Node bundles — so it is the command that finishes a declined prompt and clears the daemon's "stale .loc setup: run \`flock install\`" warning when the last site under a suffix is gone.
 
-The macOS app takes the same choices. The **Domain** row in the **Site** section of **Settings → Sites** picks the site's suffix, **Apply** runs the whole switch, password prompt included, and a declined prompt leaves the config switched: the app tells you to run `flock install`. **Add Domain…** is a sheet that enters the alias's label (`tenant1`, `a.b`) and its suffix: **Inherit** rides the site's suffix and moves with it, a picked suffix pins the alias. A suffix new to the machine is provisioned on the spot — the sheet chains `flock install`, prompts included; decline the password and the alias is added already, and `flock install` finishes it. The API takes the same choices: `PATCH /v1/sites/{name}` with `{"tld": "loc"}` (`""` inherits, an omitted key keeps the current suffix), `POST /v1/sites/{name}/domains` with `{"domain": "demo2", "suffix": "loc"}` (`"inherit"` for an inherited alias), and `POST /v1/tld/check`, which normalizes and validates a suffix as you type it.
+The macOS app takes the same choices. The **Domain** row in the **Site** section of **Settings → Sites** picks the site's suffix, **Apply** runs the whole switch, password prompt included, and a declined prompt leaves the config switched: the app tells you to run `flock install`. **Add Alias…** is a sheet that enters the alias's label (one word, no dots) and its suffix: **Inherit** rides the site's suffix and moves with it, a picked suffix pins the alias. A suffix new to the machine is provisioned on the spot — the sheet chains `flock install`, prompts included; decline the password and the alias is added already, and `flock install` finishes it. The API takes the same choices: `PATCH /v1/sites/{name}` with `{"tld": "loc"}` (`""` inherits, an omitted key keeps the current suffix), `POST /v1/sites/{name}/domains` with `{"domain": "demo2", "suffix": "loc"}` (`"inherit"` for an inherited alias), and `POST /v1/tld/check`, which normalizes and validates a suffix as you type it.
 
 ## Wildcard subdomains
 
@@ -68,14 +68,18 @@ On Windows, a group policy or a VPN can override the rule that sends `*.<tld>` t
 
 ## Extra domains and aliases
 
-Give a site additional domains. A name without a dot is treated as a subdomain of the site, and a full name ending in the site's suffix is added as an alias that follows the site. `--suffix` adds the alias under a suffix of its own: pinned, or `inherit` to follow the site ([Per-site domains](#per-site-domains)).
+A site's extra names come in two kinds. A **subdomain** hangs under the site's effective domain: a name like `tenant1` or `a.b` becomes `tenant1.acme.test` or `a.b.acme.test`, follows the site's suffix, and already works unlisted up to four levels deep (above); you list one for the Sites display and for machines without wildcard DNS. An **alias** is a name of its own beside the site: its label is one word, no dots. A full name ending in the site's suffix is added as an alias that follows the site; `--suffix` adds the alias under a suffix of its own: pinned, or `inherit` to follow the site ([Per-site domains](#per-site-domains)). Names with a leading or trailing dot (`sub.domain.`) are refused.
 
 :::app
-In **Settings → Sites**, select the site and click **Add Domain…** under **Domains** in its **Site** section. Enter `tenant1` for `tenant1.acme.test`, and click **Add**. On Windows and Linux a full name like `acme-admin.test` adds a separate alias; on macOS the sheet pairs a label with a suffix: **Inherit** rides the site's suffix and moves with it, a picked suffix pins the alias, and a suffix new to the machine is provisioned on the spot ([Per-site domains](#per-site-domains)).
+In **Settings → Sites**, select the site and find **Aliases** and **Subdomains** in its **Site** section.
 
-![Adding a domain in Settings → Sites](screenshot:settings-sites-add-domain)
+**Add Alias…** adds a name of its own. Enter the label and pick the suffix: **Inherit** rides the site's suffix and moves with it, a picked suffix pins the alias, and a suffix new to the machine is provisioned on the spot ([Per-site domains](#per-site-domains)). On Windows and Linux a full name like `acme-admin.test` adds the alias in one field.
 
-Extra domains are listed under **Domains**, with aliases marked **(alias)**. To remove one, click the minus button next to it and confirm with **Remove**.
+**Add Subdomain…** adds a name under the site's domain: enter `tenant1` for `tenant1.acme.test`, or `a.b` for two levels. There is no suffix to pick — it follows the site.
+
+![Adding an alias in Settings → Sites](screenshot:settings-sites-add-domain)
+
+To remove an entry, click the minus button next to it and confirm with **Remove**.
 :::
 
 :::cli
