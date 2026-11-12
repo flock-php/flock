@@ -991,18 +991,24 @@ func TestAddDomainSuffix(t *testing.T) {
 		t.Fatalf("the explicit demo5.test changed: %+v", e)
 	}
 
-	// The suffix parameter is only a suffix: a full host with it, a public suffix, bad labels
-	// and an empty domain are refused.
+	// The suffix parameter is only a suffix: a full host with it, a public suffix, bad labels,
+	// a leading or trailing dot and an empty domain are refused, and a refused add leaves
+	// config.json untouched.
+	before := configBytes(t, b)
 	for _, body := range []string{
 		`{"domain":"x.example","suffix":"loc"}`, // R7: mutually exclusive with full-host input
 		`{"domain":"z","suffix":"dev"}`,         // public
 		`{"domain":"z","suffix":"com"}`,         // public
 		`{"domain":"bad space","suffix":"inherit"}`,
+		`{"domain":"sub.domain."}`, // trailing dot: refused as input, never trimmed
 		`{"domain":"","suffix":"loc"}`,
 	} {
 		if resp, out := call(t, "POST", srv.URL+"/v1/sites/demo/domains", "", body); resp.StatusCode != http.StatusBadRequest {
 			t.Errorf("add %s must be rejected, got %d: %s", body, resp.StatusCode, out)
 		}
+	}
+	if !bytes.Equal(before, configBytes(t, b)) {
+		t.Fatal("a refused domain add changed config.json")
 	}
 }
 

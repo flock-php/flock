@@ -452,6 +452,10 @@ func TestAddDomainWithSuffix(t *testing.T) {
 	if _, err := addDomainWithSuffix(s.cfg, &site, "a.b", "loc"); err == nil {
 		t.Errorf("--suffix takes a single label, got no error for %q", "a.b")
 	}
+	// The plain form too: a trailing dot is refused as input, not trimmed and added.
+	if _, err := s.cfg.AddDomain(&site, "sub.domain."); err == nil || !strings.Contains(err.Error(), "leading or trailing dot") {
+		t.Errorf("a trailing dot must be refused, got %v", err)
+	}
 }
 
 // TestRetiredSuffixes pins the pure set-diff that drives retirement.

@@ -17,20 +17,20 @@ func TestNormalizeDomainStoresSubdomainsRelativeAndAliasesInFull(t *testing.T) {
 	app, _ := cfg.FindSite("app")
 
 	for in, want := range map[string]Domain{
-		"tenant2":              sub("tenant2"),
-		" A.B ":                sub("a.b"),
-		"tenant3.app.test":     sub("tenant3"),
-		"a.b.c.d":              sub("a.b.c.d"),
-		"my-app-3.test.":       inherited("my-app-3"),
-		"deep.alias.test":      inherited("deep.alias"),
-		"x.y.z.w.app.test":     sub("x.y.z.w"),
-		"tenant-with-dash-9":   sub("tenant-with-dash-9"),
-		"test":                 sub("test"),
-		"api.v2.store-x.test":  inherited("api.v2.store-x"),
-		"tenant1.app-3.test":   inherited("tenant1.app-3"),
-		"Upper.Case.App.Test.": sub("upper.case"),
-		"api.shop.test":        inherited("api.shop"),
-		"v1.store.test":        inherited("v1.store"),
+		"tenant2":             sub("tenant2"),
+		" A.B ":               sub("a.b"),
+		"tenant3.app.test":    sub("tenant3"),
+		"a.b.c.d":             sub("a.b.c.d"),
+		"My-App-3.TEST":       inherited("my-app-3"),
+		"deep.alias.test":     inherited("deep.alias"),
+		"x.y.z.w.app.test":    sub("x.y.z.w"),
+		"tenant-with-dash-9":  sub("tenant-with-dash-9"),
+		"test":                sub("test"),
+		"api.v2.store-x.test": inherited("api.v2.store-x"),
+		"tenant1.app-3.test":  inherited("tenant1.app-3"),
+		"Upper.Case.App.Test": sub("upper.case"),
+		"api.shop.test":       inherited("api.shop"),
+		"v1.store.test":       inherited("v1.store"),
 	} {
 		got, err := cfg.NormalizeDomain(app, in)
 		if err != nil || got != want {
@@ -56,6 +56,9 @@ func TestNormalizeDomainRejectsConflictsAndInvalidNames(t *testing.T) {
 		"-dash":                            "not a valid domain name",
 		"shop.test":                        "already served by shop",
 		"store.test":                       "already served by shop",
+		"sub.domain.":                      "leading or trailing dot",
+		".foo":                             "leading or trailing dot",
+		".":                                "leading or trailing dot",
 		strings.Repeat("a.", 130) + "test": "too long",
 	} {
 		got, err := cfg.NormalizeDomain(app, in)

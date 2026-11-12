@@ -205,12 +205,16 @@ func TestNormalizeDomainClassifiesEntries(t *testing.T) {
 		"api.demo2.loc":    pinned("api.demo2", "loc"),
 		"app-3.test":       inherited("app-3"),
 		"tenant3.app.test": sub("tenant3"), // under the site's own domain: subdomain, as today
-		"my-app-3.test.":   inherited("my-app-3"),
 	} {
 		got, err := cfg.NormalizeDomain(app, in)
 		if err != nil || got != want {
 			t.Errorf("NormalizeDomain(%q) = %+v, %v; want %+v", in, got, err, want)
 		}
+	}
+
+	// A trailing dot is refused as input, not trimmed and classified.
+	if _, err := cfg.NormalizeDomain(app, "my-app-3.test."); err == nil || !strings.Contains(err.Error(), "leading or trailing dot") {
+		t.Errorf(`NormalizeDomain("my-app-3.test.") = %v; want the leading-or-trailing-dot refusal`, err)
 	}
 
 	// A site on its own suffix: its suffix is the inherit boundary, the global one is just

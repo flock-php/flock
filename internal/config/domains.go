@@ -141,13 +141,16 @@ func (c *Config) RemoveDomain(s *Site, name string) bool {
 // was. A non-public suffix is taken at its word: "x.example" joins "demo2.loc" in pinning,
 // because no rule can tell a user's chosen suffix from an example domain's; a legacy stored
 // "x.example" is not reclassified — migration keeps it a subdomain, host byte-identical.
+// Input with a leading or trailing dot is refused outright, never trimmed and classified.
 func (c *Config) NormalizeDomain(s Site, name string) (Domain, error) {
-	name = strings.TrimSuffix(strings.ToLower(strings.TrimSpace(name)), ".")
+	name = strings.ToLower(strings.TrimSpace(name))
 	domain, suffix := c.Domain(s), s.Suffix(c)
 
 	switch {
 	case name == "":
 		return Domain{}, fmt.Errorf("the domain is empty")
+	case strings.HasPrefix(name, ".") || strings.HasSuffix(name, "."):
+		return Domain{}, fmt.Errorf("%q has a leading or trailing dot", name)
 	case strings.Contains(name, "*"):
 		return Domain{}, fmt.Errorf("wildcards aren't needed: every subdomain up to %d levels below %s is served already — add a name only to put it into the hosts file", MaxDepth, domain)
 	case strings.Contains(name, "://") || strings.ContainsAny(name, "/: "):
