@@ -228,20 +228,21 @@ func siteTLD(raw string) (string, error) {
 	return tld, nil
 }
 
-// siteHost normalizes a requested name-part override, siteTLD's doctrine for a label: "" (like
-// an absent host) is the default — the site's name, stored as "" — a label equal to the site's
-// name is that default too (sanitizeHost's canonical form; the CLI's `flock site host` resolves
-// it the same way, never storing a redundant Host:"demo"), and anything else must be a single
-// DNS label (config.HostLabelOK — ValidateTLD does not apply: Host is a label, "localhost" is a
-// perfectly good one). A rejected one is an invalid() error: callers run it inside b.Mutate, so
-// returning it leaves config.json untouched.
+// siteHost normalizes a requested name-part override, siteTLD's doctrine for a host name:
+// "" (like an absent host) is the default — the site's name, stored as "" — a host equal to
+// the site's name is that default too (sanitizeHost's canonical form; the CLI's
+// `flock site host` resolves it the same way, never storing a redundant Host:"demo"), and
+// anything else must be a dotted DNS hostname (config.HostNameOK — a single label is its
+// simplest case, ValidateTLD does not apply: "localhost" is a perfectly good host). A
+// rejected one is an invalid() error: callers run it inside b.Mutate, so returning it
+// leaves config.json untouched.
 func siteHost(site config.Site, raw string) (string, error) {
 	host := strings.ToLower(strings.TrimSpace(raw))
 	if host == "" {
 		return "", nil
 	}
-	if !config.HostLabelOK(host) {
-		return "", invalid("%q is not a host label: host is a single label of a-z, 0-9 and inner hyphens", raw)
+	if !config.HostNameOK(host) {
+		return "", invalid("%q is not a domain name: host is one or more labels joined with dots, each a-z, 0-9 and inner hyphens, no leading or trailing dots", raw)
 	}
 	if host == site.Name {
 		return "", nil // the site name is the default: store the default, not an override
@@ -420,8 +421,9 @@ func registerConfig(mux *http.ServeMux, b Backend) {
 			TLD json.RawMessage `json:"tld"`
 			// Host is the name part of the site's domain (the Site.Host override): absent or
 			// null keeps what it is, "" is the default (the site's name), a value is
-			// lowercased, trimmed and must be a single DNS label (400 on reject, with the
-			// config untouched). Raw JSON decides between absent and null, exactly like TLD.
+			// lowercased, trimmed and must be a dotted DNS host name (400 on reject, with
+			// the config untouched). Raw JSON decides between absent and null, exactly like
+			// TLD.
 			Host json.RawMessage `json:"host"`
 			// Title is the site's display name: absent or null keeps it, "" shows the site
 			// name again, a value is stored through config.SanitizeTitle as sent — the API
@@ -462,7 +464,7 @@ func registerConfig(mux *http.ServeMux, b Backend) {
 			if len(body.Host) > 0 && string(body.Host) != "null" {
 				var raw string
 				if err := json.Unmarshal(body.Host, &raw); err != nil {
-					return invalid("host must be a string (a single label like liga, or \"\" for the site name), not %s", body.Host)
+					return invalid("host must be a string (a host name like liga or cms.liga, or \"\" for the site name), not %s", body.Host)
 				}
 				host, err := siteHost(site, raw)
 				if err != nil {
@@ -832,7 +834,7 @@ type SiteChange struct {
 	// value is normalized and validated (400 on reject, the config untouched).
 	TLD *string `json:"tld,omitempty"`
 	// Host is the name part of the site's domain: nil leaves it alone, "" is the default
-	// (the site's name), a value is lowercased and must be a single DNS label (400 on
+	// (the site's name), a value is lowercased and must be a dotted DNS host name (400 on
 	// reject, the config untouched).
 	Host *string `json:"host,omitempty"`
 	// Title is the site's display name: nil leaves it alone, "" shows the site name

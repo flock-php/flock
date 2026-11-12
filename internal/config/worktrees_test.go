@@ -176,6 +176,25 @@ func TestWorktreeFollowsTheSiteHostOverride(t *testing.T) {
 	if got := cfg.Domain(second); got != "x-y-2.liga.test" {
 		t.Errorf("numbered worktree domain: %q, want x-y-2.liga.test (must not share a host)", got)
 	}
+
+	// A DOTTED parent host (the 2026-11-12 relaxation) rides the same synthesis unchanged:
+	// the slug is just another label in front of the parent's name part — the worktree is
+	// served at f.cms.liga.test under its identity name f.cms.
+	cmsRepo := filepath.Join(parked, "cms")
+	addWorktree(t, cmsRepo, filepath.Join(parked, "cms-f"), "cms-f", "ref: refs/heads/f")
+	if err := cfg.Upsert(Site{Name: "cms", Path: cmsRepo, Host: "cms.liga"}); err != nil {
+		t.Fatal(err)
+	}
+	cmsWt, ok := cfg.FindSite("f.cms")
+	if !ok {
+		t.Fatal("worktree of the dotted-host parent not served")
+	}
+	if got := cfg.Domain(cmsWt); got != "f.cms.liga.test" {
+		t.Errorf("dotted-parent worktree domain: %q, want f.cms.liga.test", got)
+	}
+	if cmsWt.Name != "f.cms" {
+		t.Errorf("dotted-parent worktree identity: %q, want f.cms", cmsWt.Name)
+	}
 }
 
 func TestAWorktreeWinsOverTheSameSubdomainOfItsSite(t *testing.T) {

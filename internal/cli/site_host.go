@@ -29,11 +29,11 @@ func newSiteHostCommand() *cobra.Command {
 		Short: "Show or rename the domain name part of one site (by default it is the site name)",
 		Long: `The site is the one in the current directory, or the one named. With no label, show
 the domain it serves at now and its override. With a label, serve it as <label>.<suffix> —
-a single DNS label; the suffix stays where it is (flock site tld picks that). With
---default the site name rules again, the default. The site's subdomains and its worktrees'
-hosts move with the name, and their .env files are retargeted from the old host to the new;
-the site's aliases never move. The folder and the site name are untouched — this is the
-domain part only.`,
+one or more words joined with dots (cms.liga → cms.liga.test); the suffix stays where it is
+(flock site tld picks that). With --default the site name rules again, the default. The
+site's subdomains and its worktrees' hosts move with the name, and their .env files are
+retargeted from the old host to the new; the site's aliases never move. The folder and the
+site name are untouched — this is the domain part only.`,
 		Args: cobra.RangeArgs(0, 2),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			label, siteName := "", ""
@@ -88,15 +88,15 @@ domain part only.`,
 }
 
 // changeSiteHost is the unprivileged core of `flock site host <label>|--default [site]`:
-// resolve the site, normalize and validate the label (one DNS label; --default asks for the
-// site name, stored canonically empty — sanitizeHost's form), probe the landing hosts,
-// store the override, retarget the site's and its worktrees' .env files from the old host
-// to the new, and hand the config to the daemon. Validation and the collision check run
-// before anything is touched: a rejected label changes nothing. Both host sides of the
-// .env move are HostRenameSwaps' arguments, so the site's stored override cannot leak into
-// the old side (the listers run after the store, exactly like SwapsForSite's). It returns
-// the site's primary host before and after, and whether anything changed at all (false on
-// "already" — the signal for RunE to skip the success line).
+// resolve the site, normalize and validate the label (a dotted host name; --default asks
+// for the site name, stored canonically empty — sanitizeHost's form), probe the landing
+// hosts, store the override, retarget the site's and its worktrees' .env files from the
+// old host to the new, and hand the config to the daemon. Validation and the collision
+// check run before anything is touched: a rejected label changes nothing. Both host sides
+// of the .env move are HostRenameSwaps' arguments, so the site's stored override cannot
+// leak into the old side (the listers run after the store, exactly like SwapsForSite's).
+// It returns the site's primary host before and after, and whether anything changed at all
+// (false on "already" — the signal for RunE to skip the success line).
 func (s *state) changeSiteHost(raw, siteName string, def bool, out io.Writer) (oldPrimary, newPrimary string, changed bool, err error) {
 	site, err := siteArg(s, siteArgs(siteName))
 	if err != nil {
@@ -113,8 +113,8 @@ func (s *state) changeSiteHost(raw, siteName string, def bool, out io.Writer) (o
 		if host == "" {
 			return "", "", false, fmt.Errorf("usage: flock site host <label> [site], or flock site host --default [site]")
 		}
-		if !config.HostLabelOK(host) {
-			return "", "", false, fmt.Errorf("%q is not a domain name: the name part of a site's host is a single DNS label — a-z, 0-9 and inner hyphens, up to 63 characters", raw)
+		if !config.HostNameOK(host) {
+			return "", "", false, fmt.Errorf("%q is not a domain name: the name part of a site's host is one or more DNS labels joined with dots — a-z, 0-9 and inner hyphens, up to 63 characters each, no leading or trailing dots", raw)
 		}
 		if host == site.Name {
 			host = "" // the site name is the default: store the default, not an override

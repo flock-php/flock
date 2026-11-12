@@ -857,11 +857,14 @@ func TestSiteTLDPatchRefusesSelfCollision(t *testing.T) {
 }
 
 // TestSiteHostAndTitle pins the host override and the display title over the wire: PATCH host
-// "LIGA " is normalized, stored, and the row serves liga.test showing site_host; the RawMessage's
-// 3 states are exactly tld's (absent keeps, null keeps, "" is the default — the site name, and a
-// label equal to the name stores that canonical ""); HostLabelOK's refusals and the landing pair
-// siteHostClash runs (the CLI `flock site host`'s own) are 400s with config.json byte-identical;
-// title stores through config.SanitizeTitle VERBATIM — the API folds no whitespace (the CLI's
+// "LIGA " is normalized, stored, and the row serves liga.test showing site_host — and so does
+// a dotted host ("CMS.LIGA " → cms.liga.test, the 2026-11-12 relaxation; the old "a.b"→400 pin
+// deliberately migrated to a 200 row, with "a..b", ".liga" and "liga." refusing in its place);
+// the RawMessage's 3 states are exactly tld's (absent keeps, null keeps, "" is the default —
+// the site name, and a host equal to the name stores that canonical ""); HostNameOK's refusals
+// and the landing pair siteHostClash runs (the CLI `flock site host`'s own, dotted hosts
+// included) are 400s with config.json byte-identical; title stores through
+// config.SanitizeTitle VERBATIM — the API folds no whitespace (the CLI's
 // Fields-join is a shell-argv artifact) — drops control runes, and caps at 80 runes. POST create
 // takes both through the same validators, and the landing check now sees Host via Config.Domain.
 func TestSiteHostAndTitle(t *testing.T) {
@@ -936,14 +939,47 @@ func TestSiteHostAndTitle(t *testing.T) {
 		t.Fatalf(`a host equal to the site name must store the canonical "": %+v`, site)
 	}
 
-	// A non-label is a 400 naming the rule, config.json byte-identical; so is a non-string.
-	before = configBytes(t, b)
-	resp, body := call(t, "PATCH", srv.URL+"/v1/sites/demo", "", `{"host":"a.b"}`)
-	if resp.StatusCode != http.StatusBadRequest || !strings.Contains(body, "single label") {
+	// Dotted hosts (the 2026-11-12 relaxation): "CMS.LIGA " normalizes to "cms.liga" and
+	// the row serves cms.liga.test …
+	if resp, body := call(t, "PATCH", srv.URL+"/v1/sites/demo", "", `{"host":"CMS.LIGA "}`); resp.StatusCode != http.StatusOK {
+		t.Fatalf("host CMS.LIGA: %d %s", resp.StatusCode, body)
+	}
+	if site, _ := b.config(t).FindSite("demo"); site.Host != "cms.liga" {
+		t.Fatalf("dotted host not stored normalized: %+v", site)
+	}
+	statusRowsFromConfig(t, b)
+	if r := siteRow(t, statusRows(t, srv), "demo"); r.Domain != "cms.liga.test" || r.SiteHost != "cms.liga" {
+		t.Fatalf("row after dotted host: %+v", r)
+	}
+	// … and "a.b", refused by the old single-label rule, is a plain 200 now — this row
+	// deliberately migrated from the 400 pin it held (it pinned the OLD rule).
+	if resp, body := call(t, "PATCH", srv.URL+"/v1/sites/demo", "", `{"host":"a.b"}`); resp.StatusCode != http.StatusOK {
 		t.Fatalf("host a.b: %d %s", resp.StatusCode, body)
 	}
+	if site, _ := b.config(t).FindSite("demo"); site.Host != "a.b" {
+		t.Fatalf("host a.b not stored: %+v", site)
+	}
+
+	// Back to the default: the collision rows below probe the untouched shape.
+	if resp, body := call(t, "PATCH", srv.URL+"/v1/sites/demo", "", `{"host":""}`); resp.StatusCode != http.StatusOK {
+		t.Fatalf("host default again: %d %s", resp.StatusCode, body)
+	}
+
+	// A malformed host name is still a 400 naming the rule — doubled and leading dots,
+	// the dot doctrine HostNameOK mirrors from NormalizeDomain — config.json
+	// byte-identical; so is a non-string.
+	before = configBytes(t, b)
+	resp, body := call(t, "PATCH", srv.URL+"/v1/sites/demo", "", `{"host":"a..b"}`)
+	if resp.StatusCode != http.StatusBadRequest || !strings.Contains(body, "domain name") {
+		t.Fatalf("host a..b: %d %s", resp.StatusCode, body)
+	}
+	for _, bad := range []string{".liga", "liga."} {
+		if resp, body := call(t, "PATCH", srv.URL+"/v1/sites/demo", "", `{"host":`+jsonString(bad)+`}`); resp.StatusCode != http.StatusBadRequest || !strings.Contains(body, "domain name") {
+			t.Fatalf("host %q: %d %s", bad, resp.StatusCode, body)
+		}
+	}
 	if !bytes.Equal(before, configBytes(t, b)) {
-		t.Fatal(`{"host":"a.b"} changed config.json`)
+		t.Fatal("a refused host name changed config.json")
 	}
 	if resp, body := call(t, "PATCH", srv.URL+"/v1/sites/demo", "", `{"host":123}`); resp.StatusCode != http.StatusBadRequest || !strings.Contains(body, "host must be a string") {
 		t.Fatalf("host 123: %d %s", resp.StatusCode, body)
@@ -960,6 +996,23 @@ func TestSiteHostAndTitle(t *testing.T) {
 	}
 	if !bytes.Equal(before, configBytes(t, b)) {
 		t.Fatal("a refused rename changed config.json")
+	}
+
+	// The same collision math on a DOTTED landing: the site deep serves cms.liga.test,
+	// so renaming demo onto "cms.liga" (the case- and space-folded form) is refused the
+	// same way — Config.Domain's exact-host map is label-agnostic.
+	if err := b.Mutate(func(cfg *config.Config) error {
+		return cfg.Upsert(config.Site{Name: "deep", Path: t.TempDir(), Host: "cms.liga"})
+	}); err != nil {
+		t.Fatal(err)
+	}
+	before = configBytes(t, b)
+	resp, body = call(t, "PATCH", srv.URL+"/v1/sites/demo", "", `{"host":" CMS.LIGA "}`)
+	if resp.StatusCode != http.StatusBadRequest || !strings.Contains(body, "cms.liga.test is already served by site deep") {
+		t.Fatalf("dotted host collision: %d %s", resp.StatusCode, body)
+	}
+	if !bytes.Equal(before, configBytes(t, b)) {
+		t.Fatal("the refused dotted collision changed config.json")
 	}
 
 	// A rename of a site that already claims one host twice (a pinned alias and the
@@ -1054,7 +1107,8 @@ func TestSiteHostAndTitle(t *testing.T) {
 		t.Fatalf("create Liga/liga row: %+v", r)
 	}
 	// A create whose host lands on a served name is refused like the patch, creating
-	// nothing, config.json byte-identical; a non-label is refused before anything.
+	// nothing, config.json byte-identical; a malformed host name is refused before
+	// anything (doubled dot — the migrated pin: "a.b" is valid since the relaxation).
 	before = configBytes(t, b)
 	resp, body = call(t, "POST", srv.URL+"/v1/sites", "", `{"path":`+jsonString(t.TempDir())+`,"name":"bad","host":"shop"}`)
 	if resp.StatusCode != http.StatusBadRequest || !strings.Contains(body, "shop.test is already served by site shop") {
@@ -1063,11 +1117,25 @@ func TestSiteHostAndTitle(t *testing.T) {
 	if _, ok := b.config(t).FindSite("bad"); ok {
 		t.Fatal("the rejected create made a site")
 	}
-	if resp, body := call(t, "POST", srv.URL+"/v1/sites", "", `{"path":`+jsonString(t.TempDir())+`,"name":"nope","host":"a.b"}`); resp.StatusCode != http.StatusBadRequest || !strings.Contains(body, "single label") {
-		t.Fatalf("create host a.b: %d %s", resp.StatusCode, body)
+	if resp, body := call(t, "POST", srv.URL+"/v1/sites", "", `{"path":`+jsonString(t.TempDir())+`,"name":"nope","host":"a..b"}`); resp.StatusCode != http.StatusBadRequest || !strings.Contains(body, "domain name") {
+		t.Fatalf("create host a..b: %d %s", resp.StatusCode, body)
+	}
+	if _, ok := b.config(t).FindSite("nope"); ok {
+		t.Fatal("the rejected dotted create made a site")
 	}
 	if !bytes.Equal(before, configBytes(t, b)) {
 		t.Fatal("the rejected creates changed config.json")
+	}
+	// A create with a dotted host goes through the same siteHost validator and stores.
+	if resp, body := call(t, "POST", srv.URL+"/v1/sites", "", `{"path":`+jsonString(t.TempDir())+`,"name":"multi","host":"BLOG.DEEP"}`); resp.StatusCode != http.StatusOK {
+		t.Fatalf("create dotted host: %d %s", resp.StatusCode, body)
+	}
+	if s, ok := b.config(t).FindSite("multi"); !ok || s.Host != "blog.deep" {
+		t.Fatalf("create dotted host stored wrong: %+v (%v)", s, ok)
+	}
+	statusRowsFromConfig(t, b)
+	if r := siteRow(t, statusRows(t, srv), "multi"); r.Domain != "blog.deep.test" || r.SiteHost != "blog.deep" {
+		t.Fatalf("create dotted host row: %+v", r)
 	}
 	// Absent host/title stay the defaults (the name; the keys never enter config.json).
 	if resp, body := call(t, "POST", srv.URL+"/v1/sites", "", `{"path":`+jsonString(t.TempDir())+`,"name":"plain2"}`); resp.StatusCode != http.StatusOK {

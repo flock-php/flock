@@ -184,10 +184,12 @@ func (c *Config) worktreeSites(byName map[string]Site) {
 			}
 			name := slug + "." + parent.Name
 			// The internal host part is the slug in front of the parent's host: a
-			// multi-label shape ("<slug>.<parent host>") that a user-set Site.Host never
-			// takes (single label) — these rows are synthesized post-Load, on demand, so
-			// the Load sanitizer never sees them. The identity fallback below numbers
-			// both parts, so renamed worktrees never share a host.
+			// multi-label shape ("<slug>.<parent host>") that rows this feeds are
+			// served at — user-set Site.Host names may be dotted too now, and the
+			// landing check refuses any override onto a synthesized worktree host,
+			// so the two never collide. These rows are synthesized post-Load, on
+			// demand, so the Load sanitizer never sees them. The identity fallback
+			// below numbers both parts, so renamed worktrees never share a host.
 			host := slug + "." + parent.HostName()
 			for n := 2; ; n++ {
 				if _, taken := byName[name]; !taken {

@@ -184,3 +184,34 @@ func TestHostLabelOK(t *testing.T) {
 		}
 	}
 }
+
+// TestHostNameOK pins the site HOST name rule (the 2026-11-12 relaxation): one or more
+// labels joined by single dots, each label HostLabelOK's shape, 253 total at most;
+// leading, trailing and doubled dots refused. Strict lowercase, exactly like HostLabelOK
+// — normalizing the input is the caller's job (trim+lowercase before the check).
+func TestHostNameOK(t *testing.T) {
+	good := []string{
+		"liga", "cms.liga", "a", "1", "app-2", "x.y.z",
+		strings.Repeat("a", 63), // one label at the cap
+		strings.Repeat("a", 63) + "." + strings.Repeat("b", 63),
+		strings.Repeat("a", 63) + "." + strings.Repeat("b", 63) + "." + strings.Repeat("c", 63) + "." + strings.Repeat("d", 61), // exactly 253
+	}
+	for _, host := range good {
+		if !HostNameOK(host) {
+			t.Errorf("%q: want a valid host name", host)
+		}
+	}
+	bad := []string{
+		"", "liga.", ".liga", "a..b", ".", "..",
+		"LIGA", "CMS.LIGA", // strict lowercase: the caller normalizes first
+		"-liga", "liga-", "a_b", "a b",
+		strings.Repeat("a", 64), // one label over 63
+		"a." + strings.Repeat("b", 64),
+		strings.Repeat("a", 63) + "." + strings.Repeat("b", 63) + "." + strings.Repeat("c", 63) + "." + strings.Repeat("d", 62), // 254 total
+	}
+	for _, host := range bad {
+		if HostNameOK(host) {
+			t.Errorf("%q: want an invalid host name", host)
+		}
+	}
+}

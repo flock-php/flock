@@ -207,12 +207,15 @@ func TestChangeSiteHostRenamesPrimaryAndRetargetsEnvs(t *testing.T) {
 	}
 }
 
-// TestChangeSiteHostRefusesBadLabelsWithoutTouchingAnything (pins b and c): Host is one DNS
-// label — "liga.cms", a trailing dot, edge hyphens and an over-long label are refused by
-// name, quoting the input; the empty label without --default is a usage error. Every
-// refusal leaves config.json and all three .env files byte-identical.
+// TestChangeSiteHostRefusesBadLabelsWithoutTouchingAnything (pins b and c): Host is one
+// or more DNS labels joined with dots (the 2026-11-12 relaxation) — "liga.", ".liga", a
+// doubled dot, edge hyphens and an over-long label are refused by name, quoting the
+// input; the empty label without --default is a usage error. (The pre-relaxation refusals
+// "liga.cms" and "a.b.c" deliberately migrated to acceptance — the dotted rename test
+// below pins them.) Every refusal leaves config.json and all three .env files
+// byte-identical.
 func TestChangeSiteHostRefusesBadLabelsWithoutTouchingAnything(t *testing.T) {
-	for _, raw := range []string{"liga.cms", "liga.", ".liga", "-liga", "liga-", "a.b.c", strings.Repeat("a", 64)} {
+	for _, raw := range []string{"liga.", ".liga", "a..b", "-liga", "liga-", strings.Repeat("a", 64)} {
 		t.Run("label "+raw, func(t *testing.T) {
 			s, demoDir, shopDir, wtDir := siteHostFixture(t)
 			before := snapshot(t, s, demoDir, shopDir, wtDir)
@@ -244,6 +247,71 @@ func TestChangeSiteHostRefusesBadLabelsWithoutTouchingAnything(t *testing.T) {
 	assertUntouched(t, before)
 }
 
+// TestChangeSiteHostDottedRenamesPrimaryAndRetargetsEnvs pins the 2026-11-12 relaxation:
+// `flock site host cms.liga demo` is accepted — the name part may be a dotted host name.
+// The rename behaves exactly like the single-label one: demo.test → cms.liga.test, the
+// site's and the worktree's .env files retargeted (feature.demo.test →
+// feature.cms.liga.test), the old host gone, aliases and the other site untouched, and
+// the input normalized (" CMS.LIGA " stores "cms.liga").
+func TestChangeSiteHostDottedRenamesPrimaryAndRetargetsEnvs(t *testing.T) {
+	s, demoDir, shopDir, wtDir := siteHostFixture(t)
+	shopBefore := envSnapshot(t, shopDir)
+
+	var out strings.Builder
+	oldPrimary, newPrimary, changed, err := s.changeSiteHost(" CMS.LIGA ", "demo", false, &out)
+	if err != nil {
+		t.Fatalf("changeSiteHost cms.liga: %v\n%s", err, out.String())
+	}
+	if !changed {
+		t.Fatal("a real rename must report a change")
+	}
+	if oldPrimary != "demo.test" || newPrimary != "cms.liga.test" {
+		t.Errorf("primaries: got %q → %q, want %q → %q", oldPrimary, newPrimary, "demo.test", "cms.liga.test")
+	}
+
+	reloaded, err := config.Load(s.root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	site, ok := reloaded.FindSite("demo")
+	if !ok || site.Host != "cms.liga" {
+		t.Fatalf("site demo must carry the dotted override, got %+v", site)
+	}
+	if got := reloaded.Domain(site); got != "cms.liga.test" {
+		t.Errorf("Domain: got %q, want cms.liga.test", got)
+	}
+
+	data, err := os.ReadFile(filepath.Join(demoDir, ".env"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	demo := string(data)
+	for _, want := range []string{
+		"APP_URL=https://cms.liga.test",
+		"SESSION_DOMAIN=.cms.liga.test",
+		"SANCTUM_STATEFUL_DOMAINS=cms.liga.test,app-2.test,demo2.loc", // the aliases stay: a name of its own
+		"MAIL_FROM=noreply@cms.liga.test",
+	} {
+		if !strings.Contains(demo, want) {
+			t.Errorf("demo .env must hold %q:\n%s", want, demo)
+		}
+	}
+	if strings.Contains(demo, "demo.test") {
+		t.Errorf("the old host must be gone from the retargeted keys:\n%s", demo)
+	}
+
+	data, err = os.ReadFile(filepath.Join(wtDir, ".env"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if wt := string(data); !strings.Contains(wt, "APP_URL=http://feature.cms.liga.test") ||
+		!strings.Contains(wt, "SESSION_DOMAIN=.feature.cms.liga.test") || strings.Contains(wt, "demo.test") {
+		t.Errorf("worktree .env:\n%s", wt)
+	}
+
+	assertUntouched(t, shopBefore)
+}
+
 // TestChangeSiteHostCollisionLeavesEverything (pin d): demo can't be renamed onto shop's
 // host — the refusal names the taken host and its holder and touches nothing.
 func TestChangeSiteHostCollisionLeavesEverything(t *testing.T) {
@@ -261,6 +329,22 @@ func TestChangeSiteHostCollisionLeavesEverything(t *testing.T) {
 	msg := err.Error()
 	if !strings.Contains(msg, "shop.test") || !strings.Contains(msg, "site shop") || !strings.Contains(msg, "can't move") {
 		t.Errorf("the refusal must name the host, the holder and the refusal, got: %v", err)
+	}
+	assertUntouched(t, before)
+
+	// The collision probe is label-agnostic the same way Domain() is: a rename onto a
+	// DOTTED host another site already serves is refused with nothing touched.
+	shop, _ := s.cfg.FindSite("shop")
+	shop.Host = "deep.one"
+	if err := s.cfg.Upsert(shop); err != nil {
+		t.Fatal(err)
+	}
+	before = snapshot(t, s, demoDir, shopDir, wtDir)
+	out.Reset()
+	if _, _, changed, err := s.changeSiteHost("deep.one", "demo", false, &out); err == nil {
+		t.Fatalf("the dotted collision must be refused, output:\n%s", out.String())
+	} else if changed || !strings.Contains(err.Error(), "deep.one.test") || !strings.Contains(err.Error(), "site shop") {
+		t.Errorf("the dotted refusal must name deep.one.test and site shop, got: %v", err)
 	}
 	assertUntouched(t, before)
 }

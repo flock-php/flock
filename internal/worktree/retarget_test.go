@@ -74,6 +74,45 @@ func TestRetargetDotenvKeepsHostsThatOnlyLookSimilar(t *testing.T) {
 	}
 }
 
+// TestRetargetDotenvDottedOldHostBoundaries pins the host-matching doctrine with a DOTTED
+// old host (possible since the 2026-11-12 dotted-host relaxation): it is label-agnostic
+// and byte-for-byte the single-label one. URL hosts swap at the exact host and deeper
+// under it (x.cms.liga.test, the site's own subdomains); list members and mail domains
+// swap exactly (:port kept); hosts that merely end in the old host's letters
+// (evil-cms.liga.test) or keep it as a prefix of a longer name (cms.liga.evil.com) do
+// not — the swap needs the whole label boundary either way.
+func TestRetargetDotenvDottedOldHostBoundaries(t *testing.T) {
+	path := filepath.Join(t.TempDir(), ".env")
+	write(t, path, strings.Join([]string{
+		"APP_URL=https://cms.liga.test",
+		"APP_URL=https://x.cms.liga.test/y",
+		"SESSION_DOMAIN=.cms.liga.test",
+		"SANCTUM_STATEFUL_DOMAINS=evil-cms.liga.test,cms.liga.test:8080,cms.liga.evil.com",
+		"MAIL_FROM=noreply@cms.liga.test",
+		"",
+	}, "\n"))
+
+	changed, err := RetargetDotenv(path, "cms.liga.test", "liga.test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantKeys := []string{"APP_URL", "SESSION_DOMAIN", "SANCTUM_STATEFUL_DOMAINS", "MAIL_FROM"}
+	if !slices.Equal(changed, wantKeys) {
+		t.Errorf("changed: %v, want %v", changed, wantKeys)
+	}
+	want := strings.Join([]string{
+		"APP_URL=https://liga.test",
+		"APP_URL=https://x.liga.test/y",
+		"SESSION_DOMAIN=.liga.test",
+		"SANCTUM_STATEFUL_DOMAINS=evil-cms.liga.test,liga.test:8080,cms.liga.evil.com",
+		"MAIL_FROM=noreply@liga.test",
+		"",
+	}, "\n")
+	if got := read(t, path); got != want {
+		t.Errorf("got\n%s\nwant\n%s", got, want)
+	}
+}
+
 // Laravel writes MAIL_FROM_ADDRESS (resolved into config('mail.from.address')), not the
 // generic MAIL_FROM: the app's mail sender is noreply@acme.test, and a suffix switch that
 // moves APP_URL, the session domain and the stateful list while the sender keeps naming

@@ -33,7 +33,9 @@ func TestDomainUsesHostOverride(t *testing.T) {
 }
 
 // TestLoadSanitisesHostAndTitle: config.json is hand-editable, so a stored Host or Title
-// is input nobody screened — sanitizeSuffix's doctrine applies, per field.
+// is input nobody screened — sanitizeSuffix's doctrine applies, per field. Since the
+// 2026-11-12 relaxation the Host may be a dotted host name ("a.b" survives untouched);
+// the refusal doctrine is unchanged: anything HostNameOK refuses is cleared to "".
 func TestLoadSanitisesHostAndTitle(t *testing.T) {
 	root := t.TempDir()
 	body := `{"tld":"test","sites":[
@@ -43,7 +45,9 @@ func TestLoadSanitisesHostAndTitle(t *testing.T) {
 		{"name":"d","path":"/code/d","host":"localhost"},
 		{"name":"e","path":"/code/e","host":"E"},
 		{"name":"f","path":"/code/f","title":"` + strings.Repeat("é", 200) + `"},
-		{"name":"g","path":"/code/g","host":"-bad-","title":"\t"}
+		{"name":"g","path":"/code/g","host":"-bad-","title":"\t"},
+		{"name":"h","path":"/code/h","host":" CMS.LIGA "},
+		{"name":"i","path":"/code/i","host":"a..b"}
 	]}`
 	if err := os.WriteFile(file(root), []byte(body), 0o600); err != nil {
 		t.Fatal(err)
@@ -53,8 +57,8 @@ func TestLoadSanitisesHostAndTitle(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	wantHosts := []string{"liga", "", "", "localhost", "", "", ""}
-	wantTitles := []string{"xyz", "", "xy", "", "", strings.Repeat("é", 80), ""}
+	wantHosts := []string{"liga", "a.b", "", "localhost", "", "", "", "cms.liga", ""}
+	wantTitles := []string{"xyz", "", "xy", "", "", strings.Repeat("é", 80), "", "", ""}
 	for i, s := range cfg.Sites {
 		if s.Host != wantHosts[i] {
 			t.Errorf("site %s: Host = %q, want %q", s.Name, s.Host, wantHosts[i])
@@ -64,10 +68,13 @@ func TestLoadSanitisesHostAndTitle(t *testing.T) {
 		}
 	}
 
-	// Host is a label, not a suffix: HostLabelOK is the only rule (no ValidateTLD here),
-	// so "localhost" passes the label regex and stays — deliberate.
+	// Host is a host name, not a suffix: HostNameOK is the only rule (no ValidateTLD
+	// here), so "localhost" passes the label rule and stays — deliberate, as ever.
 	if got := cfg.Domain(cfg.Sites[0]); got != "liga.test" {
 		t.Errorf("a with the sanitized host: %q, want liga.test", got)
+	}
+	if got := cfg.Domain(cfg.Sites[1]); got != "a.b.test" {
+		t.Errorf("b with the dotted host: %q, want a.b.test", got)
 	}
 	if got := cfg.Domain(cfg.Sites[4]); got != "e.test" {
 		t.Errorf("host equal to Name: %q, want e.test (cleared to inherit)", got)

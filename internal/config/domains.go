@@ -21,6 +21,25 @@ func HostLabelOK(label string) bool {
 	return hostLabel.MatchString(label)
 }
 
+// HostNameOK reports whether host is a dotted DNS hostname: one or more labels separated
+// by single dots, each label HostLabelOK's shape (a-z, 0-9 and inner hyphens, ≤63), 253
+// characters in total; leading, trailing and doubled dots are refused. This is the site
+// HOST name rule — the name part of a site's primary domain may be dotted ("cms.liga" →
+// cms.liga.test, the 2026-11-12 relaxation); the alias LABEL rule (ruling R7) stays
+// HostLabelOK. Strict lowercase like HostLabelOK: normalizing input (trim, lowercase) is
+// the caller's job.
+func HostNameOK(host string) bool {
+	if len(host) == 0 || len(host) > 253 {
+		return false
+	}
+	for _, l := range strings.Split(host, ".") {
+		if !hostLabel.MatchString(l) {
+			return false
+		}
+	}
+	return true
+}
+
 // ExtraDomain is one of a site's extra domains (Site.Domains), resolved for display and
 // routing: Entry is the API-facing string (the bare label for a subdomain, the full host
 // for an alias, inherited or pinned — like the stored strings of old), Host the name it is

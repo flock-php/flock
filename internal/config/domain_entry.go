@@ -93,13 +93,13 @@ func sanitizeSuffix(raw string) string {
 
 // sanitizeHost is sanitizeSuffix's doctrine for the Host override: a stored host nobody
 // screened is input, not a validated choice. Normalize (trim, lowercase), keep it only if
-// HostLabelOK accepts it — Host is a label, not a suffix, so ValidateTLD does not apply
-// ("localhost" is a perfectly good label) — and clear it when it equals the site's Name,
+// HostNameOK accepts it — Host is a host name, not a suffix, so ValidateTLD does not apply
+// ("localhost" is a perfectly good name) — and clear it when it equals the site's Name,
 // which is the default anyway. An override nobody screened must never be worse than none,
 // and a valid stored host survives untouched, so Loads are idempotent.
 func sanitizeHost(s *Site) {
 	host := strings.ToLower(strings.TrimSpace(s.Host))
-	if !HostLabelOK(host) || host == s.Name {
+	if !HostNameOK(host) || host == s.Name {
 		host = ""
 	}
 	s.Host = host
@@ -129,11 +129,12 @@ func SanitizeTitle(t string) string {
 const maxTitleRunes = 80
 
 // HostName is the name part of the site's primary host: its Host override when set, the
-// identity Name otherwise. A stored Host is sanitized to a single valid label or "" at
-// Load (see sanitizeHost); the synthesized worktree rows this also feeds (see
-// worktreeSites) carry an internal multi-label form ("<slug>.<parent host>"). Exported
-// for the .env retargeter (worktree.HostRenameSwaps, TLDHostSwaps), which names hosts
-// outside Config.Domain and must derive the name part without reading any suffix back.
+// identity Name otherwise. A stored Host is sanitized to a valid (possibly dotted) host
+// name or "" at Load (see sanitizeHost); the synthesized worktree rows this also feeds
+// (see worktreeSites) carry an internal multi-label form ("<slug>.<parent host>").
+// Exported for the .env retargeter (worktree.HostRenameSwaps, TLDHostSwaps), which names
+// hosts outside Config.Domain and must derive the name part without reading any suffix
+// back.
 func (s Site) HostName() string {
 	if s.Host != "" {
 		return s.Host

@@ -121,9 +121,10 @@ func (s *Services) SetRunning(id string, on bool) {
 type Site struct {
 	Name string `json:"name"`
 	// Host replaces the Name in the name part of the site's primary host: a single DNS
-	// label ("liga" → served at liga.<suffix>) while the folder and every config key,
-	// CLI path and API route stay the Name; empty means the Name (today's behavior).
-	// Sanitized at Load like the suffix overrides (see sanitizeHost).
+	// label or a dotted host name ("liga" → served at liga.<suffix>, "cms.liga" →
+	// cms.liga.<suffix>) while the folder and every config key, CLI path and API route
+	// stay the Name; empty means the Name (today's behavior). Sanitized at Load like the
+	// suffix overrides (see sanitizeHost).
 	Host string `json:"host,omitempty"`
 	// Title is the site's display name ("" = inherit the Name). It is display-only:
 	// no host, config key or CLI path derives from it. Sanitized at Load (see
