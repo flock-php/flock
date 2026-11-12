@@ -1810,9 +1810,21 @@ private struct RenameHostSheet: View {
             HStack(alignment: .firstTextBaseline, spacing: 12) {
                 Text("Name").foregroundStyle(.secondary)
                     .frame(width: 48, alignment: .leading)
-                TextField(site.name, text: draftBinding)
-                    .textFieldStyle(.roundedBorder)
-                    .frame(width: 230)
+                // The typed name plus the suffix it will serve under — the permanent tail makes
+                // the full domain visible while typing; it is grey and uneditable on purpose.
+                HStack(spacing: 0) {
+                    TextField(site.name, text: draftBinding)
+                        .textFieldStyle(.plain)
+                        .padding(.leading, 8)
+                    Text(".\(site.tld.isEmpty ? (model.status?.dns.tld ?? "test") : site.tld)")
+                        .foregroundStyle(.secondary)
+                        .padding(.trailing, 8)
+                        .allowsHitTesting(false)
+                }
+                .padding(.vertical, 5)
+                .frame(width: 230)
+                .background(RoundedRectangle(cornerRadius: 6).fill(Color(nsColor: .textBackgroundColor)))
+                .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color(nsColor: .separatorColor)))
             }
             Text("The suffix is chosen in Domain below.")
                 .font(.caption).foregroundStyle(.secondary)
