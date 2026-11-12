@@ -10,7 +10,7 @@ flock tld loc     # switch: acme.loc from now on
 ```
 
 :::app
-The macOS app asks for the same choice in **Settings → General → Network**: pick **.test**, **.loc** or **.local**, or type your own under **Custom…**. What you pick is checked against the rules below as you type: refusals show in red and disable **Apply**, warnings in orange, and a normalized name previews in green. **Apply** runs the whole switch, the password prompt included. Decline the password and the config is on the new suffix already; the app tells you to run `flock install` to finish the setup.
+The macOS app asks for the same choice in **Settings → General → Network**: pick **.alt**, **.example**, **.internal**, **.loc**, **.localhost** or **.test**, or type your own under **Custom…**. What you pick is checked against the rules below as you type: refusals show in red and disable **Apply**, warnings in orange, and a normalized name previews in green. **Apply** runs the whole switch, the password prompt included. Decline the password and the config is on the new suffix already; the app tells you to run `flock install` to finish the setup.
 :::
 
 `loc` is the usual choice. A switch touches everything that names the suffix: the aliases that follow the sites move to the new one (`app-2.test` → `app-2.loc`), the `.env` files of linked sites and worktrees are rewritten (`APP_URL`, `SESSION_DOMAIN`, `SANCTUM_STATEFUL_DOMAINS`, `MAIL_FROM` and Laravel's `MAIL_FROM_ADDRESS` now name the new hosts), the daemon reloads, a suffix nothing serves under anymore is retired, and the new one is pointed at Flock with its own name-constrained certificate authority, recreated and re-trusted, so browsers keep trusting your sites' HTTPS. Sites that carry a suffix of their own, and aliases pinned to a suffix, never move (below). macOS and Linux ask for your password for the DNS and certificate steps, and Windows asks for administrator approval. If you decline a prompt, the config is on the new suffix already; run `flock install` to finish the setup.
@@ -19,7 +19,8 @@ What you may choose:
 
 - A single DNS label: 2 to 63 characters of letters, digits and inner hyphens, starting with a letter. Input is normalized, so `flock tld "LOC "` and `flock tld .loc` both mean `loc`.
 - Names delegated in the public root zone are refused: sites under `.dev` would swallow the real internet behind that suffix.
-- `localhost` and `invalid` are refused; they are reserved for special use.
+- `alt` is accepted with a warning: RFC 9610 reserves it for alternative DNS roots — Flock keeps it local.
+- `invalid` is refused; it is reserved for special use. `localhost` is accepted with a warning: your OS resolves `*.localhost` to loopback itself; Flock serves it from this machine.
 - `local` is accepted with a warning: mDNS (Bonjour) owns `.local`, and macOS may keep resolving those names itself. Prefer `loc`.
 
 `flock status` shows the current suffix under **dns** — one row for every suffix in use. The local API takes the suffix too: `POST /v1/settings` with `{"tld": "loc"}` updates the config and moves the aliases that follow (inherited); explicit ones stay. Pointing the OS at a new suffix is `flock tld`'s job.
