@@ -15,6 +15,7 @@ A site has three names and today two of them are welded together. Split them:
 ### Host (primary domain)
 
 1. **Model:** `Site.Host` (config.json): "" = the site name (today's behavior, byte-stable for existing configs); otherwise a **single DNS label** replacing the name in the primary host. One chokepoint already exists — `Config.Domain(s)` — everything derived (server_name, leaf cert SANs, hosts-file entries, subdomain/alias hosts, status rows) follows by construction.
+   **Amendment (2026-11-12, user ruling):** the host NAME part is relaxed from a single DNS label to a **dotted DNS hostname** — one or more labels joined by single dots, each label HostLabelOK's shape (a-z, 0-9, inner hyphens, ≤63), ≤253 total, leading/trailing/double dots refused: the user hit the wall wanting `cms.liga` → `cms.liga.test`. Safe because everything downstream of the `Config.Domain` chokepoint is label-agnostic string math — worktree hosts already synthesized as `<slug>.<host>`, the `.env` retargeter matches at host boundaries, collisions are exact-host maps, certs cover the full name (all pinned by tests). The alias LABEL rule (`HostLabelOK` for domain-add labels with a suffix, ruling R7) does **not** change; only the site host validator widens (`config.HostNameOK`).
 2. **CLI:** `flock site host <label> [site]` / `flock site host --default [site]` — validates (HostLabelOK + no leading/trailing dot + collision check), retargets the site's `.env` (primary host old→new incl. worktree-derived hosts, same machinery as `site tld`), commits, prints ✓. No elevation (wildcard DNS covers the new name; leaf certs re-issue on demand).
 3. **API/MCP:** `PATCH /v1/sites/{name} {"host":"liga"}` (3-state like tld: absent=keep, ""=default, label=set) with the collision rule shared via config; MCP `update_site` action `set_site_host`; status gains raw `site_host` (additive).
 4. **App (macOS):** a pencil button next to the site's address link → a small sheet with ONE name field (prefilled with the current name part) + a hint line "the suffix is chosen in Domain below" → runs the bundled CLI (`site host …`) streaming in the shared ProvisionSheet (decline not possible — no elevation; failure lines shown as-is).
@@ -27,7 +28,7 @@ A site has three names and today two of them are welded together. Split them:
 
 ## Non-goals
 
-Renaming the identity (`Site.Name`) or the folder; multi-label primaries ("a.b" as a host — single label keeps worktree hosts and subdomain math boring); `.flockrc` storage (machine-local config.json, like TLD); Windows/Linux app controls (follow-ups); changing aliases/subdomains semantics (3b shipped).
+Renaming the identity (`Site.Name`) or the folder; ~~multi-label primaries ("a.b" as a host — single label keeps worktree hosts and subdomain math boring)~~ (relaxed 2026-11-12 — see the amendment to Goal 1); `.flockrc` storage (machine-local config.json, like TLD); Windows/Linux app controls (follow-ups); changing aliases/subdomains semantics (3b shipped).
 
 ## Anti-goals
 

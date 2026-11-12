@@ -86,12 +86,13 @@ On macOS, select the site in **Settings → Sites**: the **Domain** row in its *
 
 A site with a suffix of its own is never dragged by a global change, and neither is an alias pinned to a suffix. What a suffix switch provisions, and the rules a suffix must obey: [Per-site domains](domains.md#per-site-domains).
 
-The name part of the domain is editable too — one word, the suffix staying where it is:
+The name part of the domain is editable too — one or more words joined with dots, the suffix staying where it is:
 
 :::cli
 ```bash
 cd ~/Code/acme
 flock site host liga        # acme.test becomes liga.test
+flock site host cms.liga    # … or cms.liga.test
 flock site host             # show what the site is served as now
 flock site host --default   # the site name rules again (the default)
 ```

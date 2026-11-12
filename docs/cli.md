@@ -30,7 +30,7 @@ This page lists the `flock` commands. The other pages show where to find each ac
 | `flock link [name] [--php 8.4] [--secure]` | Serve the current directory as `<name>.test` |
 | `flock unlink [name]` | Remove a linked site |
 | `flock site tld [suffix] [site]` | Show what a site is served under; with a suffix, serve it under its own (`<name>.<suffix>`, DNS and HTTPS provisioned — asks for your password on macOS and Linux, administrator approval on Windows); `--inherit` makes it follow the global TLD again |
-| `flock site host [label] [site]` | Show the domain name a site is served under; with a label, serve it as `<label>.<suffix>` — one word, the suffix untouched, its subdomains and worktrees' hosts and `.env` files retargeted in the same run (aliases never move; no password asked); `--default` serves it under the site name again |
+| `flock site host [label] [site]` | Show the domain name a site is served under; with a label, serve it as `<label>.<suffix>` — one or more words joined with dots, the suffix untouched, its subdomains and worktrees' hosts and `.env` files retargeted in the same run (aliases never move; no password asked); `--default` serves it under the site name again |
 | `flock site title [words…] [site]` | Show the name the app lists a site under; with words, list it under a display name of your own — nothing else changes (domains, certificates and `.env` files stay where they are); `--default` shows its site name again |
 | `flock sites` | List linked and parked sites, and proxies |
 | `flock proxy <name> <port\|host:port\|url> [--secure]` | Proxy `<name>.test` to a local service, e.g. a Node.js dev server |
