@@ -51,7 +51,9 @@ needs the REVERB_HOST, REVERB_PORT and REVERB_SCHEME lines ` + "`flock reverb`" 
 				return errors.New("Laravel Reverb isn't installed in " + site.Path + " — run `php artisan install:broadcasting --reverb` first")
 			}
 			s.cfg.SetReverb(&site, on)
-			s.cfg.Upsert(site)
+			if err := s.cfg.Upsert(site); err != nil {
+				return err
+			}
 			if err := s.commit(cmd.Context(), cmd.ErrOrStderr()); err != nil {
 				return err
 			}
