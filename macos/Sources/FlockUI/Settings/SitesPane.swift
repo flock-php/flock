@@ -28,12 +28,6 @@ struct SitesPane: View {
     }
     /// The site whose PHP extensions are shown.
     private let extensionsState = State<Status.Site?>(initialValue: nil)
-    /// The site whose display name the Rename sheet is open for.
-    private let editingTitleState = State<Status.Site?>(initialValue: nil)
-    private var editingTitle: Status.Site? {
-        get { editingTitleState.wrappedValue }
-        nonmutating set { editingTitleState.wrappedValue = newValue }
-    }
     /// The site whose domain name the sheet is open for.
     private let editingHostState = State<Status.Site?>(initialValue: nil)
     private var editingHost: Status.Site? {
@@ -198,9 +192,6 @@ struct SitesPane: View {
         }
         .sheet(item: extensionsState.projectedValue) { site in
             SiteExtensionsSheet(site: site)
-        }
-        .sheet(item: editingTitleState.projectedValue) { site in
-            RenameTitleSheet(site: site)
         }
         .sheet(item: editingHostState.projectedValue, onDismiss: {
             // The rename ran the bundled CLI, or was closed: the rows show the outcome.
@@ -480,15 +471,10 @@ struct SitesPane: View {
             HStack(alignment: .top, spacing: 10) {
                 VStack(alignment: .leading, spacing: 2) {
                     HStack(spacing: 6) {
-                        Text(site.title.isEmpty ? site.name : site.title).font(.title3.weight(.semibold))
-                        // Worktree rows are named through their parent: the CLI refuses a title
-                        // (and host) change on them, so no pencil offers what the guard rejects.
-                        if !site.isWorktree {
-                            Button { editingTitle = site } label: { Image(systemName: "pencil") }
-                                .buttonStyle(.borderless)
-                                .foregroundStyle(.secondary)
-                                .help("Rename…")
-                        }
+                        // Keyed to the site: switching sites discards an edit half-typed, even
+                        // though the detail subtree below is itself re-keyed.
+                        SiteTitleField(site: site)
+                            .id(site.id)
                         if site.parked {
                             Badge(text: "Project folder", color: .secondary)
                         }
@@ -496,6 +482,8 @@ struct SitesPane: View {
                     if let text = site.url, let url = URL(string: text) {
                         HStack(spacing: 6) {
                             Link(text, destination: url).font(.callout)
+                            // Worktree rows are named through their parent: the CLI refuses a host
+                            // change on them, so no pencil offers what the guard rejects.
                             if !site.isWorktree {
                                 Button { editingHost = site } label: { Image(systemName: "pencil") }
                                     .buttonStyle(.borderless)
@@ -1654,59 +1642,109 @@ private struct AddSubdomainSheet: View {
     }
 }
 
-/// Renames what Flock shows for a site: the display name lives beside the site name, and empty
-/// text hands the display back to the site name (the folder). This change is a title-only PATCH;
-/// it never touches domains or the config.json entry's name. The daemon screens the text — the
-/// pane's banner reports a refusal while the sheet is already gone.
-private struct RenameTitleSheet: View {
+/// A site's display name in the detail header, click-to-edit: a click on the name swaps in a field
+/// holding the display name (the folder name shows as the placeholder, so the user sees what an
+/// empty field inherits), Enter or a click away commits the trimmed text — hands-down a title-only
+/// PATCH that never touches domains or the config entry's name, empty stores `""` (the display goes
+/// back to the folder name) and unchanged text sends nothing — and Esc drops the edit uncommitted.
+/// A refusal lands in the pane's banner the way it did with the sheet it replaces. The hand cursor
+/// and the tooltip promise all this. The header keys the field to the site (inside the detail
+/// subtree, itself keyed by `.id(selectedID)`), so switching sites rebuilds it and discards an
+/// edit half-typed.
+private struct SiteTitleField: View {
     @Environment(AppModel.self) private var model
-    @Environment(\.dismiss) private var dismiss
     let site: Status.Site
 
-    /// The display name typed so far; nil until the user types, so the field opens on the
-    /// site's current title. (A draft on nil, not a value in init: nothing may overwrite what
-    /// was typed once the sheet has opened.)
-    private let draftState = State<String?>(initialValue: nil)
+    /// Whether the field is open, and what has been typed in it so far — both throwaway by design:
+    /// the site switch recreates this view (see the note above), which clears them.
+    private let editingState = State<Bool>(initialValue: false)
+    private var editing: Bool {
+        get { editingState.wrappedValue }
+        nonmutating set { editingState.wrappedValue = newValue }
+    }
+    private let draftState = State<String>(initialValue: "")
     private var draft: String {
-        get { draftState.wrappedValue ?? site.title }
+        get { draftState.wrappedValue }
         nonmutating set { draftState.wrappedValue = newValue }
     }
     private var draftBinding: Binding<String> {
         Binding(get: { draft }, set: { draftState.wrappedValue = $0 })
     }
+    /// The field's focus: losing it is a commit, exactly like Enter.
+    private let fieldFocus = FocusState<Bool>()
+    /// Whether the pointer sits on the name, so the cursor can be popped even when the name view
+    /// vanishes under it (an edit starting, the site switching) — no stuck hand cursors.
+    private let hoveredState = State<Bool>(initialValue: false)
+    private var hovered: Bool {
+        get { hoveredState.wrappedValue }
+        nonmutating set { hoveredState.wrappedValue = newValue }
+    }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("Rename \(site.title.isEmpty ? site.name : site.title)").font(.headline)
-            HStack(alignment: .firstTextBaseline, spacing: 12) {
-                Text("Name").foregroundStyle(.secondary)
-                    .frame(width: 48, alignment: .leading)
-                TextField(site.name, text: draftBinding)
-                    .textFieldStyle(.roundedBorder)
-                    .frame(width: 230)
-            }
-            Text("Leave empty to inherit the folder name.")
-                .font(.caption).foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-            HStack {
-                Spacer()
-                Button("Cancel", role: .cancel) { dismiss() }
-                    .keyboardShortcut(.cancelAction)
-                Button {
-                    let typed = draft
-                    Task {
-                        await model.settings.perform { _ = try await $0.updateSite(site.name, SiteChange(title: typed)) }
-                        dismiss()
-                    }
-                } label: {
-                    BusyLabel(title: "Rename", busyTitle: "Renaming…", isBusy: model.settings.isBusy)
+        if editing {
+            TextField(site.name, text: draftBinding)
+                .textFieldStyle(.plain)
+                .font(.title3.weight(.semibold))
+                .fixedSize()
+                .focused(fieldFocus.projectedValue)
+                .onAppear { fieldFocus.wrappedValue = true }
+                .onSubmit { commit() }
+                .onChange(of: fieldFocus.wrappedValue) { _, focused in
+                    if !focused { commit() }
                 }
-                .keyboardShortcut(.defaultAction)
-                .disabled(model.settings.isBusy)
-            }
+                // Esc cancels: an invisible button owns the shortcut the way the sheets' Cancel
+                // does, so the key works while the field holds the focus.
+                .background(
+                    Button("") { cancel() }
+                        .keyboardShortcut(.cancelAction)
+                        .opacity(0)
+                        .allowsHitTesting(false)
+                        .accessibilityHidden(true)
+                )
+        } else {
+            Text(site.title.isEmpty ? site.name : site.title)
+                .font(.title3.weight(.semibold))
+                .help("Click to rename — leave empty to inherit the folder name")
+                .onTapGesture {
+                    // Seed the field with the shown name on the way in: the draft itself is empty
+                    // between edits, so an old one can never show up in a new edit.
+                    draft = site.title.isEmpty ? site.name : site.title
+                    editing = true
+                }
+                .onHover { inside in
+                    hovered = inside
+                    if inside { NSCursor.pointingHand.push() } else { NSCursor.pop() }
+                }
+                .onDisappear {
+                    if hovered { NSCursor.pop() }
+                }
         }
-        .padding(20)
-        .frame(width: 420)
+    }
+
+    /// Enter or a click away: close the edit and send the trimmed text — unless nothing of it
+    /// differs from the shown name the field opened with, in which case this is just closing
+    /// (comparing against the shown name, not the raw title, so a click that ends without typing
+    /// never pins an inherited folder name into a title). The field is already gone when `perform`
+    /// runs, so a refusal lands in the pane's banner; busy mid-edit is the banner's business, the
+    /// field never blocks on it.
+    private func commit() {
+        guard editing else { return }
+        editing = false
+        let shown = site.title.isEmpty ? site.name : site.title
+        let typed = draft.trimmingCharacters(in: .whitespaces)
+        draft = ""
+        fieldFocus.wrappedValue = false
+        guard typed != shown else { return }
+        Task {
+            await model.settings.perform { _ = try await $0.updateSite(site.name, SiteChange(title: typed)) }
+        }
+    }
+
+    /// Esc: close the edit and drop the draft — the stored title stands.
+    private func cancel() {
+        editing = false
+        draft = ""
+        fieldFocus.wrappedValue = false
     }
 }
 
