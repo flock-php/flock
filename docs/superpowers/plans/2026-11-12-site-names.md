@@ -22,7 +22,7 @@
 
 - A legacy config (no `host`/`title` keys) produces byte-identical domains, status JSON (keys absent), and hosts-file entries — defaults are `""` = today.
 - Renaming a host moves the primary host, its subdomains, and its worktree hosts (serving + `.env`); it never moves explicit aliases, and inherited aliases are name-free so nothing to move.
-- A hand-edited `config.json` with `host:"A.B."` or `"localhost"`-style junk sanitizes at Load to `""` (folder default) — no crash, no rejected startup; API/CLI inputs reject with zero mutation instead.
+- A hand-edited `config.json` with `host:"A.B."` (non-label) sanitizes at Load to `""` (folder default) — no crash, no rejected startup; special words that pass the label shape (`localhost`) stay (Host is a label, not a suffix); API/CLI inputs reject with zero mutation instead.
 - A host landing on another site's primary/alias/proxy host (or its own alias host) is refused identically by CLI, API, and MCP.
 - Setting a Title changes no host anywhere: `Domain`, `domain` status field, certs, and subdomain hosts are byte-identical before/after.
 
