@@ -35,7 +35,7 @@ flock unpark ~/Work
 
 ## Linking a project
 
-A linked site is a single project folder, wherever it lives. The site name defaults to the folder name. The app shows the site under that name, and the shown name is editable: give it a display name — the pencil next to the site's name, or `flock site title ACME Shop` — and the app shows the site under it, while its domain, path and settings stay exactly as they are. Clearing the name in the app's sheet, or `flock site title --default`, shows the site name (its folder name, unless `flock link` was given another) again.
+A linked site is a single project folder, wherever it lives. The site name defaults to the folder name. The app shows the site under that name, and the shown name is editable: click the name in the site's header and type a display name — Return or a click away commits it, Esc drops it — or run `flock site title ACME Shop`, and the app shows the site under it, while its domain, path and settings stay exactly as they are. Committing the field empty, or `flock site title --default`, shows the site name (its folder name, unless `flock link` was given another) again.
 
 :::app
 In **Settings → Sites**, click **Add Site…** and choose the project folder. Then select the site to set its HTTPS in the **Site** section and its PHP version under **Versions**.
