@@ -20,9 +20,9 @@ struct SitesPane: View {
         get { confirmState.wrappedValue }
         nonmutating set { confirmState.wrappedValue = newValue }
     }
-    /// The site the Add Domain sheet is open for (the sheet's fields live in it).
-    private let addingState = State<String?>(initialValue: nil)
-    private var adding: String? {
+    /// The add sheet that is open: its site and which flow it runs (the sheet's fields live in it).
+    private let addingState = State<AddingDomain?>(initialValue: nil)
+    private var adding: AddingDomain? {
         get { addingState.wrappedValue }
         nonmutating set { addingState.wrappedValue = newValue }
     }
@@ -220,8 +220,12 @@ struct SitesPane: View {
             // The sheet added, declined, or chained and finished: the sites show the outcome.
             Task { await model.settings.refresh() }
         }) {
-            if let adding, let site = model.status?.sites.first(where: { $0.name == adding }) {
-                AddDomainSheet(site: site)
+            if let adding, let site = model.status?.sites.first(where: { $0.name == adding.site }) {
+                if adding.subdomain {
+                    AddSubdomainSheet(site: site)
+                } else {
+                    AddAliasSheet(site: site)
+                }
             }
         }
         .alert("Add a proxy", isPresented: addingProxyState.projectedValue) {
@@ -527,32 +531,25 @@ struct SitesPane: View {
                             .fixedSize(horizontal: false, vertical: true)
                     }
                 }
-                field("Domains") {
+                field("Aliases") {
                     VStack(alignment: .leading, spacing: 3) {
-                        ForEach(site.domains) { domain in
-                            HStack(spacing: 4) {
-                                if let problem = domain.problem {
-                                    Label("\(domain.host): \(problem)", systemImage: "exclamationmark.triangle.fill")
-                                        .foregroundStyle(.orange)
-                                        .fixedSize(horizontal: false, vertical: true)
-                                } else if let url = domain.url.flatMap(URL.init(string:)) {
-                                    Link(domain.alias ? "\(domain.host) (alias)" : domain.host, destination: url)
-                                } else {
-                                    Text(domain.host)
-                                }
-                                Button {
-                                    confirm = ConfirmAction(
-                                        title: "Remove \(domain.host)?", button: "Remove", destructive: true,
-                                        message: "\(domain.host) is no longer served by \(site.name).",
-                                        run: { [name = site.name, entry = domain.entry] client in try await client.removeDomain(site: name, domain: entry) })
-                                } label: { Image(systemName: "minus.circle") }
-                                    .buttonStyle(.borderless)
-                                    .help("Remove \(domain.host)")
-                            }
+                        ForEach(site.domains.filter(\.alias)) { domain in
+                            domainRow(site, domain)
                         }
-                        Button("Add Domain…") { adding = site.name }
+                        Button("Add Alias…") { adding = AddingDomain(site: site.name) }
                             .buttonStyle(.link)
-                            .help("Extra domains: subdomains and aliases")
+                            .help("Another name for the site, with its own subdomains")
+                    }
+                    .font(.callout)
+                }
+                field("Subdomains") {
+                    VStack(alignment: .leading, spacing: 3) {
+                        ForEach(site.domains.filter { !$0.alias }) { domain in
+                            domainRow(site, domain)
+                        }
+                        Button("Add Subdomain…") { adding = AddingDomain(site: site.name, subdomain: true) }
+                            .buttonStyle(.link)
+                            .help("A name under \(site.domain), following the site's suffix")
                     }
                     .font(.callout)
                 }
@@ -610,6 +607,29 @@ struct SitesPane: View {
         // A site's details are the Domain row's owner: switching sites resets the one picker.
         .onChange(of: site.siteTld, initial: true) { _, _ in
             prefillSuffix(site)
+        }
+    }
+
+    /// One row of the Aliases and Subdomains lists: the name (its problem, if any) and Remove.
+    @ViewBuilder private func domainRow(_ site: Status.Site, _ domain: Status.SiteDomain) -> some View {
+        HStack(spacing: 4) {
+            if let problem = domain.problem {
+                Label("\(domain.host): \(problem)", systemImage: "exclamationmark.triangle.fill")
+                    .foregroundStyle(.orange)
+                    .fixedSize(horizontal: false, vertical: true)
+            } else if let url = domain.url.flatMap(URL.init(string:)) {
+                Link(domain.host, destination: url)
+            } else {
+                Text(domain.host)
+            }
+            Button {
+                confirm = ConfirmAction(
+                    title: "Remove \(domain.host)?", button: "Remove", destructive: true,
+                    message: "\(domain.host) is no longer served by \(site.name).",
+                    run: { [name = site.name, entry = domain.entry] client in try await client.removeDomain(site: name, domain: entry) })
+            } label: { Image(systemName: "minus.circle") }
+                .buttonStyle(.borderless)
+                .help("Remove \(domain.host)")
         }
     }
 
@@ -1276,12 +1296,19 @@ private struct ShareSheet: View {
     }
 }
 
-/// Adds a domain to a site: a label and the suffix it lands under. The alias is <label>.<suffix>:
+/// Which add flow is open: the site, and whether it adds an alias or a subdomain.
+private struct AddingDomain: Equatable {
+    var site: String
+    var subdomain: Bool = false
+}
+
+/// Adds an alias to a site: a separate name beside the site's domain, in the label + suffix
+/// model. The alias is <label>.<suffix>:
 /// Inherit follows the site's suffix (it moves when the suffix moves), a picked suffix pins the
 /// alias in place. A suffix new to the machine chains the bundled CLI's `flock install` (streaming
 /// in the sheet stacked on this one, prompts included) so the alias resolves with trusted HTTPS
 /// right away; an already-active suffix adds with nothing to install.
-private struct AddDomainSheet: View {
+private struct AddAliasSheet: View {
     @Environment(AppModel.self) private var model
     @Environment(\.dismiss) private var dismiss
     let site: Status.Site
@@ -1344,11 +1371,11 @@ private struct AddDomainSheet: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("Add a domain to \(site.name)").font(.headline)
+            Text("Add an alias to \(site.name)").font(.headline)
             HStack(alignment: .firstTextBaseline, spacing: 12) {
                 Text("Label").foregroundStyle(.secondary)
                     .frame(width: 48, alignment: .leading)
-                TextField("tenant1, a.b", text: labelState.projectedValue)
+                TextField("api2", text: labelState.projectedValue)
                     .textFieldStyle(.roundedBorder)
                     .frame(width: 230)
             }
@@ -1358,7 +1385,7 @@ private struct AddDomainSheet: View {
                 SuffixPicker(store: model.settings, suffixModel: suffixModel, current: global, allowInherit: true)
             }
             SuffixFeedback(suffixModel: suffixModel, candidate: suffixModel.candidate(current: global))
-            Text(domainHelp)
+            Text(aliasHelp)
                 .font(.caption).foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
             if let error {
@@ -1418,17 +1445,17 @@ private struct AddDomainSheet: View {
         return "\(trimmed.isEmpty ? "name" : trimmed).\(shown)"
     }
 
-    /// What adding a domain does on this machine, in the label + suffix model.
-    private var domainHelp: String {
+    /// What adding an alias does on this machine, in the label + suffix model.
+    private var aliasHelp: String {
         let dns = model.status?.dns
-        let depth = dns?.maxDepth ?? 4
+        let base = "An alias is a separate name for \(site.name), with its own subdomains. The label is one word, no dots; \(aliasPreview) is what lands. Inherit follows \(site.name)’s suffix (.\(siteSuffix)) and moves with it; a picked suffix pins the alias in place."
         if dns?.wildcard ?? true {
-            return "Every subdomain up to \(depth) levels below \(site.domain) already works. The label adds the alias \(aliasPreview): Inherit follows \(site.name)’s suffix (.\(siteSuffix)) and moves with it; a picked suffix pins the alias in place. Added names are listed here and resolve on machines without wildcard DNS."
+            return base
         }
-        return "Wildcard subdomains don't work here (\(dns?.wildcardProblem ?? "")), so add each name you use. The label adds the alias \(aliasPreview): Inherit follows \(site.name)’s suffix; a picked suffix pins the alias in place."
+        return base + " Listing names matters here: wildcard subdomains don't work (\(dns?.wildcardProblem ?? ""))."
     }
 
-    /// Adds the domain on the banner-free path, so a refusal shows in the sheet, then chains
+    /// Adds the alias on the banner-free path, so a refusal shows in the sheet, then chains
     /// the install when the suffix is new to the machine. The pane refreshes on close.
     private func submit() async {
         submitting = true
@@ -1490,6 +1517,102 @@ private struct AddDomainSheet: View {
             // Installed: close both sheets and refresh; the chain sheet's onDismiss stays quiet.
             chainDone = true
             dismiss()
+        }
+    }
+}
+
+/// Adds a subdomain to a site: one name under the site's domain ("tenant1", "a.b"), and the
+/// site's suffix is taken as it comes — there is nothing to pick, it hangs under the site.
+/// The add goes through the legacy classification (no suffix); the daemon decides what lands.
+private struct AddSubdomainSheet: View {
+    @Environment(AppModel.self) private var model
+    @Environment(\.dismiss) private var dismiss
+    let site: Status.Site
+
+    private let nameState = State<String>(initialValue: "")
+    private var name: String {
+        get { nameState.wrappedValue }
+        nonmutating set { nameState.wrappedValue = newValue }
+    }
+    /// The add is in flight; a refusal is the sheet's own red line, never the pane's banner.
+    private let submittingState = State<Bool>(initialValue: false)
+    private var submitting: Bool {
+        get { submittingState.wrappedValue }
+        nonmutating set { submittingState.wrappedValue = newValue }
+    }
+    private let errorState = State<String?>(initialValue: nil)
+    private var error: String? {
+        get { errorState.wrappedValue }
+        nonmutating set { errorState.wrappedValue = newValue }
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Add a subdomain to \(site.name)").font(.headline)
+            HStack(alignment: .firstTextBaseline, spacing: 12) {
+                Text("Name").foregroundStyle(.secondary)
+                    .frame(width: 48, alignment: .leading)
+                TextField("tenant1 or a.b", text: nameState.projectedValue)
+                    .textFieldStyle(.roundedBorder)
+                    .frame(width: 230)
+            }
+            Text(subdomainHelp)
+                .font(.caption).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            if let error {
+                Label(error, systemImage: "exclamationmark.triangle.fill")
+                    .font(.caption).foregroundStyle(.red)
+                    .textSelection(.enabled)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            HStack {
+                Spacer()
+                Button("Cancel", role: .cancel) { dismiss() }
+                    .keyboardShortcut(.cancelAction)
+                Button {
+                    Task { await submit() }
+                } label: {
+                    BusyLabel(title: "Add", busyTitle: "Adding…", isBusy: submitting)
+                }
+                .keyboardShortcut(.defaultAction)
+                .disabled(!canAdd)
+            }
+        }
+        .padding(20)
+        .frame(width: 420)
+    }
+
+    /// Add needs a name and nothing else — there is no check to wait for.
+    private var canAdd: Bool {
+        if submitting { return false }
+        return !name.trimmingCharacters(in: .whitespaces).isEmpty
+    }
+
+    /// Why list a name that already works: the Sites display and machines without wildcard DNS.
+    private var subdomainHelp: String {
+        let trimmed = name.trimmingCharacters(in: .whitespaces)
+        let shown = trimmed.isEmpty ? "name" : trimmed
+        let dns = model.status?.dns
+        let depth = dns?.maxDepth ?? 4
+        let base = "\(shown).\(site.domain) hangs under the site's domain and follows its suffix."
+        if dns?.wildcard ?? true {
+            return base + " Every subdomain up to \(depth) levels deep already works without listing; list it to see it here and on machines without wildcard DNS."
+        }
+        return base + " Listing matters here: wildcard subdomains don't work (\(dns?.wildcardProblem ?? "")), so add each name you use."
+    }
+
+    /// Adds on the banner-free path, so a refusal shows in the sheet. No suffix: the daemon's
+    /// classification decides (a name under the site's domain stays a subdomain of it).
+    private func submit() async {
+        submitting = true
+        error = nil
+        let domain = name.trimmingCharacters(in: .whitespaces)
+        switch await model.settings.addDomainChecked(site: site.name, domain: domain, suffix: "") {
+        case .success:
+            dismiss()
+        case .failure(let failure):
+            submitting = false
+            error = failure.localizedDescription
         }
     }
 }
