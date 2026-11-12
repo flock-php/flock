@@ -481,10 +481,14 @@ struct SitesPane: View {
                 VStack(alignment: .leading, spacing: 2) {
                     HStack(spacing: 6) {
                         Text(site.title.isEmpty ? site.name : site.title).font(.title3.weight(.semibold))
-                        Button { editingTitle = site } label: { Image(systemName: "pencil") }
-                            .buttonStyle(.borderless)
-                            .foregroundStyle(.secondary)
-                            .help("Rename…")
+                        // Worktree rows are named through their parent: the CLI refuses a title
+                        // (and host) change on them, so no pencil offers what the guard rejects.
+                        if !site.isWorktree {
+                            Button { editingTitle = site } label: { Image(systemName: "pencil") }
+                                .buttonStyle(.borderless)
+                                .foregroundStyle(.secondary)
+                                .help("Rename…")
+                        }
                         if site.parked {
                             Badge(text: "Project folder", color: .secondary)
                         }
@@ -492,10 +496,12 @@ struct SitesPane: View {
                     if let text = site.url, let url = URL(string: text) {
                         HStack(spacing: 6) {
                             Link(text, destination: url).font(.callout)
-                            Button { editingHost = site } label: { Image(systemName: "pencil") }
-                                .buttonStyle(.borderless)
-                                .foregroundStyle(.secondary)
-                                .help("Change the domain name…")
+                            if !site.isWorktree {
+                                Button { editingHost = site } label: { Image(systemName: "pencil") }
+                                    .buttonStyle(.borderless)
+                                    .foregroundStyle(.secondary)
+                                    .help("Change the domain name…")
+                            }
                         }
                     }
                     Text(site.path).font(.caption).foregroundStyle(.tertiary)
