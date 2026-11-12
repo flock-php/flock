@@ -24,7 +24,7 @@ func TestNormalizeTLD(t *testing.T) {
 }
 
 func TestValidateTLDAcceptsLocalLabels(t *testing.T) {
-	for _, tld := range []string{"test", "loc", "home-ar"} {
+	for _, tld := range []string{"test", "loc", "home-ar", "internal", "example"} {
 		warning, err := ValidateTLD(tld)
 		if err != nil || warning != "" {
 			t.Errorf("ValidateTLD(%q) = warning %q, err %v; want it accepted without warning", tld, warning, err)
@@ -36,6 +36,18 @@ func TestValidateTLDAcceptsLocalLabels(t *testing.T) {
 	}
 	if !strings.Contains(warning, "Bonjour") || !strings.Contains(warning, "mDNS") {
 		t.Errorf("ValidateTLD(\"local\"): want the warning to mention Bonjour and mDNS, got %q", warning)
+	}
+}
+
+// TestValidateTLDWarnsOnAltAndLocalhost: the picker offers these two and ValidateTLD is the
+// rule for every entry point — accepted with a warning, never an error, so the suffix stays in
+// ActiveSuffixes and gets provisioned (roots, resolvers, NRPT).
+func TestValidateTLDWarnsOnAltAndLocalhost(t *testing.T) {
+	for _, tld := range []string{"localhost", "alt"} {
+		warning, err := ValidateTLD(tld)
+		if err != nil || warning == "" {
+			t.Errorf("ValidateTLD(%q) = warning %q, err %v; want it accepted with a warning", tld, warning, err)
+		}
 	}
 }
 
@@ -56,7 +68,7 @@ func TestValidateTLDRejectsUnusableLabels(t *testing.T) {
 }
 
 func TestValidateTLDRejectsReservedAndPublic(t *testing.T) {
-	for _, tld := range []string{"localhost", "invalid"} {
+	for _, tld := range []string{"invalid"} {
 		if _, err := ValidateTLD(tld); err == nil || !strings.Contains(err.Error(), "reserved") {
 			t.Errorf("ValidateTLD(%q): want an error containing \"reserved\", got %v", tld, err)
 		}

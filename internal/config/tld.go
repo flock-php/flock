@@ -12,10 +12,19 @@ import (
 // edge hyphen can't be a resolvable name.
 var tldLabel = regexp.MustCompile(`^[a-z][a-z0-9-]{0,61}[a-z0-9]$`)
 
-// specialUseTLDs are labels RFC 6761 pins for special use. They are not in the IANA root zone,
-// so the public list alone would let them through: localhost resolves by definition, and
-// invalid never does — neither can name sites.
-var specialUseTLDs = map[string]struct{}{"localhost": {}, "invalid": {}}
+// specialUseTLDs are labels RFC 6761 pins for special use that can never name sites: invalid
+// never resolves at all. They are not in the IANA root zone, so the public list alone would
+// let them through. localhost is the one special-use label Flock serves — see ValidateTLD.
+var specialUseTLDs = map[string]struct{}{"invalid": {}}
+
+// warnedPublicTLDs is the narrow allowlist inside the public-list refusal: labels Flock
+// accepts as local suffixes with a warning even where the public list speaks. alt is reserved
+// for alternative DNS roots (RFC 9610) and may one day be delegated; the exemption keeps a
+// gen-tlds refresh from locking it out, and warns about the label's DNS history meanwhile.
+// Every other public label stays hard-refused.
+var warnedPublicTLDs = map[string]string{
+	"alt": ".alt is reserved for alternative DNS roots (RFC 9610): DNS software may special-case it — Flock keeps it local",
+}
 
 // NormalizeTLD turns user input into the label to store: it trims spaces, strips leading dots
 // (people type ".loc" the way they see it in a URL) and lowercases. The result is validated,
@@ -25,7 +34,8 @@ func NormalizeTLD(raw string) string {
 }
 
 // ValidateTLD takes a normalized TLD (see NormalizeTLD) and returns a warning to show when it
-// is accepted — mDNS owns "local" — and an error when it must not be used: not a label, a
+// is accepted — mDNS owns "local", the OS resolves "localhost" itself, and "alt" is reserved
+// for alternative roots (RFC 9610) — and an error when it must not be used: not a label, a
 // special-use name, or a public TLD, under which sites would shadow real internet names.
 func ValidateTLD(tld string) (string, error) {
 	if tld == "" {
@@ -37,8 +47,14 @@ func ValidateTLD(tld string) (string, error) {
 	if !tldLabel.MatchString(tld) {
 		return "", fmt.Errorf("%q is not a valid TLD: use a-z, 0-9 and inner hyphens, from 2 to 63 characters starting with a letter", tld)
 	}
+	if tld == "localhost" {
+		return ".localhost is special-use (RFC 6761): your OS resolves *.localhost to loopback itself — Flock serves it from this machine", nil
+	}
 	if _, ok := specialUseTLDs[tld]; ok {
 		return "", fmt.Errorf("%q is reserved for special use (RFC 6761): it can't name sites", tld)
+	}
+	if warning, ok := warnedPublicTLDs[tld]; ok {
+		return warning, nil
 	}
 	if IsPublicTLD(tld) {
 		return "", fmt.Errorf("%q is a public TLD: sites under .%s would shadow real internet names", tld, tld)

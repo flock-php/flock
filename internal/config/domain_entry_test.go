@@ -175,14 +175,17 @@ func TestActiveSuffixes(t *testing.T) {
 		Sites: []Site{
 			{Name: "a", TLD: "loc", Domains: []Domain{inherited("i"), pinned("e", "dev2")}},
 			{Name: "b", Domains: []Domain{pinned("p", "home-ar"), sub("plain"), inherited("x"), pinned("dup", "loc")}},
+			{Name: "c", TLD: "alt", Domains: []Domain{pinned("l", "localhost")}},
 		},
 	}
-	if got := cfg.ActiveSuffixes(); !slices.Equal(got, []string{"dev2", "home-ar", "loc", "test"}) {
+	// The warn-not-error suffixes (alt, localhost) stay in the set: the same gate provisions
+	// their roots, resolvers and NRPT entries.
+	if got := cfg.ActiveSuffixes(); !slices.Equal(got, []string{"alt", "dev2", "home-ar", "loc", "localhost", "test"}) {
 		t.Fatalf("ActiveSuffixes: %v", got)
 	}
 
 	cfg.Sites[0].Domains = append(cfg.Sites[0].Domains, pinned("web", "com"), pinned("u", "x"))
-	if got := cfg.ActiveSuffixes(); !slices.Equal(got, []string{"dev2", "home-ar", "loc", "test"}) {
+	if got := cfg.ActiveSuffixes(); !slices.Equal(got, []string{"alt", "dev2", "home-ar", "loc", "localhost", "test"}) {
 		t.Errorf("ActiveSuffixes with a public (com) and refused (x) suffix: %v, want them excluded", got)
 	}
 }

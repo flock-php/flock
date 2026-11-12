@@ -351,6 +351,9 @@ func TestTLDCheck(t *testing.T) {
 		{in: `"LOC "`, ok: true, normalized: "loc"},
 		{in: `"dev"`, ok: false, normalized: "dev", err: "public TLD"},
 		{in: `"local"`, ok: true, normalized: "local", warning: "mDNS"},
+		{in: `"localhost"`, ok: true, normalized: "localhost", warning: "RFC 6761"},
+		{in: `"ALT "`, ok: true, normalized: "alt", warning: "RFC 9610"},
+		{in: `"EXAMPLE "`, ok: true, normalized: "example"},
 		{in: `""`, ok: false, normalized: "", err: "empty"},
 	} {
 		resp, body := call(t, "POST", srv.URL+"/v1/tld/check", "", `{"tld":`+tc.in+`}`)
