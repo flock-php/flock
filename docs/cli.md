@@ -29,6 +29,7 @@ This page lists the `flock` commands. The other pages show where to find each ac
 | `flock link [name] [--php 8.4] [--secure]` | Serve the current directory as `<name>.test` |
 | `flock unlink [name]` | Remove a linked site |
 | `flock sites` | List linked and parked sites, and proxies |
+| `flock open [site\|dir]` | Open a site in the browser (the one you're in, by default, or a site by name or directory) |
 | `flock proxy <name> <port\|host:port\|url> [--secure]` | Proxy `<name>.test` to a local service, e.g. a Node.js dev server |
 | `flock unproxy <name>` | Stop serving a proxy |
 | `flock proxies` | List proxies |
@@ -90,6 +91,7 @@ This page lists the `flock` commands. The other pages show where to find each ac
 | `flock mail` | List caught emails |
 | `flock mail open <id>` | Open an email in your system's mail app |
 | `flock mail clear [inbox]` | Delete caught emails |
+| `flock db [site\|dir] [--client <command>] [--url]` | Open a site's database in the client registered for `postgres://` and `mysql://` links (else an installed TablePlus, TablePro, DataGrip or DBeaver), from its `.env`. `--url` prints driver, host, database, user and URL instead |
 | `flock dumps [on\|off\|clear]` | Capture `dump()` / `dd()` output (and queries, logs, views, jobs and requests), or list captured dumps |
 | `flock dumps page [on\|off]` | Also show `dump()` output in the page or terminal while capturing |
 | `flock events [kind...] [-n 50]` | List captured queries, logs, views, jobs and requests |
