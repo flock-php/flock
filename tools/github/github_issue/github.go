@@ -5,7 +5,10 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
+	"regexp"
+	"strconv"
 
 	"github.com/google/go-github/v93/github"
 )
@@ -14,6 +17,8 @@ const (
 	Claimed    = "claimed"
 	HelpWanted = "help wanted"
 )
+
+var claimMarker = regexp.MustCompile(`<!-- pr-gate:claim pr=(\d+) author=([A-Za-z0-9-]+) -->`)
 
 // User is the GitHub user data used by issue workflows.
 type User struct {
@@ -34,6 +39,12 @@ type Issue struct {
 	AuthorAssociation string
 	Assignees         []User
 	Labels            []Label
+}
+
+// Claim identifies the pull request that owns an automatically claimed issue.
+type Claim struct {
+	PullRequestNumber int
+	Author            string
 }
 
 // Event is an issue webhook event.
@@ -61,6 +72,53 @@ func (s *Service) Get(owner, repository string, number int) (*Issue, error) {
 func (s *Service) AddLabel(owner, repository string, number int, label string) error {
 	_, _, err := s.client.Issues.AddLabelsToIssue(context.Background(), owner, repository, number, []string{label})
 	return err
+}
+
+// CreateClaim records an automated claim before assigning the issue author.
+func (s *Service) CreateClaim(owner, repository string, number, pullRequestNumber int, author string) error {
+	body := fmt.Sprintf("<!-- pr-gate:claim pr=%d author=%s -->\n\nIssue claimed by @%s in PR #%d.", pullRequestNumber, author, author, pullRequestNumber)
+	_, _, err := s.client.Issues.CreateComment(context.Background(), owner, repository, number, github.IssueCommentRequest{Body: body})
+	return err
+}
+
+// FindClaim returns the first claim record written by the contribution workflow.
+func (s *Service) FindClaim(owner, repository string, number int) (*Claim, error) {
+	options := &github.IssueListCommentsOptions{PerPage: 100}
+	var claim *Claim
+	var claimCommentID int64
+	for {
+		comments, response, err := s.client.Issues.ListComments(context.Background(), owner, repository, number, options)
+		if err != nil {
+			return nil, err
+		}
+		for _, comment := range comments {
+			current, ok := claimFromComment(comment)
+			if !ok || (claim != nil && comment.GetID() >= claimCommentID) {
+				continue
+			}
+			claim = current
+			claimCommentID = comment.GetID()
+		}
+		if response.NextPage == 0 {
+			return claim, nil
+		}
+		options.Page = response.NextPage
+	}
+}
+
+func claimFromComment(comment *github.IssueComment) (*Claim, bool) {
+	if comment.GetUser().GetLogin() != "github-actions[bot]" {
+		return nil, false
+	}
+	match := claimMarker.FindStringSubmatch(comment.GetBody())
+	if match == nil {
+		return nil, false
+	}
+	pullRequestNumber, err := strconv.Atoi(match[1])
+	if err != nil || pullRequestNumber == 0 {
+		return nil, false
+	}
+	return &Claim{PullRequestNumber: pullRequestNumber, Author: match[2]}, true
 }
 
 // EnsureClaimedLabel creates the durable pull request approval label when it is missing.

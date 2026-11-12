@@ -38,7 +38,7 @@ func TestRunReopensOnlyGateClosedPullRequests(t *testing.T) {
 				t.Fatalf("approved issue = %+v, want flock#73", result.ApprovedIssue)
 			}
 			if tt.gateClosed {
-				want := []string{"pr:get", "pr:gate-closed", "pr:list-linked-issues", "issue:get", "pr:set-state", "pr:create-comment"}
+				want := []string{"pr:get", "pr:gate-closed", "pr:list-linked-issues", "issue:get", "issue:find-claim", "pr:set-state", "pr:create-comment"}
 				if !reflect.DeepEqual(api.calls, want) {
 					t.Fatalf("calls = %v, want %v", api.calls, want)
 				}
@@ -168,11 +168,11 @@ func TestRunReopensClaimedPullRequestClosedForTheWrongBase(t *testing.T) {
 	}
 }
 
-func TestRunReturnsAssignedHelpWantedIssueForAssignment(t *testing.T) {
+func TestRunReturnsMaintainerAssignedIssueForAnAssignedContributor(t *testing.T) {
 	api := &fakeService{
 		pullRequest: pullRequest("open", "Fixes #73"),
 		issue: &github_issue.Issue{
-			State: "open", Assignees: []github_issue.User{{Login: "claimed-by"}}, Labels: []github_issue.Label{{Name: github_issue.HelpWanted}},
+			State: "open", Assignees: []github_issue.User{{Login: "contributor"}, {Login: "another-contributor"}}, Labels: []github_issue.Label{{Name: github_issue.HelpWanted}},
 		},
 	}
 	result, err := Execute(Dependencies{Issues: &fakeIssueService{api: api}, PullRequests: api}, "flock-php", "flock", Event{Action: "synchronize", Number: 87})
@@ -182,8 +182,40 @@ func TestRunReturnsAssignedHelpWantedIssueForAssignment(t *testing.T) {
 	if result.ApprovedIssue == nil || result.ApprovedIssue.Number != 73 {
 		t.Fatalf("result = %+v, want approved issue flock#73", result)
 	}
-	if want := []string{"pr:get", "pr:list-files", "pr:list-linked-issues", "issue:get"}; !reflect.DeepEqual(api.calls, want) {
+	if want := []string{"pr:get", "pr:list-files", "pr:list-linked-issues", "issue:get", "issue:find-claim"}; !reflect.DeepEqual(api.calls, want) {
 		t.Fatalf("calls = %v, want %v", api.calls, want)
+	}
+}
+
+func TestRunReturnsClaimOwnerForAnotherPullRequest(t *testing.T) {
+	api := &fakeService{
+		pullRequest: pullRequest("open", "Fixes #73"),
+		issue:       approvedIssue(),
+		claim:       &github_issue.Claim{PullRequestNumber: 86, Author: "first-contributor"},
+	}
+
+	result, err := Execute(Dependencies{Issues: &fakeIssueService{api: api}, PullRequests: api}, "flock-php", "flock", Event{Action: "synchronize", Number: 87})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.ApprovedIssue == nil || result.ApprovedIssue.Number != 73 || result.ClaimedBy != "first-contributor" {
+		t.Fatalf("result = %+v", result)
+	}
+}
+
+func TestRunAllowsTheClaimOwnerToRetry(t *testing.T) {
+	api := &fakeService{
+		pullRequest: pullRequest("open", "Fixes #73"),
+		issue:       approvedIssue(),
+		claim:       &github_issue.Claim{PullRequestNumber: 87, Author: "contributor"},
+	}
+
+	result, err := Execute(Dependencies{Issues: &fakeIssueService{api: api}, PullRequests: api}, "flock-php", "flock", Event{Action: "synchronize", Number: 87})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.ApprovedIssue == nil || result.ClaimedBy != "" {
+		t.Fatalf("result = %+v", result)
 	}
 }
 
@@ -200,7 +232,7 @@ func TestRunApprovesFirstProcessedPullRequestDespiteALowerNumber(t *testing.T) {
 	if result.ApprovedIssue == nil || result.ApprovedIssue.Number != 73 {
 		t.Fatalf("result = %+v, want approved issue flock#73", result)
 	}
-	if want := []string{"pr:get", "pr:list-files", "pr:list-linked-issues", "issue:get"}; !reflect.DeepEqual(api.calls, want) {
+	if want := []string{"pr:get", "pr:list-files", "pr:list-linked-issues", "issue:get", "issue:find-claim"}; !reflect.DeepEqual(api.calls, want) {
 		t.Fatalf("calls = %v, want %v", api.calls, want)
 	}
 }
@@ -376,6 +408,7 @@ type fakeService struct {
 	linkedIssues []github_pr.LinkedIssue
 	issue        *github_issue.Issue
 	issues       map[int]*github_issue.Issue
+	claim        *github_issue.Claim
 	gateClosed   bool
 	state        string
 	commented    bool
@@ -387,6 +420,7 @@ type fakeService struct {
 	filesErr     error
 	linkedErr    error
 	gateErr      error
+	findClaimErr error
 	commentErr   error
 	stateErr     error
 }
@@ -411,6 +445,10 @@ func (f *fakeService) ListLinkedIssues(string, string, int) ([]github_pr.LinkedI
 func (f *fakeService) GateClosed(string, string, int) (bool, error) {
 	f.calls = append(f.calls, "pr:gate-closed")
 	return f.gateClosed, f.gateErr
+}
+func (f *fakeService) ClaimCommentExists(string, string, int) (bool, error) {
+	f.calls = append(f.calls, "pr:claim-comment-exists")
+	return false, nil
 }
 func (f *fakeService) CreateComment(string, string, int, string) error {
 	f.calls = append(f.calls, "pr:create-comment")
@@ -439,6 +477,10 @@ func (f *fakeIssueService) Get(_ string, _ string, number int) (*github_issue.Is
 		return issue, f.err
 	}
 	return f.api.issue, f.err
+}
+func (f *fakeIssueService) FindClaim(string, string, int) (*github_issue.Claim, error) {
+	f.api.calls = append(f.api.calls, "issue:find-claim")
+	return f.api.claim, f.api.findClaimErr
 }
 func (f *fakeIssueService) EnsureClaimedLabel(string, string) error {
 	f.api.calls = append(f.api.calls, "issue:ensure-claimed-label")

@@ -42,7 +42,7 @@ func main() {
 	switch os.Args[1] {
 	case "pr":
 		service := PullRequestEventService{
-			Assignment: pr_assignment.Dependencies{Issues: github_issue.New(client), Repositories: github_repository.New(client)},
+			Assignment: pr_assignment.Dependencies{Issues: github_issue.New(client)},
 			Gate:       pr_gate.Dependencies{Issues: github_issue.New(client), PullRequests: github_pr.New(client)},
 			Milestones: github_pr.New(client),
 		}

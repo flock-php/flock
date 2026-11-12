@@ -80,6 +80,26 @@ func TestServiceListsPaginatedClosingIssuesReferences(t *testing.T) {
 	}
 }
 
+func TestServicePropagatesLinkedIssueGraphQLErrors(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost || r.URL.Path != "/graphql" {
+			t.Errorf("request = %s %s", r.Method, r.URL.Path)
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		_, _ = io.WriteString(w, `{"errors":[{"message":"linked issue access denied"}]}`)
+	}))
+	defer server.Close()
+
+	client, err := github_client.New(server.URL, "token")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := New(client).ListLinkedIssues("flock-php", "flock", 87); err == nil || !strings.Contains(err.Error(), "linked issue access denied") {
+		t.Fatalf("ListLinkedIssues() error = %v", err)
+	}
+}
+
 func TestServiceGetsPullRequestsFilesAndUpdates(t *testing.T) {
 	var server *httptest.Server
 	server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -182,6 +202,37 @@ func TestServiceDetectsGateClosedPullRequests(t *testing.T) {
 			got, err := New(client).GateClosed("flock-php", "flock", 87)
 			if err != nil || got != tt.want {
 				t.Fatalf("GateClosed() = %t, %v", got, err)
+			}
+		})
+	}
+}
+
+func TestServiceDetectsBotAuthoredClaimComments(t *testing.T) {
+	for _, tt := range []struct {
+		name     string
+		comments string
+		want     bool
+	}{
+		{name: "bot claim", comments: `[{"user":{"login":"github-actions[bot]"},"body":"<!-- pr-gate:claim -->"}]`, want: true},
+		{name: "user marker", comments: `[{"user":{"login":"contributor"},"body":"<!-- pr-gate:claim -->"}]`},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.URL.Path != "/repos/flock-php/flock/issues/87/comments" {
+					w.WriteHeader(http.StatusNotFound)
+					return
+				}
+				_, _ = io.WriteString(w, tt.comments)
+			}))
+			defer server.Close()
+
+			client, err := github_client.New(server.URL, "token")
+			if err != nil {
+				t.Fatal(err)
+			}
+			got, err := New(client).ClaimCommentExists("flock-php", "flock", 87)
+			if err != nil || got != tt.want {
+				t.Fatalf("ClaimCommentExists() = %t, %v", got, err)
 			}
 		})
 	}

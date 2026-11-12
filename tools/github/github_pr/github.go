@@ -13,7 +13,10 @@ import (
 	"flock/tools/github/github_issue"
 )
 
-const GateMarker = "<!-- pr-gate:closed -->"
+const (
+	GateMarker  = "<!-- pr-gate:closed -->"
+	ClaimMarker = "<!-- pr-gate:claim -->"
+)
 
 type Service struct {
 	client *github.Client
@@ -202,7 +205,8 @@ func (s *Service) ListLinkedIssues(owner, repository string, pullRequestNumber i
 		}
 
 		var response struct {
-			Data struct {
+			Errors []struct{ Message string }
+			Data   struct {
 				Repository struct {
 					PullRequest struct {
 						ClosingIssuesReferences struct {
@@ -226,6 +230,9 @@ func (s *Service) ListLinkedIssues(owner, repository string, pullRequestNumber i
 		if _, err := s.client.Do(request, &response); err != nil {
 			return nil, err
 		}
+		if len(response.Errors) != 0 {
+			return nil, fmt.Errorf("list linked issues for pull request #%d: %s", pullRequestNumber, response.Errors[0].Message)
+		}
 
 		for _, issue := range response.Data.Repository.PullRequest.ClosingIssuesReferences.Nodes {
 			linkedIssue := LinkedIssue{Owner: issue.Repository.Owner.Login, Repository: issue.Repository.Name, Number: issue.Number}
@@ -239,6 +246,26 @@ func (s *Service) ListLinkedIssues(owner, repository string, pullRequestNumber i
 			return issues, nil
 		}
 		cursor = &page.EndCursor
+	}
+}
+
+// ClaimCommentExists reports whether the contribution workflow has announced an automated claim on the pull request.
+func (s *Service) ClaimCommentExists(owner, repository string, number int) (bool, error) {
+	options := &github.IssueListCommentsOptions{PerPage: 100}
+	for {
+		comments, response, err := s.client.Issues.ListComments(context.Background(), owner, repository, number, options)
+		if err != nil {
+			return false, err
+		}
+		for _, comment := range comments {
+			if comment.GetUser().GetLogin() == "github-actions[bot]" && strings.Contains(comment.GetBody(), ClaimMarker) {
+				return true, nil
+			}
+		}
+		if response.NextPage == 0 {
+			return false, nil
+		}
+		options.Page = response.NextPage
 	}
 }
 

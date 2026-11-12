@@ -38,7 +38,7 @@ func (s PullRequestEventService) Run(owner, repository string, data []byte) erro
 			return nil
 		}
 		approvedIssue := *result.ApprovedIssue
-		assignment, err := pr_assignment.Execute(s.Assignment, owner, approvedIssue, event.Author)
+		assignment, err := pr_assignment.Execute(s.Assignment, owner, approvedIssue, event.Number, event.Author)
 		if err != nil {
 			return err
 		}
@@ -46,6 +46,11 @@ func (s PullRequestEventService) Run(owner, repository string, data []byte) erro
 			return pr_gate.CloseClaimedIssue(s.Gate.PullRequests, owner, repository, event.Number, approvedIssue, assignment.ClaimedBy)
 		}
 		if !assignment.ApprovalWithdrawn {
+			if assignment.AutomatedClaim {
+				if err := pr_gate.EnsureClaimComment(s.Gate.PullRequests, owner, repository, event.Number, approvedIssue, event.Author); err != nil {
+					return err
+				}
+			}
 			if err := milestone_transfer.Execute(s.Milestones, owner, repository, event.Number, approvedIssue); err != nil {
 				return err
 			}

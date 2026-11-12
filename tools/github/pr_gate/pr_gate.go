@@ -19,12 +19,14 @@ type PullRequestGateService interface {
 	ListFiles(owner, repository string, number int) ([]github_pr.File, error)
 	ListLinkedIssues(owner, repository string, pullRequestNumber int) ([]github_pr.LinkedIssue, error)
 	GateClosed(owner, repository string, number int) (bool, error)
+	ClaimCommentExists(owner, repository string, number int) (bool, error)
 	CreateComment(owner, repository string, number int, body string) error
 	SetState(owner, repository string, number int, state string) error
 }
 
 type IssueReader interface {
 	Get(owner, repository string, number int) (*github_issue.Issue, error)
+	FindClaim(owner, repository string, number int) (*github_issue.Claim, error)
 	EnsureClaimedLabel(owner, repository string) error
 	AddLabel(owner, repository string, number int, label string) error
 }
@@ -43,6 +45,7 @@ type Event struct {
 
 type Result struct {
 	ApprovedIssue *issue_reference.Reference
+	ClaimedBy     string
 }
 
 type action string
@@ -91,7 +94,7 @@ func (g pullRequestGate) evaluateClosed(pr *github_pr.PullRequest) (Result, bool
 	if err != nil || !closedByGate {
 		return Result{}, false, err
 	}
-	issue, approved, err := firstApprovedIssue(g.dependencies.Issues, g.dependencies.PullRequests, g.owner, g.repository, pr)
+	issue, approved, _, err := firstApprovedIssue(g.dependencies.Issues, g.dependencies.PullRequests, g.owner, g.repository, pr)
 	if err != nil {
 		return Result{}, false, err
 	}
@@ -122,9 +125,12 @@ func (g pullRequestGate) evaluateOpen(pr *github_pr.PullRequest, retryAllowed bo
 	if len(files) != 0 && evaluate(files) == allow {
 		return Result{}, false, nil
 	}
-	issue, approved, err := firstApprovedIssue(g.dependencies.Issues, g.dependencies.PullRequests, g.owner, g.repository, pr)
+	issue, approved, claimedBy, err := firstApprovedIssue(g.dependencies.Issues, g.dependencies.PullRequests, g.owner, g.repository, pr)
 	if err != nil {
 		return Result{}, false, err
+	}
+	if claimedBy != "" {
+		return Result{ApprovedIssue: &issue, ClaimedBy: claimedBy}, false, nil
 	}
 	if approved {
 		return approvedResult(issue), false, nil
@@ -155,6 +161,16 @@ func CloseClaimedIssue(pullRequests PullRequestGateService, owner, repository st
 	return pullRequests.SetState(owner, repository, number, "closed")
 }
 
+// EnsureClaimComment tells contributors when their pull request owns an automated issue claim.
+func EnsureClaimComment(pullRequests PullRequestGateService, owner, repository string, number int, issue issue_reference.Reference, claimant string) error {
+	exists, err := pullRequests.ClaimCommentExists(owner, repository, number)
+	if err != nil || exists {
+		return err
+	}
+	comment := fmt.Sprintf("Issue %s is claimed by @%s in PR #%d.\n\n%s", issue, claimant, number, github_pr.ClaimMarker)
+	return pullRequests.CreateComment(owner, repository, number, comment)
+}
+
 func evaluate(files []github_pr.File) action {
 	if docsOnly(files) {
 		return allow
@@ -162,10 +178,10 @@ func evaluate(files []github_pr.File) action {
 	return closeUnapproved
 }
 
-func firstApprovedIssue(issues IssueReader, pullRequests PullRequestGateService, owner, repository string, pr *github_pr.PullRequest) (issue_reference.Reference, bool, error) {
+func firstApprovedIssue(issues IssueReader, pullRequests PullRequestGateService, owner, repository string, pr *github_pr.PullRequest) (issue_reference.Reference, bool, string, error) {
 	linkedIssues, err := pullRequests.ListLinkedIssues(owner, repository, pr.Number)
 	if err != nil {
-		return issue_reference.Reference{}, false, err
+		return issue_reference.Reference{}, false, "", err
 	}
 	for _, linkedIssue := range linkedIssues {
 		if linkedIssue.Owner != owner || linkedIssue.Repository != repository {
@@ -177,14 +193,27 @@ func firstApprovedIssue(issues IssueReader, pullRequests PullRequestGateService,
 			if isNotFound(err) {
 				continue
 			}
-			return issue_reference.Reference{}, false, err
+			return issue_reference.Reference{}, false, "", err
+		}
+		if issue == nil || issue.IsPullRequest || issue.State != "open" {
+			continue
+		}
+		claim, err := issues.FindClaim(owner, reference.Repository, reference.Number)
+		if err != nil {
+			return issue_reference.Reference{}, false, "", err
+		}
+		if claim != nil {
+			if claim.PullRequestNumber == pr.Number && claim.Author == pr.Author.Login {
+				return reference, true, "", nil
+			}
+			return reference, false, claim.Author, nil
 		}
 		if !issueApproved(issue, pr.Author.Login) {
 			continue
 		}
-		return reference, true, nil
+		return reference, true, "", nil
 	}
-	return issue_reference.Reference{}, false, nil
+	return issue_reference.Reference{}, false, "", nil
 }
 
 func isNotFound(err error) bool {
@@ -236,7 +265,10 @@ func issueApproved(issue *github_issue.Issue, author string) bool {
 	if issue == nil || issue.IsPullRequest || issue.State != "open" {
 		return false
 	}
-	return github_issue.HasHelpWanted(issue) || github_issue.HasAssignee(issue, author)
+	if len(issue.Assignees) != 0 {
+		return github_issue.HasAssignee(issue, author)
+	}
+	return github_issue.HasHelpWanted(issue)
 }
 
 func approvedPullRequest(pr *github_pr.PullRequest) bool {

@@ -147,6 +147,48 @@ func TestServiceCreatesClaimedLabelWhenMissing(t *testing.T) {
 	}
 }
 
+func TestServiceCreatesAndFindsAutomatedClaims(t *testing.T) {
+	var server *httptest.Server
+	server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method + " " + r.URL.Path {
+		case "POST /repos/flock-php/flock/issues/73/comments":
+			body, _ := io.ReadAll(r.Body)
+			if !strings.Contains(string(body), "<!-- pr-gate:claim pr=87 author=contributor -->") ||
+				!strings.Contains(string(body), "Issue claimed by @contributor in PR #87.") {
+				t.Fatalf("claim comment = %s", body)
+			}
+			_, _ = io.WriteString(w, `{}`)
+		case "GET /repos/flock-php/flock/issues/73/comments":
+			if r.URL.Query().Get("page") == "2" {
+				_, _ = io.WriteString(w, `[{"id":99,"user":{"login":"github-actions[bot]"},"body":"<!-- pr-gate:claim pr=86 author=first-contributor -->"}]`)
+				return
+			}
+			w.Header().Set("Link", "<"+server.URL+"/repos/flock-php/flock/issues/73/comments?page=2>; rel=\"next\"")
+			_, _ = io.WriteString(w, `[
+				{"id":1,"user":{"login":"contributor"},"body":"<!-- pr-gate:claim pr=1 author=forged -->"},
+				{"id":2,"user":{"login":"github-actions[bot]"},"body":"<!-- pr-gate:claim pr=0 author=invalid -->"},
+				{"id":100,"user":{"login":"github-actions[bot]"},"body":"<!-- pr-gate:claim pr=87 author=contributor -->"}
+			]`)
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer server.Close()
+
+	client, err := github_client.New(server.URL, "token")
+	if err != nil {
+		t.Fatal(err)
+	}
+	service := New(client)
+	if err := service.CreateClaim("flock-php", "flock", 73, 87, "contributor"); err != nil {
+		t.Fatal(err)
+	}
+	claim, err := service.FindClaim("flock-php", "flock", 73)
+	if err != nil || claim == nil || claim.PullRequestNumber != 86 || claim.Author != "first-contributor" {
+		t.Fatalf("FindClaim() = %+v, %v", claim, err)
+	}
+}
+
 func TestServicePropagatesIssueErrors(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)

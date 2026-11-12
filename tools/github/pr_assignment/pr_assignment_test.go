@@ -14,7 +14,7 @@ func TestRunAssignsAuthorAndMarksIssueClaimed(t *testing.T) {
 		Labels: []github_issue.Label{{Name: github_issue.HelpWanted}},
 	}}
 
-	if _, err := Execute(Dependencies{Issues: api, Repositories: api}, "flock-php", issue_reference.Reference{Repository: "flock", Number: 73}, "contributor"); err != nil {
+	if _, err := Execute(Dependencies{Issues: api}, "flock-php", issue_reference.Reference{Repository: "flock", Number: 73}, 87, "contributor"); err != nil {
 		t.Fatal(err)
 	}
 	if api.assignee != "contributor" || !api.claimed || !api.removed {
@@ -24,50 +24,40 @@ func TestRunAssignsAuthorAndMarksIssueClaimed(t *testing.T) {
 
 func TestExecuteReturnsServiceErrors(t *testing.T) {
 	issue := &github_issue.Issue{Number: 73, State: "open", Labels: []github_issue.Label{{Name: github_issue.HelpWanted}}}
-	for _, api := range []*fakeService{{getErr: errors.New("get")}, {issue: issue, assignErr: errors.New("assign")}, {issue: issue, labelErr: errors.New("label")}, {issue: issue, removeErr: errors.New("remove")}, {issue: &github_issue.Issue{Number: 73, State: "open", Assignees: []github_issue.User{{Login: "another-contributor"}}, Labels: []github_issue.Label{{Name: github_issue.HelpWanted}}}, roleErr: errors.New("role")}} {
-		if _, err := Execute(Dependencies{Issues: api, Repositories: api}, "flock-php", issue_reference.Reference{Repository: "flock", Number: 73}, "contributor"); err == nil {
+	for _, api := range []*fakeService{{getErr: errors.New("get")}, {issue: issue, findClaimErr: errors.New("find claim")}, {issue: issue, createClaimErr: errors.New("create claim")}, {issue: issue, assignErr: errors.New("assign")}, {issue: issue, labelErr: errors.New("label")}, {issue: issue, removeErr: errors.New("remove")}} {
+		if _, err := Execute(Dependencies{Issues: api}, "flock-php", issue_reference.Reference{Repository: "flock", Number: 73}, 87, "contributor"); err == nil {
 			t.Fatal("Execute() returned nil error")
 		}
 	}
 }
 
-func TestExecuteReportsExistingContributorClaim(t *testing.T) {
+func TestExecuteWithdrawsApprovalForAnUnassignedAuthor(t *testing.T) {
 	api := &fakeService{issue: &github_issue.Issue{Number: 73, State: "open", Assignees: []github_issue.User{{Login: "another-contributor"}}, Labels: []github_issue.Label{{Name: github_issue.HelpWanted}}}}
-	result, err := Execute(Dependencies{Issues: api, Repositories: api}, "flock-php", issue_reference.Reference{Repository: "flock", Number: 73}, "contributor")
-	if err != nil || result.ClaimedBy != "another-contributor" {
+	result, err := Execute(Dependencies{Issues: api}, "flock-php", issue_reference.Reference{Repository: "flock", Number: 73}, 87, "contributor")
+	if err != nil || !result.ApprovalWithdrawn {
 		t.Fatalf("Execute() = %+v, %v", result, err)
 	}
-	if api.assignee != "" || api.removed {
-		t.Fatalf("assignee = %q, removed = %t", api.assignee, api.removed)
+	if api.assignee != "" || api.removed || api.claim != nil {
+		t.Fatalf("unexpected claim side effects: %+v", api)
 	}
 }
 
-func TestRunRemovesHelpWantedWhenTheAuthorIsAlreadyAssigned(t *testing.T) {
+func TestExecutePreservesMaintainerAssignments(t *testing.T) {
 	api := &fakeService{issue: &github_issue.Issue{
 		Number:    73,
 		State:     "open",
-		Assignees: []github_issue.User{{Login: "contributor"}},
+		Assignees: []github_issue.User{{Login: "contributor"}, {Login: "another-contributor"}},
 		Labels:    []github_issue.Label{{Name: github_issue.HelpWanted}},
 	}}
-	if _, err := Execute(Dependencies{Issues: api, Repositories: api}, "flock-php", issue_reference.Reference{Repository: "flock", Number: 73}, "contributor"); err != nil {
+	if result, err := Execute(Dependencies{Issues: api}, "flock-php", issue_reference.Reference{Repository: "flock", Number: 73}, 87, "contributor"); err != nil || result != (Result{}) {
 		t.Fatal(err)
 	}
-	if api.assignee != "" || !api.claimed || !api.removed {
-		t.Fatalf("assignee = %q, claimed = %t, removed = %t", api.assignee, api.claimed, api.removed)
+	if api.assignee != "" || api.claimed || api.removed || api.claim != nil {
+		t.Fatalf("unexpected automatic claim state: %+v", api)
 	}
 }
 
-func TestExecuteAllowsMaintainerAssignments(t *testing.T) {
-	api := &fakeService{issue: &github_issue.Issue{Number: 73, State: "open", Assignees: []github_issue.User{{Login: "maintainer"}}, Labels: []github_issue.Label{{Name: github_issue.HelpWanted}}}, roles: map[string]string{"maintainer": "maintain"}}
-	if _, err := Execute(Dependencies{Issues: api, Repositories: api}, "flock-php", issue_reference.Reference{Repository: "flock", Number: 73}, "contributor"); err != nil {
-		t.Fatal(err)
-	}
-	if api.assignee != "contributor" || !api.claimed || !api.removed {
-		t.Fatalf("assignee = %q, claimed = %t, removed = %t", api.assignee, api.claimed, api.removed)
-	}
-}
-
-func TestExecuteMarksAnIssueClaimedWhenGitHubIgnoresAssignment(t *testing.T) {
+func TestExecuteFailsWhenGitHubIgnoresAssignment(t *testing.T) {
 	api := &fakeService{
 		issue: &github_issue.Issue{
 			Number: 73, State: "open", Labels: []github_issue.Label{{Name: github_issue.HelpWanted}},
@@ -77,75 +67,36 @@ func TestExecuteMarksAnIssueClaimedWhenGitHubIgnoresAssignment(t *testing.T) {
 		},
 	}
 
-	if _, err := Execute(Dependencies{Issues: api, Repositories: api}, "flock-php", issue_reference.Reference{Repository: "flock", Number: 73}, "contributor"); err != nil {
-		t.Fatal(err)
+	if _, err := Execute(Dependencies{Issues: api}, "flock-php", issue_reference.Reference{Repository: "flock", Number: 73}, 87, "contributor"); err == nil {
+		t.Fatal("Execute() returned nil error")
 	}
-	if api.assignee != "contributor" || !api.claimed || !api.removed {
-		t.Fatalf("assignee = %q, claimed = %t, removed = %t", api.assignee, api.claimed, api.removed)
+	if api.claim == nil || api.claimed || api.removed {
+		t.Fatalf("claim = %+v, claimed = %t, removed = %t", api.claim, api.claimed, api.removed)
 	}
 }
 
-func TestExecuteReleasesAuthorWhenConcurrentClaimWins(t *testing.T) {
+func TestExecuteReportsAnotherPullRequestClaim(t *testing.T) {
 	api := &fakeService{
-		issue:         &github_issue.Issue{Number: 73, State: "open", Labels: []github_issue.Label{{Name: github_issue.HelpWanted}}},
-		assignedIssue: &github_issue.Issue{Number: 73, Assignees: []github_issue.User{{Login: "zulu"}, {Login: "other-contributor"}}},
+		issue: &github_issue.Issue{Number: 73, State: "open", Labels: []github_issue.Label{{Name: github_issue.HelpWanted}}},
+		claim: &github_issue.Claim{PullRequestNumber: 86, Author: "other-contributor"},
 	}
-	result, err := Execute(Dependencies{Issues: api, Repositories: api}, "flock-php", issue_reference.Reference{Repository: "flock", Number: 73}, "zulu")
+	result, err := Execute(Dependencies{Issues: api}, "flock-php", issue_reference.Reference{Repository: "flock", Number: 73}, 87, "zulu")
 	if err != nil || result.ClaimedBy != "other-contributor" {
 		t.Fatalf("Execute() = %+v, %v", result, err)
 	}
-	if api.removed || api.unassigned != "zulu" {
-		t.Fatalf("removed = %t, unassigned = %q", api.removed, api.unassigned)
+	if api.removed || api.assignee != "" {
+		t.Fatalf("removed = %t, assignee = %q", api.removed, api.assignee)
 	}
 }
 
-func TestExecuteUsesTheSameWinnerForConcurrentClaims(t *testing.T) {
-	assignedIssue := &github_issue.Issue{Number: 73, Assignees: []github_issue.User{{Login: "zulu"}, {Login: "alpha"}}}
-	for _, author := range []string{"alpha", "zulu"} {
-		api := &fakeService{
-			issue:         &github_issue.Issue{Number: 73, State: "open", Labels: []github_issue.Label{{Name: github_issue.HelpWanted}}},
-			assignedIssue: assignedIssue,
-		}
-		result, err := Execute(Dependencies{Issues: api, Repositories: api}, "flock-php", issue_reference.Reference{Repository: "flock", Number: 73}, author)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if author == "alpha" && api.unassigned != "" {
-			t.Fatalf("winning author %q was unassigned", author)
-		}
-		if author == "zulu" && (result.ClaimedBy != "alpha" || api.unassigned != author) {
-			t.Fatalf("losing author result = %+v, unassigned = %q", result, api.unassigned)
-		}
-	}
-}
-
-func TestExecuteRetriesCleanupAfterVerificationFailure(t *testing.T) {
-	initialIssue := &github_issue.Issue{Number: 73, State: "open", Labels: []github_issue.Label{{Name: github_issue.HelpWanted}}}
-	assignedIssue := &github_issue.Issue{
-		Number:    73,
-		State:     "open",
-		Assignees: []github_issue.User{{Login: "zulu"}, {Login: "alpha"}},
-		Labels:    []github_issue.Label{{Name: github_issue.HelpWanted}},
-	}
+func TestExecuteCompletesTheOwnerRetry(t *testing.T) {
 	api := &fakeService{
-		issue:         initialIssue,
-		assignedIssue: assignedIssue,
-		roleErr:       errors.New("role"),
-		removeErr:     errors.New("remove"),
+		issue: &github_issue.Issue{Number: 73, State: "open", Assignees: []github_issue.User{{Login: "contributor"}}, Labels: []github_issue.Label{{Name: github_issue.HelpWanted}}},
+		claim: &github_issue.Claim{PullRequestNumber: 87, Author: "contributor"},
 	}
-	if _, err := Execute(Dependencies{Issues: api, Repositories: api}, "flock-php", issue_reference.Reference{Repository: "flock", Number: 73}, "zulu"); err == nil {
-		t.Fatal("Execute() returned nil error when verification and cleanup failed")
-	}
-	if api.unassigned != "zulu" {
-		t.Fatalf("unassigned = %q, want zulu", api.unassigned)
-	}
-
-	api.issue = assignedIssue
-	api.roleErr = nil
-	api.removeErr = nil
-	result, err := Execute(Dependencies{Issues: api, Repositories: api}, "flock-php", issue_reference.Reference{Repository: "flock", Number: 73}, "zulu")
-	if err != nil || result.ClaimedBy != "alpha" || api.unassigned != "zulu" {
-		t.Fatalf("retry result = %+v, unassigned = %q, err = %v", result, api.unassigned, err)
+	result, err := Execute(Dependencies{Issues: api}, "flock-php", issue_reference.Reference{Repository: "flock", Number: 73}, 87, "contributor")
+	if err != nil || !result.AutomatedClaim || !api.claimed || !api.removed {
+		t.Fatalf("result = %+v, claimed = %t, removed = %t, err = %v", result, api.claimed, api.removed, err)
 	}
 }
 
@@ -156,42 +107,51 @@ func TestExecuteReportsWithdrawnApprovalWithoutClaiming(t *testing.T) {
 		{Number: 73, State: "open"},
 	} {
 		api := &fakeService{issue: issue}
-		result, err := Execute(Dependencies{Issues: api, Repositories: api}, "flock-php", issue_reference.Reference{Repository: "flock", Number: 73}, "contributor")
+		result, err := Execute(Dependencies{Issues: api}, "flock-php", issue_reference.Reference{Repository: "flock", Number: 73}, 87, "contributor")
 		if err != nil || !result.ApprovalWithdrawn {
 			t.Fatalf("Execute() = %+v, %v; want withdrawn approval", result, err)
 		}
-		if api.assignee != "" || api.removed || api.unassigned != "" {
+		if api.assignee != "" || api.removed || api.claim != nil {
 			t.Fatalf("unexpected claim side effects: %+v", api)
 		}
 	}
 }
 
 type fakeService struct {
-	issue         *github_issue.Issue
-	assignedIssue *github_issue.Issue
-	assignee      string
-	unassigned    string
-	removed       bool
-	claimed       bool
-	roles         map[string]string
-	getErr        error
-	assignErr     error
-	removeErr     error
-	labelErr      error
-	roleErr       error
+	issue          *github_issue.Issue
+	assignedIssue  *github_issue.Issue
+	claim          *github_issue.Claim
+	assignee       string
+	removed        bool
+	claimed        bool
+	getErr         error
+	findClaimErr   error
+	createClaimErr error
+	assignErr      error
+	removeErr      error
+	labelErr       error
 }
 
 func (f *fakeService) Get(string, string, int) (*github_issue.Issue, error) { return f.issue, f.getErr }
+func (f *fakeService) FindClaim(string, string, int) (*github_issue.Claim, error) {
+	return f.claim, f.findClaimErr
+}
+func (f *fakeService) CreateClaim(_ string, _ string, _ int, pullRequestNumber int, author string) error {
+	if f.createClaimErr != nil {
+		return f.createClaimErr
+	}
+	f.claim = &github_issue.Claim{PullRequestNumber: pullRequestNumber, Author: author}
+	return nil
+}
 func (f *fakeService) AddAssignee(_ string, _ string, _ int, username string) (*github_issue.Issue, error) {
 	f.assignee = username
-	if f.assignedIssue != nil {
-		return f.assignedIssue, f.assignErr
+	if f.assignErr != nil {
+		return nil, f.assignErr
 	}
-	return &github_issue.Issue{Number: f.issue.Number, State: f.issue.State, Assignees: append(f.issue.Assignees, github_issue.User{Login: username}), Labels: f.issue.Labels}, f.assignErr
-}
-func (f *fakeService) RemoveAssignee(_ string, _ string, _ int, username string) error {
-	f.unassigned = username
-	return f.removeErr
+	if f.assignedIssue != nil {
+		return f.assignedIssue, nil
+	}
+	return &github_issue.Issue{Number: f.issue.Number, State: f.issue.State, Assignees: append(f.issue.Assignees, github_issue.User{Login: username}), Labels: f.issue.Labels}, nil
 }
 func (f *fakeService) AddLabel(_ string, _ string, _ int, label string) error {
 	if label == github_issue.Claimed {
@@ -200,11 +160,9 @@ func (f *fakeService) AddLabel(_ string, _ string, _ int, label string) error {
 	return f.labelErr
 }
 func (f *fakeService) RemoveHelpWanted(string, string, *github_issue.Issue) error {
-	if github_issue.HasHelpWanted(f.issue) {
-		f.removed = true
+	if f.removeErr != nil {
+		return f.removeErr
 	}
-	return f.removeErr
-}
-func (f *fakeService) GetUserRole(_ string, _ string, username string) (string, error) {
-	return f.roles[username], f.roleErr
+	f.removed = true
+	return nil
 }
