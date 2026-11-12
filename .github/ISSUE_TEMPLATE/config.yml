@@ -6,6 +6,3 @@ contact_links:
     -   name: Chat on Discord
         url: https://discord.flockphp.com
         about: Talk with the community and the maintainers.
-    -   name: Report a security vulnerability
-        url: https://github.com/flock-php/flock/security/advisories/new
-        about: Please report security issues privately, not as a public issue.
