@@ -9,6 +9,7 @@ import (
 
 	"flock/tools/github/github_issue"
 	"flock/tools/github/github_pr"
+	"flock/tools/github/issue_reference"
 	"flock/tools/github/pr_assignment"
 	"flock/tools/github/pr_gate"
 )
@@ -40,11 +41,10 @@ func TestRunPullRequestEventClaimsApprovedIssue(t *testing.T) {
 	if issues.assignee != "contributor" || !issues.claimed || !issues.removed {
 		t.Fatalf("assignee = %q, claimed = %t, removed = %t", issues.assignee, issues.claimed, issues.removed)
 	}
-	if !strings.Contains(pullRequests.comment, "Issue flock#73 is claimed by @contributor in PR #87.") ||
-		!strings.Contains(pullRequests.comment, github_pr.ClaimMarker) {
+	if pullRequests.comment != "<!-- pr-gate:claim issue=flock#73 author=contributor -->" {
 		t.Fatalf("claim comment = %q", pullRequests.comment)
 	}
-	want := []string{"pr:get", "pr:list-files", "pr:list-linked-issues", "issue:get", "issue:find-claim", "issue:get", "issue:find-claim", "issue:create-claim", "issue:assign", "issue:add-label", "issue:remove-help-wanted", "pr:claim-comment-exists", "pr:create-comment", "pr:get", "pr:list-linked-issues", "pr:transfer-milestone", "issue:ensure-claimed-label", "issue:add-label"}
+	want := []string{"pr:get", "pr:get", "pr:list-files", "pr:list-linked-issues", "issue:get", "issue:find-claim", "pr:find-claim-record", "pr:create-comment", "issue:get", "issue:find-claim", "issue:create-claim", "issue:assign", "issue:add-label", "issue:remove-help-wanted", "pr:get", "pr:list-linked-issues", "pr:transfer-milestone", "issue:ensure-claimed-label", "issue:add-label"}
 	if !reflect.DeepEqual(calls, want) {
 		t.Fatalf("calls = %v, want %v", calls, want)
 	}
@@ -60,7 +60,7 @@ func TestRunPullRequestEventSkipsCrossRepositoryAssignmentAndMilestoneTransfer(t
 		t.Fatal(err)
 	}
 	want := []string{
-		"pr:get", "pr:list-files", "pr:list-linked-issues",
+		"pr:get", "pr:get", "pr:list-files", "pr:list-linked-issues",
 		"pr:get", "pr:list-files", "pr:list-linked-issues",
 		"pr:get", "pr:list-files", "pr:list-linked-issues", "pr:create-comment", "pr:set-state",
 	}
@@ -79,7 +79,7 @@ func TestRunPullRequestEventClosesIssueClaimedByAnotherContributor(t *testing.T)
 	if err := newPullRequestEventService(pullRequests, issues).Run("flock-php", "flock", []byte(`{"action":"opened","pull_request":{"number":87,"user":{"login":"contributor"}}}`)); err != nil {
 		t.Fatal(err)
 	}
-	want := []string{"pr:get", "pr:list-files", "pr:list-linked-issues", "issue:get", "issue:find-claim", "issue:get", "issue:find-claim", "pr:get", "pr:create-comment", "pr:set-state"}
+	want := []string{"pr:get", "pr:get", "pr:list-files", "pr:list-linked-issues", "issue:get", "issue:find-claim", "pr:find-claim-record", "pr:create-comment", "issue:get", "issue:find-claim", "issue:get", "issue:find-claim", "pr:delete-claim-record", "pr:get", "pr:create-comment", "pr:set-state"}
 	if !reflect.DeepEqual(calls, want) {
 		t.Fatalf("calls = %v, want %v", calls, want)
 	}
@@ -87,8 +87,8 @@ func TestRunPullRequestEventClosesIssueClaimedByAnotherContributor(t *testing.T)
 		!strings.Contains(pullRequests.comment, "other issues labeled `help wanted`") {
 		t.Fatalf("comment = %q", pullRequests.comment)
 	}
-	if issues.findClaimCalls != 2 {
-		t.Fatalf("FindClaim() calls = %d, want gate read and assignment reread", issues.findClaimCalls)
+	if issues.findClaimCalls != 3 {
+		t.Fatalf("FindClaim() calls = %d, want gate, assignment, and release reads", issues.findClaimCalls)
 	}
 }
 
@@ -133,7 +133,7 @@ func TestRunPullRequestEventIgnoresClaimedLabelForAuthorization(t *testing.T) {
 			if !github_pr.HasLabel(pullRequests.pullRequest, github_issue.Claimed) {
 				t.Fatalf("labels = %+v, want the display label after successful transfer", pullRequests.pullRequest.Labels)
 			}
-			want := []string{"pr:get", "pr:list-files", "pr:list-linked-issues", "issue:get", "issue:find-claim", "issue:get", "issue:find-claim", "issue:create-claim", "issue:assign", "issue:add-label", "issue:remove-help-wanted", "pr:claim-comment-exists", "pr:create-comment", "pr:get", "pr:list-linked-issues", "issue:ensure-claimed-label", "issue:add-label"}
+			want := []string{"pr:get", "pr:get", "pr:list-files", "pr:list-linked-issues", "issue:get", "issue:find-claim", "pr:find-claim-record", "pr:create-comment", "issue:get", "issue:find-claim", "issue:create-claim", "issue:assign", "issue:add-label", "issue:remove-help-wanted", "pr:get", "pr:list-linked-issues", "issue:ensure-claimed-label", "issue:add-label"}
 			if !reflect.DeepEqual(calls, want) {
 				t.Fatalf("calls = %v, want %v", calls, want)
 			}
@@ -241,7 +241,7 @@ func TestRunPullRequestEventClosesAssignedIssueForAnotherAuthor(t *testing.T) {
 	if err := newPullRequestEventService(pullRequests, issues).Run("flock-php", "flock", []byte(`{"action":"opened","pull_request":{"number":87,"user":{"login":"contributor"}}}`)); err != nil {
 		t.Fatal(err)
 	}
-	want := []string{"pr:get", "pr:list-files", "pr:list-linked-issues", "issue:get", "pr:get", "pr:list-files", "pr:list-linked-issues", "issue:get", "pr:get", "pr:list-files", "pr:list-linked-issues", "issue:get", "pr:create-comment", "pr:set-state"}
+	want := []string{"pr:get", "pr:get", "pr:list-files", "pr:list-linked-issues", "issue:get", "pr:get", "pr:list-files", "pr:list-linked-issues", "issue:get", "pr:get", "pr:list-files", "pr:list-linked-issues", "issue:get", "pr:create-comment", "pr:set-state"}
 	if !reflect.DeepEqual(calls, want) {
 		t.Fatalf("calls = %v, want %v", calls, want)
 	}
@@ -267,7 +267,7 @@ func TestRunPullRequestEventReevaluatesWhenIssueApprovalIsWithdrawn(t *testing.T
 	if !strings.Contains(pullRequests.comment, "Flock takes pull requests only for issues a maintainer has approved") {
 		t.Fatalf("re-evaluation comment = %q", pullRequests.comment)
 	}
-	want := []string{"pr:get", "pr:gate-closed", "pr:list-linked-issues", "issue:get", "issue:find-claim", "pr:set-state", "pr:create-comment", "issue:get", "pr:get", "pr:list-files", "pr:list-linked-issues", "issue:get", "pr:create-comment", "pr:set-state"}
+	want := []string{"pr:get", "pr:get", "pr:gate-closed", "pr:list-linked-issues", "issue:get", "issue:find-claim", "pr:set-state", "pr:create-comment", "pr:find-claim-record", "pr:create-comment", "issue:get", "issue:get", "issue:find-claim", "pr:delete-claim-record", "pr:get", "pr:list-files", "pr:list-linked-issues", "issue:get", "pr:create-comment", "pr:set-state"}
 	if !reflect.DeepEqual(calls, want) {
 		t.Fatalf("calls = %v, want %v", calls, want)
 	}
@@ -288,6 +288,7 @@ func TestRunPullRequestEventProcessesReplacementApprovedIssue(t *testing.T) {
 			{Number: 73, State: "open", Labels: []github_issue.Label{{Name: "help wanted"}}},
 			{Number: 73, State: "closed", Labels: []github_issue.Label{{Name: "help wanted"}}},
 			{Number: 73, State: "closed", Labels: []github_issue.Label{{Name: "help wanted"}}},
+			{Number: 73, State: "closed", Labels: []github_issue.Label{{Name: "help wanted"}}},
 			{Number: 74, State: "open", Labels: []github_issue.Label{{Name: "help wanted"}}},
 			{Number: 74, State: "open", Labels: []github_issue.Label{{Name: "help wanted"}}},
 		},
@@ -297,8 +298,7 @@ func TestRunPullRequestEventProcessesReplacementApprovedIssue(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := []string{
-		"pr:get", "pr:list-files", "pr:list-linked-issues", "issue:get", "issue:find-claim", "issue:get", "pr:get", "pr:list-files", "pr:list-linked-issues", "issue:get", "issue:get",
-		"issue:find-claim", "issue:get", "issue:find-claim", "issue:create-claim", "issue:assign", "issue:add-label", "issue:remove-help-wanted", "pr:claim-comment-exists", "pr:create-comment", "pr:get", "pr:list-linked-issues", "pr:transfer-milestone", "issue:ensure-claimed-label", "issue:add-label",
+		"pr:get", "pr:get", "pr:list-files", "pr:list-linked-issues", "issue:get", "issue:find-claim", "pr:find-claim-record", "pr:create-comment", "issue:get", "issue:get", "issue:find-claim", "pr:delete-claim-record", "pr:get", "pr:list-files", "pr:list-linked-issues", "issue:get", "issue:get", "issue:find-claim", "pr:find-claim-record", "pr:create-comment", "issue:get", "issue:find-claim", "issue:create-claim", "issue:assign", "issue:add-label", "issue:remove-help-wanted", "pr:get", "pr:list-linked-issues", "pr:transfer-milestone", "issue:ensure-claimed-label", "issue:add-label",
 	}
 	if !reflect.DeepEqual(calls, want) {
 		t.Fatalf("calls = %v, want %v", calls, want)
@@ -318,7 +318,7 @@ func TestRunPullRequestEventBoundsApprovalRetries(t *testing.T) {
 	issues := &pullRequestIssueFake{
 		issue: approved,
 		issueReads: []*github_issue.Issue{
-			approved, withdrawn, approved, withdrawn, approved, withdrawn, approved, withdrawn,
+			approved, withdrawn, approved, approved, withdrawn, approved, approved, withdrawn, approved, approved, withdrawn, approved,
 		},
 		calls: &calls,
 	}
@@ -326,8 +326,112 @@ func TestRunPullRequestEventBoundsApprovalRetries(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), "issue approval changed repeatedly") {
 		t.Fatalf("runPullRequestEvent() error = %v, want bounded-retry error", err)
 	}
-	if got := strings.Count(strings.Join(calls, ","), "issue:get"); got != 8 {
-		t.Fatalf("issue reads = %d, want 8", got)
+	if got := strings.Count(strings.Join(calls, ","), "issue:get"); got != 12 {
+		t.Fatalf("issue reads = %d, want 12", got)
+	}
+}
+
+func TestRunPullRequestEventReleasesAnUnlinkedAutomaticClaim(t *testing.T) {
+	calls := []string{}
+	pullRequests := &pullRequestEventFake{
+		pullRequest:  &github_pr.PullRequest{Number: 87, State: "open", BaseRef: "main", Body: "Fixes #74", Author: github_issue.User{Login: "contributor", Type: "User"}},
+		claimRecord:  &github_pr.ClaimRecord{Issue: issue_reference.Reference{Repository: "flock", Number: 73}, Author: "contributor", CommentID: 12},
+		linkedIssues: []github_pr.LinkedIssue{linkedIssue(74, nil)}, calls: &calls,
+	}
+	issues := &pullRequestIssueFake{
+		issue:      &github_issue.Issue{Number: 73, State: "open", Assignees: []github_issue.User{{Login: "contributor"}}, Labels: []github_issue.Label{{Name: github_issue.Claimed}}},
+		claim:      &github_issue.Claim{PullRequestNumber: 87, Author: "contributor", CommentID: 19},
+		assignment: &github_issue.Assignment{Assigner: "github-actions[bot]"}, calls: &calls,
+	}
+	if err := newPullRequestEventService(pullRequests, issues).Run("flock-php", "flock", []byte(`{"action":"edited","changes":{"body":{}},"pull_request":{"number":87,"user":{"login":"contributor"}}}`)); err != nil {
+		t.Fatal(err)
+	}
+	if issues.claim != nil || len(issues.issue.Assignees) != 0 || !issues.restored || pullRequests.claimRecord != nil {
+		t.Fatalf("release state = %+v, record = %+v", issues, pullRequests.claimRecord)
+	}
+	if err := newPullRequestEventService(pullRequests, issues).Run("flock-php", "flock", []byte(`{"action":"edited","changes":{"body":{}},"pull_request":{"number":87}}`)); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestRunPullRequestEventReleasesClosedAndRetargetedClaims(t *testing.T) {
+	for _, tt := range []struct {
+		name  string
+		state string
+		base  string
+		event string
+	}{
+		{name: "closed", state: "closed", base: "main", event: `{"action":"closed","pull_request":{"number":87}}`},
+		{name: "retargeted", state: "open", base: "release", event: `{"action":"edited","changes":{"base":{}},"pull_request":{"number":87}}`},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			pullRequests := &pullRequestEventFake{
+				pullRequest: &github_pr.PullRequest{Number: 87, State: tt.state, BaseRef: tt.base},
+				claimRecord: &github_pr.ClaimRecord{Issue: issue_reference.Reference{Repository: "flock", Number: 73}, Author: "contributor", CommentID: 12},
+			}
+			issues := &pullRequestIssueFake{
+				issue: &github_issue.Issue{Number: 73, State: "open", Assignees: []github_issue.User{{Login: "contributor"}}, Labels: []github_issue.Label{{Name: github_issue.Claimed}}},
+				claim: &github_issue.Claim{PullRequestNumber: 87, Author: "contributor", CommentID: 19}, assignment: &github_issue.Assignment{Assigner: "github-actions[bot]"},
+			}
+			if err := newPullRequestEventService(pullRequests, issues).Run("flock-php", "flock", []byte(tt.event)); err != nil {
+				t.Fatal(err)
+			}
+			if pullRequests.claimRecord != nil || issues.claim != nil || len(issues.issue.Assignees) != 0 || !issues.restored {
+				t.Fatalf("release state = %+v, record = %+v", issues, pullRequests.claimRecord)
+			}
+		})
+	}
+}
+
+func TestRunPullRequestEventKeepsMergedClaimRecord(t *testing.T) {
+	pullRequests := &pullRequestEventFake{
+		pullRequest: &github_pr.PullRequest{Number: 87, State: "closed", Merged: true, BaseRef: "main"},
+		claimRecord: &github_pr.ClaimRecord{Issue: issue_reference.Reference{Repository: "flock", Number: 73}, Author: "contributor", CommentID: 12},
+	}
+	issues := &pullRequestIssueFake{issue: &github_issue.Issue{Number: 73, State: "open"}}
+	if err := newPullRequestEventService(pullRequests, issues).Run("flock-php", "flock", []byte(`{"action":"closed","pull_request":{"number":87}}`)); err != nil {
+		t.Fatal(err)
+	}
+	if pullRequests.claimRecord == nil || issues.claim != nil || (issues.calls != nil && len(*issues.calls) != 0) {
+		t.Fatalf("merged cleanup changed state: record = %+v, issue calls = %v", pullRequests.claimRecord, issues.calls)
+	}
+}
+
+func TestRunPullRequestEventRetainsRecordWhenCleanupFails(t *testing.T) {
+	pullRequests := &pullRequestEventFake{
+		pullRequest:  &github_pr.PullRequest{Number: 87, State: "open", BaseRef: "main"},
+		claimRecord:  &github_pr.ClaimRecord{Issue: issue_reference.Reference{Repository: "flock", Number: 73}, Author: "contributor", CommentID: 12},
+		linkedIssues: []github_pr.LinkedIssue{}, deleteRecordErr: errors.New("delete record"),
+	}
+	issues := &pullRequestIssueFake{issue: &github_issue.Issue{Number: 73, State: "open"}}
+	err := newPullRequestEventService(pullRequests, issues).Run("flock-php", "flock", []byte(`{"action":"edited","changes":{"body":{}},"pull_request":{"number":87}}`))
+	if err == nil || !strings.Contains(err.Error(), "pull request #87") || pullRequests.claimRecord == nil {
+		t.Fatalf("error = %v, record = %+v; want PR context and retained record", err, pullRequests.claimRecord)
+	}
+}
+
+func TestReplacementPullRequestCanClaimReleasedIssue(t *testing.T) {
+	issue := &github_issue.Issue{Number: 73, State: "open", Assignees: []github_issue.User{{Login: "contributor"}}, Labels: []github_issue.Label{{Name: github_issue.Claimed}}}
+	firstPullRequest := &pullRequestEventFake{
+		pullRequest: &github_pr.PullRequest{Number: 87, State: "closed", BaseRef: "main"},
+		claimRecord: &github_pr.ClaimRecord{Issue: issue_reference.Reference{Repository: "flock", Number: 73}, Author: "contributor", CommentID: 12},
+	}
+	issues := &pullRequestIssueFake{issue: issue, claim: &github_issue.Claim{PullRequestNumber: 87, Author: "contributor", CommentID: 19}, assignment: &github_issue.Assignment{Assigner: "github-actions[bot]"}}
+	if err := newPullRequestEventService(firstPullRequest, issues).Run("flock-php", "flock", []byte(`{"action":"closed","pull_request":{"number":87}}`)); err != nil {
+		t.Fatal(err)
+	}
+	if len(issue.Assignees) != 0 || !github_issue.HasHelpWanted(issue) {
+		t.Fatalf("released issue = %+v", issue)
+	}
+
+	replacement := &pullRequestEventFake{pullRequest: &github_pr.PullRequest{Number: 88, State: "open", BaseRef: "main", Body: "Fixes #73", Author: github_issue.User{Login: "replacement", Type: "User"}}, linkedIssues: []github_pr.LinkedIssue{linkedIssue(73, nil)}}
+	issues.issue = issue
+	issues.claim = nil
+	if err := newPullRequestEventService(replacement, issues).Run("flock-php", "flock", []byte(`{"action":"opened","pull_request":{"number":88,"user":{"login":"replacement"}}}`)); err != nil {
+		t.Fatal(err)
+	}
+	if issues.assignee != "replacement" {
+		t.Fatalf("replacement assignee = %q", issues.assignee)
 	}
 }
 
@@ -351,6 +455,92 @@ func TestRunPullRequestEventStopsOnErrors(t *testing.T) {
 	}
 }
 
+func TestWorkflowTransitionSelectsRecordCleanupAndFollowOnAction(t *testing.T) {
+	issue := issue_reference.Reference{Repository: "flock", Number: 73}
+	gate := pr_gate.Result{ApprovedIssue: &issue}
+	for _, tt := range []struct {
+		name       string
+		assignment pr_assignment.Result
+		want       workflowDecision
+	}{
+		{name: "maintainer assignment", want: workflowDecision{transition: workflowCompleteApproval, record: releaseClaimRecord, claimant: "contributor"}},
+		{name: "automatic claim", assignment: pr_assignment.Result{State: pr_assignment.ResultAutomaticClaim}, want: workflowDecision{transition: workflowCompleteApproval, record: keepClaimRecord, claimant: "contributor"}},
+		{name: "conflict", assignment: pr_assignment.Result{State: pr_assignment.ResultConflict, Claimant: "other"}, want: workflowDecision{transition: workflowCloseConflict, record: releaseClaimRecord, claimant: "other"}},
+		{name: "withdrawn approval", assignment: pr_assignment.Result{State: pr_assignment.ResultApprovalWithdrawn}, want: workflowDecision{transition: workflowRetryApproval, record: releaseClaimRecord, claimant: "contributor"}},
+		{name: "no approved issue", assignment: pr_assignment.Result{}, want: workflowDecision{transition: workflowStop, claimant: "contributor"}},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			gateResult := gate
+			if tt.name == "no approved issue" {
+				gateResult = pr_gate.Result{}
+			}
+			got, err := workflowTransitionFor(gateResult, tt.assignment, "contributor")
+			if err != nil || got != tt.want {
+				t.Fatalf("workflowTransitionFor() = %+v, want %+v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestWorkflowTransitionRejectsAnUnknownAssignmentState(t *testing.T) {
+	issue := issue_reference.Reference{Repository: "flock", Number: 73}
+	_, err := workflowTransitionFor(
+		pr_gate.Result{ApprovedIssue: &issue},
+		pr_assignment.Result{State: pr_assignment.ResultState(99)},
+		"contributor",
+	)
+	if err == nil {
+		t.Fatal("workflowTransitionFor() returned nil error")
+	}
+}
+
+func TestRetryTransitionBoundsApprovalRetries(t *testing.T) {
+	if got := retryTransitionFor(false, 0); got != finishWorkflow {
+		t.Fatalf("retryTransitionFor(false, 0) = %d, want %d", got, finishWorkflow)
+	}
+	if got := retryTransitionFor(true, maxApprovalRetries-1); got != retryWorkflow {
+		t.Fatalf("retryTransitionFor(true, max-1) = %d, want %d", got, retryWorkflow)
+	}
+	if got := retryTransitionFor(true, maxApprovalRetries); got != retryLimitReached {
+		t.Fatalf("retryTransitionFor(true, max) = %d, want %d", got, retryLimitReached)
+	}
+}
+
+func TestLinkedIssueTransitionRequiresTheRecordedRepositoryAndIssue(t *testing.T) {
+	issue := issue_reference.Reference{Repository: "flock", Number: 73}
+	linked := []github_pr.LinkedIssue{linkedIssue(73, nil)}
+	if got := linkedIssueTransitionFor(linked, "flock-php", "flock", issue); got != linkedIssuePresent {
+		t.Fatalf("linkedIssueTransitionFor() = %d, want %d", got, linkedIssuePresent)
+	}
+	if got := linkedIssueTransitionFor(linked, "flock-php", "other", issue); got != linkedIssueMissing {
+		t.Fatalf("linkedIssueTransitionFor() = %d, want %d", got, linkedIssueMissing)
+	}
+	if got := linkedIssueTransitionFor(linked, "flock-php", "flock", issue_reference.Reference{Repository: "flock", Number: 74}); got != linkedIssueMissing {
+		t.Fatalf("linkedIssueTransitionFor() = %d, want %d", got, linkedIssueMissing)
+	}
+}
+
+func TestReconciliationSelectsReleaseBeforeStoppingClosedPullRequests(t *testing.T) {
+	pullRequests := &pullRequestEventFake{
+		pullRequest: &github_pr.PullRequest{Number: 87, State: "closed", BaseRef: "main"},
+		claimRecord: &github_pr.ClaimRecord{Issue: issue_reference.Reference{Repository: "flock", Number: 73}, Author: "contributor", CommentID: 12},
+	}
+	service := newPullRequestEventService(pullRequests, &pullRequestIssueFake{})
+	machine := reconciliationMachine{
+		service:    service,
+		owner:      "flock-php",
+		repository: "flock",
+		event:      github_pr.Event{Action: "closed", Number: 87},
+	}
+	decision, err := machine.evaluate()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if decision.transition != releaseAndStopReconciliation || decision.record == nil {
+		t.Fatalf("reconciliation decision = %+v, want release-and-stop with record", decision)
+	}
+}
+
 func TestAPIURLUsesEnvironmentOverride(t *testing.T) {
 	t.Setenv("GITHUB_API_URL", "https://github.example")
 	if got := apiURL(); got != "https://github.example" {
@@ -370,8 +560,10 @@ type pullRequestEventFake struct {
 	getErr           error
 	comment          string
 	gateClosed       bool
-	claimComment     bool
-	claimCommentErr  error
+	claimRecord      *github_pr.ClaimRecord
+	claimRecordErr   error
+	deleteRecordErr  error
+	linkedErr        error
 	transferredIssue int
 	transferErr      error
 }
@@ -402,16 +594,33 @@ func (f *pullRequestEventFake) GateClosed(string, string, int) (bool, error) {
 	f.record("pr:gate-closed")
 	return f.gateClosed, nil
 }
-func (f *pullRequestEventFake) ClaimCommentExists(string, string, int) (bool, error) {
-	f.record("pr:claim-comment-exists")
-	return f.claimComment, f.claimCommentErr
+func (f *pullRequestEventFake) FindClaimRecord(string, string, int) (*github_pr.ClaimRecord, error) {
+	return f.claimRecord, f.claimRecordErr
+}
+func (f *pullRequestEventFake) CreateClaimRecord(_ string, _ string, _ int, issue issue_reference.Reference, author string) (*github_pr.ClaimRecord, error) {
+	f.record("pr:find-claim-record")
+	if f.claimRecordErr != nil {
+		return nil, f.claimRecordErr
+	}
+	if f.claimRecord != nil && f.claimRecord.Issue == issue && f.claimRecord.Author == author {
+		return f.claimRecord, nil
+	}
+	f.claimRecord = &github_pr.ClaimRecord{Issue: issue, Author: author, CommentID: 1}
+	f.record("pr:create-comment")
+	f.comment = fmt.Sprintf("<!-- pr-gate:claim issue=%s author=%s -->", issue, author)
+	return f.claimRecord, nil
+}
+func (f *pullRequestEventFake) DeleteClaimRecord(string, string, *github_pr.ClaimRecord) error {
+	f.record("pr:delete-claim-record")
+	if f.deleteRecordErr != nil {
+		return f.deleteRecordErr
+	}
+	f.claimRecord = nil
+	return nil
 }
 func (f *pullRequestEventFake) CreateComment(_ string, _ string, _ int, comment string) error {
 	f.record("pr:create-comment")
 	f.comment = comment
-	if strings.Contains(comment, github_pr.ClaimMarker) {
-		f.claimComment = true
-	}
 	return nil
 }
 func (f *pullRequestEventFake) SetState(_, _ string, _ int, state string) error {
@@ -421,7 +630,7 @@ func (f *pullRequestEventFake) SetState(_, _ string, _ int, state string) error 
 }
 func (f *pullRequestEventFake) ListLinkedIssues(string, string, int) ([]github_pr.LinkedIssue, error) {
 	f.record("pr:list-linked-issues")
-	return f.linkedIssues, nil
+	return f.linkedIssues, f.linkedErr
 }
 func (f *pullRequestEventFake) TransferIssueMilestone(_, _ string, _ int, issueNumber int) (bool, error) {
 	f.record("pr:transfer-milestone")
@@ -451,9 +660,10 @@ type pullRequestIssueFake struct {
 	removed        bool
 	claimed        bool
 	claim          *github_issue.Claim
+	assignment     *github_issue.Assignment
+	restored       bool
 	calls          *[]string
 	assignErr      error
-	role           string
 }
 
 func (f *pullRequestIssueFake) Get(string, string, int) (*github_issue.Issue, error) {
@@ -508,6 +718,41 @@ func (f *pullRequestIssueFake) AddLabel(_ string, _ string, number int, label st
 func (f *pullRequestIssueFake) RemoveHelpWanted(string, string, *github_issue.Issue) error {
 	f.record("issue:remove-help-wanted")
 	f.removed = true
+	return nil
+}
+func (f *pullRequestIssueFake) DeleteClaim(string, string, int64) error {
+	f.record("issue:delete-claim")
+	f.claim = nil
+	return nil
+}
+func (f *pullRequestIssueFake) LatestAssignment(string, string, int, string) (*github_issue.Assignment, error) {
+	f.record("issue:latest-assignment")
+	return f.assignment, nil
+}
+func (f *pullRequestIssueFake) RemoveAssignee(string, string, int, string) error {
+	f.record("issue:remove-assignee")
+	f.issue.Assignees = nil
+	return nil
+}
+func (f *pullRequestIssueFake) RemoveClaimed(string, string, *github_issue.Issue) error {
+	f.record("issue:remove-claimed")
+	if f.issue != nil {
+		labels := f.issue.Labels[:0]
+		for _, label := range f.issue.Labels {
+			if label.Name != github_issue.Claimed {
+				labels = append(labels, label)
+			}
+		}
+		f.issue.Labels = labels
+	}
+	return nil
+}
+func (f *pullRequestIssueFake) RestoreHelpWanted(string, string, *github_issue.Issue) error {
+	f.record("issue:restore-help-wanted")
+	f.restored = true
+	if f.issue != nil && f.issue.State == "open" && len(f.issue.Assignees) == 0 {
+		f.issue.Labels = append(f.issue.Labels, github_issue.Label{Name: github_issue.HelpWanted})
+	}
 	return nil
 }
 func (f *pullRequestIssueFake) record(call string) {

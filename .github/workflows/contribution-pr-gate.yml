@@ -18,7 +18,7 @@ on:
   pull_request_target:
     # "edited": a PR's base can change after it opens, and a gate-closed PR can add an approved
     # issue to its description. "synchronize": a docs-only PR can get other changes pushed to it.
-    types: [ opened, reopened, edited, synchronize ]
+    types: [ opened, reopened, edited, synchronize, closed ]
 
 permissions:
   contents: read

@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"flock/tools/github/github_client"
+	"flock/tools/github/issue_reference"
 )
 
 func TestServiceTransfersMilestone(t *testing.T) {
@@ -208,14 +209,15 @@ func TestServiceDetectsGateClosedPullRequests(t *testing.T) {
 	}
 }
 
-func TestServiceDetectsBotAuthoredClaimComments(t *testing.T) {
+func TestServiceReadsBotAuthoredClaimRecords(t *testing.T) {
 	for _, tt := range []struct {
-		name     string
-		comments string
-		want     bool
+		name      string
+		comments  string
+		wantIssue issue_reference.Reference
+		wantFound bool
 	}{
-		{name: "bot claim", comments: `[{"user":{"login":"github-actions[bot]"},"body":"<!-- pr-gate:claim -->"}]`, want: true},
-		{name: "user marker", comments: `[{"user":{"login":"contributor"},"body":"<!-- pr-gate:claim -->"}]`},
+		{name: "structured bot claim", comments: `[{"id":4,"user":{"login":"github-actions[bot]"},"body":"<!-- pr-gate:claim issue=flock#73 author=contributor -->"}]`, wantIssue: issue_reference.Reference{Repository: "flock", Number: 73}, wantFound: true},
+		{name: "user marker", comments: `[{"id":4,"user":{"login":"contributor"},"body":"<!-- pr-gate:claim issue=flock#73 author=contributor -->"}]`},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -231,9 +233,74 @@ func TestServiceDetectsBotAuthoredClaimComments(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			got, err := New(client).ClaimCommentExists("flock-php", "flock", 87)
-			if err != nil || got != tt.want {
-				t.Fatalf("ClaimCommentExists() = %t, %v", got, err)
+			got, err := New(client).FindClaimRecord("flock-php", "flock", 87)
+			if err != nil || (got != nil) != tt.wantFound {
+				t.Fatalf("FindClaimRecord() = %+v, %v", got, err)
+			}
+			if got != nil && got.Issue != tt.wantIssue {
+				t.Fatalf("record issue = %+v, want %+v", got.Issue, tt.wantIssue)
+			}
+		})
+	}
+}
+
+func TestServiceCreatesReusesAndDeletesClaimRecords(t *testing.T) {
+	var comments = 0
+	var deleted int64
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method + " " + r.URL.Path {
+		case "GET /repos/flock-php/flock/issues/87/comments":
+			if comments == 0 {
+				_, _ = io.WriteString(w, `[]`)
+				return
+			}
+			_, _ = io.WriteString(w, `[{"id":12,"user":{"login":"github-actions[bot]"},"body":"<!-- pr-gate:claim issue=flock#73 author=contributor -->"}]`)
+		case "POST /repos/flock-php/flock/issues/87/comments":
+			comments++
+			_, _ = io.WriteString(w, `{"id":12}`)
+		case "DELETE /repos/flock-php/flock/issues/comments/12":
+			deleted = 12
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer server.Close()
+	client, err := github_client.New(server.URL, "token")
+	if err != nil {
+		t.Fatal(err)
+	}
+	service := New(client)
+	issue := issue_reference.Reference{Repository: "flock", Number: 73}
+	created, err := service.CreateClaimRecord("flock-php", "flock", 87, issue, "contributor")
+	if err != nil || created.CommentID != 12 {
+		t.Fatalf("CreateClaimRecord() = %+v, %v", created, err)
+	}
+	reused, err := service.CreateClaimRecord("flock-php", "flock", 87, issue, "contributor")
+	if err != nil || reused.CommentID != 12 || comments != 1 {
+		t.Fatalf("reused record = %+v, %v; comments = %d", reused, err, comments)
+	}
+	if err := service.DeleteClaimRecord("flock-php", "flock", created); err != nil || deleted != 12 {
+		t.Fatalf("DeleteClaimRecord() = %v, deleted = %d", err, deleted)
+	}
+}
+
+func TestClaimRecordTransitionForSelectsIdempotentWrites(t *testing.T) {
+	issue := issue_reference.Reference{Repository: "flock", Number: 73}
+	for _, tt := range []struct {
+		name   string
+		record *ClaimRecord
+		issue  issue_reference.Reference
+		author string
+		want   claimRecordTransition
+	}{
+		{name: "missing record", issue: issue, author: "contributor", want: createClaimRecord},
+		{name: "matching record", record: &ClaimRecord{Issue: issue, Author: "contributor"}, issue: issue, author: "contributor", want: reuseClaimRecord},
+		{name: "different issue", record: &ClaimRecord{Issue: issue, Author: "contributor"}, issue: issue_reference.Reference{Repository: "flock", Number: 74}, author: "contributor", want: createClaimRecord},
+		{name: "different author", record: &ClaimRecord{Issue: issue, Author: "another"}, issue: issue, author: "contributor", want: createClaimRecord},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := claimRecordTransitionFor(tt.record, tt.issue, tt.author); got != tt.want {
+				t.Fatalf("claimRecordTransitionFor() = %d, want %d", got, tt.want)
 			}
 		})
 	}

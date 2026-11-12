@@ -196,6 +196,7 @@ func TestServiceCreatesAndFindsAutomatedClaims(t *testing.T) {
 			_, _ = io.WriteString(w, `[
 				{"id":1,"user":{"login":"contributor"},"body":"<!-- pr-gate:claim pr=1 author=forged -->"},
 				{"id":2,"user":{"login":"github-actions[bot]"},"body":"<!-- pr-gate:claim pr=0 author=invalid -->"},
+				{"id":101,"user":{"login":"github-actions[bot]"},"body":"User text <!-- pr-gate:claim pr=88 author=forged -->"},
 				{"id":100,"user":{"login":"github-actions[bot]"},"body":"<!-- pr-gate:claim pr=87 author=contributor -->"}
 			]`)
 		default:
@@ -213,8 +214,71 @@ func TestServiceCreatesAndFindsAutomatedClaims(t *testing.T) {
 		t.Fatal(err)
 	}
 	claim, err := service.FindClaim("flock-php", "flock", 73)
-	if err != nil || claim == nil || claim.PullRequestNumber != 86 || claim.Author != "first-contributor" {
+	if err != nil || claim == nil || claim.PullRequestNumber != 86 || claim.Author != "first-contributor" || claim.CommentID != 99 {
 		t.Fatalf("FindClaim() = %+v, %v", claim, err)
+	}
+}
+
+func TestServiceDeletesClaimByExactCommentID(t *testing.T) {
+	var deletedPath string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		deletedPath = r.URL.Path
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer server.Close()
+	client, err := github_client.New(server.URL, "token")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := New(client).DeleteClaim("flock-php", "flock", 99); err != nil || deletedPath != "/repos/flock-php/flock/issues/comments/99" {
+		t.Fatalf("DeleteClaim() = %v, path = %q", err, deletedPath)
+	}
+}
+
+func TestServiceFindsLatestAssignmentAcrossPages(t *testing.T) {
+	var server *httptest.Server
+	server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Query().Get("page") == "2" {
+			_, _ = io.WriteString(w, `[{"event":"assigned","assignee":{"login":"contributor"},"assigner":{"login":"maintainer"},"created_at":"2026-01-03T00:00:00Z"}]`)
+			return
+		}
+		w.Header().Set("Link", "<"+server.URL+"/repos/flock-php/flock/issues/73/events?page=2>; rel=\"next\"")
+		_, _ = io.WriteString(w, `[{"event":"assigned","assignee":{"login":"contributor"},"assigner":{"login":"github-actions[bot]"},"created_at":"2026-01-02T00:00:00Z"},{"event":"assigned","assignee":{"login":"other"},"assigner":{"login":"github-actions[bot]"},"created_at":"2026-01-04T00:00:00Z"}]`)
+	}))
+	defer server.Close()
+	client, err := github_client.New(server.URL, "token")
+	if err != nil {
+		t.Fatal(err)
+	}
+	assignment, err := New(client).LatestAssignment("flock-php", "flock", 73, "contributor")
+	if err != nil || assignment == nil || assignment.Assigner != "maintainer" {
+		t.Fatalf("LatestAssignment() = %+v, %v", assignment, err)
+	}
+}
+
+func TestServiceRestoresHelpWantedOnlyForOpenUnassignedIssues(t *testing.T) {
+	for _, body := range []string{
+		`{"number":73,"state":"closed","assignees":[]}`,
+		`{"number":73,"state":"open","assignees":[{"login":"maintainer"}]}`,
+	} {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.Method != http.MethodGet || r.URL.Path != "/repos/flock-php/flock/issues/73" {
+				t.Errorf("request = %s %s", r.Method, r.URL.Path)
+				w.WriteHeader(http.StatusNotFound)
+				return
+			}
+			_, _ = io.WriteString(w, body)
+		}))
+		client, err := github_client.New(server.URL, "token")
+		if err != nil {
+			server.Close()
+			t.Fatal(err)
+		}
+		if err := New(client).RestoreHelpWanted("flock-php", "flock", &Issue{Number: 73}); err != nil {
+			server.Close()
+			t.Fatal(err)
+		}
+		server.Close()
 	}
 }
 

@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"regexp"
 	"strconv"
+	"time"
 
 	"github.com/google/go-github/v93/github"
 )
@@ -18,7 +19,7 @@ const (
 	HelpWanted = "help wanted"
 )
 
-var claimMarker = regexp.MustCompile(`<!-- pr-gate:claim pr=(\d+) author=([A-Za-z0-9-]+) -->`)
+var claimMarker = regexp.MustCompile(`^<!-- pr-gate:claim pr=(\d+) author=([A-Za-z0-9-]+) -->(?:\r?\n|$)`)
 
 // User is the GitHub user data used by issue workflows.
 type User struct {
@@ -45,6 +46,11 @@ type Issue struct {
 type Claim struct {
 	PullRequestNumber int
 	Author            string
+	CommentID         int64
+}
+
+type Assignment struct {
+	Assigner string
 }
 
 // Event is an issue webhook event.
@@ -118,7 +124,22 @@ func claimFromComment(comment *github.IssueComment) (*Claim, bool) {
 	if err != nil || pullRequestNumber == 0 {
 		return nil, false
 	}
-	return &Claim{PullRequestNumber: pullRequestNumber, Author: match[2]}, true
+	return &Claim{
+		PullRequestNumber: pullRequestNumber,
+		Author:            match[2],
+		CommentID:         comment.GetID(),
+	}, true
+}
+
+func (s *Service) DeleteClaim(owner, repository string, commentID int64) error {
+	if commentID == 0 {
+		return nil
+	}
+	_, err := s.client.Issues.DeleteComment(context.Background(), owner, repository, commentID)
+	if isNotFound(err) {
+		return nil
+	}
+	return err
 }
 
 // EnsureClaimedLabel creates the durable pull request approval label when it is missing.
@@ -181,7 +202,52 @@ func (s *Service) AddAssignee(owner, repository string, number int, username str
 
 func (s *Service) RemoveAssignee(owner, repository string, number int, username string) error {
 	_, _, err := s.client.Issues.RemoveAssignees(context.Background(), owner, repository, number, []string{username})
+	if isNotFound(err) {
+		return nil
+	}
 	return err
+}
+
+func (s *Service) LatestAssignment(owner, repository string, number int, username string) (*Assignment, error) {
+	var latest time.Time
+	var assigner string
+	options := &github.ListOptions{PerPage: 100}
+	for {
+		events, response, err := s.client.Issues.ListIssueEvents(context.Background(), owner, repository, number, options)
+		if err != nil {
+			return nil, err
+		}
+		for _, event := range events {
+			if event.GetEvent() != "assigned" || event.GetAssignee().GetLogin() != username {
+				continue
+			}
+			createdAt := event.GetCreatedAt().Time
+			if !createdAt.After(latest) {
+				continue
+			}
+			latest = createdAt
+			assigner = event.GetAssigner().GetLogin()
+		}
+		if response.NextPage == 0 {
+			break
+		}
+		options.Page = response.NextPage
+	}
+	if latest.IsZero() {
+		return nil, nil
+	}
+	return &Assignment{Assigner: assigner}, nil
+}
+
+func (s *Service) RestoreHelpWanted(owner, repository string, issue *Issue) error {
+	current, err := s.Get(owner, repository, issue.Number)
+	if err != nil {
+		return err
+	}
+	if current == nil || current.State != "open" || len(current.Assignees) != 0 {
+		return nil
+	}
+	return s.AddLabel(owner, repository, issue.Number, HelpWanted)
 }
 
 func HasHelpWanted(issue *Issue) bool {

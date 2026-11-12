@@ -8,6 +8,7 @@ import (
 
 	"flock/tools/github/github_issue"
 	"flock/tools/github/github_pr"
+	"flock/tools/github/issue_reference"
 	"github.com/google/go-github/v93/github"
 )
 
@@ -555,6 +556,47 @@ func TestApplyRejectsUnknownTransition(t *testing.T) {
 	}
 }
 
+func TestClaimedIssueTransitionOnlyClosesOpenPullRequests(t *testing.T) {
+	for _, tt := range []struct {
+		name string
+		pr   *github_pr.PullRequest
+		want claimedIssueTransition
+	}{
+		{name: "missing pull request", want: leaveClaimedPullRequestOpen},
+		{name: "closed pull request", pr: pullRequest("closed", "Fixes #73"), want: leaveClaimedPullRequestOpen},
+		{name: "open pull request", pr: pullRequest("open", "Fixes #73"), want: closeClaimedPullRequest},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := claimedIssueTransitionFor(tt.pr); got != tt.want {
+				t.Fatalf("claimedIssueTransitionFor() = %d, want %d", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestLinkedIssueTransitionSelectsTheFirstApprovedIssueAndConflict(t *testing.T) {
+	for _, tt := range []struct {
+		name          string
+		authorization github_issue.AuthorizationState
+		conflictFound bool
+		want          linkedIssueTransition
+		wantErr       bool
+	}{
+		{name: "approved", authorization: github_issue.AuthorizationMaintainerAssignment, want: approveLinkedIssue},
+		{name: "first conflict", authorization: github_issue.AuthorizationAutomaticClaimConflict, want: rememberLinkedIssueConflict},
+		{name: "later conflict", authorization: github_issue.AuthorizationAutomaticClaimConflict, conflictFound: true, want: skipLinkedIssue},
+		{name: "denied", authorization: github_issue.AuthorizationDenied, want: skipLinkedIssue},
+		{name: "unknown", authorization: github_issue.AuthorizationState(99), want: skipLinkedIssue, wantErr: true},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := linkedIssueTransitionFor(tt.authorization, tt.conflictFound)
+			if got != tt.want || (err != nil) != tt.wantErr {
+				t.Fatalf("linkedIssueTransitionFor() = %d, %v; want %d, error=%t", got, err, tt.want, tt.wantErr)
+			}
+		})
+	}
+}
+
 type fakeService struct {
 	pullRequest  *github_pr.PullRequest
 	files        []github_pr.File
@@ -600,9 +642,16 @@ func (f *fakeService) GateClosed(string, string, int) (bool, error) {
 	f.calls = append(f.calls, "pr:gate-closed")
 	return f.gateClosed, f.gateErr
 }
-func (f *fakeService) ClaimCommentExists(string, string, int) (bool, error) {
-	f.calls = append(f.calls, "pr:claim-comment-exists")
-	return false, nil
+func (f *fakeService) FindClaimRecord(string, string, int) (*github_pr.ClaimRecord, error) {
+	return nil, nil
+}
+func (f *fakeService) CreateClaimRecord(string, string, int, issue_reference.Reference, string) (*github_pr.ClaimRecord, error) {
+	f.calls = append(f.calls, "pr:find-claim-record")
+	return nil, nil
+}
+func (f *fakeService) DeleteClaimRecord(string, string, *github_pr.ClaimRecord) error {
+	f.calls = append(f.calls, "pr:delete-claim-record")
+	return nil
 }
 func (f *fakeService) CreateComment(string, string, int, string) error {
 	f.calls = append(f.calls, "pr:create-comment")

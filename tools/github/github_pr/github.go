@@ -4,18 +4,25 @@ package github_pr
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/google/go-github/v93/github"
 
 	"flock/tools/github/github_issue"
+	"flock/tools/github/issue_reference"
 )
 
 const (
-	GateMarker  = "<!-- pr-gate:closed -->"
-	ClaimMarker = "<!-- pr-gate:claim -->"
+	GateMarker = "<!-- pr-gate:closed -->"
+)
+
+var (
+	claimRecordMarker = regexp.MustCompile(`^<!-- pr-gate:claim issue=([A-Za-z0-9_.-]+)#([0-9]+) author=([A-Za-z0-9-]+) -->$`)
 )
 
 type Service struct {
@@ -28,6 +35,19 @@ type LinkedIssue struct {
 	Number          int
 	MilestoneNumber *int
 }
+
+type ClaimRecord struct {
+	Issue     issue_reference.Reference
+	Author    string
+	CommentID int64
+}
+
+type claimRecordTransition uint8
+
+const (
+	createClaimRecord claimRecordTransition = iota
+	reuseClaimRecord
+)
 
 // PullRequest is the GitHub pull request data used by workflows.
 type PullRequest struct {
@@ -253,24 +273,92 @@ func (s *Service) ListLinkedIssues(owner, repository string, pullRequestNumber i
 	}
 }
 
-// ClaimCommentExists reports whether the contribution workflow has announced an automated claim on the pull request.
-func (s *Service) ClaimCommentExists(owner, repository string, number int) (bool, error) {
+// FindClaimRecord returns the workflow-owned issue record on a pull request.
+func (s *Service) FindClaimRecord(owner, repository string, pullRequestNumber int) (*ClaimRecord, error) {
 	options := &github.IssueListCommentsOptions{PerPage: 100}
+	var record *ClaimRecord
 	for {
-		comments, response, err := s.client.Issues.ListComments(context.Background(), owner, repository, number, options)
+		comments, response, err := s.client.Issues.ListComments(context.Background(), owner, repository, pullRequestNumber, options)
 		if err != nil {
-			return false, err
+			return nil, err
 		}
 		for _, comment := range comments {
-			if comment.GetUser().GetLogin() == "github-actions[bot]" && strings.Contains(comment.GetBody(), ClaimMarker) {
-				return true, nil
+			if comment.GetUser().GetLogin() != "github-actions[bot]" {
+				continue
 			}
+			current, ok := claimRecordFromComment(comment)
+			if !ok || (record != nil && comment.GetID() <= record.CommentID) {
+				continue
+			}
+			record = current
 		}
 		if response.NextPage == 0 {
-			return false, nil
+			return record, nil
 		}
 		options.Page = response.NextPage
 	}
+}
+
+func claimRecordFromComment(comment *github.IssueComment) (*ClaimRecord, bool) {
+	if match := claimRecordMarker.FindStringSubmatch(comment.GetBody()); match != nil {
+		number, err := strconv.Atoi(match[2])
+		if err != nil || number == 0 {
+			return nil, false
+		}
+		return &ClaimRecord{
+			Issue:     issue_reference.Reference{Repository: match[1], Number: number},
+			Author:    match[3],
+			CommentID: comment.GetID(),
+		}, true
+	}
+	return nil, false
+}
+
+// CreateClaimRecord writes one structured workflow-owned issue record unless a matching record already exists.
+func (s *Service) CreateClaimRecord(owner, repository string, pullRequestNumber int, issue issue_reference.Reference, author string) (*ClaimRecord, error) {
+	record, err := s.FindClaimRecord(owner, repository, pullRequestNumber)
+	if err != nil {
+		return nil, err
+	}
+	transition := claimRecordTransitionFor(record, issue, author)
+	switch transition {
+	case reuseClaimRecord:
+		return record, nil
+	case createClaimRecord:
+		// Continue with the targeted comment write below.
+	default:
+		return nil, fmt.Errorf("unknown claim record transition %d", transition)
+	}
+	body := fmt.Sprintf("<!-- pr-gate:claim issue=%s author=%s -->", issue, author)
+	comment, _, err := s.client.Issues.CreateComment(context.Background(), owner, repository, pullRequestNumber, github.IssueCommentRequest{Body: body})
+	if err != nil {
+		return nil, err
+	}
+	return &ClaimRecord{Issue: issue, Author: author, CommentID: comment.GetID()}, nil
+}
+
+func claimRecordTransitionFor(record *ClaimRecord, issue issue_reference.Reference, author string) claimRecordTransition {
+	if record != nil && record.Issue == issue && record.Author == author {
+		return reuseClaimRecord
+	}
+	return createClaimRecord
+}
+
+// DeleteClaimRecord deletes the exact workflow-owned record comment.
+func (s *Service) DeleteClaimRecord(owner, repository string, record *ClaimRecord) error {
+	if record == nil || record.CommentID == 0 {
+		return nil
+	}
+	_, err := s.client.Issues.DeleteComment(context.Background(), owner, repository, record.CommentID)
+	if isNotFound(err) {
+		return nil
+	}
+	return err
+}
+
+func isNotFound(err error) bool {
+	var response *github.ErrorResponse
+	return errors.As(err, &response) && response.Response != nil && response.Response.StatusCode == 404
 }
 
 func (s *Service) GateClosed(owner, repository string, number int) (bool, error) {

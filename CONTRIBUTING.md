@@ -23,6 +23,10 @@ the **`claimed`** label to the issue and pull request, removes `help wanted`, an
 Pull requests that don't reference an approved issue are closed automatically, with a note explaining why. Once the
 issue is approved, edit the pull request's description to reference it and it reopens by itself.
 
+Flock releases an automatic issue claim when its pull request closes without merging, targets a branch other than
+`main`, or no longer has the issue as a same-repository closing reference. The release removes only the bot's claim
+and assignment. A maintainer assignment or another assignee keeps the issue's current ownership and availability state.
+
 Flock's prebuilt PHP and services are built in [flock-php/binaries](https://github.com/flock-php/binaries), and a
 change often needs work in both repositories. When a change needs an update there, open the related issue and pull
 request in `flock-php/binaries` too.

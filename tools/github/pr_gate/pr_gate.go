@@ -20,7 +20,9 @@ type PullRequestGateService interface {
 	ListFiles(owner, repository string, number int) ([]github_pr.File, error)
 	ListLinkedIssues(owner, repository string, pullRequestNumber int) ([]github_pr.LinkedIssue, error)
 	GateClosed(owner, repository string, number int) (bool, error)
-	ClaimCommentExists(owner, repository string, number int) (bool, error)
+	FindClaimRecord(owner, repository string, number int) (*github_pr.ClaimRecord, error)
+	CreateClaimRecord(owner, repository string, number int, issue issue_reference.Reference, author string) (*github_pr.ClaimRecord, error)
+	DeleteClaimRecord(owner, repository string, record *github_pr.ClaimRecord) error
 	CreateComment(owner, repository string, number int, body string) error
 	SetState(owner, repository string, number int, state string) error
 }
@@ -236,27 +238,40 @@ func approvedResult(issue issue_reference.Reference) Result {
 	}
 }
 
+type claimedIssueTransition uint8
+
+const (
+	leaveClaimedPullRequestOpen claimedIssueTransition = iota
+	closeClaimedPullRequest
+)
+
+func claimedIssueTransitionFor(pullRequest *github_pr.PullRequest) claimedIssueTransition {
+	if pullRequest == nil || pullRequest.State != "open" {
+		return leaveClaimedPullRequestOpen
+	}
+	return closeClaimedPullRequest
+}
+
 // CloseClaimedIssue closes a pull request whose approved issue was claimed after the gate read it.
 func CloseClaimedIssue(pullRequests PullRequestGateService, owner, repository string, number int, issue issue_reference.Reference, claimant string) error {
 	pullRequest, err := pullRequests.Get(owner, repository, number)
-	if err != nil || pullRequest == nil || pullRequest.State != "open" {
+	if err != nil {
 		return err
+	}
+	transition := claimedIssueTransitionFor(pullRequest)
+	switch transition {
+	case leaveClaimedPullRequestOpen:
+		return nil
+	case closeClaimedPullRequest:
+		// Continue with the selected close effects below.
+	default:
+		return fmt.Errorf("unknown claimed issue transition %d", transition)
 	}
 	comment := fmt.Sprintf("Thanks for the PR, @%s! Issue %s has already been claimed by @%s, so this pull request is closed. Please check other issues labeled `help wanted`.\n\n%s", pullRequest.Author.Login, issue, claimant, github_pr.GateMarker)
 	if err := pullRequests.CreateComment(owner, repository, number, comment); err != nil {
 		return err
 	}
 	return pullRequests.SetState(owner, repository, number, "closed")
-}
-
-// EnsureClaimComment tells contributors when their pull request owns an automated issue claim.
-func EnsureClaimComment(pullRequests PullRequestGateService, owner, repository string, number int, issue issue_reference.Reference, claimant string) error {
-	exists, err := pullRequests.ClaimCommentExists(owner, repository, number)
-	if err != nil || exists {
-		return err
-	}
-	comment := fmt.Sprintf("Issue %s is claimed by @%s in PR #%d.\n\n%s", issue, claimant, number, github_pr.ClaimMarker)
-	return pullRequests.CreateComment(owner, repository, number, comment)
 }
 
 func firstApprovedIssue(issues IssueReader, pullRequests PullRequestGateService, owner, repository string, pr *github_pr.PullRequest) (linkedIssueDecision, error) {
@@ -292,26 +307,24 @@ func firstApprovedIssue(issues IssueReader, pullRequests PullRequestGateService,
 		if err != nil {
 			return linkedIssueDecision{}, err
 		}
-		switch authorization {
-		case github_issue.AuthorizationMaintainerAssignment,
-			github_issue.AuthorizationAutomaticClaimOwner,
-			github_issue.AuthorizationCreateAutomaticClaim:
+		transition, err := linkedIssueTransitionFor(authorization, conflict.state == conflictingLinkedIssueClaim)
+		if err != nil {
+			return linkedIssueDecision{}, err
+		}
+		switch transition {
+		case approveLinkedIssue:
 			return linkedIssueDecision{
 				state: approvedLinkedIssue,
 				issue: reference,
 			}, nil
-		case github_issue.AuthorizationAutomaticClaimConflict:
-			if conflict.state == noApprovedLinkedIssue {
-				conflict = linkedIssueDecision{
-					state:    conflictingLinkedIssueClaim,
-					issue:    reference,
-					claimant: claim.Author,
-				}
+		case rememberLinkedIssueConflict:
+			conflict = linkedIssueDecision{
+				state:    conflictingLinkedIssueClaim,
+				issue:    reference,
+				claimant: claim.Author,
 			}
-		case github_issue.AuthorizationDenied:
+		case skipLinkedIssue:
 			continue
-		default:
-			return linkedIssueDecision{}, fmt.Errorf("unknown authorization state %d", authorization)
 		}
 	}
 	if conflict.state == conflictingLinkedIssueClaim {
@@ -332,6 +345,32 @@ type linkedIssueDecision struct {
 	state    linkedIssueState
 	issue    issue_reference.Reference
 	claimant string
+}
+
+type linkedIssueTransition uint8
+
+const (
+	skipLinkedIssue linkedIssueTransition = iota
+	approveLinkedIssue
+	rememberLinkedIssueConflict
+)
+
+func linkedIssueTransitionFor(authorization github_issue.AuthorizationState, conflictFound bool) (linkedIssueTransition, error) {
+	switch authorization {
+	case github_issue.AuthorizationMaintainerAssignment,
+		github_issue.AuthorizationAutomaticClaimOwner,
+		github_issue.AuthorizationCreateAutomaticClaim:
+		return approveLinkedIssue, nil
+	case github_issue.AuthorizationAutomaticClaimConflict:
+		if conflictFound {
+			return skipLinkedIssue, nil
+		}
+		return rememberLinkedIssueConflict, nil
+	case github_issue.AuthorizationDenied:
+		return skipLinkedIssue, nil
+	default:
+		return skipLinkedIssue, fmt.Errorf("unknown authorization state %d", authorization)
+	}
 }
 
 func isNotFound(err error) bool {
