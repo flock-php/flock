@@ -144,7 +144,13 @@ func TestShellProfileZDOTDIRRemovesLegacyLine(t *testing.T) {
 	if err := addToShellPath("/f/bin"); err != nil {
 		t.Fatal(err)
 	}
-	t.Setenv("ZDOTDIR", filepath.Join(home, "zsh"))
+	// The directory has to exist, or the profile falls back to ~/.zshrc and
+	// the legacy path is never looked at as such.
+	zdotdir := filepath.Join(home, "zsh")
+	if err := os.Mkdir(zdotdir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("ZDOTDIR", zdotdir)
 
 	removed, err := removeFromShellProfiles()
 	if err != nil || !removed {
@@ -159,6 +165,7 @@ func TestShellProfileZDOTDIRRemovesLegacyLine(t *testing.T) {
 func TestShellPathLine(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("ZDOTDIR", "") // an inherited one would point at the developer's real .zshrc
 	bin := filepath.Join(home, "it's here", "bin")
 	if err := addToShellPath(bin); err != nil {
 		t.Fatal(err)
