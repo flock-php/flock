@@ -147,7 +147,7 @@ func (c *Config) TLDMoveCollision(newTLD string) *TLDMove {
 			suffix = newTLD
 		}
 		owner := "site " + site.Name
-		primary := site.hostName() + "." + suffix
+		primary := site.HostName() + "." + suffix
 		if col := report(primary, owner, moves); col != nil {
 			return col
 		}

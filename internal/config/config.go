@@ -116,7 +116,7 @@ func (s *Services) SetRunning(id string, on bool) {
 }
 
 // Site is a directory served as <host>.<suffix> — its Host override, the Name when it has
-// none (see Site.hostName) — under its own TLD override, or the global one, and its
+// none (see Site.HostName) — under its own TLD override, or the global one, and its
 // subdomains (up to MaxDepth levels).
 type Site struct {
 	Name string `json:"name"`
@@ -333,10 +333,10 @@ func (c *Config) Save(root string) error {
 }
 
 // Domain is the primary hostname of a site: <host>.<the suffix it is served under> — the
-// site's Host override, its Name when it has none (see Site.hostName) — with its own TLD
+// site's Host override, its Name when it has none (see Site.HostName) — with its own TLD
 // override, the global one when it inherits (see Site.Suffix).
 func (c *Config) Domain(s Site) string {
-	return s.hostName() + "." + s.Suffix(c)
+	return s.HostName() + "." + s.Suffix(c)
 }
 
 // PHPFor returns the PHP version a site runs on.

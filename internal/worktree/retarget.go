@@ -194,20 +194,22 @@ func swapHostSuffix(host, oldHost, newHost string) (string, bool) {
 	return host, false
 }
 
-// HostSwap is one .env file to retarget when the local TLD changes: the file's path and the
-// hosts to swap in it.
+// HostSwap is one .env file to retarget when a host a site is served at changes: the file's
+// path and the hosts to swap in it.
 type HostSwap struct {
 	Path string // the .env file, under the site's or worktree's folder
-	Old  string // the host as the TLD change leaves it: <name>.<oldTLD>, <slug>.<parent>.<oldTLD>
+	Old  string // the host as the change leaves it: <host>.<oldTLD>, <slug>.<parent host>.<oldTLD>
 	New  string // the host to write in its place
 }
 
 // TLDHostSwaps lists the .env files a global TLD change from oldTLD to newTLD retargets:
 // every linked site that inherits the global suffix (the .env under its Path, served at
-// <name>.<suffix>), the inherited aliases of those sites (their hosts ride the site's
-// effective suffix, so their .env entries move too: <alias-label>.<old-effective> →
-// <alias-label>.<new-effective>), and every stored worktree entry of an inheriting site
-// (its .env, served at <slug>.<parent>.<suffix>). A site with its own Site.TLD override —
+// <host>.<suffix> — the site's Host override when it has one, the folder name otherwise),
+// the inherited aliases of those sites (their hosts ride the site's effective suffix, so
+// their .env entries move too: <alias-label>.<old-effective> → <alias-label>.<new-effective>
+// — an alias is a name of its own, the site's Host never enters it), and every stored
+// worktree entry of an inheriting site (its .env, served at
+// <slug>.<parent host>.<suffix>). A site with its own Site.TLD override —
 // and its worktrees, and its aliases, inherited included — is not moved by a global change
 // (override wins, unchanged); an alias pinned to a suffix of its own never appears (the Q2
 // rule). Every host is derived from the arguments, never from c.TLD: callers may compute the
@@ -225,10 +227,11 @@ func TLDHostSwaps(c *config.Config, oldTLD, newTLD string) []HostSwap {
 	var swaps []HostSwap
 	for _, s := range c.Sites {
 		if s.TLD != "" {
-			continue // a global TLD change leaves this site's hosts at <name>.<its own suffix>
+			continue // a global TLD change leaves this site's hosts at <host>.<its own suffix>
 		}
 		path := filepath.Join(s.Path, ".env")
-		swaps = append(swaps, HostSwap{Path: path, Old: s.Name + "." + oldTLD, New: s.Name + "." + newTLD})
+		host := s.HostName() // the name part is the Host override when the site has one
+		swaps = append(swaps, HostSwap{Path: path, Old: host + "." + oldTLD, New: host + "." + newTLD})
 		for _, d := range s.Domains {
 			if d.Alias && d.TLD == "" {
 				swaps = append(swaps, HostSwap{Path: path, Old: d.Label + "." + oldTLD, New: d.Label + "." + newTLD})
@@ -239,29 +242,35 @@ func TLDHostSwaps(c *config.Config, oldTLD, newTLD string) []HostSwap {
 		if e.Slug == "" || e.Site == "" {
 			continue // no stored slug and parent: no host named it
 		}
-		if parent, ok := byName[e.Site]; ok && parent.TLD != "" {
-			continue // its host rides the parent's override, which a global change leaves alone
+		parentHost := e.Site
+		if parent, ok := byName[e.Site]; ok {
+			if parent.TLD != "" {
+				continue // its host rides the parent's override, which a global change leaves alone
+			}
+			parentHost = parent.HostName() // the worktree host is slug.deep under the parent's host
 		}
 		swaps = append(swaps, HostSwap{
 			Path: filepath.Join(e.Path, ".env"),
-			Old:  e.Slug + "." + e.Site + "." + oldTLD,
-			New:  e.Slug + "." + e.Site + "." + newTLD,
+			Old:  e.Slug + "." + parentHost + "." + oldTLD,
+			New:  e.Slug + "." + parentHost + "." + newTLD,
 		})
 	}
 	return swaps
 }
 
 // SwapsForSite lists the .env files a site-scoped suffix change moves: the site's own
-// <name>.<oldSuffix> → <name>.<newSuffix>, its inherited aliases (Domain.Alias with an
+// <host>.<oldSuffix> → <host>.<newSuffix> (the name part is the site's Host override when
+// it has one), its inherited aliases (Domain.Alias with an
 // empty TLD, whose hosts ride the site's effective suffix: <label>.<oldSuffix> →
 // <label>.<newSuffix>, in the site's .env), and every stored worktree entry of that site
-// (<slug>.<name>.<oldSuffix> → <slug>.<name>.<newSuffix>). Nothing else: aliases pinned to
+// (<slug>.<host>.<oldSuffix> → <slug>.<host>.<newSuffix>). Nothing else: aliases pinned to
 // a suffix of their own never move (the Q2 rule), subdomain hosts ride the site's through
 // RetargetDotenv's deeper-host matching, and every other site — inheriting included — keeps
 // its hosts where they are. The suffixes come from the arguments, never from the config:
 // callers list the swaps after storing the site's new override, and reading Site.TLD for the
-// old side would then give both sides the new suffix. Equal suffixes move nothing; an
-// unknown name lists nothing. (A free function, like TLDHostSwaps: the .env rewriting
+// old side would then give both sides the new suffix. The name part may come from the
+// stored site: a suffix change never moves the Host override. Equal suffixes move nothing;
+// an unknown name lists nothing. (A free function, like TLDHostSwaps: the .env rewriting
 // lives here.)
 func SwapsForSite(c *config.Config, name, oldSuffix, newSuffix string) []HostSwap {
 	if oldSuffix == newSuffix {
@@ -273,7 +282,8 @@ func SwapsForSite(c *config.Config, name, oldSuffix, newSuffix string) []HostSwa
 	}
 
 	path := filepath.Join(site.Path, ".env")
-	swaps := []HostSwap{{Path: path, Old: name + "." + oldSuffix, New: name + "." + newSuffix}}
+	host := site.HostName()
+	swaps := []HostSwap{{Path: path, Old: host + "." + oldSuffix, New: host + "." + newSuffix}}
 	for _, d := range site.Domains {
 		if d.Alias && d.TLD == "" {
 			swaps = append(swaps, HostSwap{Path: path, Old: d.Label + "." + oldSuffix, New: d.Label + "." + newSuffix})
@@ -285,8 +295,46 @@ func SwapsForSite(c *config.Config, name, oldSuffix, newSuffix string) []HostSwa
 		}
 		swaps = append(swaps, HostSwap{
 			Path: filepath.Join(e.Path, ".env"),
-			Old:  e.Slug + "." + name + "." + oldSuffix,
-			New:  e.Slug + "." + name + "." + newSuffix,
+			Old:  e.Slug + "." + host + "." + oldSuffix,
+			New:  e.Slug + "." + host + "." + newSuffix,
+		})
+	}
+	return swaps
+}
+
+// HostRenameSwaps lists the .env files a primary-host rename of the named site moves: the
+// site's own <oldHost>.<suffix> → <newHost>.<suffix> and every stored worktree entry of
+// that site (<slug>.<oldHost>.<suffix> → <slug>.<newHost>.<suffix> — the worktree host is
+// the slug deep under the parent's host, the same internal multi-label shape the worktree
+// rows are served at). Aliases are never listed: inherited and pinned alike, an alias is a
+// name of its own, so no host it carries contains the renamed part; the site's subdomains
+// and the worktrees' subhosts ride the listed swaps through RetargetDotenv's deeper-host
+// matching, like everywhere else. Both hosts are arguments, never the stored Host: callers
+// list the swaps after storing the site's new override, and reading it back for the old
+// side would give both sides the new host. The suffix is the site's effective one —
+// Site.TLD ∪ Config.TLD — which a rename never changes, so reading it from the config is
+// safe. Equal hosts and an unknown name list nothing. (A free function, like TLDHostSwaps:
+// the .env rewriting lives here.)
+func HostRenameSwaps(c *config.Config, name, oldHost, newHost string) []HostSwap {
+	if oldHost == newHost {
+		return nil
+	}
+	site, ok := c.FindSite(name)
+	if !ok {
+		return nil
+	}
+
+	suffix := site.Suffix(c)
+	path := filepath.Join(site.Path, ".env")
+	swaps := []HostSwap{{Path: path, Old: oldHost + "." + suffix, New: newHost + "." + suffix}}
+	for _, e := range c.Worktrees {
+		if e.Site != name || e.Slug == "" {
+			continue // not this site's worktree, or no stored slug: no host named it
+		}
+		swaps = append(swaps, HostSwap{
+			Path: filepath.Join(e.Path, ".env"),
+			Old:  e.Slug + "." + oldHost + "." + suffix,
+			New:  e.Slug + "." + newHost + "." + suffix,
 		})
 	}
 	return swaps

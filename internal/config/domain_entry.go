@@ -128,11 +128,13 @@ func SanitizeTitle(t string) string {
 // maxTitleRunes is the cap on a site's display Title.
 const maxTitleRunes = 80
 
-// hostName is the name part of the site's primary host: its Host override when set, the
+// HostName is the name part of the site's primary host: its Host override when set, the
 // identity Name otherwise. A stored Host is sanitized to a single valid label or "" at
 // Load (see sanitizeHost); the synthesized worktree rows this also feeds (see
-// worktreeSites) carry an internal multi-label form ("<slug>.<parent host>").
-func (s Site) hostName() string {
+// worktreeSites) carry an internal multi-label form ("<slug>.<parent host>"). Exported
+// for the .env retargeter (worktree.HostRenameSwaps, TLDHostSwaps), which names hosts
+// outside Config.Domain and must derive the name part without reading any suffix back.
+func (s Site) HostName() string {
 	if s.Host != "" {
 		return s.Host
 	}

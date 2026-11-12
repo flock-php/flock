@@ -283,3 +283,106 @@ func TestSwapsForSiteMovesOnlyTheSiteItNames(t *testing.T) {
 		t.Errorf("unchanged suffix: got %+v, want nil", got)
 	}
 }
+
+// TestTLDHostSwapsFollowsTheHostOverride: the global TLD switch moves a site's hosts by
+// their HOST, not by the identity Name — a site renamed to liga moves liga.* and its
+// worktrees' slug.liga.*, never the dead demo.*. (The .env files already name liga.* after
+// `flock site host liga`; a swap list still deriving the Name would retarget nothing and
+// leave them pointing at a host nobody serves — the design's anti-goal.)
+func TestTLDHostSwapsFollowsTheHostOverride(t *testing.T) {
+	cfg := &config.Config{
+		TLD: "loc", // already switched: both sides still come from the arguments
+		Sites: []config.Site{
+			{Name: "demo", Host: "liga", Path: "/code/demo"},
+			{Name: "plain", Path: "/code/plain"},
+		},
+		Worktrees: []config.WorktreeEntry{
+			{Path: "/wt/feature", Site: "demo", Slug: "feature"},
+			{Path: "/wt/fix", Site: "plain", Slug: "fix"},
+		},
+	}
+	swaps := TLDHostSwaps(cfg, "test", "loc")
+	want := []HostSwap{
+		{Path: filepath.Join("/code/demo", ".env"), Old: "liga.test", New: "liga.loc"},
+		{Path: filepath.Join("/code/plain", ".env"), Old: "plain.test", New: "plain.loc"},
+		{Path: filepath.Join("/wt/feature", ".env"), Old: "feature.liga.test", New: "feature.liga.loc"},
+		{Path: filepath.Join("/wt/fix", ".env"), Old: "fix.plain.test", New: "fix.plain.loc"},
+	}
+	if !slices.Equal(swaps, want) {
+		t.Errorf("got %+v\nwant %+v", swaps, want)
+	}
+}
+
+// TestSwapsForSiteFollowsTheHostOverride: the site-scoped suffix change derives the name
+// part of the primary host and of every worktree host from Host too.
+func TestSwapsForSiteFollowsTheHostOverride(t *testing.T) {
+	cfg := &config.Config{
+		TLD:       "loc",
+		Sites:     []config.Site{{Name: "demo", Host: "liga", Path: "/code/demo", TLD: "loc"}},
+		Worktrees: []config.WorktreeEntry{{Path: "/wt/feature", Site: "demo", Slug: "feature"}},
+	}
+	want := []HostSwap{
+		{Path: filepath.Join("/code/demo", ".env"), Old: "liga.test", New: "liga.loc"},
+		{Path: filepath.Join("/wt/feature", ".env"), Old: "feature.liga.test", New: "feature.liga.loc"},
+	}
+	if got := SwapsForSite(cfg, "demo", "test", "loc"); !slices.Equal(got, want) {
+		t.Errorf("got %+v\nwant %+v", got, want)
+	}
+}
+
+// TestHostRenameSwapsMovesPrimaryAndWorktrees: a primary host rename moves the site's own
+// <oldHost>.<suffix> → <newHost>.<suffix> and every stored worktree entry of that site —
+// never an alias, inherited or pinned (an alias is a name of its own, the rename does not
+// reach it), never another site, and never an entry without a stored slug. Both hosts are
+// arguments (the caller stores the new Host before listing, exactly as the suffix listers
+// store the new TLD first; the stored override must not leak into the old side); the
+// suffix is the site's effective one, which a rename never changes. Equal hosts and an
+// unknown name list nothing.
+func TestHostRenameSwapsMovesPrimaryAndWorktrees(t *testing.T) {
+	cfg := &config.Config{
+		TLD: "test",
+		Sites: []config.Site{
+			{Name: "demo", Host: "liga", Path: "/code/demo", Domains: []config.Domain{
+				{Label: "app-2", Alias: true},
+				{Label: "demo2", TLD: "loc", Alias: true},
+				{Label: "tenant1"},
+			}},
+			{Name: "shop", Path: "/code/shop"},
+		},
+		Worktrees: []config.WorktreeEntry{
+			{Path: "/wt/feature", Site: "demo", Slug: "feature"},
+			{Path: "/wt/no-slug", Site: "demo"},
+			{Path: "/wt/shopfix", Site: "shop", Slug: "shopfix"},
+		},
+	}
+	// The site already stores Host "liga" (the caller saved first): the old side must still
+	// be the passed oldHost "demo", never the stored one.
+	want := []HostSwap{
+		{Path: filepath.Join("/code/demo", ".env"), Old: "demo.test", New: "liga.test"},
+		{Path: filepath.Join("/wt/feature", ".env"), Old: "feature.demo.test", New: "feature.liga.test"},
+	}
+	if got := HostRenameSwaps(cfg, "demo", "demo", "liga"); !slices.Equal(got, want) {
+		t.Errorf("got %+v\nwant %+v", got, want)
+	}
+	if got := HostRenameSwaps(cfg, "demo", "liga", "liga"); got != nil {
+		t.Errorf("equal hosts: got %+v, want nil", got)
+	}
+	if got := HostRenameSwaps(cfg, "nope", "demo", "liga"); got != nil {
+		t.Errorf("unknown site: got %+v, want nil", got)
+	}
+	if got := HostRenameSwaps(cfg, "shop", "shop", "store"); !slices.Equal(got, []HostSwap{
+		{Path: filepath.Join("/code/shop", ".env"), Old: "shop.test", New: "store.test"},
+		{Path: filepath.Join("/wt/shopfix", ".env"), Old: "shopfix.shop.test", New: "shopfix.store.test"},
+	}) {
+		t.Errorf("rename moves the site and its worktree: got %+v", got)
+	}
+	// A site with an override of its own: the rename moves hosts under ITS suffix, not the
+	// global one — the worktree host rides it too.
+	cfg.Sites[1].TLD = "dev"
+	if got := HostRenameSwaps(cfg, "shop", "shop", "store"); !slices.Equal(got, []HostSwap{
+		{Path: filepath.Join("/code/shop", ".env"), Old: "shop.dev", New: "store.dev"},
+		{Path: filepath.Join("/wt/shopfix", ".env"), Old: "shopfix.shop.dev", New: "shopfix.store.dev"},
+	}) {
+		t.Errorf("site with its own suffix: got %+v", got)
+	}
+}

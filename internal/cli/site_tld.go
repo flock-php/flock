@@ -18,8 +18,9 @@ import (
 	"flock/internal/worktree"
 )
 
-// newSiteCommand builds `flock site`, the per-site controls; so far it has one subcommand,
-// tld. (The sites list itself is `flock sites`.)
+// newSiteCommand builds `flock site`, the per-site controls: the domain suffix a site is
+// served under (tld) and its primary domain name (host). (The sites list itself is
+// `flock sites`.)
 func newSiteCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "site",
@@ -27,7 +28,7 @@ func newSiteCommand() *cobra.Command {
 		Args:  cobra.NoArgs,
 		RunE:  func(cmd *cobra.Command, _ []string) error { return cmd.Help() },
 	}
-	cmd.AddCommand(newSiteTLDCommand())
+	cmd.AddCommand(newSiteTLDCommand(), newSiteHostCommand())
 	return cmd
 }
 
@@ -236,12 +237,34 @@ func (s *state) changeSiteTLD(raw, siteName string, inherit bool, out io.Writer)
 func (s *state) siteHostsFree(site config.Site, newSuffix string) error {
 	probe := site
 	probe.TLD = newSuffix
+	return s.siteLandingFree(site, probe, "."+newSuffix, newSuffix)
+}
+
+// siteHostRenameFree is the landing check of `flock site host`: the site as proposed with
+// its Host moved ("" — the site name — for --default), against the same pair as
+// siteHostsFree. A rename moves only the primary host and the worktree hosts derived from
+// it: aliases are names of their own and never enter the probe's move.
+func (s *state) siteHostRenameFree(site config.Site, newHost string) error {
+	probe := site
+	if newHost == "" {
+		newHost = site.Name // the default is a host too; what the probe actually lands on
+	}
+	probe.Host = newHost
+	suffix := site.Suffix(s.cfg) // a rename never changes the suffix
+	return s.siteLandingFree(site, probe, newHost+"."+suffix, suffix)
+}
+
+// siteLandingFree is the shared pair behind siteHostsFree and siteHostRenameFree: probe is
+// the site as proposed, target names the host or ".suffix" it moves onto (the wording
+// differs because the two commands say what moves differently), and suffix is the suffix
+// the self-collision message reads.
+func (s *state) siteLandingFree(site, probe config.Site, target, suffix string) error {
 	if host, owner := s.cfg.SiteHostCollision(probe); host != "" {
-		return fmt.Errorf("%s is already served by %s: %s can't move to .%s", host, owner, site.Name, newSuffix)
+		return fmt.Errorf("%s is already served by %s: %s can't move to %s", host, owner, site.Name, target)
 	}
 	if host, _, moved := s.cfg.SiteSelfCollision(probe); host != "" {
 		return fmt.Errorf("%s is claimed twice on .%s by %s: the pinned alias %s and the alias %s that follows the site — remove one first (flock domain remove %s %s)",
-			host, newSuffix, site.Name, host, moved, host, site.Name)
+			host, suffix, site.Name, host, moved, host, site.Name)
 	}
 	return nil
 }
