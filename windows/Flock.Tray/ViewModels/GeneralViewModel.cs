@@ -53,6 +53,9 @@ public sealed partial class GeneralViewModel : ObservableObject, IDisposable
         ? "Every name, any subdomain included, is resolved by Flock's DNS server. Site domains are also in the hosts file."
         : $"Only site domains and the domains added to sites resolve (the hosts file){(Status?.Dns?.WildcardProblem is { Length: > 0 } problem ? $": {problem}" : string.Empty)}.";
     public string DomainValue => Config is { } config ? $"*.{config.Tld}" : "";
+    /// <summary>The applied suffix without the leading dot, as the daemon stores it: the picker's Current feed
+    /// (the macOS SuffixPicker's <c>current</c>), which seeds the rows and keeps Apply off an unchanged suffix.</summary>
+    public string DomainTld => Config?.Tld ?? "";
     public string ProjectFoldersDescription => Config is { } config
         ? $"Every folder inside a project folder is served as <folder>.{config.Tld} — the same as `flock park`."
         : "";
@@ -110,6 +113,7 @@ public sealed partial class GeneralViewModel : ObservableObject, IDisposable
         OnPropertyChanged(nameof(ConfigVisibility));
         OnPropertyChanged(nameof(DomainDescription));
         OnPropertyChanged(nameof(DomainValue));
+        OnPropertyChanged(nameof(DomainTld));
         OnPropertyChanged(nameof(ProjectFoldersDescription));
         OnPropertyChanged(nameof(Root));
         OnPropertyChanged(nameof(PortsDescription));

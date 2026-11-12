@@ -14,7 +14,9 @@ internal sealed partial class GeneralPane : UserControl, ISettingsPane
     private readonly RuntimeService model;
     private readonly GeneralViewModel viewModel;
     private readonly SettingsWindow window;
+    private readonly DomainApplyService domainApply;
     private string? selectedParked;
+    private bool applyingTld;
 
     public GeneralPane(SettingsWindow window, RuntimeService model)
     {
@@ -23,6 +25,10 @@ internal sealed partial class GeneralPane : UserControl, ISettingsPane
         InitializeComponent();
         viewModel = new GeneralViewModel(model);
         DataContext = viewModel;
+        domainApply = new DomainApplyService(new CliProcessRunner());
+        TldPicker.CheckAsync = tld => model.Client.CheckTldAsync(tld);
+        TldPicker.Changed += UpdateTldApply;
+        UpdateTldApply();
         Startup.IsOn = Native.StartsAtSignIn;
         model.UpdateService.Changed += UpdateChanged;
         viewModel.PropertyChanged += ViewModelChanged;
@@ -46,8 +52,52 @@ internal sealed partial class GeneralPane : UserControl, ISettingsPane
     {
         model.UpdateService.Changed -= UpdateChanged;
         viewModel.PropertyChanged -= ViewModelChanged;
+        TldPicker.Changed -= UpdateTldApply;
         viewModel.Dispose();
         return Task.CompletedTask;
+    }
+
+    /// <summary>Apply is enabled only on a checked, acceptable draft (the picker's macOS canApply) and only
+    /// while no switch is running. The picker raises Changed whenever the draft or verdict moves.</summary>
+    private void UpdateTldApply()
+    {
+        ApplyTld.IsEnabled = TldPicker.CanApply && !applyingTld;
+    }
+
+    /// <summary>The whole domain switch (the macOS applyDomain): the bundled CLI owns the config write, the
+    /// migration and the elevation. Its aggregated output appears only when the run ends in failure or a
+    /// declined prompt — the busy Apply button is the running state (R-3c-3).</summary>
+    private async void ApplyTldClicked(object sender, RoutedEventArgs args)
+    {
+        if (applyingTld || TldPicker.DraftNormalized is not { } suffix)
+        {
+            return;
+        }
+        applyingTld = true;
+        UpdateTldApply();
+        ApplyTldContent.IsBusy = true;
+        ApplyOutputBox.Visibility = Visibility.Collapsed;
+        ApplyDeclined.Visibility = Visibility.Collapsed;
+        var (ok, declined, output) = await domainApply.RunAsync(["tld", suffix]);
+        applyingTld = false;
+        ApplyTldContent.IsBusy = false;
+        if (ok)
+        {
+            // The config read moves Current to the new suffix; the reset returns the picker to a clean draft.
+            await model.Configuration.RefreshAsync();
+            TldPicker.Reset();
+        }
+        else
+        {
+            ApplyOutput.Text = output;
+            ApplyOutputBox.Visibility = Visibility.Visible;
+            if (declined)
+            {
+                ApplyDeclined.Text = $"You declined administrator approval. Flock’s config is on .{suffix} already; finish the switch by running `flock install` in a terminal.";
+                ApplyDeclined.Visibility = Visibility.Visible;
+            }
+        }
+        UpdateTldApply();
     }
 
     private void ViewModelChanged(object? sender, PropertyChangedEventArgs args)

@@ -56,11 +56,28 @@
         <StackPanel Spacing="4" Margin="0,0,0,24" Visibility="{Binding ConfigVisibility}">
             <TextBlock Text="Network" Style="{StaticResource BodyStrongTextBlockStyle}" Margin="1,0,0,6" />
             <Border Style="{StaticResource CardStyle}">
-                <StackPanel Spacing="1">
+                <StackPanel Spacing="6">
                     <TextBlock Text="Domain" />
                     <TextBlock Text="{Binding DomainDescription}" Style="{StaticResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                TextWrapping="Wrap" />
-                    <TextBlock Text="{Binding DomainValue}" Margin="0,4,0,0" />
+                    <Grid ColumnSpacing="8">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <controls:SuffixPickerControl x:Name="TldPicker" Current="{Binding DomainTld}" AllowInherit="False" />
+                        <Button x:Name="ApplyTld" Grid.Column="1" VerticalAlignment="Top" IsEnabled="False" Click="ApplyTldClicked">
+                            <controls:BusyContent x:Name="ApplyTldContent" Text="Apply" BusyText="Applying…" />
+                        </Button>
+                    </Grid>
+                    <!-- The CLI's aggregated output, shown once the run ends in failure (the SetupWindow log box). -->
+                    <Border x:Name="ApplyOutputBox" Visibility="Collapsed" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1" CornerRadius="6" Padding="12,10">
+                        <ScrollViewer MaxHeight="160" HorizontalScrollBarVisibility="Auto">
+                            <TextBlock x:Name="ApplyOutput" FontFamily="{StaticResource MonoFont}" FontSize="12" TextWrapping="NoWrap" IsTextSelectionEnabled="True" />
+                        </ScrollViewer>
+                    </Border>
+                    <TextBlock x:Name="ApplyDeclined" Style="{StaticResource CaptionTextBlockStyle}" Foreground="{ThemeResource SystemFillColorCautionBrush}"
+                               TextWrapping="Wrap" Visibility="Collapsed" />
                 </StackPanel>
             </Border>
             <TextBlock Text="{Binding PortsDescription}" Visibility="{Binding PortsVisibility}" Style="{StaticResource CaptionTextBlockStyle}"
