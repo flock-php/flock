@@ -1686,6 +1686,9 @@ private struct SiteTitleField: View {
                 .textFieldStyle(.plain)
                 .font(.title3.weight(.semibold))
                 .fixedSize()
+                .padding(.horizontal, 6)
+                .padding(.vertical, 2)
+                .background(hoverChrome)
                 .focused(fieldFocus.projectedValue)
                 .onAppear { fieldFocus.wrappedValue = true }
                 .onSubmit { commit() }
@@ -1704,6 +1707,10 @@ private struct SiteTitleField: View {
         } else {
             Text(site.title.isEmpty ? site.name : site.title)
                 .font(.title3.weight(.semibold))
+                .padding(.horizontal, 6)
+                .padding(.vertical, 2)
+                .background(hoverChrome)
+                .contentShape(RoundedRectangle(cornerRadius: 6))
                 .help("Click to rename — leave empty to inherit the folder name")
                 .onTapGesture {
                     // Seed the field with the shown name on the way in: the draft itself is empty
@@ -1719,6 +1726,16 @@ private struct SiteTitleField: View {
                     if hovered { NSCursor.pop() }
                 }
         }
+    }
+
+    /// The raised pill that promises the name is clickable: the same shape and padding the field
+    /// keeps while editing, so nothing jumps when the click opens it; it only fills in under the
+    /// pointer (a click is a hover, so editing keeps whatever the pointer brought).
+    @ViewBuilder private var hoverChrome: some View {
+        RoundedRectangle(cornerRadius: 6)
+            .fill(.quaternary)
+            .opacity(hovered ? 1 : 0)
+            .animation(.easeOut(duration: 0.12), value: hovered)
     }
 
     /// Enter or a click away: close the edit and send the trimmed text — unless nothing of it
