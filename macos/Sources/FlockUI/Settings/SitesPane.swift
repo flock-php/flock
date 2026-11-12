@@ -481,13 +481,14 @@ struct SitesPane: View {
                     }
                     if let text = site.url, let url = URL(string: text) {
                         HStack(spacing: 6) {
-                            Link(text, destination: url).font(.callout)
+                            Link(text, destination: url).font(.callout).pointerStyle(.link)
                             // Worktree rows are named through their parent: the CLI refuses a host
                             // change on them, so no pencil offers what the guard rejects.
                             if !site.isWorktree {
                                 Button { editingHost = site } label: { Image(systemName: "pencil") }
                                     .buttonStyle(.borderless)
                                     .foregroundStyle(.secondary)
+                                    .pointerStyle(.link)
                                     .help("Change the domain name…")
                             }
                         }
@@ -1718,13 +1719,8 @@ private struct SiteTitleField: View {
                     draft = site.title.isEmpty ? site.name : site.title
                     editing = true
                 }
-                .onHover { inside in
-                    hovered = inside
-                    if inside { NSCursor.pointingHand.push() } else { NSCursor.pop() }
-                }
-                .onDisappear {
-                    if hovered { NSCursor.pop() }
-                }
+                .onHover { hovered = $0 }
+                .pointerStyle(.link)
         }
     }
 
