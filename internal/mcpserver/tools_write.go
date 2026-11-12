@@ -81,7 +81,7 @@ func (s *server) addWriteTools(srv *mcp.Server) {
 			"- add_domain (domain[, suffix]): an extra domain, a subdomain (\"tenant1\" → tenant1.<site>.test) or an alias (\"my-app-2.test\"); " +
 			"with suffix the domain is a single label and the suffix makes it an alias: \"inherit\" follows the site's suffix, \"loc\" pins it to one of its own.\n" +
 			"- set_site_tld (tld): serve the site at <name>.<suffix> (e.g. loc); \"inherit\" makes it follow Flock's global suffix again.\n" +
-			"- set_site_host (host): replace the name part of the site's domain with a single label (liga → liga.test); \"default\" serves it under its site name again.\n" +
+			"- set_site_host (host): replace the name part of the site's domain as dotted words (cms.liga → cms.liga.test); \"default\" serves it under its site name again.\n" +
 			"- set_site_title (title): the site's display name (how Flock's lists show it); \"default\" shows the site name again.\n" +
 			"- set_server (server, worker): run PHP through FastCGI (PHP-FPM) or FrankenPHP, optionally in Octane's worker mode.\n" +
 			"- restart: restart a FrankenPHP site's process, e.g. so Octane workers load changed code.",
@@ -690,7 +690,7 @@ type updateSiteIn struct {
 	Domain  string `json:"domain,omitempty" jsonschema:"add_domain: a subdomain (tenant1) or an alias (my-app-2.test); with suffix: a single label (demo2)"`
 	Suffix  string `json:"suffix,omitempty" jsonschema:"add_domain: the alias's suffix: inherit (it follows the site's suffix) or one of its own (loc); left out for subdomains"`
 	TLD     string `json:"tld,omitempty" jsonschema:"set_site_tld: the site's own suffix (e.g. loc), or inherit to follow Flock's global suffix again"`
-	Host    string `json:"host,omitempty" jsonschema:"set_site_host: single label replacing the name part of the site's domain (liga → liga.test); default = the site name again (the default)"`
+	Host    string `json:"host,omitempty" jsonschema:"set_site_host: dotted words replacing the name part of the site's domain (liga → liga.test); default = the site name again (the default)"`
 	Title   string `json:"title,omitempty" jsonschema:"set_site_title: the site's display name (how Flock's lists show it); default = the site name again (the default)"`
 	Server  string `json:"server,omitempty" jsonschema:"set_server: fastcgi or frankenphp"`
 	Worker  string `json:"worker,omitempty" jsonschema:"set_server with frankenphp: classic (the default) or octane (Laravel Octane's worker mode)"`
@@ -773,7 +773,7 @@ func (s *server) updateSite(ctx context.Context, _ *mcp.CallToolRequest, in upda
 	case "set_site_host":
 		host := strings.TrimSpace(in.Host)
 		if host == "" {
-			return nil, siteActionOut{}, errors.New("set_site_host needs host (a single label like liga, or default)")
+			return nil, siteActionOut{}, errors.New("set_site_host needs host (dotted words like cms.liga, or default)")
 		}
 		if strings.EqualFold(host, "default") {
 			host = "" // the API stores the default (the site name) as ""
