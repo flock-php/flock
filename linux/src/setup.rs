@@ -270,7 +270,20 @@ impl SetupView {
         });
         let this = self.clone();
         let done = self.button(tr!("Done"), true, move || this.finish());
-        self.page(tr!("Flock is ready"), "", Some(group.upcast_ref()), &[settings, done]);
+        let body = gtk::Box::builder().orientation(gtk::Orientation::Vertical).spacing(18).build();
+        body.append(&group);
+        body.append(
+            &gtk::Label::builder()
+                .label(markdown_links(tr!(
+                    "Flock is free and open source. If you like it, [a star on GitHub](https://github.com/flock-php/flock) helps others find it."
+                )))
+                .use_markup(true)
+                .wrap(true)
+                .xalign(0.0)
+                .css_classes(["dim-label"])
+                .build(),
+        );
+        self.page(tr!("Flock is ready"), "", Some(body.upcast_ref()), &[settings, done]);
     }
 
     /// The next steps, with the first run's installs of the newest PHP and Node.js LTS as the
@@ -463,4 +476,37 @@ fn append(buffer: &gtk::TextBuffer, text: &str) {
     let mut end = buffer.end_iter();
     buffer.insert(&mut end, text);
     buffer.insert(&mut end, "\n");
+}
+
+/// Pango markup for a text with Markdown links, [label](url), as the translations write them (the
+/// macOS and Windows apps share the text).
+fn markdown_links(text: &str) -> String {
+    let mut markup = String::new();
+    let mut rest = text;
+    while let Some(start) = rest.find('[') {
+        let Some((label, url, after)) =
+            rest[start + 1..].split_once("](").and_then(|(label, tail)| tail.split_once(')').map(|(url, after)| (label, url, after)))
+        else {
+            break;
+        };
+        markup.push_str(&glib::markup_escape_text(&rest[..start]));
+        markup.push_str(&format!("<a href=\"{}\">{}</a>", glib::markup_escape_text(url), glib::markup_escape_text(label)));
+        rest = after;
+    }
+    markup.push_str(&glib::markup_escape_text(rest));
+    markup
+}
+
+#[cfg(test)]
+mod tests {
+    use super::markdown_links;
+
+    #[test]
+    fn makes_markdown_links_pango_ones() {
+        assert_eq!(
+            markdown_links("Free & open. If you like it, [a star](https://example.com/a?b=1&c=2) helps."),
+            "Free &amp; open. If you like it, <a href=\"https://example.com/a?b=1&amp;c=2\">a star</a> helps."
+        );
+        assert_eq!(markdown_links("No [link here"), "No [link here");
+    }
 }

@@ -1,9 +1,11 @@
 using System.Security;
+using System.Text.RegularExpressions;
 using Flock.Kit;
 using Flock.Tray.Infrastructure;
 using Flock.Tray.Settings;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Documents;
 namespace Flock.Tray;
 
 /// <summary>First-run setup and installation progress.</summary>
@@ -24,10 +26,30 @@ internal sealed partial class SetupWindow : FlockWindow
         InitializeComponent();
         InitializeChrome(WindowRoot, WindowTitleBar, WindowCaption, WindowIcon);
         LanguageHost.Children.Add(Settings.LanguageSetting.Create(model.Preferences));
+        ShowLinks(StarText, Strings.Setup_Star);
         model.Changed += ShowDefaults;
         Closed += (_, _) => model.Changed -= ShowDefaults;
         Render(Stage.Intro);
     }
+
+    /// <summary>A text with Markdown links, [label](url), as the translations write them (the macOS
+    /// and Linux apps share the text).</summary>
+    private static void ShowLinks(TextBlock block, string text)
+    {
+        var start = 0;
+        foreach (Match link in MarkdownLink().Matches(text))
+        {
+            block.Inlines.Add(new Run { Text = text[start..link.Index] });
+            var hyperlink = new Hyperlink { NavigateUri = new Uri(link.Groups[2].Value) };
+            hyperlink.Inlines.Add(new Run { Text = link.Groups[1].Value });
+            block.Inlines.Add(hyperlink);
+            start = link.Index + link.Length;
+        }
+        block.Inlines.Add(new Run { Text = text[start..] });
+    }
+
+    [GeneratedRegex(@"\[([^\]]+)\]\(([^)]+)\)")]
+    private static partial Regex MarkdownLink();
 
     private void Render(Stage value)
     {

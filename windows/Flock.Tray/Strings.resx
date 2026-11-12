@@ -52,6 +52,9 @@
     <data name="About_DataFolder" xml:space="preserve">
         <value>Data folder</value>
     </data>
+    <data name="About_DiscordDescription" xml:space="preserve">
+        <value>Ask questions, share feedback and see what's coming.</value>
+    </data>
     <data name="About_Documentation" xml:space="preserve">
         <value>Flock documentation</value>
     </data>
@@ -60,6 +63,9 @@
     </data>
     <data name="About_FoundBugDescription" xml:space="preserve">
         <value>Opens a new GitHub issue with your versions filled in.</value>
+    </data>
+    <data name="About_Join" xml:space="preserve">
+        <value>Join</value>
     </data>
     <data name="About_License" xml:space="preserve">
         <value>License</value>
@@ -72,6 +78,18 @@
     </data>
     <data name="About_ReportIssue" xml:space="preserve">
         <value>Report an issue</value>
+    </data>
+    <data name="About_Sponsor" xml:space="preserve">
+        <value>Sponsor</value>
+    </data>
+    <data name="About_StarOnGitHub" xml:space="preserve">
+        <value>Star on GitHub</value>
+    </data>
+    <data name="About_Support" xml:space="preserve">
+        <value>Support Flock</value>
+    </data>
+    <data name="About_SupportDescription" xml:space="preserve">
+        <value>Flock is free and open source, forever. Sponsoring helps keep it maintained.</value>
     </data>
     <data name="About_Tagline" xml:space="preserve">
         <value>A native local development environment for Laravel.</value>
@@ -1423,6 +1441,10 @@ Details are in %LocalAppData%\Flock\tray.log.</value>
     </data>
     <data name="Setup_SettingUp" xml:space="preserve">
         <value>Setting up Flock…</value>
+    </data>
+    <data name="Setup_Star" xml:space="preserve">
+        <value>Flock is free and open source. If you like it, [a star on GitHub](https://github.com/flock-php/flock) helps others find it.</value>
+        <comment>Keep the Markdown link: [label](url)</comment>
     </data>
     <data name="Setup_Terminal" xml:space="preserve">
         <value>Terminal</value>

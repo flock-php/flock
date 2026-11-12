@@ -52,6 +52,9 @@
     <data name="About_DataFolder" xml:space="preserve">
         <value>Složka s daty</value>
     </data>
+    <data name="About_DiscordDescription" xml:space="preserve">
+        <value>Ptejte se, sdílejte zpětnou vazbu a sledujte, co chystáme.</value>
+    </data>
     <data name="About_Documentation" xml:space="preserve">
         <value>Dokumentace Flocku</value>
     </data>
@@ -60,6 +63,9 @@
     </data>
     <data name="About_FoundBugDescription" xml:space="preserve">
         <value>Otevře nové issue na GitHubu s vyplněnými verzemi.</value>
+    </data>
+    <data name="About_Join" xml:space="preserve">
+        <value>Připojit se</value>
     </data>
     <data name="About_License" xml:space="preserve">
         <value>Licence</value>
@@ -72,6 +78,18 @@
     </data>
     <data name="About_ReportIssue" xml:space="preserve">
         <value>Nahlásit problém</value>
+    </data>
+    <data name="About_Sponsor" xml:space="preserve">
+        <value>Sponzorovat</value>
+    </data>
+    <data name="About_StarOnGitHub" xml:space="preserve">
+        <value>Dát hvězdičku na GitHubu</value>
+    </data>
+    <data name="About_Support" xml:space="preserve">
+        <value>Podpořte Flock</value>
+    </data>
+    <data name="About_SupportDescription" xml:space="preserve">
+        <value>Flock je zdarma a open source, navždy. Sponzorství pomáhá udržet jeho vývoj.</value>
     </data>
     <data name="About_Tagline" xml:space="preserve">
         <value>Nativní lokální vývojové prostředí pro Laravel.</value>
@@ -1321,6 +1339,9 @@ Podrobnosti najdete v %LocalAppData%\Flock\tray.log.</value>
     </data>
     <data name="Setup_SettingUp" xml:space="preserve">
         <value>Nastavuje se Flock…</value>
+    </data>
+    <data name="Setup_Star" xml:space="preserve">
+        <value>Flock je zdarma a open source. Pokud se vám líbí, [hvězdička na GitHubu](https://github.com/flock-php/flock) pomůže ostatním ho najít.</value>
     </data>
     <data name="Setup_Terminal" xml:space="preserve">
         <value>Terminál</value>

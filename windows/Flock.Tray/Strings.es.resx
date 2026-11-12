@@ -52,6 +52,9 @@
     <data name="About_DataFolder" xml:space="preserve">
         <value>Carpeta de datos</value>
     </data>
+    <data name="About_DiscordDescription" xml:space="preserve">
+        <value>Haz preguntas, comparte tus comentarios y descubre lo que viene.</value>
+    </data>
     <data name="About_Documentation" xml:space="preserve">
         <value>Documentación de Flock</value>
     </data>
@@ -60,6 +63,9 @@
     </data>
     <data name="About_FoundBugDescription" xml:space="preserve">
         <value>Abre una nueva incidencia en GitHub con tus versiones ya rellenadas.</value>
+    </data>
+    <data name="About_Join" xml:space="preserve">
+        <value>Unirse</value>
     </data>
     <data name="About_License" xml:space="preserve">
         <value>Licencia</value>
@@ -72,6 +78,18 @@
     </data>
     <data name="About_ReportIssue" xml:space="preserve">
         <value>Informar de un problema</value>
+    </data>
+    <data name="About_Sponsor" xml:space="preserve">
+        <value>Patrocinar</value>
+    </data>
+    <data name="About_StarOnGitHub" xml:space="preserve">
+        <value>Dar una estrella en GitHub</value>
+    </data>
+    <data name="About_Support" xml:space="preserve">
+        <value>Apoya a Flock</value>
+    </data>
+    <data name="About_SupportDescription" xml:space="preserve">
+        <value>Flock es gratuito y de código abierto, para siempre. Patrocinarlo ayuda a mantenerlo.</value>
     </data>
     <data name="About_Tagline" xml:space="preserve">
         <value>Un entorno de desarrollo local nativo para Laravel.</value>
@@ -1309,6 +1327,9 @@ Encontrarás los detalles en %LocalAppData%\Flock\tray.log.</value>
     </data>
     <data name="Setup_SettingUp" xml:space="preserve">
         <value>Configurando Flock…</value>
+    </data>
+    <data name="Setup_Star" xml:space="preserve">
+        <value>Flock es gratuito y de código abierto. Si te gusta, [una estrella en GitHub](https://github.com/flock-php/flock) ayuda a que otros lo encuentren.</value>
     </data>
     <data name="Setup_Terminal" xml:space="preserve">
         <value>Terminal</value>

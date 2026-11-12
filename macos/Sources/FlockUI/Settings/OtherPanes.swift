@@ -195,8 +195,18 @@ struct AboutPane: View {
             HStack {
                 Button("Data Folder") { reveal(FlockPaths.root.path) }
                 Button("Flock Docs") { NSWorkspace.shared.open(URL(string: "https://flockphp.com/docs")!) }
+                Button("Discord") { NSWorkspace.shared.open(URL(string: "https://discord.flockphp.com")!) }
                 Button("License") { NSWorkspace.shared.open(URL(string: "https://github.com/flock-php/flock/blob/main/LICENSE")!) }
             }
+            VStack(spacing: 8) {
+                Text("Flock is free and open source, forever. Sponsoring helps keep it maintained.")
+                    .font(.callout).foregroundStyle(.secondary)
+                HStack {
+                    Button("Star on GitHub", systemImage: "star") { NSWorkspace.shared.open(URL(string: "https://github.com/flock-php/flock")!) }
+                    Button("Sponsor", systemImage: "heart") { NSWorkspace.shared.open(URL(string: "https://github.com/sponsors/flock-php")!) }
+                }
+            }
+            .padding(.top, 6)
             Button("Found a bug? Report an issue") { NSWorkspace.shared.open(issueURL) }
                 .buttonStyle(.link)
                 .font(.callout)

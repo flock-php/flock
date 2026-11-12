@@ -25,15 +25,34 @@ impl AboutPane {
         let data = gtk::Button::with_label(tr!("Data Folder"));
         data.connect_clicked(|button| ui::open_file(Some(button.upcast_ref()), paths::root()));
         links.append(&data);
-        for (label, url) in
-            [(tr!("Flock Docs"), "https://flockphp.com/docs"), (tr!("License"), "https://github.com/flock-php/flock/blob/main/LICENSE")]
-        {
+        for (label, url) in [
+            (tr!("Flock Docs"), "https://flockphp.com/docs"),
+            ("Discord", "https://discord.flockphp.com"),
+            (tr!("License"), "https://github.com/flock-php/flock/blob/main/LICENSE"),
+        ] {
             links.append(&link_button(label, url));
         }
+
+        let support = gtk::Box::builder().orientation(gtk::Orientation::Vertical).spacing(8).build();
+        support.append(
+            &gtk::Label::builder()
+                .label(tr!("Flock is free and open source, forever. Sponsoring helps keep it maintained."))
+                .wrap(true)
+                .css_classes(["dim-label"])
+                .build(),
+        );
+        let support_links = gtk::Box::builder().spacing(8).halign(gtk::Align::Center).build();
+        for (label, url) in
+            [(tr!("Star on GitHub"), "https://github.com/flock-php/flock"), (tr!("Sponsor"), "https://github.com/sponsors/flock-php")]
+        {
+            support_links.append(&link_button(label, url));
+        }
+        support.append(&support_links);
 
         let column = gtk::Box::builder().orientation(gtk::Orientation::Vertical).spacing(18).build();
         column.append(&versions);
         column.append(&links);
+        column.append(&support);
         let issue = link_button(tr!("Found a bug? Report an issue"), "");
         issue.add_css_class("flat");
         column.append(&issue);

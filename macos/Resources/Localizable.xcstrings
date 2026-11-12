@@ -2918,6 +2918,9 @@
         }
       }
     },
+    "Discord" : {
+      "shouldTranslate" : false
+    },
     "Dismiss" : {
       "localizations" : {
         "cs" : {
@@ -4007,6 +4010,39 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Flock está añadido"
+          }
+        }
+      }
+    },
+    "Flock is free and open source, forever. Sponsoring helps keep it maintained." : {
+      "localizations" : {
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Flock je zdarma a open source, navždy. Sponzorství pomáhá udržet jeho vývoj."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Flock es gratuito y de código abierto, para siempre. Patrocinarlo ayuda a mantenerlo."
+          }
+        }
+      }
+    },
+    "Flock is free and open source. If you like it, [a star on GitHub](https://github.com/flock-php/flock) helps others find it." : {
+      "comment" : "Keep the Markdown link: [label](url)",
+      "localizations" : {
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Flock je zdarma a open source. Pokud se vám líbí, [hvězdička na GitHubu](https://github.com/flock-php/flock) pomůže ostatním ho najít."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Flock es gratuito y de código abierto. Si te gusta, [una estrella en GitHub](https://github.com/flock-php/flock) ayuda a que otros lo encuentren."
           }
         }
       }
@@ -9180,6 +9216,38 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Código fuente"
+          }
+        }
+      }
+    },
+    "Sponsor" : {
+      "localizations" : {
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sponzorovat"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Patrocinar"
+          }
+        }
+      }
+    },
+    "Star on GitHub" : {
+      "localizations" : {
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dát hvězdičku na GitHubu"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dar una estrella en GitHub"
           }
         }
       }

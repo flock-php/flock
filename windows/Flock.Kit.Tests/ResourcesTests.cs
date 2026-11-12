@@ -96,7 +96,7 @@ public partial class ResourcesTests
     public void XamlHasNoUntranslatedText()
     {
         // Product names and technical values stay as they are.
-        string[] kept = ["Flock", "PHP", "Node", "PHP-CGI", "FrankenPHP", "Xdebug", "HTML", "9003", "127.0.0.1", "debug, develop"];
+        string[] kept = ["Flock", "Discord", "PHP", "Node", "PHP-CGI", "FrankenPHP", "Xdebug", "HTML", "9003", "127.0.0.1", "debug, develop"];
         foreach (var file in Sources("Flock.Tray", "*.xaml"))
         {
             var texts = XDocument.Load(file).Descendants().SelectMany(element => element.Attributes())

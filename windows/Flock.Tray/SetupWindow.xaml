@@ -153,6 +153,7 @@
                             </StackPanel>
                         </Border>
                     </StackPanel>
+                    <TextBlock x:Name="StarText" TextWrapping="Wrap" Foreground="{ThemeResource TextFillColorSecondaryBrush}" Margin="1,16,0,8" />
                     <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8" Margin="0,8,0,0">
                         <Button Content="{l:Loc Key=Setup_OpenSettings}" Click="OpenSettingsClicked" />
                         <Button Content="{l:Loc Key=Common_Done}" Click="CloseClicked" Style="{StaticResource AccentButtonStyle}" />

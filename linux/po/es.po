@@ -576,6 +576,13 @@ msgstr "Flock no ha preparado este worktree"
 msgid "Flock is added"
 msgstr "Flock está añadido"
 
+msgid "Flock is free and open source, forever. Sponsoring helps keep it maintained."
+msgstr "Flock es gratuito y de código abierto, para siempre. Patrocinarlo ayuda a mantenerlo."
+
+#. Keep the Markdown link: [label](url)
+msgid "Flock is free and open source. If you like it, [a star on GitHub](https://github.com/flock-php/flock) helps others find it."
+msgstr "Flock es gratuito y de código abierto. Si te gusta, [una estrella en GitHub](https://github.com/flock-php/flock) ayuda a que otros lo encuentren."
+
 msgid "Flock is not installed for this user ({path} is missing) — run `flk install` once."
 msgstr "Flock no está instalado para este usuario (falta {path}): ejecuta `flk install` una vez."
 
@@ -1456,6 +1463,12 @@ msgstr "Algo salió mal. La salida de abajo indica qué; puedes volver a intenta
 
 msgid "Sources"
 msgstr "Código fuente"
+
+msgid "Sponsor"
+msgstr "Patrocinar"
+
+msgid "Star on GitHub"
+msgstr "Dar una estrella en GitHub"
 
 msgid "Start"
 msgstr "Iniciar"
