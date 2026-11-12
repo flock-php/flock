@@ -566,6 +566,68 @@ public class ClientTests : IDisposable
     }
 
     [Fact]
+    public async Task AddsDomainsWithAndWithoutASuffix()
+    {
+        var handler = new Handler(_ => new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StringContent("""{"version":"dev","pid":1,"started_at":"2026-10-13T14:10:01Z"}"""),
+        });
+        using var client = new FlockClient(new HttpClient(handler) { Timeout = Timeout.InfiniteTimeSpan }, WriteApiJson("http://127.0.0.1:1", "t"), clock);
+
+        await client.AddDomainAsync("shop", "tenant1", "shop.loc");
+        await client.AddDomainAsync("shop", "my-app-2.test");
+        await client.AddDomainAsync("shop", "plain", "");
+
+        Assert.Equal(
+            ["POST /v1/sites/shop/domains", "POST /v1/sites/shop/domains", "POST /v1/sites/shop/domains"],
+            handler.Requests.Select(r => $"{r.Method} {r.RequestUri!.PathAndQuery}"));
+        // The suffix travels only when a dialog pinned one; the daemon omits it otherwise (older daemons never see it).
+        Assert.Equal(
+            ["""{"domain":"tenant1","suffix":"shop.loc"}""", """{"domain":"my-app-2.test"}""", """{"domain":"plain"}"""],
+            handler.Bodies);
+    }
+
+    [Fact]
+    public async Task ChecksATldAgainstTheDaemon()
+    {
+        var handler = new Handler(_ => new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StringContent("""{"ok":true,"normalized":"loc","warning":"some applications refuse it"}"""),
+        });
+        using var client = new FlockClient(new HttpClient(handler) { Timeout = Timeout.InfiniteTimeSpan }, WriteApiJson("http://127.0.0.1:1", "t"), clock);
+
+        var check = await client.CheckTldAsync("LOC.");
+
+        Assert.True(check.Ok);
+        Assert.Equal("loc", check.Normalized);
+        Assert.Equal("some applications refuse it", check.Warning);
+        Assert.Null(check.Error);
+        Assert.Equal((HttpMethod.Post, "/v1/tld/check"), (handler.Requests[0].Method, handler.Requests[0].RequestUri?.AbsolutePath));
+        // The daemon normalizes; the client sends the entry as typed.
+        Assert.Equal("""{"tld":"LOC."}""", handler.Bodies[0]);
+    }
+
+    [Fact]
+    public async Task SendsTldHostAndTitleChangesThroughTheClient()
+    {
+        var handler = new Handler(_ => new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StringContent("""{"version":"dev","pid":1,"started_at":"2026-10-13T14:10:01Z"}"""),
+        });
+        using var client = new FlockClient(new HttpClient(handler) { Timeout = Timeout.InfiniteTimeSpan }, WriteApiJson("http://127.0.0.1:1", "t"), clock);
+
+        await client.UpdateSettingsAsync(new SettingsChange(Tld: "loc"));
+        await client.UpdateSettingsAsync(new SettingsChange());
+        await client.UpdateSiteAsync("shop", new SiteChange(Tld: "loc", Host: "store", Title: "My Shop"));
+        await client.UpdateSiteAsync("shop", new SiteChange(Tld: ""));
+
+        // Absent keeps, "" inherits/defaults, a value sets; a change with nothing in it sends {}.
+        Assert.Equal(
+            ["""{"tld":"loc"}""", "{}", """{"tld":"loc","host":"store","title":"My Shop"}""", """{"tld":""}"""],
+            handler.Bodies);
+    }
+
+    [Fact]
     public async Task CallsTheAiClientAndBoostEndpoints()
     {
         var handler = new Handler(r => new HttpResponseMessage(HttpStatusCode.OK)

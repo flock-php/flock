@@ -63,6 +63,10 @@ public sealed class FlockClient : IDisposable
     /// <summary>Changes only the non-null settings and returns the new status.</summary>
     public Task<Status> UpdateSettingsAsync(SettingsChange change, CancellationToken cancellationToken = default) => Send<Status>(HttpMethod.Post, "/v1/settings", change, cancellationToken: cancellationToken);
 
+    /// <summary>Checks a suffix while it is being typed; the daemon normalizes it and answers ok with a warning, or not ok with an error.</summary>
+    public Task<TldCheck> CheckTldAsync(string tld, CancellationToken cancellationToken = default) =>
+        Send<TldCheck>(HttpMethod.Post, "/v1/tld/check", new { tld }, cancellationToken: cancellationToken);
+
     public Task<FlockConfig> ConfigAsync(CancellationToken cancellationToken = default) => Get<FlockConfig>("/v1/config", cancellationToken: cancellationToken);
 
     public Task<List<Service>> ServicesAsync(CancellationToken cancellationToken = default) => Get<List<Service>>("/v1/services", cancellationToken: cancellationToken);
@@ -106,9 +110,10 @@ public sealed class FlockClient : IDisposable
     // Secured is left out when null (FlockJson ignores nulls), so the daemon keeps an existing proxy's setting.
     private sealed record ProxyRequest(string Name, string Upstream, bool? Secured);
 
-    /// <summary>Adds an extra domain: a subdomain ("tenant1", "a.b") or an alias ("my-app-2.test").</summary>
-    public Task<Status> AddDomainAsync(string site, string domain, CancellationToken cancellationToken = default) =>
-        Send<Status>(HttpMethod.Post, $"/v1/sites/{Escape(site)}/domains", new { domain }, cancellationToken: cancellationToken);
+    /// <summary>Adds an extra domain: a subdomain ("tenant1", "a.b") or an alias ("my-app-2.test"). A suffix the entry was typed with travels as "suffix"; without one the daemon keeps its default.</summary>
+    public Task<Status> AddDomainAsync(string site, string domain, string? suffix = null, CancellationToken cancellationToken = default) =>
+        Send<Status>(HttpMethod.Post, $"/v1/sites/{Escape(site)}/domains",
+            new { domain, suffix = string.IsNullOrEmpty(suffix) ? null : suffix }, cancellationToken: cancellationToken);
 
     /// <summary>Removes an extra domain, given as SiteDomain.Entry (or its full name).</summary>
     public Task<Status> RemoveDomainAsync(string site, string domain, CancellationToken cancellationToken = default) =>

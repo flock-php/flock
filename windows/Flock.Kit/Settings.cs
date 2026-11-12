@@ -101,10 +101,12 @@ public sealed record SettingsChange(
     string? DefaultNode = null,
     string? Channel = null,
     List<string>? CaptureOff = null,
-    bool? DumpsInPage = null);
+    bool? DumpsInPage = null,
+    string? Tld = null);
 
 /// <summary>
 /// Body of PATCH /v1/sites/{name}; null fields are left out. An empty Php means "use the default";
 /// Server is "fastcgi" or "frankenphp", Worker "" (classic) or "octane" (see Status.SiteServer).
+/// Tld "" puts the site back on the global suffix, Host "" on the name; Title is the display name.
 /// </summary>
-public sealed record SiteChange(bool? Secured = null, string? Php = null, string? Node = null, string? Server = null, string? Worker = null, string? Root = null);
+public sealed record SiteChange(bool? Secured = null, string? Php = null, string? Node = null, string? Server = null, string? Worker = null, string? Root = null, string? Tld = null, string? Host = null, string? Title = null);

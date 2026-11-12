@@ -95,6 +95,71 @@ public class DecodingTests
     }
 
     [Fact]
+    public void DecodesSiteTldHostTitleAndDnsSuffixes()
+    {
+        var status = FlockJson.Decode<Status>("""
+            {"version":"dev","pid":1,"started_at":"2026-10-13T14:10:01Z",
+             "dns":{"tld":"test","addr":"127.0.0.1:53535","suffixes":[
+                {"tld":"test","wildcard":true},
+                {"tld":"loc","wildcard":false,"problem":"a company DNS overrides Flock's rule"}]},
+             "sites":[{"name":"shop","domain":"store.shop.loc","path":"C:\\code\\shop","php":"8.4","tld":"loc","site_tld":"loc","site_host":"store","title":"My Shop"},
+                      {"name":"plain","domain":"plain.test","path":"C:\\code\\plain","php":"8.4","tld":"test","site_tld":""}]}
+            """);
+
+        var shop = status.Sites[0];
+        Assert.Equal(("loc", "loc", "store", "My Shop"), (shop.Tld, shop.SiteTld, shop.SiteHost, shop.Title));
+        // Served with the defaults: site_host and title are omitempty, so they stay "".
+        var plain = status.Sites[1];
+        Assert.Equal(("test", "", "", ""), (plain.Tld, plain.SiteTld, plain.SiteHost, plain.Title));
+
+        Assert.Equal(2, status.Dns.Suffixes.Count);
+        Assert.Equal(("test", true, null), (status.Dns.Suffixes[0].Tld, status.Dns.Suffixes[0].Wildcard, status.Dns.Suffixes[0].Problem));
+        Assert.Equal(("loc", false, "a company DNS overrides Flock's rule"),
+            (status.Dns.Suffixes[1].Tld, status.Dns.Suffixes[1].Wildcard, status.Dns.Suffixes[1].Problem));
+    }
+
+    [Fact]
+    public void ReadsTldFieldsAsDefaultsForOlderDaemons()
+    {
+        // A site row and dns from a daemon predating the tld feature: no tld, site_tld, site_host, title, no suffixes key.
+        var status = FlockJson.Decode<Status>("""
+            {"version":"dev","pid":1,"started_at":"2026-10-13T14:10:01Z",
+             "dns":{"tld":"test","addr":"127.0.0.1:53535"},
+             "sites":[{"name":"old","domain":"old.test","path":"C:\\code\\old","php":"8.4"}]}
+            """);
+
+        var old = status.Sites[0];
+        Assert.Equal(("", "", "", ""), (old.Tld, old.SiteTld, old.SiteHost, old.Title));
+        Assert.Empty(status.Dns.Suffixes);
+
+        // Go's nil slice arrives as null.
+        var nil = FlockJson.Decode<Status>("""{"version":"dev","dns":{"tld":"test","suffixes":null},"sites":[]}""");
+        Assert.Empty(nil.Dns.Suffixes);
+    }
+
+    [Fact]
+    public void DecodesATldCheckWithAndWithoutItsExtraKeys()
+    {
+        // warning and error are omitempty: absent keys read as null.
+        var ok = FlockJson.Decode<TldCheck>("""{"ok":true,"normalized":"loc"}""");
+        Assert.True(ok.Ok);
+        Assert.Equal("loc", ok.Normalized);
+        Assert.Null(ok.Warning);
+        Assert.Null(ok.Error);
+
+        var bad = FlockJson.Decode<TldCheck>("""{"ok":false,"normalized":"","error":"this is a public domain"}""");
+        Assert.False(bad.Ok);
+        Assert.Equal("", bad.Normalized);
+        Assert.Null(bad.Warning);
+        Assert.Equal("this is a public domain", bad.Error);
+
+        var warned = FlockJson.Decode<TldCheck>("""{"ok":true,"normalized":"internal","warning":"some applications refuse it"}""");
+        Assert.True(warned.Ok);
+        Assert.Equal("some applications refuse it", warned.Warning);
+        Assert.Null(warned.Error);
+    }
+
+    [Fact]
     public void DecodesASitesBranchesAndOrdersThem()
     {
         var branches = FlockJson.Decode<SiteBranches>("""

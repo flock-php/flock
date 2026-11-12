@@ -78,5 +78,12 @@ public class SettingsTests
         Assert.Equal("""{"capture_off":["query"]}""", FlockJson.Encode(new SettingsChange(CaptureOff: ["query"])));
         Assert.Equal("""{"capture_off":[]}""", FlockJson.Encode(new SettingsChange(CaptureOff: [])));
         Assert.Equal("""{"dumps_in_page":true}""", FlockJson.Encode(new SettingsChange(DumpsInPage: true)));
+        // tld and host are three-state on the wire: absent keeps, "" inherits/defaults, a value sets.
+        Assert.Equal("""{"tld":""}""", FlockJson.Encode(new SettingsChange(Tld: "")));
+        Assert.Equal("""{"tld":"loc"}""", FlockJson.Encode(new SiteChange(Tld: "loc")));
+        Assert.Equal("""{"host":""}""", FlockJson.Encode(new SiteChange(Host: "")));
+        Assert.Equal("""{"title":"My Shop"}""", FlockJson.Encode(new SiteChange(Title: "My Shop")));
+        Assert.Equal("{}", FlockJson.Encode(new SettingsChange()));
+        Assert.Equal("{}", FlockJson.Encode(new SiteChange()));
     }
 }

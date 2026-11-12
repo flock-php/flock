@@ -58,7 +58,7 @@ public sealed class SitesService : IAsyncDisposable
         MutateAsync(Key(name), name, (_, cancellationToken) => client.RemoveProxyAsync(name, cancellationToken), token);
 
     public Task<OperationOutcome> AddDomainAsync(string site, string domain, CancellationToken token = default) =>
-        MutateAsync(Key(site), site, (_, cancellationToken) => client.AddDomainAsync(site, domain, cancellationToken), token);
+        MutateAsync(Key(site), site, (_, cancellationToken) => client.AddDomainAsync(site, domain, cancellationToken: cancellationToken), token);
 
     public Task<OperationOutcome> RemoveDomainAsync(string site, string domain, CancellationToken token = default) =>
         MutateAsync(Key(site), site, (_, cancellationToken) => client.RemoveDomainAsync(site, domain, cancellationToken), token);

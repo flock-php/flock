@@ -13,6 +13,12 @@ public sealed class ApiConfig
     public string Token { get; init; } = "";
 }
 
+/// <summary>One entry of dns.suffixes: a known suffix, whether it is wildcard-resolved here, and why not when it isn't.</summary>
+public sealed record SuffixStatus(string Tld, bool Wildcard, string? Problem);
+
+/// <summary>POST /v1/tld/check: the daemon's verdict on a suffix a picker is typing. Always HTTP 200.</summary>
+public sealed record TldCheck(bool Ok, string Normalized, string? Warning, string? Error);
+
 /// <summary>GET /v1/status</summary>
 public sealed class Status
 {
@@ -142,6 +148,8 @@ public sealed class Status
         public string WildcardProblem { get; init; } = "";
         /// <summary>Subdomain levels below a site (and its aliases) that are served.</summary>
         public int MaxDepth { get; init; }
+        /// <summary>The known suffixes and whether each is served; empty from daemons predating per-suffix status.</summary>
+        public List<SuffixStatus> Suffixes { get; init; } = [];
     }
 
     /// <summary>
@@ -188,6 +196,14 @@ public sealed class Status
     {
         public string Name { get; init; } = "";
         public string Domain { get; init; } = "";
+        /// <summary>The suffix the domain uses, global or site-specific; "" from daemons predating this.</summary>
+        public string Tld { get; init; } = "";
+        /// <summary>The suffix set for this site; empty when it follows the global one.</summary>
+        public string SiteTld { get; init; } = "";
+        /// <summary>The label the site is served as under its suffix, when it isn't its name.</summary>
+        public string SiteHost { get; init; } = "";
+        /// <summary>The site's display title; empty when none is set.</summary>
+        public string Title { get; init; } = "";
         public string Path { get; init; } = "";
         /// <summary>The PHP version the site uses; PhpSource says why (see VersionSource).</summary>
         public string Php { get; init; } = "";
