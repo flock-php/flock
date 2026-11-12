@@ -263,6 +263,11 @@ impl Client {
         self.request("POST", &format!("/v1/sites/{}/restart", escape(name)), None::<&()>, Duration::from_secs(60))
     }
 
+    /// Restarts a site's Reverb server, e.g. so it loads changed code.
+    pub fn restart_reverb(&self, name: &str) -> Result<Status, Error> {
+        self.request("POST", &format!("/v1/sites/{}/reverb/restart", escape(name)), None::<&()>, Duration::from_secs(60))
+    }
+
     /// Puts a Node.js site's dev server to sleep until the site's next visit.
     pub fn stop_site(&self, name: &str) -> Result<Status, Error> {
         self.request("POST", &format!("/v1/sites/{}/stop", escape(name)), None::<&()>, Duration::from_secs(60))
@@ -1168,6 +1173,10 @@ pub struct SiteStatus {
     pub worker: String,
     pub octane_available: bool,
     pub frankenphp: Option<SiteFrankenPhp>,
+    /// The site's Reverb server, while it's turned on; available when the project has Laravel
+    /// Reverb installed.
+    pub reverb: Option<SiteReverb>,
+    pub reverb_available: bool,
     /// php or node; older daemons send none, which means php.
     #[serde(rename = "type")]
     pub kind: String,
@@ -1227,6 +1236,11 @@ impl SiteStatus {
             _ => true,
         }
     }
+
+    /// Where browsers reach the site's Reverb server: wss://acme.test/app, ws:// without HTTPS.
+    pub fn reverb_url(&self) -> String {
+        format!("{}://{}/app", if self.secured { "wss" } else { "ws" }, self.domain)
+    }
 }
 
 impl Status {
@@ -1267,6 +1281,25 @@ pub struct SiteFrankenPhp {
     pub progress: f64,
     pub problem: String,
     pub log: String,
+}
+
+/// A site's Laravel Reverb server.
+#[derive(Deserialize, Debug, Clone, PartialEq, Default)]
+#[serde(default)]
+pub struct SiteReverb {
+    /// running, failed or unavailable.
+    pub state: String,
+    pub port: u16,
+    /// The app's .env lines for reaching it through the web server.
+    pub env: Vec<String>,
+    pub problem: String,
+    pub log: String,
+}
+
+impl SiteReverb {
+    pub fn running(&self) -> bool {
+        self.state == "running"
+    }
 }
 
 /// A Node.js site's dev server, which Flock starts on the site's first visit.
@@ -1530,6 +1563,8 @@ pub struct SiteChange {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub worker: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub reverb: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub root: Option<String>,
 }
 
@@ -1675,6 +1710,38 @@ mod tests {
         assert!(status.sites[2].node_server.is_none());
         let change = SiteChange { kind: Some("node".to_owned()), ..Default::default() };
         assert_eq!(serde_json::to_value(change).unwrap(), serde_json::json!({ "type": "node" }));
+    }
+
+    #[test]
+    fn decodes_reverb() {
+        let json = r#"{"sites":[
+            {"name":"acme","domain":"acme.test","path":"/home/a/acme","php":"8.4","secured":true,"reverb_available":true,
+              "reverb":{"state":"running","port":28080,"env":["REVERB_HOST=acme.test","REVERB_PORT=443","REVERB_SCHEME=https"],
+                "log":"reverb-acme"}},
+            {"name":"blog","domain":"blog.test","path":"/home/a/blog","php":"8.4",
+              "reverb":{"state":"unavailable","port":0,"problem":"Laravel Reverb isn't installed in the project","log":"reverb-blog"}},
+            {"name":"shop","domain":"shop.test","path":"/home/a/shop","php":"8.4"}]}"#;
+        let status: Status = serde_json::from_str(json).unwrap();
+        let acme = &status.sites[0];
+        assert!(acme.reverb_available);
+        let reverb = acme.reverb.as_ref().unwrap();
+        assert!(reverb.running());
+        assert_eq!(reverb.port, 28080);
+        assert_eq!(reverb.env, ["REVERB_HOST=acme.test", "REVERB_PORT=443", "REVERB_SCHEME=https"]);
+        assert_eq!(reverb.log, "reverb-acme");
+        assert_eq!(acme.reverb_url(), "wss://acme.test/app");
+        let blog = &status.sites[1];
+        assert!(!blog.reverb_available);
+        let reverb = blog.reverb.as_ref().unwrap();
+        assert!(!reverb.running() && reverb.env.is_empty() && reverb.problem.contains("isn't installed"));
+        assert_eq!(blog.reverb_url(), "ws://blog.test/app");
+        // Turned off, or an older daemon's site.
+        assert!(status.sites[2].reverb.is_none() && !status.sites[2].reverb_available);
+
+        let on = SiteChange { reverb: Some(true), ..Default::default() };
+        assert_eq!(serde_json::to_value(on).unwrap(), serde_json::json!({ "reverb": true }));
+        let off = SiteChange { reverb: Some(false), ..Default::default() };
+        assert_eq!(serde_json::to_value(off).unwrap(), serde_json::json!({ "reverb": false }));
     }
 
     #[test]

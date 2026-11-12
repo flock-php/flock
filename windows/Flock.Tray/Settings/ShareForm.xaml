@@ -1,0 +1,16 @@
+<UserControl
+    x:Class="Flock.Tray.Settings.ShareForm"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <!-- Who may open the shared site (nobody listed: anyone with the link), and whether visitors see the app's debug mode. -->
+    <StackPanel Spacing="12">
+        <TextBox x:Name="AllowBox" Header="Only these people (optional)" PlaceholderText="colleague@acme.com, *@client.com" />
+        <TextBlock Style="{StaticResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap"
+                   Text="Anyone with the link can open the site unless you list email addresses — Cloudflare then emails them a code. The link stops working after 8 hours or when you stop sharing." />
+        <StackPanel Spacing="2">
+            <CheckBox x:Name="DebugBox" Content="Show error details to visitors" />
+            <TextBlock Style="{StaticResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap"
+                       Text="Turns the app's debug mode on for this share, so visitors see stack traces. Only for people you trust." />
+        </StackPanel>
+    </StackPanel>
+</UserControl>

@@ -35,6 +35,12 @@ struct SitesPane: View {
         get { restartingState.wrappedValue }
         nonmutating set { restartingState.wrappedValue = newValue }
     }
+    /// The site whose Reverb server is restarting.
+    private let restartingReverbState = State<String?>(initialValue: nil)
+    private var restartingReverb: String? {
+        get { restartingReverbState.wrappedValue }
+        nonmutating set { restartingReverbState.wrappedValue = newValue }
+    }
     /// The site the Share sheet is open for.
     private let sharingState = State<String?>(initialValue: nil)
     private var sharing: String? {
@@ -485,7 +491,8 @@ struct SitesPane: View {
         .help(worktree.path)
     }
 
-    /// What a site's list row warns about: the site, its document root, one of its domains, or its FrankenPHP.
+    /// What a site's list row warns about: the site, its document root, one of its domains, its FrankenPHP
+    /// or its Reverb server.
     private func problem(_ site: Status.Site) -> String? {
         if let problem = site.problem {
             return problem
@@ -499,6 +506,9 @@ struct SitesPane: View {
         if !site.isNode, site.server == .frankenphp, let franken = site.frankenPHP, franken.state == .failed || franken.state == .unavailable,
            !franken.problem.isEmpty {
             return franken.problem
+        }
+        if !site.isNode, let reverb = site.reverb, reverb.state == .failed || reverb.state == .unavailable, !reverb.problem.isEmpty {
+            return reverb.problem
         }
         return nil
     }
@@ -648,6 +658,9 @@ struct SitesPane: View {
             } else {
                 section("Server") {
                     serverFields(site)
+                }
+                section("Reverb") {
+                    reverbFields(site)
                 }
             }
 
@@ -934,6 +947,102 @@ struct SitesPane: View {
             return log
         }
         return "frankenphp-\(site.name)"
+    }
+
+    /// Laravel Reverb for the site: Run Reverb, then its state, the .env lines the app needs, Restart
+    /// and its output.
+    @ViewBuilder
+    private func reverbFields(_ site: Status.Site) -> some View {
+        let store = model.settings
+        let address = "\(site.secured ? "wss" : "ws")://\(site.domain)/app"
+        field("Run Reverb") {
+            Toggle("Run Reverb", isOn: Binding(
+                get: { site.reverb != nil },
+                set: { on in Task { await store.perform { _ = try await $0.updateSite(site.name, SiteChange(reverb: on)) } } }
+            ))
+            .labelsHidden()
+            .toggleStyle(.switch)
+            .controlSize(.small)
+            .disabled(!site.reverbAvailable && site.reverb == nil)
+        }
+
+        if let reverb = site.reverb {
+            reverbState(reverb, address: address)
+
+            if !reverb.env.isEmpty {
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack(spacing: 8) {
+                        Text("The app's .env needs:")
+                            .font(.caption).foregroundStyle(.secondary)
+                        Button("Copy") {
+                            NSPasteboard.general.clearContents()
+                            NSPasteboard.general.setString(reverb.env.joined(separator: "\n"), forType: .string)
+                        }
+                        .controlSize(.small)
+                    }
+                    Text(reverb.env.joined(separator: "\n"))
+                        .font(.callout.monospaced())
+                        .textSelection(.enabled)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+
+            HStack(spacing: 8) {
+                Button("Restart") {
+                    restartingReverb = site.name
+                    Task {
+                        await store.perform { _ = try await $0.restartReverb(site.name) }
+                        restartingReverb = nil
+                    }
+                }
+                .disabled(reverb.state != .running || restartingReverb == site.name)
+                .help("Restart Reverb, e.g. so it loads changed code")
+                if restartingReverb == site.name {
+                    ProgressView().controlSize(.mini)
+                }
+            }
+            .controlSize(.small)
+
+            ServerOutput(log: reverb.log.isEmpty ? "reverb-\(site.name)" : reverb.log, live: reverb.state == .running)
+
+            Text("WebSocket connections under /app and Laravel's broadcasts under /apps go to Reverb; every other request stays the app's. Flock doesn't change the project's .env. Rebuild the front end after changing it.")
+                .font(.caption).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        } else {
+            Text(site.reverbAvailable
+                 ? "Flock runs php artisan reverb:start for the site. Browsers reach it at \(address), with no port or certificate of its own."
+                 : "Install Laravel Reverb in the project (php artisan install:broadcasting --reverb) to run it.")
+                .font(.caption).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    /// The Reverb server: running at its address, why it stopped, or why it can't run.
+    @ViewBuilder
+    private func reverbState(_ reverb: Status.SiteReverb, address: String) -> some View {
+        switch reverb.state {
+        case .running:
+            HStack(spacing: 6) {
+                StateDot(color: StateDot.running)
+                Text("Running at \(address)").textSelection(.enabled)
+            }
+        case .failed:
+            HStack(spacing: 6) {
+                StateDot(color: StateDot.failed)
+                Text(reverb.problem.isEmpty ? "Failed" : reverb.problem)
+                    .textSelection(.enabled)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        case .unavailable:
+            if !reverb.problem.isEmpty {
+                Label(reverb.problem, systemImage: "exclamationmark.triangle.fill")
+                    .font(.caption).foregroundStyle(.orange)
+                    .textSelection(.enabled)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        case .unknown:
+            EmptyView()
+        }
     }
 
     /// Notes when versions disagree: an isolation over the project's pin, .flockrc over .nvmrc.

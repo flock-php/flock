@@ -208,6 +208,28 @@ func TestReloadReportsSitesWithMissingPHP(t *testing.T) {
 	}
 }
 
+func TestReloadSaysWhyAnEnabledReverbServerCantRun(t *testing.T) {
+	root, cfg := testRoot(t, nil)
+	client := startDaemon(t, root)
+
+	cfg.Upsert(config.Site{Name: "app", Path: t.TempDir(), PHP: "7.0", Reverb: true, ReverbPort: freePort(t)})
+	if err := cfg.Save(root); err != nil {
+		t.Fatal(err)
+	}
+
+	status, err := client.Reload(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(status.Sites) != 1 {
+		t.Fatalf("unexpected sites: %+v", status.Sites)
+	}
+	// Without it `flock reverb` read the missing status as "Reverb is off" and suggested turning it on.
+	if r := status.Sites[0].Reverb; r == nil || r.State != api.ReverbUnavailable || r.Problem != "PHP 7.0 is not installed" {
+		t.Fatalf("reverb status: %+v", r)
+	}
+}
+
 func TestTheFirstRunWaitsForTheDefaultsAndSaysSo(t *testing.T) {
 	root, cfg := testRoot(t, func(cfg *config.Config) { cfg.DefaultPHP, cfg.DefaultNode = "", "" })
 	cfg.Upsert(config.Site{Name: "app", Path: t.TempDir()})
@@ -385,6 +407,22 @@ func TestProjectFilesFollowsTheConfiguredCaddyfile(t *testing.T) {
 	writeFile(t, configured, "header X-Configured yes\n")
 	if created := d.projectFiles(); created == named || !strings.Contains(created, configured) {
 		t.Fatalf("creating the configured file did not change the project fingerprint: %q", created)
+	}
+}
+
+func TestProjectFilesNoticesReverbBeingInstalled(t *testing.T) {
+	site := t.TempDir()
+	d := daemon{cfg: &config.Config{Sites: []config.Site{{Name: "app", Path: site}}}}
+	before := d.projectFiles()
+
+	// composer require laravel/reverb changes no file the fingerprint watches otherwise.
+	writeFile(t, filepath.Join(site, "artisan"), "")
+	if err := os.MkdirAll(filepath.Join(site, "vendor", "laravel", "reverb"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeFile(t, filepath.Join(site, "vendor", "laravel", "reverb", "composer.json"), "{}")
+	if d.projectFiles() == before {
+		t.Fatal("installing Reverb did not change the project fingerprint")
 	}
 }
 
