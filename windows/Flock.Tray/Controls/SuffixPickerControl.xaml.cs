@@ -19,7 +19,7 @@ public sealed partial class SuffixPickerControl : UserControl
     public const string CustomTag = "custom";
 
     /// <summary>The domains the menu offers, as the daemon stores them: no leading dot.</summary>
-    private static readonly string[] Presets = ["test", "loc", "internal", "alt", "localhost", "example"];
+    private static readonly string[] Presets = ["test", "loc", "internal", "alt", "example"];
 
     private const int DebounceMilliseconds = 300;
 
