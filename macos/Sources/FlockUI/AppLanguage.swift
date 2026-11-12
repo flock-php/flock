@@ -45,12 +45,14 @@ enum AppLanguage: String, CaseIterable, Identifiable {
     /// The language the app runs in since it started.
     static let running = Bundle.main.preferredLocalizations.first ?? "en"
 
-    /// The localization the app would start in with this choice: for System, the first of the
-    /// user's languages (NSGlobalDomain, not this app's override) that Flock has.
+    /// The localization the app would start in with this choice. For System, the app's own
+    /// AppleLanguages when it names a language Flock doesn't have (System Settings sets it per app),
+    /// else the user's languages (NSGlobalDomain).
     var localization: String {
         guard self == .system else { return rawValue }
+        let own = UserDefaults.standard.persistentDomain(forName: Self.domain)?["AppleLanguages"] as? [String]
         let global = UserDefaults.standard.persistentDomain(forName: UserDefaults.globalDomain)?["AppleLanguages"] as? [String] ?? []
-        return Bundle.preferredLocalizations(from: Bundle.main.localizations, forPreferences: global).first ?? "en"
+        return Bundle.preferredLocalizations(from: Bundle.main.localizations, forPreferences: own ?? global).first ?? "en"
     }
 
     /// Dates, counts and lists in the language the app runs in, with the user's region and formats.
@@ -79,7 +81,7 @@ enum AppLanguage: String, CaseIterable, Identifiable {
     }
 }
 
-/// The Language picker, and Restart Flock once the choice differs from the language running. In
+/// The Language picker, and Relaunch Flock once the choice differs from the language running. In
 /// Settings → General and in the setup, so it can be changed before Flock runs.
 struct LanguagePicker: View {
     private let selectedState = State<AppLanguage>(initialValue: AppLanguage.selected)
@@ -99,7 +101,7 @@ struct LanguagePicker: View {
                     .font(.caption).foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
                 Spacer()
-                Button("Restart Flock") {
+                Button("Relaunch Flock") {
                     do {
                         try AppLanguage.relaunch()
                     } catch {

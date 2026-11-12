@@ -354,6 +354,10 @@ msgstr "Nastavení spouštění se nepodařilo změnit: {error}."
 msgid "Could not open {program}: {error}"
 msgstr "{program} se nepodařilo otevřít: {error}"
 
+#. {error}: why
+msgid "Could not relaunch Flock: {error}"
+msgstr "Flock se nepodařilo znovu spustit: {error}"
+
 msgid "Couldn't check for new releases: {error}"
 msgstr "Nová vydání se nepodařilo vyhledat: {error}"
 
@@ -1205,6 +1209,10 @@ msgstr "Obnovit"
 msgid "Reinstall {version}"
 msgstr "Přeinstalovat {version}"
 
+#. Restarts only the app, the daemon keeps running
+msgid "Relaunch Flock"
+msgstr "Znovu spustit Flock"
+
 msgid "Reload the log every 2 seconds"
 msgstr "Načítat log znovu každé 2 sekundy"
 
@@ -1269,6 +1277,7 @@ msgstr "Restartovat"
 msgid "Restart Daemon"
 msgstr "Restartovat démona"
 
+#. Restarts the daemon and its services
 msgid "Restart Flock"
 msgstr "Restartovat Flock"
 

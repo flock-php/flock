@@ -7591,6 +7591,23 @@
         }
       }
     },
+    "Relaunch Flock" : {
+      "comment" : "Restarts only the app, the daemon keeps running",
+      "localizations" : {
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Znovu spustit Flock"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Volver a abrir Flock"
+          }
+        }
+      }
+    },
     "Reload the log every 2 seconds while this window is visible" : {
       "localizations" : {
         "cs" : {
@@ -7927,22 +7944,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Reiniciar el demonio"
-          }
-        }
-      }
-    },
-    "Restart Flock" : {
-      "localizations" : {
-        "cs" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Restartovat Flock"
-          }
-        },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Reiniciar Flock"
           }
         }
       }

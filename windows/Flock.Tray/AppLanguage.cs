@@ -9,11 +9,11 @@ namespace Flock.Tray;
 /// </summary>
 internal static class AppLanguage
 {
-    /// <summary>The preference the running app applied ("system", "en", "cs", "es").</summary>
-    public static string Preference { get; private set; } = Localization.System;
-
     /// <summary>The language the running app shows ("en", "cs", "es").</summary>
     public static string Current { get; private set; } = "en";
+
+    /// <summary>The system's preferred UI languages at startup, before Apply set the UI culture.</summary>
+    private static string[] systemLanguages = [];
 
     /// <summary>
     /// Sets the UI culture of this thread and of every thread started later, before any window exists.
@@ -23,13 +23,16 @@ internal static class AppLanguage
     /// </summary>
     public static void Apply(string preference)
     {
-        Preference = preference;
         // Windows' preferred UI languages in order (Win32: WinRT's GlobalizationPreferences.Languages, the
         // full Settings → Language list, isn't safe before App.Run sets up the COM wrappers), then the
         // display language .NET started with.
-        Current = Localization.Resolve(preference, [.. Native.PreferredUiLanguages(), CultureInfo.CurrentUICulture.Name]);
+        systemLanguages = [.. Native.PreferredUiLanguages(), CultureInfo.CurrentUICulture.Name];
+        Current = Localization.Resolve(preference, systemLanguages);
         var culture = CultureInfo.GetCultureInfo(Current);
         CultureInfo.DefaultThreadCurrentUICulture = culture;
         CultureInfo.CurrentUICulture = culture;
     }
+
+    /// <summary>The language a preference would show after a restart.</summary>
+    public static string Resolve(string preference) => Localization.Resolve(preference, systemLanguages);
 }

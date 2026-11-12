@@ -2,8 +2,9 @@
 //! by the English text and built into the binary. The language is chosen once at start, from the
 //! Language setting, else the system's (LANGUAGE, LC_ALL, LC_MESSAGES, LANG); English is the
 //! fallback for anything else. A Language setting other than the system's also sets LANGUAGE, so
-//! GTK, libadwaita and WebKit translate their own texts the same way; the programs the app starts
-//! get the system's back (with_system_language).
+//! GTK, libadwaita and WebKit translate their own texts the same way, except in a C locale, where
+//! gettext ignores LANGUAGE; the programs the app starts get the system's back
+//! (with_system_language).
 //!
 //! tr! translates a literal, with {name} placeholders filled from name = value pairs, which lets a
 //! translation put them in another order; trn! picks a plural form for a count, {n} in the text;
@@ -54,6 +55,20 @@ pub fn language() -> &'static str {
 pub fn with_system_language(set: impl FnOnce(Option<&str>)) {
     if let Some(system) = SYSTEM_LANGUAGE.get() {
         set(system.as_deref());
+    }
+}
+
+/// The language a preference stands for at the next start. Reads the system's LANGUAGE, not the
+/// one init() set for the Language setting.
+pub fn resolve_next(preference: &str) -> &'static str {
+    resolve(preference, |name| system_env(name, SYSTEM_LANGUAGE.get(), |name| std::env::var(name).ok()))
+}
+
+/// env, but LANGUAGE as it was before init() replaced it (system), when it did.
+fn system_env(name: &str, system: Option<&Option<String>>, env: impl Fn(&str) -> Option<String>) -> Option<String> {
+    match system {
+        Some(language) if name == "LANGUAGE" => language.clone(),
+        _ => env(name),
     }
 }
 
@@ -468,6 +483,20 @@ mod tests {
         // A C locale ignores LANGUAGE, as gettext does.
         assert_eq!(resolve("system", env(&[("LANGUAGE", "cs"), ("LANG", "C.UTF-8")])), "en");
         assert_eq!(resolve("system", env(&[])), "en");
+    }
+
+    #[test]
+    fn resolves_the_system_language_under_an_override() {
+        // init() set LANGUAGE=cs for the Language setting.
+        let env = |name: &str| match name {
+            "LANGUAGE" => Some("cs".to_owned()),
+            "LANG" => Some("en_US.UTF-8".to_owned()),
+            _ => None,
+        };
+        assert_eq!(resolve("system", |name| system_env(name, Some(&None), env)), "en");
+        assert_eq!(resolve("system", |name| system_env(name, Some(&Some("es".to_owned())), env)), "es");
+        // Following the system, LANGUAGE is the system's own.
+        assert_eq!(resolve("system", |name| system_env(name, None, env)), "cs");
     }
 
     #[test]

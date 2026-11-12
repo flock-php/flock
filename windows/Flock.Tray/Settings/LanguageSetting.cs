@@ -7,7 +7,7 @@ namespace Flock.Tray.Settings;
 
 /// <summary>
 /// The Language setting: Settings → General, and the first-run setup, where Settings isn't available
-/// yet. A new language applies after Restart Flock (App.Relaunch).
+/// yet. A new language applies after Relaunch Flock (App.Relaunch).
 /// </summary>
 internal static class LanguageSetting
 {
@@ -22,7 +22,7 @@ internal static class LanguageSetting
         Ui.AutomationName(picker, Strings.General_AppLanguage);
 
         Button? restart = null;
-        restart = Ui.Button(Strings.General_RestartFlock, () =>
+        restart = Ui.Button(Strings.General_RelaunchFlock, () =>
         {
             // Disabled while this instance quits; enabled again only when the new one couldn't start.
             restart!.IsEnabled = false;
@@ -31,7 +31,7 @@ internal static class LanguageSetting
         var note = Ui.Setting(Strings.General_LanguageRestartNote, null, restart);
 
         void UpdateNote() =>
-            note.Visibility = preferences.Snapshot.Language != AppLanguage.Preference ? Visibility.Visible : Visibility.Collapsed;
+            note.Visibility = AppLanguage.Resolve(preferences.Snapshot.Language) != AppLanguage.Current ? Visibility.Visible : Visibility.Collapsed;
 
         picker.SelectionChanged += async (_, _) =>
         {

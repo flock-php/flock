@@ -147,7 +147,7 @@ keys (plus `_few` in Czech: 2–4). `ResourcesTests` in Flock.Kit.Tests fails fo
 placeholder, an unknown key in XAML or untranslated text in XAML.
 
 Settings → General → Language picks the language (Windows' preferred languages by default); it applies after
-Restart Flock, which starts a new instance (`--relaunch=<pid>`, waiting for the old one to exit). The installer speaks
+Relaunch Flock, which starts a new instance (`--relaunch=<pid>`, waiting for the old one to exit). The installer speaks
 the Windows display language; the app's updater passes it the app's language with `/LANG`.
 
 ## Screenshots for the docs

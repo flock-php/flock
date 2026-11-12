@@ -134,7 +134,7 @@
         <value>Deja que agentes de IA como Claude Code y Cursor trabajen con Flock: las URL y versiones de PHP de tus sitios, registros, dumps y correo, y la instalación de versiones y servicios.</value>
     </data>
     <data name="App_CouldNotRelaunch" xml:space="preserve">
-        <value>No se pudo reiniciar Flock: {0}</value>
+        <value>No se pudo volver a abrir Flock: {0}</value>
     </data>
     <data name="App_CouldNotStart" xml:space="preserve">
         <value>No se pudo iniciar Flock</value>
@@ -480,6 +480,9 @@ Encontrarás los detalles en %LocalAppData%\Flock\tray.log.</value>
     <data name="General_ProjectFoldersDescription" xml:space="preserve">
         <value>Cada carpeta dentro de una carpeta de proyectos se sirve como &lt;carpeta&gt;.{0}, igual que con `flock park`.</value>
     </data>
+    <data name="General_RelaunchFlock" xml:space="preserve">
+        <value>Volver a abrir Flock</value>
+    </data>
     <data name="General_ReleaseNotes" xml:space="preserve">
         <value>Notas de la versión</value>
     </data>
@@ -497,9 +500,6 @@ Encontrarás los detalles en %LocalAppData%\Flock\tray.log.</value>
     </data>
     <data name="General_RestartDescription" xml:space="preserve">
         <value>Reinicia el demonio y todos los servicios que ejecuta.</value>
-    </data>
-    <data name="General_RestartFlock" xml:space="preserve">
-        <value>Reiniciar Flock</value>
     </data>
     <data name="General_Restarting" xml:space="preserve">
         <value>Reiniciando…</value>

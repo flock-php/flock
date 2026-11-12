@@ -134,7 +134,7 @@
         <value>Umožněte AI agentům jako Claude Code a Cursor pracovat s Flockem: s URL a verzemi PHP vašich webů, logy, dumpy a poštou i s instalací verzí a služeb.</value>
     </data>
     <data name="App_CouldNotRelaunch" xml:space="preserve">
-        <value>Flock se nepodařilo restartovat: {0}</value>
+        <value>Flock se nepodařilo znovu spustit: {0}</value>
     </data>
     <data name="App_CouldNotStart" xml:space="preserve">
         <value>Flock se nepodařilo spustit</value>
@@ -480,6 +480,9 @@ Podrobnosti najdete v %LocalAppData%\Flock\tray.log.</value>
     <data name="General_ProjectFoldersDescription" xml:space="preserve">
         <value>Každá složka uvnitř složky projektů se obsluhuje jako &lt;složka&gt;.{0} — stejně jako po `flock park`.</value>
     </data>
+    <data name="General_RelaunchFlock" xml:space="preserve">
+        <value>Znovu spustit Flock</value>
+    </data>
     <data name="General_ReleaseNotes" xml:space="preserve">
         <value>Poznámky k verzi</value>
     </data>
@@ -497,9 +500,6 @@ Podrobnosti najdete v %LocalAppData%\Flock\tray.log.</value>
     </data>
     <data name="General_RestartDescription" xml:space="preserve">
         <value>Restartuje démona a všechny služby, které spouští.</value>
-    </data>
-    <data name="General_RestartFlock" xml:space="preserve">
-        <value>Restartovat Flock</value>
     </data>
     <data name="General_Restarting" xml:space="preserve">
         <value>Restartuje se…</value>

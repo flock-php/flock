@@ -350,6 +350,10 @@ msgstr "No se pudo cambiar el ajuste de inicio: {error}."
 msgid "Could not open {program}: {error}"
 msgstr "No se pudo abrir {program}: {error}"
 
+#. {error}: why
+msgid "Could not relaunch Flock: {error}"
+msgstr "No se pudo volver a abrir Flock: {error}"
+
 msgid "Couldn't check for new releases: {error}"
 msgstr "No se pudieron buscar nuevas versiones: {error}"
 
@@ -1197,6 +1201,10 @@ msgstr "Actualizar"
 msgid "Reinstall {version}"
 msgstr "Reinstalar {version}"
 
+#. Restarts only the app, the daemon keeps running
+msgid "Relaunch Flock"
+msgstr "Volver a abrir Flock"
+
 msgid "Reload the log every 2 seconds"
 msgstr "Recargar el registro cada 2 segundos"
 
@@ -1261,6 +1269,7 @@ msgstr "Reiniciar"
 msgid "Restart Daemon"
 msgstr "Reiniciar el demonio"
 
+#. Restarts the daemon and its services
 msgid "Restart Flock"
 msgstr "Reiniciar Flock"
 

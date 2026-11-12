@@ -135,7 +135,7 @@
         <value>Let AI agents like Claude Code and Cursor work with Flock: your sites' URLs and PHP versions, logs, dumps and mail, and installing versions and services.</value>
     </data>
     <data name="App_CouldNotRelaunch" xml:space="preserve">
-        <value>Could not restart Flock: {0}</value>
+        <value>Could not relaunch Flock: {0}</value>
         <comment>{0}: why</comment>
     </data>
     <data name="App_CouldNotStart" xml:space="preserve">
@@ -506,6 +506,10 @@ Details are in %LocalAppData%\Flock\tray.log.</value>
         <value>Every folder inside a project folder is served as &lt;folder&gt;.{0} — the same as `flock park`.</value>
         <comment>{0}: the TLD ("test")</comment>
     </data>
+    <data name="General_RelaunchFlock" xml:space="preserve">
+        <value>Relaunch Flock</value>
+        <comment>Restarts only the app, the daemon keeps running</comment>
+    </data>
     <data name="General_ReleaseNotes" xml:space="preserve">
         <value>Release Notes</value>
     </data>
@@ -524,9 +528,6 @@ Details are in %LocalAppData%\Flock\tray.log.</value>
     </data>
     <data name="General_RestartDescription" xml:space="preserve">
         <value>Restarts the daemon and every service it runs.</value>
-    </data>
-    <data name="General_RestartFlock" xml:space="preserve">
-        <value>Restart Flock</value>
     </data>
     <data name="General_Restarting" xml:space="preserve">
         <value>Restarting…</value>
@@ -750,6 +751,7 @@ Details are in %LocalAppData%\Flock\tray.log.</value>
     </data>
     <data name="Menu_RestartFlock" xml:space="preserve">
         <value>Restart Flock</value>
+        <comment>Restarts the daemon and its services</comment>
     </data>
     <data name="Menu_SetUpFlock" xml:space="preserve">
         <value>Set Up Flock…</value>

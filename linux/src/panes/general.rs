@@ -286,10 +286,10 @@ pub fn language() -> adw::PreferencesGroup {
         .selected(codes.iter().position(|code| *code == saved).unwrap_or(0) as u32)
         .build();
     let note = adw::ActionRow::builder().title(tr!("Flock uses the new language after it restarts.")).build();
-    let restart = gtk::Button::builder().label(tr!("Restart Flock")).action_name("app.relaunch").valign(gtk::Align::Center).build();
+    let restart = gtk::Button::builder().label(tr!("Relaunch Flock")).action_name("app.relaunch").valign(gtk::Align::Center).build();
     note.add_suffix(&restart);
     // Only when the choice speaks another language than this run, e.g. not "System default" → its own.
-    let pending = |preference: &str| i18n::resolve(preference, |name| std::env::var(name).ok()) != i18n::language();
+    let pending = |preference: &str| i18n::resolve_next(preference) != i18n::language();
     note.set_visible(pending(&saved));
     let shown = note.clone();
     row.connect_selected_notify(move |row| {

@@ -29,6 +29,7 @@ use std::time::Duration;
 
 use adw::prelude::*;
 use gtk::{gio, glib};
+use i18n::tr;
 
 const APP_ID: &str = "dev.flock.Flock";
 
@@ -171,13 +172,11 @@ fn main() -> glib::ExitCode {
     }
     let flag = |name: &str| args.iter().position(|a| a == name).and_then(|i| args.get(i + 1)).cloned();
     // --after <pid>: a restart (app.relaunch) waits for the old app to exit, which until then
-    // holds the application ID: GApplication would hand this start to it.
+    // holds the application ID: GApplication would hand this start to it. No time limit, since
+    // starting early would leave no app running once the old one is gone.
     if let Some(pid) = flag("--after") {
         let process = PathBuf::from(format!("/proc/{pid}"));
-        for _ in 0..200 {
-            if !process.exists() {
-                break;
-            }
+        while process.exists() {
             std::thread::sleep(Duration::from_millis(50));
         }
     }
@@ -255,7 +254,11 @@ fn main() -> glib::ExitCode {
     let relaunch = gio::ActionEntry::builder("relaunch")
         .activate(|app: &adw::Application, _, _| match relaunch() {
             Ok(()) => app.quit(),
-            Err(e) => eprintln!("relaunch: {e}"),
+            Err(e) => {
+                let dialog = adw::AlertDialog::new(Some(&tr!("Could not relaunch Flock: {error}", error = e)), None);
+                dialog.add_response("ok", tr!("OK"));
+                dialog.present(app.active_window().as_ref());
+            }
         })
         .build();
     let mut entries = vec![quit, open_action, relaunch];

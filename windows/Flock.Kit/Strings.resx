@@ -90,7 +90,7 @@
     </data>
     <data name="Conflict_Detail" xml:space="preserve">
         <value>{0} {1}.</value>
-        <comment>{0}: the program ("Herd (nginx.exe, pid 812)"), {1}: what it does ("uses port 80 (HTTP)")</comment>
+        <comment>{0}: the program ("nginx (nginx.exe, pid 812)"), {1}: what it does ("uses port 80 (HTTP)")</comment>
     </data>
     <data name="Conflict_Port" xml:space="preserve">
         <value>port {0} ({1})</value>
