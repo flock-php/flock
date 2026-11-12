@@ -3,12 +3,28 @@ package issue_assignment
 
 import "flock/tools/github/github_issue"
 
-type HelpWantedRemover interface {
+type AssignmentDisplayService interface {
 	Get(owner, repository string, number int) (*github_issue.Issue, error)
+	FindClaim(owner, repository string, number int) (*github_issue.Claim, error)
 	RemoveHelpWanted(owner, repository string, issue *github_issue.Issue) error
+	RemoveClaimed(owner, repository string, issue *github_issue.Issue) error
 }
 
-func Execute(issues HelpWantedRemover, owner, repository string, issue *github_issue.Issue) error {
+type assignmentDisplayTransition uint8
+
+const (
+	keepClaimedDisplay assignmentDisplayTransition = iota
+	removeClaimedDisplay
+)
+
+func assignmentDisplayTransitionFor(issue *github_issue.Issue, claim *github_issue.Claim) assignmentDisplayTransition {
+	if github_issue.ClaimOwnershipFor(issue, claim, "", 0) == github_issue.ClaimOwnershipSuperseded {
+		return removeClaimedDisplay
+	}
+	return keepClaimedDisplay
+}
+
+func Execute(issues AssignmentDisplayService, owner, repository string, issue *github_issue.Issue) error {
 	if issue == nil {
 		return nil
 	}
@@ -22,5 +38,15 @@ func Execute(issues HelpWantedRemover, owner, repository string, issue *github_i
 	if len(currentIssue.Assignees) == 0 {
 		return nil
 	}
-	return issues.RemoveHelpWanted(owner, repository, currentIssue)
+	claim, err := issues.FindClaim(owner, repository, currentIssue.Number)
+	if err != nil {
+		return err
+	}
+	if err := issues.RemoveHelpWanted(owner, repository, currentIssue); err != nil {
+		return err
+	}
+	if assignmentDisplayTransitionFor(currentIssue, claim) == removeClaimedDisplay {
+		return issues.RemoveClaimed(owner, repository, currentIssue)
+	}
+	return nil
 }

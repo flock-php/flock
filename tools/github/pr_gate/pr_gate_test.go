@@ -142,15 +142,15 @@ func TestRunBypassesMaintainersWithoutCheckingIssuesOrFiles(t *testing.T) {
 	}
 }
 
-func TestRunBypassesClaimedPullRequestsWithoutCheckingIssuesOrFiles(t *testing.T) {
+func TestRunDoesNotBypassAuthorizationForClaimedPullRequests(t *testing.T) {
 	pr := pullRequest("open", "Fixes #73")
 	pr.Labels = []github_issue.Label{{Name: github_issue.Claimed}}
-	api := &fakeService{pullRequest: pr}
+	api := &fakeService{pullRequest: pr, files: []github_pr.File{{Filename: "internal/site.go"}}}
 	if _, err := Execute(Dependencies{Issues: &fakeIssueService{api: api}, PullRequests: api}, "flock-php", "flock", Event{Action: "synchronize", Number: 87}); err != nil {
 		t.Fatal(err)
 	}
-	if api.issueCalls != 0 || api.filesCalls != 0 || len(api.calls) != 1 {
-		t.Fatalf("calls = %v, want only Get()", api.calls)
+	if api.state != "closed" || api.issueCalls != 1 || api.filesCalls != 1 {
+		t.Fatalf("state = %q, issue reads = %d, file reads = %d; want authorization evaluation", api.state, api.issueCalls, api.filesCalls)
 	}
 }
 
@@ -174,7 +174,6 @@ func TestRunReturnsMaintainerAssignedIssueForAnAssignedContributor(t *testing.T)
 		issue: &github_issue.Issue{
 			State: "open", Assignees: []github_issue.User{{Login: "contributor"}, {Login: "another-contributor"}}, Labels: []github_issue.Label{{Name: github_issue.HelpWanted}},
 		},
-		findClaimErr: errors.New("manual assignments must not read claims"),
 	}
 	result, err := Execute(Dependencies{Issues: &fakeIssueService{api: api}, PullRequests: api}, "flock-php", "flock", Event{Action: "synchronize", Number: 87})
 	if err != nil {
@@ -183,8 +182,71 @@ func TestRunReturnsMaintainerAssignedIssueForAnAssignedContributor(t *testing.T)
 	if result.ApprovedIssue == nil || result.ApprovedIssue.Number != 73 {
 		t.Fatalf("result = %+v, want approved issue flock#73", result)
 	}
-	if want := []string{"pr:get", "pr:list-files", "pr:list-linked-issues", "issue:get"}; !reflect.DeepEqual(api.calls, want) {
+	if want := []string{"pr:get", "pr:list-files", "pr:list-linked-issues", "issue:get", "issue:find-claim"}; !reflect.DeepEqual(api.calls, want) {
 		t.Fatalf("calls = %v, want %v", api.calls, want)
+	}
+}
+
+func TestRunAuthorizesEveryCurrentIssueAssignee(t *testing.T) {
+	for _, author := range []string{"contributor", "another-contributor"} {
+		t.Run(author, func(t *testing.T) {
+			api := &fakeService{
+				pullRequest: pullRequest("open", "Fixes #73"),
+				issue: &github_issue.Issue{
+					State: "open", Assignees: []github_issue.User{{Login: "contributor"}, {Login: "another-contributor"}},
+					Labels: []github_issue.Label{{Name: github_issue.HelpWanted}},
+				},
+			}
+			api.pullRequest.Author.Login = author
+
+			result, err := Execute(Dependencies{Issues: &fakeIssueService{api: api}, PullRequests: api}, "flock-php", "flock", Event{Action: "synchronize", Number: 87})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if result.ApprovedIssue == nil || result.ApprovedIssue.Number != 73 {
+				t.Fatalf("result = %+v, want approved issue flock#73", result)
+			}
+			if want := []string{"pr:get", "pr:list-files", "pr:list-linked-issues", "issue:get", "issue:find-claim"}; !reflect.DeepEqual(api.calls, want) {
+				t.Fatalf("calls = %v, want %v", api.calls, want)
+			}
+		})
+	}
+}
+
+func TestRunPropagatesClaimReadErrorsForEveryNonDeniedIssue(t *testing.T) {
+	for _, tt := range []struct {
+		name  string
+		issue *github_issue.Issue
+	}{
+		{name: "maintainer assignment", issue: &github_issue.Issue{State: "open", Assignees: []github_issue.User{{Login: "contributor"}}}},
+		{name: "automatic claim", issue: approvedIssue()},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			api := &fakeService{pullRequest: pullRequest("open", "Fixes #73"), issue: tt.issue, findClaimErr: errors.New("find claim")}
+			if _, err := Execute(Dependencies{Issues: &fakeIssueService{api: api}, PullRequests: api}, "flock-php", "flock", Event{Action: "synchronize", Number: 87}); err == nil {
+				t.Fatal("Execute() returned nil error")
+			}
+			if api.state != "" || api.commented {
+				t.Fatalf("state = %q, commented = %t; want no side effects", api.state, api.commented)
+			}
+		})
+	}
+}
+
+func TestRunDoesNotReadClaimForDeniedIssue(t *testing.T) {
+	api := &fakeService{
+		pullRequest:  pullRequest("open", "Fixes #73"),
+		files:        []github_pr.File{{Filename: "internal/site.go"}},
+		issue:        &github_issue.Issue{State: "closed"},
+		findClaimErr: errors.New("find claim must not run"),
+	}
+	if _, err := Execute(Dependencies{Issues: &fakeIssueService{api: api}, PullRequests: api}, "flock-php", "flock", Event{Action: "synchronize", Number: 87}); err != nil {
+		t.Fatal(err)
+	}
+	for _, call := range api.calls {
+		if call == "issue:find-claim" {
+			t.Fatalf("calls = %v, want no claim read", api.calls)
+		}
 	}
 }
 
@@ -271,14 +333,14 @@ func TestRunReturnsClaimOwnerForAnotherPullRequest(t *testing.T) {
 	api := &fakeService{
 		pullRequest: pullRequest("open", "Fixes #73"),
 		issue:       approvedIssue(),
-		claim:       &github_issue.Claim{PullRequestNumber: 86, Author: "first-contributor"},
+		claim:       &github_issue.Claim{PullRequestNumber: 86, Author: "contributor"},
 	}
 
 	result, err := Execute(Dependencies{Issues: &fakeIssueService{api: api}, PullRequests: api}, "flock-php", "flock", Event{Action: "synchronize", Number: 87})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if result.ApprovedIssue == nil || result.ApprovedIssue.Number != 73 || result.ClaimedBy != "first-contributor" {
+	if result.ApprovedIssue == nil || result.ApprovedIssue.Number != 73 || result.ClaimedBy != "contributor" {
 		t.Fatalf("result = %+v", result)
 	}
 }

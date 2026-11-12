@@ -147,10 +147,19 @@ func (s *Service) RemoveLabel(owner, repository string, number int, label string
 }
 
 func (s *Service) RemoveHelpWanted(owner, repository string, issue *Issue) error {
-	if !HasHelpWanted(issue) {
+	return s.removeLabelIfPresent(owner, repository, issue, HelpWanted)
+}
+
+// RemoveClaimed removes the durable claim display label when it is present.
+func (s *Service) RemoveClaimed(owner, repository string, issue *Issue) error {
+	return s.removeLabelIfPresent(owner, repository, issue, Claimed)
+}
+
+func (s *Service) removeLabelIfPresent(owner, repository string, issue *Issue, label string) error {
+	if !HasLabel(issue, label) {
 		return nil
 	}
-	err := s.RemoveLabel(owner, repository, issue.Number, HelpWanted)
+	err := s.RemoveLabel(owner, repository, issue.Number, label)
 	if isNotFound(err) {
 		return nil
 	}
@@ -203,28 +212,106 @@ func HasAssignee(issue *Issue, username string) bool {
 	return false
 }
 
-type ApprovalState uint8
+type IssueApprovalState uint8
 
 const (
-	ApprovalDenied ApprovalState = iota
-	ApprovalByAssignment
-	ApprovalRequiresAutomaticClaim
+	IssueApprovalDenied IssueApprovalState = iota
+	IssueApprovalAssignedAuthor
+	IssueApprovalUnassignedHelpWanted
 )
 
-func ApprovalFor(issue *Issue, author string) ApprovalState {
+// IssueApprovalFor classifies whether the current issue state can authorize the author.
+func IssueApprovalFor(issue *Issue, author string) IssueApprovalState {
 	if issue == nil || issue.IsPullRequest || issue.State != "open" {
-		return ApprovalDenied
+		return IssueApprovalDenied
 	}
 	if len(issue.Assignees) != 0 {
 		if HasAssignee(issue, author) {
-			return ApprovalByAssignment
+			return IssueApprovalAssignedAuthor
 		}
-		return ApprovalDenied
+		return IssueApprovalDenied
 	}
 	if HasHelpWanted(issue) {
-		return ApprovalRequiresAutomaticClaim
+		return IssueApprovalUnassignedHelpWanted
 	}
-	return ApprovalDenied
+	return IssueApprovalDenied
+}
+
+type ClaimOwnershipState uint8
+
+const (
+	ClaimOwnershipNone ClaimOwnershipState = iota
+	ClaimOwnershipThisPullRequest
+	ClaimOwnershipAnotherPullRequest
+	ClaimOwnershipSuperseded
+)
+
+// ClaimOwnershipFor classifies the persisted automatic claim against the current issue.
+func ClaimOwnershipFor(issue *Issue, claim *Claim, author string, pullRequestNumber int) ClaimOwnershipState {
+	if claim == nil {
+		return ClaimOwnershipNone
+	}
+	if hasAssigneeOtherThan(issue, claim.Author) {
+		return ClaimOwnershipSuperseded
+	}
+	if claim.Author == author && claim.PullRequestNumber == pullRequestNumber {
+		return ClaimOwnershipThisPullRequest
+	}
+	return ClaimOwnershipAnotherPullRequest
+}
+
+func hasAssigneeOtherThan(issue *Issue, username string) bool {
+	if issue == nil {
+		return false
+	}
+	for _, assignee := range issue.Assignees {
+		if assignee.Login != username {
+			return true
+		}
+	}
+	return false
+}
+
+type AuthorizationState uint8
+
+const (
+	AuthorizationDenied AuthorizationState = iota
+	AuthorizationMaintainerAssignment
+	AuthorizationAutomaticClaimOwner
+	AuthorizationCreateAutomaticClaim
+	AuthorizationAutomaticClaimConflict
+)
+
+// AuthorizationFor combines issue approval and claim ownership into the final authorization state.
+func AuthorizationFor(issueState IssueApprovalState, claimState ClaimOwnershipState) (AuthorizationState, error) {
+	if issueState > IssueApprovalUnassignedHelpWanted || claimState > ClaimOwnershipSuperseded {
+		return AuthorizationDenied, fmt.Errorf("unknown authorization states: issue=%d claim=%d", issueState, claimState)
+	}
+	switch issueState {
+	case IssueApprovalDenied:
+		return AuthorizationDenied, nil
+	case IssueApprovalAssignedAuthor:
+		switch claimState {
+		case ClaimOwnershipNone, ClaimOwnershipSuperseded:
+			return AuthorizationMaintainerAssignment, nil
+		case ClaimOwnershipThisPullRequest:
+			return AuthorizationAutomaticClaimOwner, nil
+		case ClaimOwnershipAnotherPullRequest:
+			return AuthorizationAutomaticClaimConflict, nil
+		}
+	case IssueApprovalUnassignedHelpWanted:
+		switch claimState {
+		case ClaimOwnershipNone:
+			return AuthorizationCreateAutomaticClaim, nil
+		case ClaimOwnershipThisPullRequest:
+			return AuthorizationAutomaticClaimOwner, nil
+		case ClaimOwnershipAnotherPullRequest:
+			return AuthorizationAutomaticClaimConflict, nil
+		case ClaimOwnershipSuperseded:
+			return AuthorizationDenied, fmt.Errorf("unsupported authorization states: issue=%d claim=%d", issueState, claimState)
+		}
+	}
+	return AuthorizationDenied, fmt.Errorf("unknown authorization states: issue=%d claim=%d", issueState, claimState)
 }
 
 // ParseEvent parses an issue webhook payload into owned workflow data.

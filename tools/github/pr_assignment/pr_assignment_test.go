@@ -24,7 +24,15 @@ func TestRunAssignsAuthorAndMarksIssueClaimed(t *testing.T) {
 
 func TestExecuteReturnsServiceErrors(t *testing.T) {
 	issue := &github_issue.Issue{Number: 73, State: "open", Labels: []github_issue.Label{{Name: github_issue.HelpWanted}}}
-	for _, api := range []*fakeService{{getErr: errors.New("get")}, {issue: issue, findClaimErr: errors.New("find claim")}, {issue: issue, createClaimErr: errors.New("create claim")}, {issue: issue, assignErr: errors.New("assign")}, {issue: issue, labelErr: errors.New("label")}, {issue: issue, removeErr: errors.New("remove")}} {
+	for _, api := range []*fakeService{
+		{getErr: errors.New("get")},
+		{issue: issue, findClaimErr: errors.New("find claim")},
+		{issue: &github_issue.Issue{Number: 73, State: "open", Assignees: []github_issue.User{{Login: "contributor"}}}, findClaimErr: errors.New("find assigned claim")},
+		{issue: issue, createClaimErr: errors.New("create claim")},
+		{issue: issue, assignErr: errors.New("assign")},
+		{issue: issue, labelErr: errors.New("label")},
+		{issue: issue, removeErr: errors.New("remove")},
+	} {
 		if _, err := Execute(Dependencies{Issues: api}, "flock-php", issue_reference.Reference{Repository: "flock", Number: 73}, 87, "contributor"); err == nil {
 			t.Fatal("Execute() returned nil error")
 		}
@@ -39,6 +47,9 @@ func TestExecuteWithdrawsApprovalForAnUnassignedAuthor(t *testing.T) {
 	}
 	if api.assignee != "" || api.removed || api.claim != nil {
 		t.Fatalf("unexpected claim side effects: %+v", api)
+	}
+	if api.findClaimCalls != 0 {
+		t.Fatalf("FindClaim() calls = %d, want 0", api.findClaimCalls)
 	}
 }
 
@@ -95,12 +106,12 @@ func TestExecuteCompletesTheOwnerRetry(t *testing.T) {
 		claim: &github_issue.Claim{PullRequestNumber: 87, Author: "contributor"},
 	}
 	result, err := Execute(Dependencies{Issues: api}, "flock-php", issue_reference.Reference{Repository: "flock", Number: 73}, 87, "contributor")
-	if err != nil || !result.AutomatedClaim || !api.claimed || !api.removed {
+	if err != nil || !result.AutomatedClaim || api.assignee != "contributor" || !api.claimed || !api.removed {
 		t.Fatalf("result = %+v, claimed = %t, removed = %t, err = %v", result, api.claimed, api.removed, err)
 	}
 }
 
-func TestExecuteDoesNotReadOrApplyAStaleClaimForAnAssignedAuthor(t *testing.T) {
+func TestExecuteReadsButDoesNotApplyAStaleClaimForAnAssignedAuthor(t *testing.T) {
 	api := &fakeService{
 		issue: &github_issue.Issue{
 			Number: 73, State: "open", Assignees: []github_issue.User{{Login: "contributor"}},
@@ -113,7 +124,7 @@ func TestExecuteDoesNotReadOrApplyAStaleClaimForAnAssignedAuthor(t *testing.T) {
 	if err != nil || result != (Result{}) {
 		t.Fatalf("Execute() = %+v, %v; want no-op", result, err)
 	}
-	if api.findClaimCalls != 0 || api.assignee != "" || api.claimed || api.removed {
+	if api.findClaimCalls != 1 || api.assignee != "" || api.claimed || api.removed {
 		t.Fatalf("unexpected stale-claim side effects: %+v", api)
 	}
 }

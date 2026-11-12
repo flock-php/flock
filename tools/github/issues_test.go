@@ -76,8 +76,22 @@ func TestIssueEventStopsOnParseAndServiceErrors(t *testing.T) {
 	}
 }
 
+func TestIssueAssignmentSkipsMarkerForMissingEventIssue(t *testing.T) {
+	api := &issueEventFakeService{currentIssue: &github_issue.Issue{
+		Number:    73,
+		Assignees: []github_issue.User{{Login: "maintainer"}},
+	}}
+	if err := newIssueEventService(api).Run("flock-php", "flock", []byte(`{"action":"assigned"}`)); err != nil {
+		t.Fatal(err)
+	}
+	if api.findClaimCalls != 0 {
+		t.Fatalf("FindClaim() calls = %d, want 0", api.findClaimCalls)
+	}
+}
+
 type issueEventFakeService struct {
 	triaged, removed                   bool
+	findClaimCalls                     int
 	currentIssue                       *github_issue.Issue
 	permission                         string
 	permissionErr, labelErr, removeErr error
@@ -103,5 +117,14 @@ func (f *issueEventFakeService) AddLabel(_ string, _ string, _ int, label string
 }
 func (f *issueEventFakeService) RemoveHelpWanted(string, string, *github_issue.Issue) error {
 	f.removed = true
+	return f.removeErr
+}
+
+func (f *issueEventFakeService) FindClaim(string, string, int) (*github_issue.Claim, error) {
+	f.findClaimCalls++
+	return nil, nil
+}
+
+func (f *issueEventFakeService) RemoveClaimed(string, string, *github_issue.Issue) error {
 	return f.removeErr
 }

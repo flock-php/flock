@@ -92,6 +92,35 @@ func TestServiceIgnoresMissingHelpWantedLabel(t *testing.T) {
 	}
 }
 
+func TestServiceIgnoresMissingClaimedLabel(t *testing.T) {
+	service := New(nil)
+	if err := service.RemoveClaimed("flock-php", "flock", &Issue{Number: 73}); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestServiceIgnoresMissingClaimedLabelResponse(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodDelete || r.URL.EscapedPath() != "/repos/flock-php/flock/issues/73/labels/claimed" {
+			t.Errorf("request = %s %s", r.Method, r.URL.String())
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		w.WriteHeader(http.StatusNotFound)
+		_, _ = io.WriteString(w, `{"message":"Label does not exist"}`)
+	}))
+	defer server.Close()
+
+	client, err := github_client.New(server.URL, "token")
+	if err != nil {
+		t.Fatal(err)
+	}
+	issue := &Issue{Number: 73, Labels: []Label{{Name: Claimed}}}
+	if err := New(client).RemoveClaimed("flock-php", "flock", issue); err != nil {
+		t.Fatalf("RemoveClaimed() = %v, want nil", err)
+	}
+}
+
 func TestServiceGetsIssueAndAddsLabel(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method + " " + r.URL.Path {
@@ -209,6 +238,10 @@ func TestServicePropagatesIssueErrors(t *testing.T) {
 	if err := service.RemoveHelpWanted("flock-php", "flock", issue); err == nil {
 		t.Fatal("RemoveHelpWanted() returned nil error")
 	}
+	issue.Labels = []Label{{Name: Claimed}}
+	if err := service.RemoveClaimed("flock-php", "flock", issue); err == nil {
+		t.Fatal("RemoveClaimed() returned nil error")
+	}
 }
 
 func TestRemoveHelpWantedSkipsIssuesWithoutTheLabel(t *testing.T) {
@@ -234,24 +267,96 @@ func TestIssueHelpers(t *testing.T) {
 	}
 }
 
-func TestApprovalForClassifiesCurrentIssueState(t *testing.T) {
+func TestIssueApprovalForClassifiesCurrentIssueState(t *testing.T) {
 	tests := []struct {
 		name  string
 		issue *Issue
-		want  ApprovalState
+		want  IssueApprovalState
 	}{
-		{name: "missing issue", want: ApprovalDenied},
-		{name: "closed issue", issue: &Issue{State: "closed"}, want: ApprovalDenied},
-		{name: "pull request", issue: &Issue{State: "open", IsPullRequest: true}, want: ApprovalDenied},
-		{name: "assigned author", issue: &Issue{State: "open", Assignees: []User{{Login: "contributor"}}}, want: ApprovalByAssignment},
-		{name: "assigned other author", issue: &Issue{State: "open", Assignees: []User{{Login: "other"}}, Labels: []Label{{Name: HelpWanted}}}, want: ApprovalDenied},
-		{name: "unassigned help wanted", issue: &Issue{State: "open", Labels: []Label{{Name: HelpWanted}}}, want: ApprovalRequiresAutomaticClaim},
-		{name: "unassigned without help wanted", issue: &Issue{State: "open"}, want: ApprovalDenied},
+		{name: "missing issue", want: IssueApprovalDenied},
+		{name: "closed issue", issue: &Issue{State: "closed"}, want: IssueApprovalDenied},
+		{name: "pull request", issue: &Issue{State: "open", IsPullRequest: true}, want: IssueApprovalDenied},
+		{name: "assigned author", issue: &Issue{State: "open", Assignees: []User{{Login: "contributor"}}}, want: IssueApprovalAssignedAuthor},
+		{name: "assigned other author", issue: &Issue{State: "open", Assignees: []User{{Login: "other"}}, Labels: []Label{{Name: HelpWanted}}}, want: IssueApprovalDenied},
+		{name: "unassigned help wanted", issue: &Issue{State: "open", Labels: []Label{{Name: HelpWanted}}}, want: IssueApprovalUnassignedHelpWanted},
+		{name: "unassigned without help wanted", issue: &Issue{State: "open"}, want: IssueApprovalDenied},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := ApprovalFor(tt.issue, "contributor"); got != tt.want {
-				t.Fatalf("ApprovalFor() = %d, want %d", got, tt.want)
+			if got := IssueApprovalFor(tt.issue, "contributor"); got != tt.want {
+				t.Fatalf("IssueApprovalFor() = %d, want %d", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestClaimOwnershipForClassifiesMarkerState(t *testing.T) {
+	claim := &Claim{PullRequestNumber: 87, Author: "contributor"}
+	tests := []struct {
+		name   string
+		issue  *Issue
+		claim  *Claim
+		author string
+		pr     int
+		want   ClaimOwnershipState
+	}{
+		{name: "no marker", want: ClaimOwnershipNone},
+		{name: "owner on unassigned issue", claim: claim, author: "contributor", pr: 87, want: ClaimOwnershipThisPullRequest},
+		{name: "owner on assigned issue", issue: &Issue{Assignees: []User{{Login: "contributor"}}}, claim: claim, author: "contributor", pr: 87, want: ClaimOwnershipThisPullRequest},
+		{name: "same author different pull request", claim: claim, author: "contributor", pr: 86, want: ClaimOwnershipAnotherPullRequest},
+		{name: "another pull request", claim: claim, author: "other", pr: 86, want: ClaimOwnershipAnotherPullRequest},
+		{name: "additional assignee supersedes marker", issue: &Issue{Assignees: []User{{Login: "contributor"}, {Login: "maintainer"}}}, claim: claim, author: "contributor", pr: 87, want: ClaimOwnershipSuperseded},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := ClaimOwnershipFor(tt.issue, tt.claim, tt.author, tt.pr); got != tt.want {
+				t.Fatalf("ClaimOwnershipFor() = %d, want %d", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestAuthorizationForCoversTheNamedStateMatrix(t *testing.T) {
+	tests := []struct {
+		name       string
+		issueState IssueApprovalState
+		claimState ClaimOwnershipState
+		want       AuthorizationState
+	}{
+		{"denied without marker", IssueApprovalDenied, ClaimOwnershipNone, AuthorizationDenied},
+		{"denied with superseded marker", IssueApprovalDenied, ClaimOwnershipSuperseded, AuthorizationDenied},
+		{"assigned without marker", IssueApprovalAssignedAuthor, ClaimOwnershipNone, AuthorizationMaintainerAssignment},
+		{"assigned with superseded marker", IssueApprovalAssignedAuthor, ClaimOwnershipSuperseded, AuthorizationMaintainerAssignment},
+		{"assigned owner", IssueApprovalAssignedAuthor, ClaimOwnershipThisPullRequest, AuthorizationAutomaticClaimOwner},
+		{"assigned conflict", IssueApprovalAssignedAuthor, ClaimOwnershipAnotherPullRequest, AuthorizationAutomaticClaimConflict},
+		{"unassigned without marker", IssueApprovalUnassignedHelpWanted, ClaimOwnershipNone, AuthorizationCreateAutomaticClaim},
+		{"unassigned owner", IssueApprovalUnassignedHelpWanted, ClaimOwnershipThisPullRequest, AuthorizationAutomaticClaimOwner},
+		{"unassigned conflict", IssueApprovalUnassignedHelpWanted, ClaimOwnershipAnotherPullRequest, AuthorizationAutomaticClaimConflict},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := AuthorizationFor(tt.issueState, tt.claimState)
+			if err != nil || got != tt.want {
+				t.Fatalf("AuthorizationFor() = %d, %v; want %d", got, err, tt.want)
+			}
+		})
+	}
+}
+
+func TestAuthorizationForRejectsUnknownStates(t *testing.T) {
+	for _, tt := range []struct {
+		name       string
+		issueState IssueApprovalState
+		claimState ClaimOwnershipState
+	}{
+		{"unknown issue state", IssueApprovalState(99), ClaimOwnershipNone},
+		{"unknown claim state", IssueApprovalDenied, ClaimOwnershipState(99)},
+		{"unsupported unassigned superseded state", IssueApprovalUnassignedHelpWanted, ClaimOwnershipSuperseded},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := AuthorizationFor(tt.issueState, tt.claimState)
+			if err == nil || got != AuthorizationDenied {
+				t.Fatalf("AuthorizationFor() = %d, %v; want denied with error", got, err)
 			}
 		})
 	}

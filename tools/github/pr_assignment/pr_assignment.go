@@ -27,6 +27,21 @@ type Result struct {
 	AutomatedClaim    bool
 }
 
+type assignmentTransition uint8
+
+const (
+	assignmentNoOp assignmentTransition = iota
+	assignmentRecoverAutomaticClaim
+	assignmentCreateAutomaticClaim
+	assignmentConflict
+	assignmentApprovalWithdrawn
+)
+
+type assignmentSnapshot struct {
+	issue *github_issue.Issue
+	claim *github_issue.Claim
+}
+
 func Execute(dependencies Dependencies, owner string, issueReference issue_reference.Reference, pullRequestNumber int, author string) (Result, error) {
 	claim := issueClaim{
 		dependencies:      dependencies,
@@ -35,7 +50,11 @@ func Execute(dependencies Dependencies, owner string, issueReference issue_refer
 		pullRequestNumber: pullRequestNumber,
 		author:            author,
 	}
-	return claim.evaluate()
+	transition, snapshot, err := claim.evaluate()
+	if err != nil {
+		return Result{}, err
+	}
+	return claim.apply(transition, snapshot)
 }
 
 type issueClaim struct {
@@ -46,33 +65,68 @@ type issueClaim struct {
 	author            string
 }
 
-func (c issueClaim) evaluate() (Result, error) {
+func (c issueClaim) evaluate() (assignmentTransition, assignmentSnapshot, error) {
 	issue, err := c.dependencies.Issues.Get(c.owner, c.issueReference.Repository, c.issueReference.Number)
 	if err != nil {
-		return Result{}, err
+		return assignmentNoOp, assignmentSnapshot{}, err
 	}
-	switch github_issue.ApprovalFor(issue, c.author) {
-	case github_issue.ApprovalDenied:
-		return Result{ApprovalWithdrawn: true}, nil
-	case github_issue.ApprovalByAssignment:
-		return Result{}, nil
-	case github_issue.ApprovalRequiresAutomaticClaim:
-		claim, err := c.dependencies.Issues.FindClaim(c.owner, c.issueReference.Repository, c.issueReference.Number)
+	issueState := github_issue.IssueApprovalFor(issue, c.author)
+	claim := (*github_issue.Claim)(nil)
+	if issueState != github_issue.IssueApprovalDenied {
+		claim, err = c.dependencies.Issues.FindClaim(c.owner, c.issueReference.Repository, c.issueReference.Number)
 		if err != nil {
-			return Result{}, err
+			return assignmentNoOp, assignmentSnapshot{}, err
 		}
-		if claim != nil {
-			if claim.PullRequestNumber != c.pullRequestNumber || claim.Author != c.author {
-				return Result{ClaimedBy: claim.Author}, nil
-			}
-			return c.assignClaimOwner(issue, true)
-		}
+	}
+	authorization, err := github_issue.AuthorizationFor(issueState, github_issue.ClaimOwnershipFor(issue, claim, c.author, c.pullRequestNumber))
+	if err != nil {
+		return assignmentNoOp, assignmentSnapshot{}, err
+	}
+	transition, err := assignmentTransitionFor(authorization)
+	if err != nil {
+		return assignmentNoOp, assignmentSnapshot{}, err
+	}
+	return transition, assignmentSnapshot{issue: issue, claim: claim}, nil
+}
+
+func assignmentTransitionFor(authorization github_issue.AuthorizationState) (assignmentTransition, error) {
+	switch authorization {
+	case github_issue.AuthorizationDenied:
+		return assignmentApprovalWithdrawn, nil
+	case github_issue.AuthorizationMaintainerAssignment:
+		return assignmentNoOp, nil
+	case github_issue.AuthorizationAutomaticClaimOwner:
+		return assignmentRecoverAutomaticClaim, nil
+	case github_issue.AuthorizationCreateAutomaticClaim:
+		return assignmentCreateAutomaticClaim, nil
+	case github_issue.AuthorizationAutomaticClaimConflict:
+		return assignmentConflict, nil
+	default:
+		return assignmentNoOp, fmt.Errorf("unknown authorization state %d", authorization)
+	}
+}
+
+func (c issueClaim) apply(transition assignmentTransition, snapshot assignmentSnapshot) (Result, error) {
+	switch transition {
+	case assignmentCreateAutomaticClaim:
 		if err := c.dependencies.Issues.CreateClaim(c.owner, c.issueReference.Repository, c.issueReference.Number, c.pullRequestNumber, c.author); err != nil {
 			return Result{}, err
 		}
-		return c.assignClaimOwner(issue, true)
+		return c.assignClaimOwner(snapshot.issue, true)
+	case assignmentRecoverAutomaticClaim:
+		return c.assignClaimOwner(snapshot.issue, true)
+	case assignmentConflict:
+		return Result{
+			ClaimedBy: snapshot.claim.Author,
+		}, nil
+	case assignmentApprovalWithdrawn:
+		return Result{
+			ApprovalWithdrawn: true,
+		}, nil
+	case assignmentNoOp:
+		return Result{}, nil
 	default:
-		return Result{}, fmt.Errorf("unknown issue approval state")
+		return Result{}, fmt.Errorf("unknown assignment transition %d", transition)
 	}
 }
 

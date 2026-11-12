@@ -2,6 +2,7 @@ package main
 
 import (
 	"errors"
+	"fmt"
 	"reflect"
 	"strings"
 	"testing"
@@ -113,18 +114,30 @@ func TestRunPullRequestEventDoesNotCloseWhenConflictDisappearsBeforeAssignmentRe
 	}
 }
 
-func TestRunPullRequestEventKeepsClaimedPullRequestOpen(t *testing.T) {
-	calls := []string{}
-	pullRequests := &pullRequestEventFake{pullRequest: &github_pr.PullRequest{
-		Number: 87, State: "open", BaseRef: "main", Author: github_issue.User{Login: "contributor", Type: "User"},
-		Labels: []github_issue.Label{{Name: github_issue.Claimed}},
-	}, calls: &calls}
-	if err := newPullRequestEventService(pullRequests, &pullRequestIssueFake{calls: &calls}).Run("flock-php", "flock", []byte(`{"action":"synchronize","pull_request":{"number":87,"user":{"login":"contributor"}}}`)); err != nil {
-		t.Fatal(err)
-	}
-	want := []string{"pr:get"}
-	if !reflect.DeepEqual(calls, want) {
-		t.Fatalf("calls = %v, want %v", calls, want)
+func TestRunPullRequestEventIgnoresClaimedLabelForAuthorization(t *testing.T) {
+	for _, claimed := range []bool{false, true} {
+		t.Run(fmt.Sprintf("claimed=%t", claimed), func(t *testing.T) {
+			calls := []string{}
+			labels := []github_issue.Label{}
+			if claimed {
+				labels = append(labels, github_issue.Label{Name: github_issue.Claimed})
+			}
+			pullRequests := &pullRequestEventFake{pullRequest: &github_pr.PullRequest{
+				Number: 87, State: "open", BaseRef: "main", Body: "Fixes #73", Author: github_issue.User{Login: "contributor", Type: "User"}, Labels: labels,
+			}, files: []github_pr.File{{Filename: "tools/github/main.go"}}, linkedIssues: []github_pr.LinkedIssue{linkedIssue(73, nil)}, calls: &calls}
+			issues := &pullRequestIssueFake{issue: &github_issue.Issue{Number: 73, State: "open", Labels: []github_issue.Label{{Name: github_issue.HelpWanted}}}, calls: &calls}
+
+			if err := newPullRequestEventService(pullRequests, issues).Run("flock-php", "flock", []byte(`{"action":"synchronize","pull_request":{"number":87,"user":{"login":"contributor"}}}`)); err != nil {
+				t.Fatal(err)
+			}
+			if !github_pr.HasLabel(pullRequests.pullRequest, github_issue.Claimed) {
+				t.Fatalf("labels = %+v, want the display label after successful transfer", pullRequests.pullRequest.Labels)
+			}
+			want := []string{"pr:get", "pr:list-files", "pr:list-linked-issues", "issue:get", "issue:find-claim", "issue:get", "issue:find-claim", "issue:create-claim", "issue:assign", "issue:add-label", "issue:remove-help-wanted", "pr:claim-comment-exists", "pr:create-comment", "pr:get", "pr:list-linked-issues", "issue:ensure-claimed-label", "issue:add-label"}
+			if !reflect.DeepEqual(calls, want) {
+				t.Fatalf("calls = %v, want %v", calls, want)
+			}
+		})
 	}
 }
 

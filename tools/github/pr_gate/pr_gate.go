@@ -100,7 +100,7 @@ func (g pullRequestGate) evaluate(retryAllowed bool) (gateTransition, error) {
 	if err != nil || pr == nil {
 		return gateTransition{}, err
 	}
-	if bypassesGate(pr.Author, pr.AuthorAssociation) || (pr.State == "open" && approvedPullRequest(pr) && pr.BaseRef == "main") {
+	if bypassesGate(pr.Author, pr.AuthorAssociation) {
 		return gateTransition{
 			state:       noAction,
 			pullRequest: pr,
@@ -163,7 +163,7 @@ func (g pullRequestGate) evaluateOpen(pr *github_pr.PullRequest, retryAllowed bo
 	if err != nil {
 		return gateTransition{}, err
 	}
-	if docsOnly(files) == noAction {
+	if docsOnly(files) {
 		return gateTransition{
 			state:       noAction,
 			pullRequest: pr,
@@ -277,39 +277,41 @@ func firstApprovedIssue(issues IssueReader, pullRequests PullRequestGateService,
 			}
 			return linkedIssueDecision{}, err
 		}
-		switch github_issue.ApprovalFor(issue, pr.Author.Login) {
-		case github_issue.ApprovalDenied:
+		issueState := github_issue.IssueApprovalFor(issue, pr.Author.Login)
+		if issueState == github_issue.IssueApprovalDenied {
 			continue
-		case github_issue.ApprovalByAssignment:
+		}
+		claim, err := issues.FindClaim(owner, reference.Repository, reference.Number)
+		if err != nil {
+			return linkedIssueDecision{}, err
+		}
+		authorization, err := github_issue.AuthorizationFor(
+			issueState,
+			github_issue.ClaimOwnershipFor(issue, claim, pr.Author.Login, pr.Number),
+		)
+		if err != nil {
+			return linkedIssueDecision{}, err
+		}
+		switch authorization {
+		case github_issue.AuthorizationMaintainerAssignment,
+			github_issue.AuthorizationAutomaticClaimOwner,
+			github_issue.AuthorizationCreateAutomaticClaim:
 			return linkedIssueDecision{
 				state: approvedLinkedIssue,
 				issue: reference,
 			}, nil
-		case github_issue.ApprovalRequiresAutomaticClaim:
-			claim, err := issues.FindClaim(owner, reference.Repository, reference.Number)
-			if err != nil {
-				return linkedIssueDecision{}, err
-			}
-			if claim != nil {
-				if claim.PullRequestNumber == pr.Number && claim.Author == pr.Author.Login {
-					return linkedIssueDecision{
-						state: approvedLinkedIssue,
-						issue: reference,
-					}, nil
+		case github_issue.AuthorizationAutomaticClaimConflict:
+			if conflict.state == noApprovedLinkedIssue {
+				conflict = linkedIssueDecision{
+					state:    conflictingLinkedIssueClaim,
+					issue:    reference,
+					claimant: claim.Author,
 				}
-				if conflict.state == noApprovedLinkedIssue {
-					conflict = linkedIssueDecision{
-						state:    conflictingLinkedIssueClaim,
-						issue:    reference,
-						claimant: claim.Author,
-					}
-				}
-				continue
 			}
-			return linkedIssueDecision{
-				state: approvedLinkedIssue,
-				issue: reference,
-			}, nil
+		case github_issue.AuthorizationDenied:
+			continue
+		default:
+			return linkedIssueDecision{}, fmt.Errorf("unknown authorization state %d", authorization)
 		}
 	}
 	if conflict.state == conflictingLinkedIssueClaim {
@@ -368,18 +370,14 @@ func bypassesGate(user github_issue.User, authorAssociation string) bool {
 	return user.Type == "Bot" || authorAssociation == "OWNER" || authorAssociation == "MEMBER" || authorAssociation == "COLLABORATOR"
 }
 
-func docsOnly(files []github_pr.File) gateTransitionState {
+func docsOnly(files []github_pr.File) bool {
 	if len(files) == 0 {
-		return closeUnapproved
+		return false
 	}
 	for _, file := range files {
 		if !strings.HasPrefix(file.Filename, "docs/") || (file.PreviousFilename != "" && !strings.HasPrefix(file.PreviousFilename, "docs/")) {
-			return closeUnapproved
+			return false
 		}
 	}
-	return noAction
-}
-
-func approvedPullRequest(pr *github_pr.PullRequest) bool {
-	return github_pr.HasLabel(pr, github_issue.Claimed)
+	return true
 }
