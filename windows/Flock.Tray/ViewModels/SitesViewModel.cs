@@ -80,7 +80,9 @@ internal sealed partial class SitesViewModel(SitesService service) : ObservableO
         OnPropertyChanged(nameof(Error));
         OnPropertyChanged(nameof(HasSites));
         OnPropertyChanged(nameof(HasProxies));
-        return !ReferenceEquals(selectedBefore, Selected) || !ReferenceEquals(proxyBefore, SelectedProxy) || selectedChanged
+        return !ReferenceEquals(selectedBefore, Selected)
+               || !ReferenceEquals(proxyBefore, SelectedProxy)
+               || selectedChanged
                || !worktreesBefore.SequenceEqual(WorktreeNames(selectedBefore));
     }
 
@@ -152,17 +154,28 @@ public sealed partial class ProxyRowViewModel(Status.Proxy proxy) : ObservableOb
         var previous = Snapshot;
         Snapshot = value;
         OnPropertyChanged(string.Empty);
-        return previous.Name != value.Name || previous.Domain != value.Domain || previous.Upstream != value.Upstream
-               || previous.Secured != value.Secured || previous.Url != value.Url || previous.Problem != value.Problem
-               || previous.Running != value.Running || previous.Server != value.Server
+        return previous.Name != value.Name
+               || previous.Domain != value.Domain
+               || previous.Upstream != value.Upstream
+               || previous.Secured != value.Secured
+               || previous.Url != value.Url
+               || previous.Problem != value.Problem
+               || previous.Running != value.Running
+               || previous.Server != value.Server
                || !CommandEqual(previous.Command, value.Command);
     }
 
     private static bool CommandEqual(Status.ProxyCommand? previous, Status.ProxyCommand? current)
     {
-        return previous is null && current is null || previous is not null && current is not null &&
-            previous.Command == current.Command && previous.Dir == current.Dir && previous.StopCommand == current.StopCommand &&
-            previous.State == current.State && previous.Problem == current.Problem && previous.Log == current.Log;
+        return previous is null && current is null
+               || previous is not null
+               && current is not null
+               && previous.Command == current.Command
+               && previous.Dir == current.Dir
+               && previous.StopCommand == current.StopCommand
+               && previous.State == current.State
+               && previous.Problem == current.Problem
+               && previous.Log == current.Log;
     }
 }
 
@@ -360,47 +373,85 @@ public sealed partial class SiteRowViewModel : ObservableObject
 
     private static bool NodeServerEqual(Status.SiteNodeServer? previous, Status.SiteNodeServer? current)
     {
-        return previous is null && current is null || previous is not null && current is not null &&
-            previous.State == current.State && previous.Port == current.Port && previous.Command == current.Command &&
-            previous.Problem == current.Problem && previous.Log == current.Log;
+        return previous is null && current is null
+               || previous is not null
+               && current is not null
+               && previous.State == current.State
+               && previous.Port == current.Port
+               && previous.Command == current.Command
+               && previous.Problem == current.Problem
+               && previous.Log == current.Log;
     }
 
     private static bool WorktreeEqual(Status.WorktreeSetup? previous, Status.WorktreeSetup? current)
     {
-        return previous is null && current is null || previous is not null && current is not null &&
-            previous.State == current.State && previous.Step == current.Step && previous.Error == current.Error &&
-            previous.Log == current.Log && previous.DbMode == current.DbMode && previous.Database == current.Database;
+        return previous is null && current is null
+               || previous is not null
+               && current is not null
+               && previous.State == current.State
+               && previous.Step == current.Step
+               && previous.Error == current.Error
+               && previous.Log == current.Log
+               && previous.DbMode == current.DbMode
+               && previous.Database == current.Database;
     }
 
     private static bool DomainsEqual(IReadOnlyList<Status.SiteDomain> previous, IReadOnlyList<Status.SiteDomain> current)
     {
-        return previous.Count == current.Count && previous.Zip(current).All(pair =>
-            pair.First.Entry == pair.Second.Entry && pair.First.Host == pair.Second.Host && pair.First.Alias == pair.Second.Alias &&
-            pair.First.Url == pair.Second.Url && pair.First.Problem == pair.Second.Problem);
+        return previous.Count == current.Count
+               && previous.Zip(current).All(pair => pair.First.Entry == pair.Second.Entry
+                                                    && pair.First.Host == pair.Second.Host
+                                                    && pair.First.Alias == pair.Second.Alias
+                                                    && pair.First.Url == pair.Second.Url
+                                                    && pair.First.Problem == pair.Second.Problem);
     }
 
     private static bool FrankenPhpEqual(Status.SiteFrankenPhp? previous, Status.SiteFrankenPhp? current)
     {
-        return previous is null && current is null || previous is not null && current is not null &&
-            previous.State == current.State && previous.Version == current.Version && previous.PhpVersion == current.PhpVersion &&
-            previous.Port == current.Port && previous.Progress == current.Progress && previous.Problem == current.Problem && previous.Log == current.Log;
+        return previous is null && current is null
+               || previous is not null
+               && current is not null
+               && previous.State == current.State
+               && previous.Version == current.Version
+               && previous.PhpVersion == current.PhpVersion
+               && previous.Port == current.Port
+               && previous.Progress == current.Progress
+               && previous.Problem == current.Problem
+               && previous.Log == current.Log;
     }
 
     private static bool ReverbEqual(Status.SiteReverb? previous, Status.SiteReverb? current)
     {
-        return previous is null && current is null || previous is not null && current is not null &&
-            previous.State == current.State && previous.Port == current.Port && previous.Env.SequenceEqual(current.Env) &&
-            previous.Problem == current.Problem && previous.Log == current.Log;
+        return previous is null && current is null
+               || previous is not null
+               && current is not null
+               && previous.State == current.State
+               && previous.Port == current.Port
+               && previous.Env.SequenceEqual(current.Env)
+               && previous.Problem == current.Problem
+               && previous.Log == current.Log;
     }
 
     private static bool ShareEqual(Status.SiteShare? previous, Status.SiteShare? current)
     {
-        return previous is null && current is null || previous is not null && current is not null &&
-            previous.Site == current.Site && previous.State == current.State && previous.Url == current.Url &&
-            previous.Allow.SequenceEqual(current.Allow) && previous.Debug == current.Debug && previous.StartedAt == current.StartedAt &&
-            previous.ExpiresAt == current.ExpiresAt && previous.Built == current.Built && previous.CanRebuild == current.CanRebuild &&
-            previous.Rebuilding == current.Rebuilding && previous.RebuildError == current.RebuildError && previous.Error == current.Error &&
-            previous.Warning == current.Warning && previous.Log == current.Log && previous.Qr == current.Qr;
+        return previous is null && current is null
+               || previous is not null
+               && current is not null
+               && previous.Site == current.Site
+               && previous.State == current.State
+               && previous.Url == current.Url
+               && previous.Allow.SequenceEqual(current.Allow)
+               && previous.Debug == current.Debug
+               && previous.StartedAt == current.StartedAt
+               && previous.ExpiresAt == current.ExpiresAt
+               && previous.Built == current.Built
+               && previous.CanRebuild == current.CanRebuild
+               && previous.Rebuilding == current.Rebuilding
+               && previous.RebuildError == current.RebuildError
+               && previous.Error == current.Error
+               && previous.Warning == current.Warning
+               && previous.Log == current.Log
+               && previous.Qr == current.Qr;
     }
 
     private void SetDraft<T>(ref T? field, T value, string property) where T : struct
