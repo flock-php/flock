@@ -1818,6 +1818,9 @@ private struct RenameHostSheet: View {
                     TextField(site.name, text: draftBinding)
                         .textFieldStyle(.plain)
                         .multilineTextAlignment(.trailing)
+                        // A dragged (scrolled) long name must not slide out of the field's box
+                        // and under the suffix: the field clips to its own frame.
+                        .clipped()
                         .padding(.leading, 8)
                     Text(".\(site.tld.isEmpty ? (model.status?.dns.tld ?? "test") : site.tld)")
                         .foregroundStyle(.secondary)
