@@ -78,9 +78,24 @@ internal sealed partial class GeneralPane : UserControl, ISettingsPane
         ApplyTldContent.IsBusy = true;
         ApplyOutputBox.Visibility = Visibility.Collapsed;
         ApplyDeclined.Visibility = Visibility.Collapsed;
-        var (ok, declined, output) = await domainApply.RunAsync(["tld", suffix]);
-        applyingTld = false;
-        ApplyTldContent.IsBusy = false;
+        bool ok;
+        bool declined;
+        string output;
+        try
+        {
+            (ok, declined, output) = await domainApply.RunAsync(["tld", suffix]);
+        }
+        catch (Exception error)
+        {
+            // A CLI run that throws would otherwise reach App.UnhandledException and quit the app.
+            App.Log(error);
+            (ok, declined, output) = (false, false, $"The domain switch did not finish: {error.Message}");
+        }
+        finally
+        {
+            applyingTld = false;
+            ApplyTldContent.IsBusy = false;
+        }
         if (ok)
         {
             // The config read moves Current to the new suffix; the reset returns the picker to a clean draft.
