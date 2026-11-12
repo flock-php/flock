@@ -267,6 +267,46 @@ func TestChangeSiteHostCollisionLeavesEverything(t *testing.T) {
 
 // TestChangeSiteHostDefaultRestoresTheFolderName (pin e): --default clears the override and
 // the .env files swap back onto the folder-name hosts.
+// TestChangeSiteHostUnwritableEnvIsReportedAndSkipped is the rename's mirror of
+// TestChangeSiteTLDunwritableEnvIsReportedAndSkipped: a .env Flock may not rewrite is
+// named on the output and skipped — the rename itself stands — and the retarget loop keeps
+// going with the worktree's file.
+func TestChangeSiteHostUnwritableEnvIsReportedAndSkipped(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("running as root: chmod 000 does not block the write")
+	}
+	s, demoDir, _, wtDir := siteHostFixture(t)
+	envPath := filepath.Join(demoDir, ".env")
+	if err := os.Chmod(envPath, 0o000); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(envPath, 0o644) })
+
+	var out strings.Builder
+	old, newPrimary, changed, err := s.changeSiteHost("liga", "demo", false, &out)
+	if err != nil {
+		t.Fatalf("an unwritable .env must not fail the rename: %v\n%s", err, out.String())
+	}
+	if !changed || old != "demo.test" || newPrimary != "liga.test" {
+		t.Errorf("rename result: got (%q, %q, %v), want (demo.test, liga.test, true)", old, newPrimary, changed)
+	}
+	if !strings.Contains(out.String(), "! could not retarget "+envPath) {
+		t.Errorf("the unwritable file must be named in the output:\n%s", out.String())
+	}
+	site, _ := s.cfg.FindSite("demo")
+	if site.Host != "liga" {
+		t.Errorf("the rename must stand: %+v", site)
+	}
+	// The loop kept going after the unwritable file: the worktree's .env is retargeted.
+	data, err := os.ReadFile(filepath.Join(wtDir, ".env"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if wt := string(data); !strings.Contains(wt, "APP_URL=http://feature.liga.test") {
+		t.Errorf("the worktree .env must be retargeted after the skipped file:\n%s", wt)
+	}
+}
+
 func TestChangeSiteHostDefaultRestoresTheFolderName(t *testing.T) {
 	s, demoDir, _, wtDir := siteHostFixture(t)
 	var out strings.Builder
