@@ -1807,15 +1807,19 @@ private struct RenameHostSheet: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Change the domain name of \(site.title.isEmpty ? site.name : site.title)").font(.headline)
-            HStack(alignment: .firstTextBaseline, spacing: 12) {
+            HStack(spacing: 12) {
                 Text("Name").foregroundStyle(.secondary)
                     .frame(width: 48, alignment: .leading)
+                Spacer()
                 // The typed name plus the suffix it will serve under — the permanent tail makes
                 // the full domain visible while typing; it is grey and uneditable on purpose.
+                // The box is at least 230 wide and grows with the name, and it sits flush with
+                // the buttons: one right edge for the whole form.
                 HStack(spacing: 0) {
                     TextField(site.name, text: draftBinding)
                         .textFieldStyle(.plain)
                         .multilineTextAlignment(.trailing)
+                        .fixedSize()
                         .padding(.leading, 8)
                     Text(".\(site.tld.isEmpty ? (model.status?.dns.tld ?? "test") : site.tld)")
                         .foregroundStyle(.secondary)
@@ -1823,7 +1827,7 @@ private struct RenameHostSheet: View {
                         .allowsHitTesting(false)
                 }
                 .padding(.vertical, 5)
-                .frame(width: 230)
+                .frame(minWidth: 230)
                 .background(RoundedRectangle(cornerRadius: 6).fill(Color(nsColor: .textBackgroundColor)))
                 .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color(nsColor: .separatorColor)))
             }
