@@ -57,11 +57,11 @@ internal sealed class ScreenshotSession(App app)
             VerticalOffset = -16
         });
 
-    /// <summary>The Add Domain dialog of a site, with a domain typed in.</summary>
+    /// <summary>The Add Alias dialog of a site, with the alias's label typed in.</summary>
     internal async Task<Window> ShowAddDomain(string site, string domain)
     {
         var window = (SettingsWindow)await ShowSite(site);
-        _ = window.Sites.AddDomain(app.State.Status!.Sites.First(s => s.Name == site));
+        _ = window.Sites.AddAliasAsync(app.State.Status!.Sites.First(s => s.Name == site));
         // The dialog's popup opens, then its content loads.
         for (var attempt = 0; attempt < 20; attempt++)
         {

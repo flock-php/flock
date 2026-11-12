@@ -1,4 +1,5 @@
 using Flock.Kit;
+using Flock.Tray.Controls;
 using Flock.Tray.Infrastructure;
 using Flock.Tray.ViewModels;
 using Microsoft.UI.Xaml;
@@ -20,6 +21,7 @@ internal sealed partial class SitesPane : UserControl, ISettingsPane
     private readonly SettingsWindow Window;
     private readonly Dictionary<string, Task> actions = [];
     private readonly DeepLinkCoordinator deepLinks;
+    private readonly DomainApplyService domainApply;
     private readonly bool loaded;
 
     // Sites whose FrankenPHP restart is in flight.
@@ -28,6 +30,11 @@ internal sealed partial class SitesPane : UserControl, ISettingsPane
     private bool active;
     private CancellationTokenSource? activeLifetime;
     private Task pendingSecure = Task.CompletedTask;
+    // The per-site suffix switch in flight, and the last one that failed. The details are rebuilt whenever
+    // the site changes, so the switch's busy button, CLI output and declined note live here and paint onto
+    // whichever Domain row is current (macOS's applying / applyLines / applyDeclined).
+    private string? applyingDomain;
+    private (string Site, string Applied, string Output, bool Declined)? domainSwitchFailed;
 
     public SitesPane(SettingsWindow window, RuntimeService model, DeepLinkCoordinator deepLinks)
     {
@@ -35,6 +42,7 @@ internal sealed partial class SitesPane : UserControl, ISettingsPane
         Model = model;
         viewModel = new SitesViewModel(model.Sites);
         this.deepLinks = deepLinks;
+        domainApply = new DomainApplyService(new CliProcessRunner());
         InitializeComponent();
         DataContext = viewModel;
         loaded = true;
@@ -457,34 +465,18 @@ internal sealed partial class SitesPane : UserControl, ISettingsPane
             panel.Children.Add(Warning(problem));
         }
 
-        // Site: HTTPS and the domains besides its own.
+        // Site: HTTPS, the suffix it's served under, and the domains besides its own.
         var https = new ToggleSwitch { IsOn = secured, MinWidth = 0 };
         Ui.AutomationName(https, "HTTPS");
         https.Toggled += (_, _) =>
         {
             Start(site.Name, () => UpdateSiteAsync(site.Name, new SiteChange(Secured: https.IsOn), () => row?.SetDraftSecured(https.IsOn)), false);
         };
-        var domains = Ui.Column(2);
-        foreach (var domain in site.Domains)
-        {
-            UIElement shown = domain.Problem is { } domainProblem ? Warning($"{domain.Host}: {domainProblem}")
-                : domain.Url is { Length: > 0 } url ? DomainLink(domain, url)
-                : Ui.Text(domain.Host, wrap: false);
-            var target = domain;
-            var remove = Ui.IconButton(Ui.GlyphRemove, $"Remove {domain.Host}", () => Start(site.Name, () => RemoveDomain(site, target)));
-            remove.Padding = new Thickness(4);
-            var domainRow = new Grid { ColumnSpacing = 4 };
-            domainRow.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-            domainRow.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-            Grid.SetColumn(remove, 1);
-            domainRow.Children.Add(shown);
-            domainRow.Children.Add(remove);
-            domains.Children.Add(domainRow);
-        }
-        var addDomain = Ui.Link("Add Domain…", () => Start(site.Name, () => AddDomain(site)));
-        addDomain.Padding = new Thickness(0);
-        domains.Children.Add(addDomain);
-        var siteSection = Section("Site", Field("HTTPS", https), Field("Domains", domains));
+        var siteSection = Section("Site",
+            Field("HTTPS", https),
+            Field("Domain", DomainRow(site)),
+            Field("Aliases", DomainList(site, site.Domains.Where(domain => domain.Alias), "Add Alias…", "Another name for the site, with its own subdomains", () => AddAliasAsync(site))),
+            Field("Subdomains", DomainList(site, site.Domains.Where(domain => !domain.Alias), "Add Subdomain…", $"A name under {site.Domain}, following the site's suffix", () => AddSubdomainAsync(site))));
         if (Model.Status?.Dns is { Wildcard: false, WildcardProblem.Length: > 0 } dns)
         {
             siteSection.Children.Add(Ui.Caption($"Subdomains only work when you add them here: {dns.WildcardProblem}.", Ui.Caution));
@@ -530,6 +522,126 @@ internal sealed partial class SitesPane : UserControl, ISettingsPane
         card.VerticalAlignment = VerticalAlignment.Top;
         return card;
     }
+
+    /// <summary>
+    ///     The Site section's Domain row (macOS's field("Domain")): the shared suffix picker with its live
+    ///     check, and an Apply that runs the bundled CLI's `flock site tld`. The picker seeds itself on the
+    ///     site's effective suffix (a preset row, or the custom field with a suffix the menu doesn't offer);
+    ///     a site that follows the global one is pushed onto Inherit. Inherit has no verdict to wait for, so
+    ///     its Apply is offered only while the site pins a suffix today (macOS's canApplySuffix). A switch in
+    ///     flight and a failed one come from the pane's fields, so they survive a re-render of the details.
+    /// </summary>
+    private StackPanel DomainRow(Status.Site site)
+    {
+        var global = Model.Status?.Dns.Tld is { Length: > 0 } tld ? tld : "test";
+        var switching = applyingDomain == site.Name;
+        // The check is wired before the suffix arrives, so the seeded row's verdict starts with it (as on macOS).
+        var picker = new SuffixPickerControl { AllowInherit = true };
+        picker.CheckAsync = tld => Model.Client.CheckTldAsync(tld);
+        picker.Current = site.Tld;
+        if (site.SiteTld.Length == 0)
+        {
+            picker.Select(SuffixPickerControl.InheritTag);
+        }
+        var apply = new Button
+        {
+            Content = new BusyContent { Text = "Apply", BusyText = "Applying…", IsBusy = switching },
+            VerticalAlignment = VerticalAlignment.Top,
+        };
+        void UpdateApply() =>
+            apply.IsEnabled = applyingDomain is null && (picker.IsInherit ? site.SiteTld.Length > 0 : picker.CanApply);
+        picker.Changed += UpdateApply;
+        UpdateApply();
+        apply.Click += async (_, _) =>
+        {
+            if (applyingDomain is not null)
+            {
+                return;
+            }
+            // The draft is captured now, so a mid-run edit can't change what runs; Inherit names the global
+            // suffix in the declined note, as on macOS.
+            var inherit = picker.IsInherit;
+            var applied = inherit ? global : picker.DraftNormalized ?? "";
+            if (applied.Length == 0)
+            {
+                return;
+            }
+            var arguments = new List<string> { "site", "tld" };
+            arguments.Add(inherit ? "--inherit" : applied);
+            arguments.Add(site.Name);
+            applyingDomain = site.Name;
+            domainSwitchFailed = null;
+            Rerender();
+            try
+            {
+                var (ok, declined, output) = await domainApply.RunAsync(arguments);
+                if (!ok)
+                {
+                    domainSwitchFailed = (site.Name, applied, output, declined);
+                }
+            }
+            catch (Exception error)
+            {
+                // A CLI run that throws would otherwise reach App.UnhandledException and quit the app.
+                App.Log(error);
+                domainSwitchFailed = (site.Name, applied, $"The suffix switch did not finish: {error.Message}", false);
+            }
+            finally
+            {
+                applyingDomain = null;
+                // The bundled CLI already wrote the site's suffix: the status poll (2 s) re-seeds this row
+                // from the fresh snapshot — no config read here, unlike the global switch, which moves the
+                // TLD the General card shows.
+                Rerender();
+            }
+        };
+        var row = Ui.Column(6,
+            Ui.Row(8, picker, apply),
+            Ui.Caption($"The suffix {site.Name} is served under. Inherit follows Flock's global (.{global}); a picked suffix pins {site.Name} to its own.", Ui.TertiaryText));
+        if (domainSwitchFailed is { } failed && failed.Site == site.Name)
+        {
+            row.Children.Add(CliOutput(failed.Output));
+            if (failed.Declined)
+            {
+                row.Children.Add(Ui.Caption(
+                    $"You declined administrator approval. Flock's config is on .{failed.Applied} for {site.Name} already; finish the switch by running `flock install` in a terminal.", Ui.Caution));
+            }
+        }
+        return row;
+    }
+
+    /// <summary>One of the two domain lists (macOS's field("Aliases") and field("Subdomains")): each entry
+    /// with its own Remove, and the link that opens the dialog adding another.</summary>
+    private StackPanel DomainList(Status.Site site, IEnumerable<Status.SiteDomain> domains, string addLabel, string addHelp, Func<Task> add)
+    {
+        var list = Ui.Column(2);
+        foreach (var domain in domains)
+        {
+            UIElement shown = domain.Problem is { } domainProblem ? Warning($"{domain.Host}: {domainProblem}")
+                : domain.Url is { Length: > 0 } url ? DomainLink(domain, url)
+                : Ui.Text(domain.Host, wrap: false);
+            var target = domain;
+            var remove = Ui.IconButton(Ui.GlyphRemove, $"Remove {domain.Host}", () => Start(site.Name, () => RemoveDomain(site, target)));
+            remove.Padding = new Thickness(4);
+            var domainRow = new Grid { ColumnSpacing = 4 };
+            domainRow.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            domainRow.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            Grid.SetColumn(remove, 1);
+            domainRow.Children.Add(shown);
+            domainRow.Children.Add(remove);
+            list.Children.Add(domainRow);
+        }
+        var addDomain = Ui.Link(addLabel, () => Start(site.Name, add));
+        addDomain.Padding = new Thickness(0);
+        ToolTipService.SetToolTip(addDomain, addHelp);
+        list.Children.Add(addDomain);
+        return list;
+    }
+
+    /// <summary>A bundled CLI run's aggregated output, shown under the control that ran it (the SetupWindow's
+    /// log box, compact): monospaced, selectable, horizontally scrollable.</summary>
+    private static Border CliOutput(string output) =>
+        Ui.Card(new ScrollViewer { MaxHeight = 160, HorizontalScrollBarVisibility = ScrollBarVisibility.Auto, Content = Ui.MonoText(output, 12) }, new Thickness(12, 10));
 
     /// <summary>A section of the details: a heading and its settings.</summary>
     private static StackPanel Section(string title, params UIElement[] rows)
@@ -1015,16 +1127,167 @@ internal sealed partial class SitesPane : UserControl, ISettingsPane
         await shown;
     }
 
-    internal async Task AddDomain(Status.Site site)
+    /// <summary>
+    ///     Adds an alias: a name of its own beside the site (macOS's AddAliasSheet). The label lands under the
+    ///     picked suffix — Inherit rides the site's suffix and moves with it, while a picked suffix pins the
+    ///     alias in place, even one equal to the site's own (the API forces the pin). A suffix new to this
+    ///     machine is provisioned on the spot: the add chains the bundled CLI's `flock install`, prompts included.
+    /// </summary>
+    internal async Task AddAliasAsync(Status.Site site)
+    {
+        var dns = Model.Status?.Dns;
+        var global = dns?.Tld is { Length: > 0 } tld ? tld : "test";
+        var siteSuffix = site.Tld.Length > 0 ? site.Tld : global; // what an inherited alias rides (an old daemon names none)
+        var name = new TextBox { Header = "Name", PlaceholderText = "api2" };
+        var picker = new SuffixPickerControl { AllowInherit = true };
+        picker.CheckAsync = tld => Model.Client.CheckTldAsync(tld);
+        // Here Current only names the Inherit row (Add is gated on the checked draft, not on CanApply), so an
+        // old daemon that reports no effective suffix still gets an honest "Inherit (.test)" label.
+        picker.Current = siteSuffix;
+        picker.Select(SuffixPickerControl.InheritTag); // the sheet opens on Inherit, as on macOS
+        var lands = Ui.Caption("", wrap: false);
+        var dialog = new ContentDialog
+        {
+            Title = $"Add an alias to {site.Name}",
+            Content = Ui.Column(12,
+                Ui.Caption($"An alias is a separate name for {site.Name}, with its own subdomains; the label is one word, no dots. Inherit follows {site.Name}'s suffix (.{siteSuffix}) and moves with it; a picked suffix pins the alias in place, and a suffix new to this PC is provisioned on the spot."
+                           + (dns is { Wildcard: false, WildcardProblem.Length: > 0 } problem
+                               ? $" Listing names matters here: on this PC only the site names and the names you add resolve ({problem.WildcardProblem})."
+                               : "")),
+                name,
+                picker,
+                lands),
+            PrimaryButtonText = "Add",
+            CloseButtonText = "Cancel",
+            DefaultButton = ContentDialogButton.Primary,
+            XamlRoot = Window.XamlRoot
+        };
+        void UpdateAdd()
+        {
+            // Add needs a label, and on a picked suffix the daemon's verdict: a pending or refused check keeps it
+            // off. A suffix equal to the site's own is a legal explicit pin, so this isn't the picker's CanApply.
+            dialog.IsPrimaryButtonEnabled = name.Text.Trim().Length > 0 && (picker.IsInherit || picker.DraftNormalized is not null);
+            lands.Text = $"{(name.Text.Trim() is { Length: > 0 } label ? label : "name")}.{(picker.IsInherit ? siteSuffix : picker.DraftNormalized ?? "suffix")} is what lands.";
+        }
+        name.TextChanged += (_, _) => UpdateAdd();
+        picker.Changed += UpdateAdd;
+        UpdateAdd();
+        if (await dialog.ShowAsync() != ContentDialogResult.Primary)
+        {
+            return;
+        }
+        var domain = name.Text.Trim();
+        var suffix = picker.IsInherit ? SuffixPickerControl.InheritTag : picker.DraftNormalized;
+        if (domain.Length == 0 || suffix is not { Length: > 0 })
+        {
+            return;
+        }
+        // R8, read before the add (macOS's isNewSuffix): the suffix is new to this machine when it is neither
+        // the global one nor one of the suffixes already served. Inherit never provisions anything; a daemon
+        // from before the list chains once, and `flock install` is idempotent.
+        var fresh = suffix != SuffixPickerControl.InheritTag
+                    && dns is not null && suffix != dns.Tld && !dns.Suffixes.Any(s => s.Tld.Length > 0 && s.Tld == suffix);
+        if (await Model.Sites.AddDomainAsync(site.Name, domain, suffix) != OperationOutcome.Succeeded)
+        {
+            return; // the window's error bar carries the refusal, as for every other site mutation
+        }
+        if (fresh)
+        {
+            await ProvisionSuffixAsync(site.Name, suffix);
+        }
+        Select(site.Name);
+    }
+
+    /// <summary>
+    ///     The chained `flock install` for a suffix new to the machine (macOS's chainInstall in its
+    ///     ProvisionSheet): the alias is in the config already, and the bundled CLI makes the suffix resolve
+    ///     with its own trusted certificates. The aggregated output appears only when the run ends in failure
+    ///     or a declined prompt; a finished run closes the dialog by itself.
+    /// </summary>
+    private async Task ProvisionSuffixAsync(string siteName, string suffix)
+    {
+        var running = Ui.Row(10, new ProgressRing { Width = 16, Height = 16 }, Ui.Caption($"Flock is making .{suffix} resolve…", wrap: false));
+        var output = Ui.MonoText("", 12);
+        var box = Ui.Card(new ScrollViewer { MaxHeight = 160, HorizontalScrollBarVisibility = ScrollBarVisibility.Auto, Content = output }, new Thickness(12, 10));
+        var declined = Ui.Caption("", Ui.Caution);
+        box.Visibility = Visibility.Collapsed;
+        declined.Visibility = Visibility.Collapsed;
+        var dialog = new ContentDialog
+        {
+            Title = $"Provisioning .{suffix}",
+            Content = Ui.Column(10, running, box, declined),
+            CloseButtonText = "Hide",
+            DefaultButton = ContentDialogButton.Close,
+            XamlRoot = Window.XamlRoot
+        };
+        // Closing while the CLI runs is allowed (Hide is how the worktree job's dialog puts it); then the
+        // late success must not hide a dialog that is already gone.
+        var closed = false;
+        dialog.Closed += (_, _) => closed = true;
+        var run = domainApply.RunAsync(["install"]);
+        var shown = dialog.ShowAsync().AsTask();
+        var (ok, wasDeclined, text) = await run;
+        if (ok)
+        {
+            if (!closed)
+            {
+                dialog.Hide();
+            }
+            await shown;
+            return;
+        }
+        // Ended short: the dialog keeps the CLI's own words, as General's Domain card does inline.
+        dialog.Title = $"Provisioning .{suffix} didn't finish";
+        running.Visibility = Visibility.Collapsed;
+        output.Text = text;
+        box.Visibility = Visibility.Visible;
+        dialog.CloseButtonText = "Close";
+        if (wasDeclined)
+        {
+            declined.Text = $"You declined administrator approval. The alias is added to {siteName} already; finish by running `flock install` in a terminal to make .{suffix} resolve.";
+            declined.Visibility = Visibility.Visible;
+        }
+        await shown;
+    }
+
+    /// <summary>
+    ///     Adds a subdomain: one name under the site's domain ("tenant1", "a.b"). There is no suffix to pick
+    ///     — it hangs under the site and follows its suffix, and the daemon's classification decides what
+    ///     lands (macOS's AddSubdomainSheet). Nothing to provision: the site's suffix is served already.
+    /// </summary>
+    private async Task AddSubdomainAsync(Status.Site site)
     {
         var dns = Model.Status?.Dns;
         var depth = dns?.MaxDepth ?? 4;
-        var details = dns is { Wildcard: true }
-            ? $"Every subdomain up to {depth} levels below {site.Domain} already works on this PC. Add one here so it also works where wildcard DNS doesn't (it's written to the hosts file), or add an alias like {site.Name}-2.{dns.Tld}."
-            : $"Wildcard subdomains don't work on this PC{(dns?.WildcardProblem is { Length: > 0 } p ? $" ({p})" : "")}, so add each one you use: it's written to the hosts file. A full name like {site.Name}-2.{dns?.Tld ?? "test"} adds an alias.";
-        if (await Window.Ask($"Add a domain to {site.Name}", details, $"tenant1, a.b or {site.Name}-2.{dns?.Tld ?? "test"}", "Add") is { } domain)
+        var name = new TextBox { Header = "Name", PlaceholderText = "tenant1 or a.b" };
+        var dialog = new ContentDialog
         {
-            await Model.Sites.AddDomainAsync(site.Name, domain);
+            Title = $"Add a subdomain to {site.Name}",
+            Content = Ui.Column(12,
+                Ui.Caption(dns is { Wildcard: false, WildcardProblem.Length: > 0 } problem
+                    ? $"Wildcard subdomains don't work on this PC ({problem.WildcardProblem}), so add each one you use: it's written to the hosts file. A subdomain hangs under {site.Domain} and follows the site's suffix."
+                    : $"Subdomains up to {depth} levels below {site.Domain} already work on this PC; list one to see it here and where wildcard DNS doesn't. It hangs under {site.Domain} and follows the site's suffix."),
+                name),
+            PrimaryButtonText = "Add",
+            CloseButtonText = "Cancel",
+            DefaultButton = ContentDialogButton.Primary,
+            XamlRoot = Window.XamlRoot
+        };
+        void UpdateAdd() => dialog.IsPrimaryButtonEnabled = name.Text.Trim().Length > 0;
+        name.TextChanged += (_, _) => UpdateAdd();
+        UpdateAdd();
+        if (await dialog.ShowAsync() != ContentDialogResult.Primary)
+        {
+            return;
+        }
+        var subdomain = name.Text.Trim();
+        if (subdomain.Length == 0)
+        {
+            return;
+        }
+        if (await Model.Sites.AddDomainAsync(site.Name, subdomain) == OperationOutcome.Succeeded)
+        {
+            Select(site.Name);
         }
     }
 
