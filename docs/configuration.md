@@ -35,6 +35,8 @@ Global settings live in `config.json` in the data directory. Edit them through t
 - the release channel (stable, beta), and the Xdebug and dump capture switches,
 - parked folders and linked sites, with their PHP and Node versions, HTTPS state and extra domains,
 - each site's own `tld` when it overrides the global one (`""` in the file, the default, means inherit; `flock site tld` sets it, see [Per-site domains](domains.md#per-site-domains)),
+- each site's `host` when the name part of its domain is not the site name (`""` in the file, the default, means the site name; `flock site host` sets it, see [Linking & parking](sites.md#domain)),
+- each site's `title` when the app should show it under a display name that isn't its site name (`""` in the file, the default, means the site name; `flock site title` sets it; display-only — it changes no host, key or path),
 - the ports Flock uses.
 
 ## Ports

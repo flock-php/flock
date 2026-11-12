@@ -36,7 +36,7 @@ flock site tld loc demo        # the named site
 flock site tld --inherit       # follow the global suffix again (the default)
 ```
 
-The suffix obeys the same rules as the global one (above). The switch retargets the site's and its worktrees' `.env` files, moves the aliases that follow the site, and provisions the new suffix on the spot. A site with a suffix of its own is never dragged by a global `flock tld` change, and neither is an alias pinned to a suffix.
+The suffix obeys the same rules as the global one (above). The switch retargets the site's and its worktrees' `.env` files, moves the aliases that follow the site, and provisions the new suffix on the spot. A site with a suffix of its own is never dragged by a global `flock tld` change, and neither is an alias pinned to a suffix. The name part of a site's domain can be replaced too, one word, without touching the suffix (`flock site host`, see [Linking & parking](sites.md#domain)).
 
 Pinning lives in the extra domains too:
 

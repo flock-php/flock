@@ -35,7 +35,7 @@ flock unpark ~/Work
 
 ## Linking a project
 
-A linked site is a single project folder, wherever it lives. The site name defaults to the folder name.
+A linked site is a single project folder, wherever it lives. The site name defaults to the folder name. The app shows the site under that name, and the shown name is editable: give it a display name — the pencil next to the site's name, or `flock site title ACME Shop` — and the app shows the site under it, while its domain, path and settings stay exactly as they are. Clearing the name in the app's sheet, or `flock site title --default`, shows the site name (its folder name, unless `flock link` was given another) again.
 
 :::app
 In **Settings → Sites**, click **Add Site…** and choose the project folder. Then select the site to set its HTTPS in the **Site** section and its PHP version under **Versions**.
@@ -70,7 +70,7 @@ Remove a link with `flock unlink [name]`.
 
 ## Domain
 
-A site is served as `<name>.<suffix>`. By default the suffix is Flock's global TLD, and the site moves with every change to it. One site can take a suffix of its own:
+A site is served as `<name>.<suffix>`: by default the name is the site name and the suffix is Flock's global TLD, and the site moves with every change to the suffix. One site can take a suffix of its own:
 
 :::cli
 ```bash
@@ -85,6 +85,23 @@ On macOS, select the site in **Settings → Sites**: the **Domain** row in its *
 :::
 
 A site with a suffix of its own is never dragged by a global change, and neither is an alias pinned to a suffix. What a suffix switch provisions, and the rules a suffix must obey: [Per-site domains](domains.md#per-site-domains).
+
+The name part of the domain is editable too — one word, the suffix staying where it is:
+
+:::cli
+```bash
+cd ~/Code/acme
+flock site host liga        # acme.test becomes liga.test
+flock site host             # show what the site is served as now
+flock site host --default   # the site name rules again (the default)
+```
+:::
+
+Everything that carries the site's name into a host moves with the rename: the site's subdomains and its worktrees' hosts move, and the `.env` files of the site and its worktrees are retargeted from the old host to the new in the same run. Aliases are names of their own and never move. Nothing else does either: the folder, the site name and the suffix are untouched, and no provisioning is needed — the suffix's wildcard DNS already covers the new name and its certificate is issued on demand. A name already served — by another site, an alias or a proxy — is refused. A worktree is served under its parent's domain, so it is renamed through the parent ([Git worktrees](worktrees.md)).
+
+:::app
+On macOS, the pencil next to the site's address opens the same switch: one field with the current name, the hint that the suffix is chosen in the **Domain** row below, and **Use the folder name** to hand the domain back to the site name. **Rename** runs the full switch, `.env` retargeting included, and shows its output.
+:::
 
 ## Proxying a local service
 
