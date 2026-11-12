@@ -216,9 +216,14 @@ public struct SiteChange: Encodable, Sendable {
     public var root: String?
     /// The site's suffix override ("" inherits the global one); nil leaves it as it is.
     public var tld: String?
+    /// The site's primary domain name, the label before the suffix ("" serves it under the site
+    /// name again); nil leaves it as it is.
+    public var host: String?
+    /// The name Flock shows for the site ("" shows the site name again); nil leaves it as it is.
+    public var title: String?
 
     public init(secured: Bool? = nil, php: String? = nil, node: String? = nil, server: String? = nil, worker: String? = nil, root: String? = nil,
-                tld: String? = nil) {
+                tld: String? = nil, host: String? = nil, title: String? = nil) {
         self.secured = secured
         self.php = php
         self.node = node
@@ -226,5 +231,7 @@ public struct SiteChange: Encodable, Sendable {
         self.worker = worker
         self.root = root
         self.tld = tld
+        self.host = host
+        self.title = title
     }
 }

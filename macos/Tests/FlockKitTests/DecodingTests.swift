@@ -88,6 +88,20 @@ private func decode<T: Decodable>(_ type: T.Type, _ json: String) throws -> T {
     #expect(legacy.tld.isEmpty && legacy.siteTld.isEmpty)
 }
 
+@Test func decodesTheSitesHostOverrideAndTitle() throws {
+    // "site_host" carries the raw domain name override ("" = the site name rules), "title" the
+    // display name ("" = the site name shows); both keys are omitempty on the wire.
+    let renamed = try decode(Status.Site.self,
+        #"{"name":"app","domain":"liga.test","path":"/code/app","php":"8.5","site_host":"liga","title":"CMS Liga"}"#)
+    #expect(renamed.host == "liga" && renamed.title == "CMS Liga")
+    let plain = try decode(Status.Site.self,
+        #"{"name":"app","domain":"app.test","path":"/code/app","php":"8.5","site_host":"","title":""}"#)
+    #expect(plain.host.isEmpty && plain.title.isEmpty)
+    // A daemon from before these fields sends neither key.
+    let legacy = try decode(Status.Site.self, #"{"name":"app","path":"/code/app"}"#)
+    #expect(legacy.host.isEmpty && legacy.title.isEmpty)
+}
+
 @Test func decodesTheWildcardHealthOfEverySuffix() throws {
     let status = try decode(Status.self, """
     {"version":"dev","pid":1,"started_at":"2026-10-13T14:10:01Z",

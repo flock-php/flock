@@ -28,6 +28,18 @@ struct SitesPane: View {
     }
     /// The site whose PHP extensions are shown.
     private let extensionsState = State<Status.Site?>(initialValue: nil)
+    /// The site whose display name the Rename sheet is open for.
+    private let editingTitleState = State<Status.Site?>(initialValue: nil)
+    private var editingTitle: Status.Site? {
+        get { editingTitleState.wrappedValue }
+        nonmutating set { editingTitleState.wrappedValue = newValue }
+    }
+    /// The site whose domain name the sheet is open for.
+    private let editingHostState = State<Status.Site?>(initialValue: nil)
+    private var editingHost: Status.Site? {
+        get { editingHostState.wrappedValue }
+        nonmutating set { editingHostState.wrappedValue = newValue }
+    }
     /// The site whose FrankenPHP is restarting.
     private let restartingState = State<String?>(initialValue: nil)
     private var restarting: String? {
@@ -187,6 +199,15 @@ struct SitesPane: View {
         .sheet(item: extensionsState.projectedValue) { site in
             SiteExtensionsSheet(site: site)
         }
+        .sheet(item: editingTitleState.projectedValue) { site in
+            RenameTitleSheet(site: site)
+        }
+        .sheet(item: editingHostState.projectedValue, onDismiss: {
+            // The rename ran the bundled CLI, or was closed: the rows show the outcome.
+            Task { await model.settings.refresh() }
+        }) { site in
+            RenameHostSheet(site: site)
+        }
         .sheet(isPresented: showApplySheetState.projectedValue) {
             if let applySite, let applyTLD {
                 ProvisionSheet(
@@ -282,12 +303,12 @@ struct SitesPane: View {
         model.pendingSecure?.resolve(sites: model.status?.sites)
     }
 
-    /// A site in the list: its name and address, a lock when it is secured, a badge while it is shared, a
-    /// warning when something is wrong.
+    /// A site in the list: its display name (its site name while it has no title) and address, a
+    /// lock when it is secured, a badge while it is shared, a warning when something is wrong.
     private func siteRow(_ site: Status.Site) -> some View {
         HStack(spacing: 6) {
             VStack(alignment: .leading, spacing: 1) {
-                Text(site.name).fontWeight(.medium).lineLimit(1)
+                Text(site.title.isEmpty ? site.name : site.title).fontWeight(.medium).lineLimit(1)
                 Text(site.domain).font(.caption).foregroundStyle(.secondary)
                     .lineLimit(1).truncationMode(.middle)
             }
@@ -459,13 +480,23 @@ struct SitesPane: View {
             HStack(alignment: .top, spacing: 10) {
                 VStack(alignment: .leading, spacing: 2) {
                     HStack(spacing: 6) {
-                        Text(site.name).font(.title3.weight(.semibold))
+                        Text(site.title.isEmpty ? site.name : site.title).font(.title3.weight(.semibold))
+                        Button { editingTitle = site } label: { Image(systemName: "pencil") }
+                            .buttonStyle(.borderless)
+                            .foregroundStyle(.secondary)
+                            .help("Rename…")
                         if site.parked {
                             Badge(text: "Project folder", color: .secondary)
                         }
                     }
                     if let text = site.url, let url = URL(string: text) {
-                        Link(text, destination: url).font(.callout)
+                        HStack(spacing: 6) {
+                            Link(text, destination: url).font(.callout)
+                            Button { editingHost = site } label: { Image(systemName: "pencil") }
+                                .buttonStyle(.borderless)
+                                .foregroundStyle(.secondary)
+                                .help("Change the domain name…")
+                        }
                     }
                     Text(site.path).font(.caption).foregroundStyle(.tertiary)
                         .lineLimit(1).truncationMode(.middle)
@@ -1613,6 +1644,189 @@ private struct AddSubdomainSheet: View {
         case .failure(let failure):
             submitting = false
             error = failure.localizedDescription
+        }
+    }
+}
+
+/// Renames what Flock shows for a site: the display name lives beside the site name, and empty
+/// text hands the display back to the site name (the folder). This change is a title-only PATCH;
+/// it never touches domains or the config.json entry's name. The daemon screens the text — the
+/// pane's banner reports a refusal while the sheet is already gone.
+private struct RenameTitleSheet: View {
+    @Environment(AppModel.self) private var model
+    @Environment(\.dismiss) private var dismiss
+    let site: Status.Site
+
+    /// The display name typed so far; nil until the user types, so the field opens on the
+    /// site's current title. (A draft on nil, not a value in init: nothing may overwrite what
+    /// was typed once the sheet has opened.)
+    private let draftState = State<String?>(initialValue: nil)
+    private var draft: String {
+        get { draftState.wrappedValue ?? site.title }
+        nonmutating set { draftState.wrappedValue = newValue }
+    }
+    private var draftBinding: Binding<String> {
+        Binding(get: { draft }, set: { draftState.wrappedValue = $0 })
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Rename \(site.title.isEmpty ? site.name : site.title)").font(.headline)
+            HStack(alignment: .firstTextBaseline, spacing: 12) {
+                Text("Name").foregroundStyle(.secondary)
+                    .frame(width: 48, alignment: .leading)
+                TextField(site.name, text: draftBinding)
+                    .textFieldStyle(.roundedBorder)
+                    .frame(width: 230)
+            }
+            Text("Leave empty to inherit the folder name.")
+                .font(.caption).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            HStack {
+                Spacer()
+                Button("Cancel", role: .cancel) { dismiss() }
+                    .keyboardShortcut(.cancelAction)
+                Button {
+                    let typed = draft
+                    Task {
+                        await model.settings.perform { _ = try await $0.updateSite(site.name, SiteChange(title: typed)) }
+                        dismiss()
+                    }
+                } label: {
+                    BusyLabel(title: "Rename", busyTitle: "Renaming…", isBusy: model.settings.isBusy)
+                }
+                .keyboardShortcut(.defaultAction)
+                .disabled(model.settings.isBusy)
+            }
+        }
+        .padding(20)
+        .frame(width: 420)
+    }
+}
+
+/// Changes the domain name part of a site's primary domain (<name>.<suffix>; the suffix is the
+/// Domain row's). This change runs the bundled CLI's `flock site host`, not the API: the CLI
+/// retargets the site's and its worktrees' .env files in the same run, and it is the one that
+/// validates the label — its output, refusals included, streams in the sheet.
+private struct RenameHostSheet: View {
+    @Environment(AppModel.self) private var model
+    @Environment(\.dismiss) private var dismiss
+    let site: Status.Site
+
+    /// The domain name typed so far; nil until the user types, so the field opens on the override,
+    /// or on the site name when the site serves under it (the default). (A draft on nil, not a
+    /// value in init: nothing may overwrite what was typed once the sheet has opened.)
+    private let draftState = State<String?>(initialValue: nil)
+    private var draft: String {
+        get { draftState.wrappedValue ?? (site.host.isEmpty ? site.name : site.host) }
+        nonmutating set { draftState.wrappedValue = newValue }
+    }
+    private var draftBinding: Binding<String> {
+        Binding(get: { draft }, set: { draftState.wrappedValue = $0 })
+    }
+    /// The `flock site host` run: the sheet, its output, the declined password, and whether the
+    /// rename is done (then the sheets close on their own).
+    private let showRunState = State<Bool>(initialValue: false)
+    private var showRun: Bool {
+        get { showRunState.wrappedValue }
+        nonmutating set { showRunState.wrappedValue = newValue }
+    }
+    private let linesState = State<[String]>(initialValue: [])
+    private var lines: [String] {
+        get { linesState.wrappedValue }
+        nonmutating set { linesState.wrappedValue = newValue }
+    }
+    private let runningState = State<Bool>(initialValue: false)
+    private var running: Bool {
+        get { runningState.wrappedValue }
+        nonmutating set { runningState.wrappedValue = newValue }
+    }
+    private let declinedState = State<Bool>(initialValue: false)
+    private var declined: Bool {
+        get { declinedState.wrappedValue }
+        nonmutating set { declinedState.wrappedValue = newValue }
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Change the domain name of \(site.title.isEmpty ? site.name : site.title)").font(.headline)
+            HStack(alignment: .firstTextBaseline, spacing: 12) {
+                Text("Name").foregroundStyle(.secondary)
+                    .frame(width: 48, alignment: .leading)
+                TextField(site.name, text: draftBinding)
+                    .textFieldStyle(.roundedBorder)
+                    .frame(width: 230)
+            }
+            Text("The suffix is chosen in Domain below.")
+                .font(.caption).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            HStack {
+                if !site.host.isEmpty {
+                    Button("Use the folder name") { Task { await run(useDefault: true) } }
+                        .disabled(running)
+                        .help("Drop the override and serve the site under its site name again")
+                }
+                Spacer()
+                Button("Cancel", role: .cancel) { dismiss() }
+                    .keyboardShortcut(.cancelAction)
+                Button {
+                    Task { await run() }
+                } label: {
+                    BusyLabel(title: "Rename", busyTitle: "Renaming…", isBusy: running)
+                }
+                .keyboardShortcut(.defaultAction)
+                .disabled(!canRename)
+            }
+        }
+        .padding(20)
+        .frame(width: 420)
+        .sheet(isPresented: Binding(get: { showRun }, set: { if !$0 { showRun = false } })) {
+            ProvisionSheet(
+                title: "Renaming the domain…",
+                failedTitle: "Renaming \(site.name)’s domain didn’t finish",
+                lines: lines,
+                running: running,
+                declined: declined,
+                footer: "You declined the password. Finish by running `flock site host` in a terminal."
+            )
+        }
+    }
+
+    /// Rename needs a name and an idle sheet — the CLI decides what a valid label is, so the
+    /// sheet never screens it itself.
+    private var canRename: Bool {
+        if running { return false }
+        return !draft.trimmingCharacters(in: .whitespaces).isEmpty
+    }
+
+    /// Runs the bundled CLI's `flock site host` for this site, streaming its output in the sheet —
+    /// the same runner as the Domain row's suffix switch. On success the sheet closes and the
+    /// pane refreshes; a refusal leaves the draft in place to fix and try again.
+    private func run(useDefault: Bool = false) async {
+        running = true
+        defer { running = false }
+        lines = []
+        declined = false
+        showRun = true
+        let typed = draft.trimmingCharacters(in: .whitespaces)
+        guard let binary = model.installation.bundledFlock else {
+            let command = useDefault ? "flock site host --default \(site.name)" : "flock site host \(typed) \(site.name)"
+            lines = ["This build of Flock has no bundled CLI — run `\(command)` in a terminal."]
+            return
+        }
+        let arguments = useDefault ? ["site", "host", "--default", site.name] : ["site", "host", typed, site.name]
+        let result = await Installation.run(binary, arguments) { line in
+            // Lines arrive from the pipe's thread; late ones lose to the final output below.
+            Task { @MainActor in
+                if running {
+                    lines.append(line)
+                }
+            }
+        }
+        lines = result.output.split(separator: "\n").map(String.init)
+        declined = result.permissionDeclined
+        if result.ok {
+            dismiss()
         }
     }
 }

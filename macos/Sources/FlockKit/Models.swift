@@ -146,6 +146,11 @@ public struct Status: Decodable, Sendable, Equatable {
         public var tld: String
         /// The site's own suffix override ("" = inherit the global one).
         public var siteTld: String
+        /// The site's primary domain name override, the label before the suffix ("" = the site name
+        /// rules); empty on a daemon from before the override.
+        public var host: String
+        /// The name Flock shows for the site ("" = the site name); empty on a daemon from before titles.
+        public var title: String
         /// The PHP version the site uses; `phpSource` says why.
         public var php: String
         public var phpSource: VersionSource
@@ -233,7 +238,8 @@ public struct Status: Decodable, Sendable, Equatable {
         }
 
         enum CodingKeys: String, CodingKey {
-            case name, domain, path, tld, siteTld, php, phpSource, phpPinned, phpFile, node, nodeSource, nodePinned, nodeFile, nodeShadowed
+            case name, domain, path, tld, siteTld, title, php, phpSource, phpPinned, phpFile, node, nodeSource, nodePinned, nodeFile, nodeShadowed
+            case host = "siteHost" // the wire's "site_host"; convertFromSnakeCase lands it on "siteHost"
             case secured, parked, url, problem, notice, root, rootSource, rootPinned, rootFile, rootState, rootSuggestions
             case domains, debugging, server, worker, octaneAvailable, boost, share, parent, branch, worktree
             case frankenPHP = "frankenphp"
@@ -246,6 +252,8 @@ public struct Status: Decodable, Sendable, Equatable {
             path = try c.decodeIfPresent(String.self, forKey: .path) ?? ""
             tld = try c.decodeIfPresent(String.self, forKey: .tld) ?? ""
             siteTld = try c.decodeIfPresent(String.self, forKey: .siteTld) ?? ""
+            host = try c.decodeIfPresent(String.self, forKey: .host) ?? ""
+            title = try c.decodeIfPresent(String.self, forKey: .title) ?? ""
             php = try c.decodeIfPresent(String.self, forKey: .php) ?? ""
             phpSource = try c.decodeIfPresent(VersionSource.self, forKey: .phpSource) ?? .default
             phpPinned = try c.decodeIfPresent(String.self, forKey: .phpPinned) ?? ""

@@ -196,6 +196,23 @@ struct ClientTests {
         #expect(StubProtocol.requests[2].body == #"{"secured":true}"#)
     }
 
+    @Test func encodesSiteHostAndTitleChangesWithNilsOmitted() throws {
+        // The exact encoder updateSite runs — the wire format a host/title change must take.
+        // (A renamed host never travels over PATCH: only the bundled CLI moves one, see SitesPane.)
+        func body(_ change: SiteChange) throws -> String {
+            String(decoding: try JSONEncoder().encode(change), as: UTF8.self)
+        }
+        // nil keeps (absent), "" resets to the default; nothing else rides along.
+        #expect(try body(SiteChange(host: "liga")) == #"{"host":"liga"}"#)
+        #expect(try body(SiteChange(host: "")) == #"{"host":""}"#)
+        #expect(try body(SiteChange(title: "CMS Liga")) == #"{"title":"CMS Liga"}"#)
+        #expect(try body(SiteChange(title: "")) == #"{"title":""}"#)
+        // Both at once: exactly these two keys (the encoder's key order is not pinned).
+        let both = try JSONSerialization.jsonObject(with: Data(try body(SiteChange(host: "liga", title: "CMS Liga")).utf8)) as? [String: Any]
+        #expect(both?.keys.sorted() == ["host", "title"])
+        #expect(both?["host"] as? String == "liga" && both?["title"] as? String == "CMS Liga")
+    }
+
     @Test func givesSlowEndpointsLongerThanTheDefault() async throws {
         StubProtocol.reset { request in
             request.url.contains("/php/") ? (200, #"{"versions":[]}"#) : request.url.contains("/node/") ? (200, #"{"versions":[]}"#)
