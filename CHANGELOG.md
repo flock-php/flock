@@ -1,5 +1,76 @@
 # Changelog
 
+## [1.1.0](https://github.com/flock-php/flock/compare/v1.0.0...v1.1.0) (2026-11-12)
+
+
+### Features
+
+* **app:** add a Discord link to the About pane ([36bb5ca](https://github.com/flock-php/flock/commit/36bb5ca94e31bbf5c33ffe9532aee18815aab858))
+* **app:** ask for a GitHub star after setup and add support links to About ([bb3d1ab](https://github.com/flock-php/flock/commit/bb3d1ab7f8c630253ef703cdd6a2f4a1ea16f878))
+* **apps:** add a proxy with its commands ([78d6e61](https://github.com/flock-php/flock/commit/78d6e61cccd8277fcdab66982045740181da6a4b))
+* **binaries:** send the version and platform with manifest requests ([1520a08](https://github.com/flock-php/flock/commit/1520a08b540cd890359c4db287a94f1c34c367e9))
+* **cli:** flock proxy start and stop, and logs by a site's or proxy's name ([baac1ce](https://github.com/flock-php/flock/commit/baac1ce17e01e18746288fed099bc1386e4813e5))
+* **config:** give sites a type ([9645b31](https://github.com/flock-php/flock/commit/9645b3184db57b1b4a3f18c51c9faa8412ff5078))
+* **linux:** add a proxy with its commands ([15e5da8](https://github.com/flock-php/flock/commit/15e5da8df042b510bfb9968a8d95b69c75ab614c))
+* **linux:** Node.js sites and proxy start commands in Sites ([d06c18a](https://github.com/flock-php/flock/commit/d06c18ac59ddf3f6b273679d8849a9a175beac74))
+* **linux:** show what Flock runs as a dot, problems as an icon ([63518a8](https://github.com/flock-php/flock/commit/63518a835d3d68efee73cf5be62075b5f6d19d60))
+* **macos:** Node.js sites and proxy start commands in Sites ([6218513](https://github.com/flock-php/flock/commit/62185138ef816ecefc9086da8896b42a4e923e4d))
+* **macos:** show what Flock runs as a dot, problems as an icon ([52a9615](https://github.com/flock-php/flock/commit/52a96159f7fc6d5327d10f31afa45765356e7648))
+* **proxy:** proxy .test domains to local services ([ddff58c](https://github.com/flock-php/flock/commit/ddff58c2d6ab106cacfd7e4430f8a4a1a1cf0cbc)), closes [#73](https://github.com/flock-php/flock/issues/73)
+* **proxy:** start and stop a proxy's server with its command ([45cdbca](https://github.com/flock-php/flock/commit/45cdbcaf7a7ad161b6a258fdd0d5455d7dcda94d))
+* **services:** read MySQL and MariaDB settings from my.cnf in the data directory ([e063ff0](https://github.com/flock-php/flock/commit/e063ff059a3c23546b25e93423d13f605747d3cf))
+* **services:** read MySQL and MariaDB settings from my.cnf in the data directory ([d9e67db](https://github.com/flock-php/flock/commit/d9e67db55c78d0aac90509736e316e4c78fb01f9)), closes [#88](https://github.com/flock-php/flock/issues/88)
+* **share:** share Node.js apps from their dev server ([2482bc5](https://github.com/flock-php/flock/commit/2482bc5a9af9ceb1579a5908acb13e03b9b1bd20))
+* **sites:** put idle Node.js dev servers to sleep ([bf795ca](https://github.com/flock-php/flock/commit/bf795ca6f3201d0588a7dca3a83e7ccdb42c40a9))
+* **sites:** serve Node.js apps, starting their dev server on the first request ([ea258bd](https://github.com/flock-php/flock/commit/ea258bd9a6d1bcb635571351908df5831b72217e))
+* **supervisor:** stop a process's whole tree ([d31cadd](https://github.com/flock-php/flock/commit/d31caddb4d7024383096d0f310bab511b058d6ec))
+* **web:** name the site's Caddy directives in flock.yml ([749a56b](https://github.com/flock-php/flock/commit/749a56bdc89cab4108424a4111113af347129998))
+* **web:** support per-site Caddy handlers ([6405360](https://github.com/flock-php/flock/commit/6405360d62ae86c6365d021d5a91149040bda72b))
+* **windows:** Node.js sites and proxy start commands in Sites ([ce8675c](https://github.com/flock-php/flock/commit/ce8675cc24ee15417f957658b4d3ee5257829413))
+* **windows:** show what Flock runs as a dot, problems as an icon ([a12cc7c](https://github.com/flock-php/flock/commit/a12cc7c45d8982e4d76cb1961d5f050f955ed92e))
+
+
+### Bug Fixes
+
+* **apps:** fit a proxy's commands into the dialog ([9efcb1f](https://github.com/flock-php/flock/commit/9efcb1f2d9dd4e56bcab112b0698600cb2db8154))
+* **apps:** Name and Upstream below each other in Add Proxy ([14d8a44](https://github.com/flock-php/flock/commit/14d8a440be767e3325f052fd8a8183c60dbb871c))
+* **cli:** don't look for a document root when linking a Node.js app ([b55a6e6](https://github.com/flock-php/flock/commit/b55a6e629676649dc3204b0cf0cb83e6e0e7da94))
+* **daemon:** race condition in caddy server and sharing ([0feb8fa](https://github.com/flock-php/flock/commit/0feb8faf313b669dba6b5195546c0d59fb4cd931))
+* **github:** drop the duplicate security link from the issue chooser ([8b93e9c](https://github.com/flock-php/flock/commit/8b93e9cc823de8abfb1f327dbb04f3f0a4176237))
+* **linux:** fit Add Proxy into the smallest window ([b195751](https://github.com/flock-php/flock/commit/b19575143401139f1c3c7b68272254238d50d257))
+* **macos:** fit Add Proxy into the smallest window ([faa1440](https://github.com/flock-php/flock/commit/faa144011e2962d609eb43f5817f126b4cfc08ec))
+* **macos:** open Add Proxy's commands from the whole row ([c57e2c9](https://github.com/flock-php/flock/commit/c57e2c9888c3d0109e9fcd151a037e683b3b91e8))
+* **proxy:** describe proxies as servers that aren't sites ([0caf817](https://github.com/flock-php/flock/commit/0caf817700685688580b08d6a2d312e5c33eac18))
+* **proxy:** race-free starts, timeouts that end the whole command, and CLI waits ([e71d009](https://github.com/flock-php/flock/commit/e71d0093046f10b8dc719e33a5546cbb68524bf2))
+* **rustfs:** run RustFS from its data directory so the volume has no space ([8b63364](https://github.com/flock-php/flock/commit/8b63364b0006d66d47e348c9466e0a0da7d5452c))
+* **rustfs:** run RustFS from its data directory so the volume has no space ([d93fac8](https://github.com/flock-php/flock/commit/d93fac895934c6e65c59f9fff4757d63b3809b56)), closes [#62](https://github.com/flock-php/flock/issues/62)
+* **services:** refuse persisted settings Flock manages; MySQL-only docs example ([348458e](https://github.com/flock-php/flock/commit/348458e31bf691fa2dee68f0dcb9a4a59022c413))
+* **sites:** keep Node.js dev servers local and their pages current ([89f304a](https://github.com/flock-php/flock/commit/89f304aed1e47f0aaa9d3a744c83ebda2517f436))
+* **supervisor:** wait for a stopped process group until it's really gone ([d87f809](https://github.com/flock-php/flock/commit/d87f80901af14b7d033e951b061e290ebc0630a3))
+* **web:** address custom handler review findings ([d13a28a](https://github.com/flock-php/flock/commit/d13a28a67dbdf03198e33725336827305bd802a2))
+* **web:** keep a share's rewritten page headers off the handler's goroutine ([14f30ce](https://github.com/flock-php/flock/commit/14f30ce4cd38e0356fcf5fa29bbe7b1ba90c8232))
+* **web:** keep a share's rewritten page headers off the handler's goroutine ([28bf670](https://github.com/flock-php/flock/commit/28bf67094e5f7af0e7f6f2b8054e82b5b078af99)), closes [#100](https://github.com/flock-php/flock/issues/100)
+* **web:** pass a rewritten page's declared trailers on too ([7de0604](https://github.com/flock-php/flock/commit/7de0604c58a6ced8bb8c213e209720759f4d991a))
+* **web:** restore streamed page rewriting from main; [#102](https://github.com/flock-php/flock/issues/102) already fixed the race ([7bc1a95](https://github.com/flock-php/flock/commit/7bc1a950452a74cb3cea781890abbc193b903fe6))
+* **web:** run the remote guard before every handler ([57b8b4b](https://github.com/flock-php/flock/commit/57b8b4b2b84c095164c275c42d783c13bdc01c32))
+* **windows:** drop the duplicate header from the About pane ([299bf26](https://github.com/flock-php/flock/commit/299bf26d0e7ac5537d56b42a28b03fc853820b1f))
+* **windows:** fit Add Proxy into the smallest window ([2c58df2](https://github.com/flock-php/flock/commit/2c58df21e5e564baf749ecc295f95149fff65591))
+* **windows:** keep another log's output when clearing one ([bdc5e13](https://github.com/flock-php/flock/commit/bdc5e13b4c5264722257fac9982c991f126c3055))
+* **windows:** move the output panel out of the detail it was in ([9fc86c7](https://github.com/flock-php/flock/commit/9fc86c71f58d835fe2d0857bed30833eb82acf3f))
+* **worktrees:** drop a worktree database on the service it was made on ([af46cbb](https://github.com/flock-php/flock/commit/af46cbb78045d175cbff079fe4e7c17806363a3c))
+* **worktrees:** drop an unlinked site's worktree databases ([f016deb](https://github.com/flock-php/flock/commit/f016deb4dba0cfd72eb715cdf60d8eb2d58220a3))
+* **worktrees:** drop an unlinked site's worktree databases ([673bce7](https://github.com/flock-php/flock/commit/673bce7e4f8cc50d18b0be5cee01d5244cefab98))
+
+
+### Refactor
+
+* **web:** use the project Caddyfile ([6c8235e](https://github.com/flock-php/flock/commit/6c8235e565edf629ef52ef289da9a6cf89ea00bd))
+
+
+### Style
+
+* **linux:** format the About pane's support links ([8a4c6f7](https://github.com/flock-php/flock/commit/8a4c6f7f387377de76ff78945b34bd8dcb6684bc))
+
 ## 1.0.0 (2026-11-02)
 
 
