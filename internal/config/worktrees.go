@@ -183,18 +183,26 @@ func (c *Config) worktreeSites(byName map[string]Site) {
 				continue
 			}
 			name := slug + "." + parent.Name
+			// The internal host part is the slug in front of the parent's host: a
+			// multi-label shape ("<slug>.<parent host>") that a user-set Site.Host never
+			// takes (single label) — these rows are synthesized post-Load, on demand, so
+			// the Load sanitizer never sees them. The identity fallback below numbers
+			// both parts, so renamed worktrees never share a host.
+			host := slug + "." + parent.hostName()
 			for n := 2; ; n++ {
 				if _, taken := byName[name]; !taken {
 					break
 				}
 				name = fmt.Sprintf("%s-%d.%s", slug, n, parent.Name)
+				host = fmt.Sprintf("%s-%d.%s", slug, n, parent.hostName())
 			}
 
 			// Settings follow the parent; the server too, except FrankenPHP, whose process and
 			// port are the parent's own. The TLD follows as well: the worktree is served at
-			// <slug>.<the parent's effective domain> (see Site.Suffix).
+			// <slug>.<the parent's effective domain> (see Site.Suffix), and so does the
+			// parent's Host override (see Site.hostName).
 			byName[name] = Site{
-				Name: name, Path: wt.Path, PHP: parent.PHP, Node: parent.Node, Secured: parent.Secured,
+				Name: name, Host: host, Path: wt.Path, PHP: parent.PHP, Node: parent.Node, Secured: parent.Secured,
 				TLD: parent.TLD, Root: parent.Root, Parent: parent.Name, Branch: wt.Branch,
 			}
 		}

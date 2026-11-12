@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"slices"
 	"strings"
+	"unicode"
 )
 
 // Domain is one of a site's extra domains (Site.Domains), stored structured so its kind is
@@ -88,6 +89,54 @@ func sanitizeSuffix(raw string) string {
 		return ""
 	}
 	return tld
+}
+
+// sanitizeHost is sanitizeSuffix's doctrine for the Host override: a stored host nobody
+// screened is input, not a validated choice. Normalize (trim, lowercase), keep it only if
+// HostLabelOK accepts it — Host is a label, not a suffix, so ValidateTLD does not apply
+// ("localhost" is a perfectly good label) — and clear it when it equals the site's Name,
+// which is the default anyway. An override nobody screened must never be worse than none,
+// and a valid stored host survives untouched, so Loads are idempotent.
+func sanitizeHost(s *Site) {
+	host := strings.ToLower(strings.TrimSpace(s.Host))
+	if !HostLabelOK(host) || host == s.Name {
+		host = ""
+	}
+	s.Host = host
+}
+
+// SanitizeTitle normalizes a stored display name: drop every control rune (tabs, newlines,
+// escapes — a Title is display text and must never break a line or a terminal), trim the
+// result, and cap it at 80 runes (counting characters, not bytes). "" stays "": inherit the
+// site name. Exported so the API and the CLI screen input with the very rule Load applies
+// to the hand-editable config.json; a Title touches no host, key or path (display-only).
+func SanitizeTitle(t string) string {
+	var b strings.Builder
+	b.Grow(len(t))
+	for _, r := range t {
+		if !unicode.IsControl(r) {
+			b.WriteRune(r)
+		}
+	}
+	title := strings.TrimSpace(b.String())
+	if runes := []rune(title); len(runes) > maxTitleRunes {
+		title = string(runes[:maxTitleRunes])
+	}
+	return title
+}
+
+// maxTitleRunes is the cap on a site's display Title.
+const maxTitleRunes = 80
+
+// hostName is the name part of the site's primary host: its Host override when set, the
+// identity Name otherwise. A stored Host is sanitized to a single valid label or "" at
+// Load (see sanitizeHost); the synthesized worktree rows this also feeds (see
+// worktreeSites) carry an internal multi-label form ("<slug>.<parent host>").
+func (s Site) hostName() string {
+	if s.Host != "" {
+		return s.Host
+	}
+	return s.Name
 }
 
 // Suffix is the suffix the site is served under: its own TLD override, the global Config.TLD

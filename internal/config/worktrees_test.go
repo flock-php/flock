@@ -136,6 +136,48 @@ func TestWorktreeFollowsTheSiteTLDOverride(t *testing.T) {
 	}
 }
 
+// TestWorktreeFollowsTheSiteHostOverride: a worktree of a site served under a Host
+// override is served at <slug>.<the site's host part>.<suffix> — the override rides with
+// the other parent settings — while the row keeps its identity name <slug>.<parent name>.
+// Two worktrees whose slugs collide get numbered in the host part too: the identity
+// fallback must not leave them served at one host.
+func TestWorktreeFollowsTheSiteHostOverride(t *testing.T) {
+	parked := t.TempDir()
+	repo := filepath.Join(parked, "demo")
+	addWorktree(t, repo, filepath.Join(parked, "demo-f"), "demo-f", "ref: refs/heads/f")
+	addWorktree(t, repo, filepath.Join(parked, "d1"), "d1", "ref: refs/heads/x/y")
+	addWorktree(t, repo, filepath.Join(parked, "d2"), "d2", "ref: refs/heads/x_y")
+
+	cfg := Default()
+	cfg.Upsert(Site{Name: "demo", Path: repo, Host: "liga"})
+
+	wt, ok := cfg.FindSite("f.demo")
+	if !ok {
+		t.Fatal("worktree not served")
+	}
+	if got := cfg.Domain(wt); got != "f.liga.test" {
+		t.Errorf("worktree domain: %q, want f.liga.test", got)
+	}
+	if wt.Name != "f.demo" {
+		t.Errorf("worktree identity: %q, want f.demo", wt.Name)
+	}
+
+	first, ok := cfg.FindSite("x-y.demo")
+	if !ok {
+		t.Fatal("first colliding worktree not served")
+	}
+	second, ok := cfg.FindSite("x-y-2.demo")
+	if !ok {
+		t.Fatal("second colliding worktree not served")
+	}
+	if got := cfg.Domain(first); got != "x-y.liga.test" {
+		t.Errorf("colliding worktree domain: %q, want x-y.liga.test", got)
+	}
+	if got := cfg.Domain(second); got != "x-y-2.liga.test" {
+		t.Errorf("numbered worktree domain: %q, want x-y-2.liga.test (must not share a host)", got)
+	}
+}
+
 func TestAWorktreeWinsOverTheSameSubdomainOfItsSite(t *testing.T) {
 	dir := t.TempDir()
 	repo := filepath.Join(dir, "acme")

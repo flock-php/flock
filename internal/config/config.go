@@ -115,10 +115,20 @@ func (s *Services) SetRunning(id string, on bool) {
 	}
 }
 
-// Site is a directory served as <name>.<suffix> (its own TLD override, or the global one)
-// and its subdomains (up to MaxDepth levels).
+// Site is a directory served as <host>.<suffix> — its Host override, the Name when it has
+// none (see Site.hostName) — under its own TLD override, or the global one, and its
+// subdomains (up to MaxDepth levels).
 type Site struct {
-	Name    string `json:"name"`
+	Name string `json:"name"`
+	// Host replaces the Name in the name part of the site's primary host: a single DNS
+	// label ("liga" → served at liga.<suffix>) while the folder and every config key,
+	// CLI path and API route stay the Name; empty means the Name (today's behavior).
+	// Sanitized at Load like the suffix overrides (see sanitizeHost).
+	Host string `json:"host,omitempty"`
+	// Title is the site's display name ("" = inherit the Name). It is display-only:
+	// no host, config key or CLI path derives from it. Sanitized at Load (see
+	// SanitizeTitle).
+	Title   string `json:"title,omitempty"`
 	Path    string `json:"path"`
 	PHP     string `json:"php,omitempty"`  // "8.5"; empty means Config.DefaultPHP
 	Node    string `json:"node,omitempty"` // major, e.g. "22"; empty means Config.DefaultNode
@@ -265,13 +275,15 @@ func Load(root string) (*Config, error) {
 	return cfg, nil
 }
 
-// migrateDomains runs the one-time legacy migration and suffix sanitization over every site
-// (see Domain.migrate and sanitizeSuffix), against the already-sanitized global TLD: the
-// global value decides how a stored string's suffix is classified, so it has to be final
-// before the entries are read.
+// migrateDomains runs the one-time legacy migration and the hand-edit sanitizations over
+// every site (see Domain.migrate, sanitizeSuffix, sanitizeHost and SanitizeTitle), against
+// the already-sanitized global TLD: the global value decides how a stored string's suffix
+// is classified, so it has to be final before the entries are read.
 func (c *Config) migrateDomains() {
 	for i := range c.Sites {
 		c.Sites[i].TLD = sanitizeSuffix(c.Sites[i].TLD)
+		sanitizeHost(&c.Sites[i])
+		c.Sites[i].Title = SanitizeTitle(c.Sites[i].Title)
 		for j := range c.Sites[i].Domains {
 			c.Sites[i].Domains[j].migrate(c.TLD)
 		}
@@ -320,10 +332,11 @@ func (c *Config) Save(root string) error {
 	return replaceFile(tmp, file(root))
 }
 
-// Domain is the primary hostname of a site: <name>.<the suffix it is served under> — its
-// own TLD override, the global one when it inherits (see Site.Suffix).
+// Domain is the primary hostname of a site: <host>.<the suffix it is served under> — the
+// site's Host override, its Name when it has none (see Site.hostName) — with its own TLD
+// override, the global one when it inherits (see Site.Suffix).
 func (c *Config) Domain(s Site) string {
-	return s.Name + "." + s.Suffix(c)
+	return s.hostName() + "." + s.Suffix(c)
 }
 
 // PHPFor returns the PHP version a site runs on.
