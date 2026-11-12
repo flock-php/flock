@@ -4,3 +4,11 @@ windows/Flock.Kit/Strings*.resx linguist-generated
 windows/Flock.Tray/Strings*.resx linguist-generated
 windows/installer/Strings.iss linguist-generated
 linux/po/*.po linguist-generated
+
+# tools/i18n writes and compares LF, so a Windows checkout keeps the catalogs and generated files LF.
+i18n/*.json text eol=lf
+macos/Resources/Localizable.xcstrings text eol=lf
+windows/Flock.Kit/Strings*.resx text eol=lf
+windows/Flock.Tray/Strings*.resx text eol=lf
+windows/installer/Strings.iss text eol=lf
+linux/po/*.po text eol=lf
