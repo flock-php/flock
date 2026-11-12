@@ -1037,6 +1037,22 @@ func TestSiteHostAndTitle(t *testing.T) {
 	if r := siteRow(t, statusRows(t, srv), "zoo"); r.Domain != "liga2.test" || r.SiteHost != "liga2" || r.Title != "CMS  Liga" {
 		t.Fatalf("create row: %+v", r)
 	}
+	// The default comparison folds the name first: name "Liga" stores as "liga", so asking
+	// for host "liga" asks for the default — Host stays "" (no "host" key in config.json),
+	// never the redundant override Load would heal.
+	if resp, body := call(t, "POST", srv.URL+"/v1/sites", "", `{"path":`+jsonString(t.TempDir())+`,"name":"Liga","host":"liga"}`); resp.StatusCode != http.StatusOK {
+		t.Fatalf("create Liga/liga: %d %s", resp.StatusCode, body)
+	}
+	if s, ok := b.config(t).FindSite("liga"); !ok || s.Host != "" {
+		t.Fatalf(`create Liga/liga must store the canonical "": %+v`, s)
+	}
+	if raw, err := os.ReadFile(filepath.Join(b.root, "config.json")); err != nil || strings.Contains(string(raw), `"host": "liga"`) {
+		t.Fatalf(`redundant host key in config.json: %s (%v)`, raw, err)
+	}
+	statusRowsFromConfig(t, b)
+	if r := siteRow(t, statusRows(t, srv), "liga"); r.Domain != "liga.test" || r.SiteHost != "" {
+		t.Fatalf("create Liga/liga row: %+v", r)
+	}
 	// A create whose host lands on a served name is refused like the patch, creating
 	// nothing, config.json byte-identical; a non-label is refused before anything.
 	before = configBytes(t, b)
@@ -1288,6 +1304,30 @@ func TestSiteStatusJSONAdditive(t *testing.T) {
 	cleared.Domain, cleared.SiteHost, cleared.Title = "demo.loc", "", ""
 	if got, err := json.Marshal(cleared); err != nil || string(got) != want {
 		t.Fatalf("empty site_host/title must stay omitted: got  %s\nwant %s", got, want)
+	}
+	// SiteRowHost gates the fill the daemon uses: a worktree row's Host is synthesized
+	// ("slug.parent host" in config.worktreeSites), never a user override — its site_host
+	// stays absent; an ordinary row reports exactly its Host.
+	wt := config.Site{Name: "f.demo", Parent: "demo", Branch: "feature/x", Host: "f.liga"}
+	for _, c := range []struct {
+		site config.Site
+		want string
+	}{
+		{config.Site{Name: "demo"}, ""},
+		{config.Site{Name: "demo", Host: "liga"}, "liga"},
+		{wt, ""},
+	} {
+		if got := SiteRowHost(c.site); got != c.want {
+			t.Errorf("SiteRowHost(%+v) = %q, want %q", c.site, got, c.want)
+		}
+	}
+	// A legacy config (no host keys) with a worktree of a host-overridden parent: the row
+	// is filled the way the daemon fills it — no site_host key, parent and branch present.
+	wtRow := SiteStatus{Name: wt.Name, Domain: "f.liga.loc", Parent: wt.Parent, Branch: wt.Branch,
+		TLD: "loc", SiteTLD: "", SiteHost: SiteRowHost(wt), Domains: []SiteDomain{}, Server: config.ServerFastCGI}
+	gotWT, err := json.Marshal(wtRow)
+	if err != nil || string(gotWT) != `{"name":"f.demo","domain":"f.liga.loc","path":"","php":"","php_source":"","php_pinned":"","php_file":"","node":"","node_source":"","node_pinned":"","node_file":"","node_shadowed":"","secured":false,"parked":false,"parent":"demo","branch":"feature/x","root":"","root_source":"","root_pinned":"","root_file":"","domains":[],"server":"fastcgi","worker":"","octane_available":false,"tld":"loc","site_tld":""}` {
+		t.Fatalf("worktree row must carry no site_host: got %s", gotWT)
 	}
 }
 

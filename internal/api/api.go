@@ -182,6 +182,17 @@ type SiteStatus struct {
 	Title string `json:"title,omitempty"`
 }
 
+// SiteRowHost is the raw host override for a status row. A worktree row's Host is synthesized
+// ("slug.parent host", internal to Flock, worktrees.go) and never a user override: the row
+// reports "" so site_host stays absent, byte-stable like a legacy row; the parent's override
+// is the parent row's business (Domain still shows the worktree's effective host).
+func SiteRowHost(site config.Site) string {
+	if site.IsWorktree() {
+		return ""
+	}
+	return site.Host
+}
+
 // FrankenPHP states of a site.
 const (
 	FrankenPHPRunning     = "running"     // serving the site

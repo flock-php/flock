@@ -379,11 +379,15 @@ func registerConfig(mux *http.ServeMux, b Backend) {
 			if name == "" {
 				name = filepath.Base(body.Path)
 			}
-			host, err := siteHost(config.Site{Name: name}, body.Host)
+			// Compare against the stored (folded) name: a create asking for name "Liga"
+			// with host "liga" asks for the default, not an override — the same rule the
+			// sanitizer would apply at Load.
+			canonical := config.SiteName(name)
+			host, err := siteHost(config.Site{Name: canonical}, body.Host)
 			if err != nil {
 				return err
 			}
-			site := config.Site{Name: config.SiteName(name), Path: filepath.Clean(body.Path), PHP: body.PHP, Secured: body.Secured, TLD: tld, Host: host, Title: config.SanitizeTitle(body.Title)}
+			site := config.Site{Name: canonical, Path: filepath.Clean(body.Path), PHP: body.PHP, Secured: body.Secured, TLD: tld, Host: host, Title: config.SanitizeTitle(body.Title)}
 			// Create-time parity with PATCH (Goal 4): a suffix or name part picked at
 			// create lands the site's domain on a host Flock may already serve — the
 			// same landing check the patch runs (Config.Domain reads Host, so the host

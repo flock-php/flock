@@ -643,6 +643,11 @@ func TestGitWorktreesAreServedUnderTheirSite(t *testing.T) {
 	if wt.Domain != "feature-auth.acme.test" || wt.Parent != "acme" || wt.Branch != "feature/auth" {
 		t.Errorf("unexpected worktree: %+v", wt)
 	}
+	// The worktree's synthesized internal Host is not a user override: the row must report
+	// "" so site_host stays absent (the parent's override is the parent row's business).
+	if wt.SiteHost != "" {
+		t.Errorf("worktree row leaked its synthesized host: site_host = %q", wt.SiteHost)
+	}
 	if _, twice := sites()["acme-auth"]; twice {
 		t.Error("the worktree is also served as a parked site")
 	}
