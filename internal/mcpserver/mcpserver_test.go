@@ -3,6 +3,7 @@ package mcpserver
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"slices"
@@ -35,6 +36,9 @@ type fakeDaemon struct {
 	phpPolls int
 	polled   int
 	changes  []string
+	// updateErr makes UpdateSite answer like a refused change (an API 400, e.g. a host
+	// collision): the tool must surface its text.
+	updateErr error
 }
 
 func (f *fakeDaemon) record(format string, args ...any) {
@@ -152,6 +156,11 @@ func (f *fakeDaemon) Proxy(_ context.Context, name, upstream string, secured *bo
 
 func (f *fakeDaemon) UpdateSite(_ context.Context, name string, c api.SiteChange) (api.Status, error) {
 	f.record("update", name, c)
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.updateErr != nil {
+		return api.Status{}, f.updateErr
+	}
 	return f.status, nil
 }
 
@@ -499,6 +508,13 @@ func TestUpdateSiteActions(t *testing.T) {
 		// daemon stored it, from the status row — not a literal "<name>".
 		{map[string]any{"action": "set_site_tld", "tld": "loc"}, `update ["shop",{"tld":"loc"}]`, "shop.loc", "shop is served at shop.loc."},
 		{map[string]any{"action": "set_site_tld", "tld": "inherit"}, `update ["shop",{"tld":""}]`, "shop.test", "shop follows Flock's global suffix again."},
+		// set_site_host echoes the real effective domain the same way; "default" is the
+		// site name again, stored as the canonical "".
+		{map[string]any{"action": "set_site_host", "host": "liga"}, `update ["shop",{"host":"liga"}]`, "liga.test", "shop is served at liga.test."},
+		{map[string]any{"action": "set_site_host", "host": "default"}, `update ["shop",{"host":""}]`, "", "shop is served under its site name again."},
+		// set_site_title echoes the stored title; "default" shows the site name again.
+		{map[string]any{"action": "set_site_title", "title": "CMS Liga"}, `update ["shop",{"title":"CMS Liga"}]`, "", `shop is shown as "CMS Liga".`},
+		{map[string]any{"action": "set_site_title", "title": "default"}, `update ["shop",{"title":""}]`, "", "shop is shown as its site name again."},
 		{map[string]any{"action": "restart", "site": "shop.test"}, `restart ["shop"]`, "", ""},
 	} {
 		d.changes = nil
@@ -524,6 +540,18 @@ func TestUpdateSiteActions(t *testing.T) {
 	if e := callTool(t, cs, "update_site", map[string]any{"action": "set_site_tld"}, nil); !strings.Contains(e, "needs tld") {
 		t.Errorf("set_site_tld without a tld: %q", e)
 	}
+	if e := callTool(t, cs, "update_site", map[string]any{"action": "set_site_host"}, nil); !strings.Contains(e, "needs host") {
+		t.Errorf("set_site_host without a host: %q", e)
+	}
+	if e := callTool(t, cs, "update_site", map[string]any{"action": "set_site_title"}, nil); !strings.Contains(e, "needs title") {
+		t.Errorf("set_site_title without a title: %q", e)
+	}
+	// A refused rename: the API's 400 text surfaces as the tool's error, unchanged.
+	d.updateErr = errors.New("liga.test is already served by site liga")
+	if e := callTool(t, cs, "update_site", map[string]any{"action": "set_site_host", "host": "liga"}, nil); !strings.Contains(e, "already served by site liga") {
+		t.Errorf("set_site_host collision: %q", e)
+	}
+	d.updateErr = nil
 }
 
 func TestLinkSiteAndDebugging(t *testing.T) {

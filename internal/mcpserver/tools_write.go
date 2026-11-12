@@ -81,11 +81,13 @@ func (s *server) addWriteTools(srv *mcp.Server) {
 			"- add_domain (domain[, suffix]): an extra domain, a subdomain (\"tenant1\" → tenant1.<site>.test) or an alias (\"my-app-2.test\"); " +
 			"with suffix the domain is a single label and the suffix makes it an alias: \"inherit\" follows the site's suffix, \"loc\" pins it to one of its own.\n" +
 			"- set_site_tld (tld): serve the site at <name>.<suffix> (e.g. loc); \"inherit\" makes it follow Flock's global suffix again.\n" +
+			"- set_site_host (host): replace the name part of the site's domain with a single label (liga → liga.test); \"default\" serves it under its site name again.\n" +
+			"- set_site_title (title): the site's display name (how Flock's lists show it); \"default\" shows the site name again.\n" +
 			"- set_server (server, worker): run PHP through FastCGI (PHP-FPM) or FrankenPHP, optionally in Octane's worker mode.\n" +
 			"- restart: restart a FrankenPHP site's process, e.g. so Octane workers load changed code.",
 		Annotations: additive(false),
 		InputSchema: schema[updateSiteIn](map[string][]any{
-			"action": {"secure", "unsecure", "isolate", "unisolate", "pin", "unpin", "add_domain", "set_site_tld", "set_server", "restart"},
+			"action": {"secure", "unsecure", "isolate", "unisolate", "pin", "unpin", "add_domain", "set_site_tld", "set_site_host", "set_site_title", "set_server", "restart"},
 			"tool":   {"php", "node"},
 			"server": {"fastcgi", "frankenphp"},
 			"worker": {"classic", "octane"},
@@ -688,6 +690,8 @@ type updateSiteIn struct {
 	Domain  string `json:"domain,omitempty" jsonschema:"add_domain: a subdomain (tenant1) or an alias (my-app-2.test); with suffix: a single label (demo2)"`
 	Suffix  string `json:"suffix,omitempty" jsonschema:"add_domain: the alias's suffix: inherit (it follows the site's suffix) or one of its own (loc); left out for subdomains"`
 	TLD     string `json:"tld,omitempty" jsonschema:"set_site_tld: the site's own suffix (e.g. loc), or inherit to follow Flock's global suffix again"`
+	Host    string `json:"host,omitempty" jsonschema:"set_site_host: single label replacing the name part of the site's domain (liga → liga.test); default = the site name again (the default)"`
+	Title   string `json:"title,omitempty" jsonschema:"set_site_title: the site's display name (how Flock's lists show it); default = the site name again (the default)"`
 	Server  string `json:"server,omitempty" jsonschema:"set_server: fastcgi or frankenphp"`
 	Worker  string `json:"worker,omitempty" jsonschema:"set_server with frankenphp: classic (the default) or octane (Laravel Octane's worker mode)"`
 }
@@ -706,7 +710,7 @@ func (s *server) updateSite(ctx context.Context, _ *mcp.CallToolRequest, in upda
 
 	var st api.Status
 	var msg string
-	echoDomain := false // set_site_tld with a suffix: the echo is the status row's real domain
+	echoDomain := false // set_site_tld / set_site_host with a value: the echo is the status row's real domain
 	switch in.Action {
 	case "secure", "unsecure":
 		st, err = s.Daemon.UpdateSite(ctx, site.Name, api.SiteChange{Secured: ptr(in.Action == "secure")})
@@ -765,6 +769,38 @@ func (s *server) updateSite(ctx context.Context, _ *mcp.CallToolRequest, in upda
 			// (normalized, collision-checked), the name the site is served at.
 			msg = fmt.Sprintf("%s is served at %s.%s.", site.Name, site.Name, tld)
 			echoDomain = true
+		}
+	case "set_site_host":
+		host := strings.TrimSpace(in.Host)
+		if host == "" {
+			return nil, siteActionOut{}, errors.New("set_site_host needs host (a single label like liga, or default)")
+		}
+		if strings.EqualFold(host, "default") {
+			host = "" // the API stores the default (the site name) as ""
+		}
+		st, err = s.Daemon.UpdateSite(ctx, site.Name, api.SiteChange{Host: &host})
+		if host == "" {
+			msg = fmt.Sprintf("%s is served under its site name again.", site.Name)
+		} else {
+			// The real effective domain again: the label as the daemon stored it
+			// (lowercased, collision-checked — the API's 400 surfaces as this tool's
+			// error otherwise), from the status row.
+			msg = fmt.Sprintf("%s is served at %s.%s.", site.Name, host, site.TLD)
+			echoDomain = true
+		}
+	case "set_site_title":
+		title := strings.TrimSpace(in.Title)
+		if title == "" {
+			return nil, siteActionOut{}, errors.New("set_site_title needs title (a display name, or default)")
+		}
+		if strings.EqualFold(title, "default") {
+			title = "" // the API stores the default (the site name) as ""
+		}
+		st, err = s.Daemon.UpdateSite(ctx, site.Name, api.SiteChange{Title: &title})
+		if title == "" {
+			msg = fmt.Sprintf("%s is shown as its site name again.", site.Name)
+		} else {
+			msg = fmt.Sprintf("%s is shown as %q.", site.Name, title)
 		}
 	case "set_server":
 		if in.Server != config.ServerFastCGI && in.Server != config.ServerFrankenPHP {
