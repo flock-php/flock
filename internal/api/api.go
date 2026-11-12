@@ -170,9 +170,16 @@ type SiteStatus struct {
 	// Share is the site's tunnel (`flock share`), while there is one.
 	Share *share.Status `json:"share,omitempty"`
 	// TLD is the suffix the site is served under: its SiteTLD override, the global one when
-	// SiteTLD is "" (inherit). Added last: old clients keep the field order they parse.
+	// SiteTLD is "" (inherit). SiteHost and Title below join this additive tail (added last):
+	// old clients keep the field order they parse and never see a key the site does not set.
 	TLD     string `json:"tld"`
 	SiteTLD string `json:"site_tld"` // the raw override ("" = inherit)
+	// SiteHost is the raw host override: the name part of Domain, "" and absent when the site
+	// inherits its Name (Domain still shows the effective host). omitempty: rows without an
+	// override keep the bytes old clients parse.
+	SiteHost string `json:"site_host,omitempty"`
+	// Title is the site's display name, "" and absent when it is shown as its Name.
+	Title string `json:"title,omitempty"`
 }
 
 // FrankenPHP states of a site.

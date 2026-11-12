@@ -228,6 +228,27 @@ func siteTLD(raw string) (string, error) {
 	return tld, nil
 }
 
+// siteHost normalizes a requested name-part override, siteTLD's doctrine for a label: "" (like
+// an absent host) is the default — the site's name, stored as "" — a label equal to the site's
+// name is that default too (sanitizeHost's canonical form; the CLI's `flock site host` resolves
+// it the same way, never storing a redundant Host:"demo"), and anything else must be a single
+// DNS label (config.HostLabelOK — ValidateTLD does not apply: Host is a label, "localhost" is a
+// perfectly good one). A rejected one is an invalid() error: callers run it inside b.Mutate, so
+// returning it leaves config.json untouched.
+func siteHost(site config.Site, raw string) (string, error) {
+	host := strings.ToLower(strings.TrimSpace(raw))
+	if host == "" {
+		return "", nil
+	}
+	if !config.HostLabelOK(host) {
+		return "", invalid("%q is not a host label: host is a single label of a-z, 0-9 and inner hyphens", raw)
+	}
+	if host == site.Name {
+		return "", nil // the site name is the default: store the default, not an override
+	}
+	return host, nil
+}
+
 // siteHostClash reports why the site — in the state given, its TLD override as proposed —
 // lands on a host Flock already serves: a suffix change moves the site's domain and its
 // inherited aliases, and any of them (the site's full set of effective hosts, pinned
@@ -332,6 +353,12 @@ func registerConfig(mux *http.ServeMux, b Backend) {
 			// TLD is the site's own suffix ("loc" → served at <name>.loc); "" (like an
 			// absent key) inherits the global one.
 			TLD string `json:"tld"`
+			// Host is the site's name part ("liga" → served at liga.<suffix>); "" (like an
+			// absent key) is the default: the site's name.
+			Host string `json:"host"`
+			// Title is the site's display name, stored through config.SanitizeTitle as sent
+			// ("" — like an absent key — shows the site name).
+			Title string `json:"title"`
 		}
 		if err := decodeBody(r, &body); err != nil {
 			writeError(w, http.StatusBadRequest, err)
@@ -352,10 +379,16 @@ func registerConfig(mux *http.ServeMux, b Backend) {
 			if name == "" {
 				name = filepath.Base(body.Path)
 			}
-			site := config.Site{Name: config.SiteName(name), Path: filepath.Clean(body.Path), PHP: body.PHP, Secured: body.Secured, TLD: tld}
-			// Create-time parity with PATCH (Goal 4): a suffix picked at create lands
-			// the site's domain on a host Flock may already serve — the same landing
-			// check the patch runs, refused with the config untouched (the closure).
+			host, err := siteHost(config.Site{Name: name}, body.Host)
+			if err != nil {
+				return err
+			}
+			site := config.Site{Name: config.SiteName(name), Path: filepath.Clean(body.Path), PHP: body.PHP, Secured: body.Secured, TLD: tld, Host: host, Title: config.SanitizeTitle(body.Title)}
+			// Create-time parity with PATCH (Goal 4): a suffix or name part picked at
+			// create lands the site's domain on a host Flock may already serve — the
+			// same landing check the patch runs (Config.Domain reads Host, so the host
+			// override is covered by it), refused with the config untouched (the
+			// closure).
 			if err := siteHostClash(cfg, site); err != nil {
 				return err
 			}
@@ -381,6 +414,16 @@ func registerConfig(mux *http.ServeMux, b Backend) {
 			// "" is inherit, a value is normalized and validated (400 on reject, with the
 			// config untouched). Raw JSON decides between absent and null.
 			TLD json.RawMessage `json:"tld"`
+			// Host is the name part of the site's domain (the Site.Host override): absent or
+			// null keeps what it is, "" is the default (the site's name), a value is
+			// lowercased, trimmed and must be a single DNS label (400 on reject, with the
+			// config untouched). Raw JSON decides between absent and null, exactly like TLD.
+			Host json.RawMessage `json:"host"`
+			// Title is the site's display name: absent or null keeps it, "" shows the site
+			// name again, a value is stored through config.SanitizeTitle as sent — the API
+			// folds no whitespace (the CLI's Fields-join is a shell-argv artifact: "a  b"
+			// arrives verbatim), drops control runes, and caps at 80 runes.
+			Title *string `json:"title"`
 		}
 		if err := decodeBody(r, &body); err != nil {
 			writeError(w, http.StatusBadRequest, err)
@@ -411,6 +454,31 @@ func registerConfig(mux *http.ServeMux, b Backend) {
 				if err := siteHostClash(cfg, site); err != nil {
 					return err
 				}
+			}
+			if len(body.Host) > 0 && string(body.Host) != "null" {
+				var raw string
+				if err := json.Unmarshal(body.Host, &raw); err != nil {
+					return invalid("host must be a string (a single label like liga, or \"\" for the site name), not %s", body.Host)
+				}
+				host, err := siteHost(site, raw)
+				if err != nil {
+					return err
+				}
+				if host != site.Host {
+					// The new name part moves the site's domain and its inherited
+					// aliases: the same pair the CLI's `flock site host` runs —
+					// SiteHostCollision and the self half kept for renames — on the
+					// modified copy, so CLI and API refuse exactly the same clashes.
+					// An equal host is a store-only no-op: nothing moves, nothing to
+					// probe.
+					site.Host = host
+					if err := siteHostClash(cfg, site); err != nil {
+						return err
+					}
+				}
+			}
+			if body.Title != nil {
+				site.Title = config.SanitizeTitle(*body.Title)
 			}
 			if body.PHP != nil {
 				installed, _ := php.Installed(b.Root())
@@ -759,6 +827,14 @@ type SiteChange struct {
 	// TLD is the site's own suffix (ruling R7): nil leaves it alone, "" is inherit, a
 	// value is normalized and validated (400 on reject, the config untouched).
 	TLD *string `json:"tld,omitempty"`
+	// Host is the name part of the site's domain: nil leaves it alone, "" is the default
+	// (the site's name), a value is lowercased and must be a single DNS label (400 on
+	// reject, the config untouched).
+	Host *string `json:"host,omitempty"`
+	// Title is the site's display name: nil leaves it alone, "" shows the site name
+	// again, a value is stored through config.SanitizeTitle as sent (the API folds no
+	// whitespace — SanitizeTitle's rules only).
+	Title *string `json:"title,omitempty"`
 }
 
 // Config fetches config.json plus the installed versions.

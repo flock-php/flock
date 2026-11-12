@@ -688,7 +688,7 @@ func (d *daemon) reload() error {
 		status := api.SiteStatus{
 			Name: site.Name, Domain: domain, Path: site.Path, Secured: site.Secured, Parked: site.Parked,
 			Parent: site.Parent, Branch: site.Branch,
-			TLD: site.Suffix(cfg), SiteTLD: site.TLD,
+			TLD: site.Suffix(cfg), SiteTLD: site.TLD, SiteHost: site.Host, Title: site.Title,
 			PHP: version, PHPSource: phpVersion.Source, PHPPinned: phpVersion.Pinned, PHPFile: phpVersion.File,
 			Node: nodeVersion.Version, NodeSource: nodeVersion.Source, NodePinned: nodeVersion.Pinned, NodeFile: nodeVersion.File,
 			NodeShadowed: nodeVersion.Shadowed, Domains: []api.SiteDomain{},

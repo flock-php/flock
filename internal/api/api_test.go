@@ -133,7 +133,8 @@ func domainEntry(t *testing.T, b *fakeBackend, siteName, label, tld string) conf
 
 // statusRowsFromConfig mirrors the daemon's row assembly (daemon.go) into fakeBackend's static
 // sites, so a test can pin what SiteStatus shows after a mutation: the effective domain and
-// suffix, the raw site_tld override, and the resolved extra domains.
+// suffix, the raw site_tld and site_host overrides, the display title, and the resolved extra
+// domains.
 func statusRowsFromConfig(t *testing.T, b *fakeBackend) {
 	t.Helper()
 	cfg := b.config(t)
@@ -141,7 +142,8 @@ func statusRowsFromConfig(t *testing.T, b *fakeBackend) {
 	for _, site := range cfg.AllSites() {
 		row := SiteStatus{
 			Name: site.Name, Domain: cfg.Domain(site), Path: site.Path, Secured: site.Secured,
-			TLD: site.Suffix(cfg), SiteTLD: site.TLD, Domains: []SiteDomain{},
+			TLD: site.Suffix(cfg), SiteTLD: site.TLD, SiteHost: site.Host, Title: site.Title,
+			Domains: []SiteDomain{},
 		}
 		for _, e := range cfg.ExtraDomains(site) {
 			row.Domains = append(row.Domains, SiteDomain{Entry: e.Entry, Host: e.Host, Alias: e.Alias, Problem: e.Problem})
@@ -854,6 +856,212 @@ func TestSiteTLDPatchRefusesSelfCollision(t *testing.T) {
 	}
 }
 
+// TestSiteHostAndTitle pins the host override and the display title over the wire: PATCH host
+// "LIGA " is normalized, stored, and the row serves liga.test showing site_host; the RawMessage's
+// 3 states are exactly tld's (absent keeps, null keeps, "" is the default — the site name, and a
+// label equal to the name stores that canonical ""); HostLabelOK's refusals and the landing pair
+// siteHostClash runs (the CLI `flock site host`'s own) are 400s with config.json byte-identical;
+// title stores through config.SanitizeTitle VERBATIM — the API folds no whitespace (the CLI's
+// Fields-join is a shell-argv artifact) — drops control runes, and caps at 80 runes. POST create
+// takes both through the same validators, and the landing check now sees Host via Config.Domain.
+func TestSiteHostAndTitle(t *testing.T) {
+	b := &fakeBackend{root: t.TempDir()}
+	cfg := config.Default()
+	for _, s := range []config.Site{
+		{Name: "demo", Path: t.TempDir()},
+		{Name: "shop", Path: t.TempDir()},
+	} {
+		if err := cfg.Upsert(s); err != nil {
+			t.Fatal(err)
+		}
+	}
+	cfg.Proxies = append(cfg.Proxies, config.Proxy{Name: "api", Upstream: "http://127.0.0.1:3000"})
+	if err := cfg.Save(b.root); err != nil {
+		t.Fatal(err)
+	}
+	srv := serve(t, b, "")
+
+	// "LIGA " is normalized: stored "liga", the row serves liga.test and reports the raw
+	// override in site_host.
+	if resp, body := call(t, "PATCH", srv.URL+"/v1/sites/demo", "", `{"host":"LIGA "}`); resp.StatusCode != http.StatusOK {
+		t.Fatalf("host LIGA: %d %s", resp.StatusCode, body)
+	}
+	if site, _ := b.config(t).FindSite("demo"); site.Host != "liga" {
+		t.Fatalf("host not stored normalized: %+v", site)
+	}
+	statusRowsFromConfig(t, b)
+	if r := siteRow(t, statusRows(t, srv), "demo"); r.Domain != "liga.test" || r.SiteHost != "liga" {
+		t.Fatalf("row after host liga: %+v", r)
+	}
+
+	// The RawMessage's three states, exactly like tld: an explicit null keeps …
+	if resp, body := call(t, "PATCH", srv.URL+"/v1/sites/demo", "", `{"host":null,"node":"20"}`); resp.StatusCode != http.StatusOK {
+		t.Fatalf("host null: %d %s", resp.StatusCode, body)
+	}
+	// … an absent key keeps …
+	if resp, body := call(t, "PATCH", srv.URL+"/v1/sites/demo", "", `{"secured":true}`); resp.StatusCode != http.StatusOK {
+		t.Fatalf("secured: %d %s", resp.StatusCode, body)
+	}
+	if site, _ := b.config(t).FindSite("demo"); site.Host != "liga" || site.Node != "20" || !site.Secured {
+		t.Fatalf("null and absent host must keep the override: %+v", site)
+	}
+
+	// Equal to the current host is a store-only no-op: OK, and config.json byte-identical.
+	before := configBytes(t, b)
+	if resp, body := call(t, "PATCH", srv.URL+"/v1/sites/demo", "", `{"host":"LIGA "}`); resp.StatusCode != http.StatusOK {
+		t.Fatalf("host equal: %d %s", resp.StatusCode, body)
+	}
+	if !bytes.Equal(before, configBytes(t, b)) {
+		t.Fatal("a same-host patch changed config.json")
+	}
+
+	// "" is the default: the override leaves the config, and the row serves the site name.
+	if resp, body := call(t, "PATCH", srv.URL+"/v1/sites/demo", "", `{"host":""}`); resp.StatusCode != http.StatusOK {
+		t.Fatalf("host default: %d %s", resp.StatusCode, body)
+	}
+	site, _ := b.config(t).FindSite("demo")
+	if site.Host != "" {
+		t.Fatalf(`{"host":""} must clear the override: %+v`, site)
+	}
+	statusRowsFromConfig(t, b)
+	if r := siteRow(t, statusRows(t, srv), "demo"); r.Domain != "demo.test" || r.SiteHost != "" {
+		t.Fatalf("row after default: %+v", r)
+	}
+	// A label equal to the site's name is the default too: the canonical "" is stored, never
+	// a redundant Host:"demo" (sanitizeHost's form — the CLI resolves it the same way).
+	if resp, body := call(t, "PATCH", srv.URL+"/v1/sites/demo", "", `{"host":"demo"}`); resp.StatusCode != http.StatusOK {
+		t.Fatalf("host demo: %d %s", resp.StatusCode, body)
+	}
+	if site, _ := b.config(t).FindSite("demo"); site.Host != "" {
+		t.Fatalf(`a host equal to the site name must store the canonical "": %+v`, site)
+	}
+
+	// A non-label is a 400 naming the rule, config.json byte-identical; so is a non-string.
+	before = configBytes(t, b)
+	resp, body := call(t, "PATCH", srv.URL+"/v1/sites/demo", "", `{"host":"a.b"}`)
+	if resp.StatusCode != http.StatusBadRequest || !strings.Contains(body, "single label") {
+		t.Fatalf("host a.b: %d %s", resp.StatusCode, body)
+	}
+	if !bytes.Equal(before, configBytes(t, b)) {
+		t.Fatal(`{"host":"a.b"} changed config.json`)
+	}
+	if resp, body := call(t, "PATCH", srv.URL+"/v1/sites/demo", "", `{"host":123}`); resp.StatusCode != http.StatusBadRequest || !strings.Contains(body, "host must be a string") {
+		t.Fatalf("host 123: %d %s", resp.StatusCode, body)
+	}
+
+	// The rename applies the same pair the CLI runs: a host another site serves …
+	resp, body = call(t, "PATCH", srv.URL+"/v1/sites/demo", "", `{"host":"shop"}`)
+	if resp.StatusCode != http.StatusBadRequest || !strings.Contains(body, "shop.test is already served by site shop") {
+		t.Fatalf("host shop: %d %s", resp.StatusCode, body)
+	}
+	// … and a proxy's host; config.json stayed byte-identical through both refusals.
+	if resp, body := call(t, "PATCH", srv.URL+"/v1/sites/demo", "", `{"host":"api"}`); resp.StatusCode != http.StatusBadRequest || !strings.Contains(body, "api.test is already served by proxy api") {
+		t.Fatalf("host api: %d %s", resp.StatusCode, body)
+	}
+	if !bytes.Equal(before, configBytes(t, b)) {
+		t.Fatal("a refused rename changed config.json")
+	}
+
+	// A rename of a site that already claims one host twice (a pinned alias and the
+	// following alias of the same name — the CLI's rename keeps the self half too) is
+	// refused the self half of the pair, config byte-identical.
+	if err := b.Mutate(func(cfg *config.Config) error {
+		return cfg.Upsert(config.Site{Name: "twin", Path: t.TempDir(), TLD: "loc", Domains: []config.Domain{
+			{Label: "demo2", TLD: "loc", Alias: true},
+			{Label: "demo2", Alias: true},
+		}})
+	}); err != nil {
+		t.Fatal(err)
+	}
+	before = configBytes(t, b)
+	resp, body = call(t, "PATCH", srv.URL+"/v1/sites/twin", "", `{"host":"twin2"}`)
+	if resp.StatusCode != http.StatusBadRequest || !strings.Contains(body, "claimed twice") {
+		t.Fatalf("rename of a self-colliding site: %d %s", resp.StatusCode, body)
+	}
+	if !bytes.Equal(before, configBytes(t, b)) {
+		t.Fatal("the refused self-collision rename changed config.json")
+	}
+
+	// Title stores through config.SanitizeTitle verbatim: interior spaces are kept as sent
+	// (no folding), control runes drop without a space, the cap counts runes not bytes.
+	if resp, body := call(t, "PATCH", srv.URL+"/v1/sites/demo", "", `{"title":"a  b"}`); resp.StatusCode != http.StatusOK {
+		t.Fatalf("title a  b: %d %s", resp.StatusCode, body)
+	}
+	if site, _ := b.config(t).FindSite("demo"); site.Title != "a  b" {
+		t.Fatalf("title must store as sent: %+v", site)
+	}
+	if resp, body := call(t, "PATCH", srv.URL+"/v1/sites/demo", "", `{"title":"x\ny"}`); resp.StatusCode != http.StatusOK {
+		t.Fatalf("title x\\ny: %d %s", resp.StatusCode, body)
+	}
+	if site, _ := b.config(t).FindSite("demo"); site.Title != "xy" {
+		t.Fatalf("control runes must drop without a space: %+v", site)
+	}
+	if resp, body := call(t, "PATCH", srv.URL+"/v1/sites/demo", "", `{"title":`+jsonString(strings.Repeat("é", 100))+`}`); resp.StatusCode != http.StatusOK {
+		t.Fatalf("long title: %d %s", resp.StatusCode, body)
+	}
+	if site, _ := b.config(t).FindSite("demo"); site.Title != strings.Repeat("é", 80) {
+		t.Fatalf("title not capped at 80 runes: %q", site.Title)
+	}
+	// null keeps (as does absent), "" clears to the default (the site name).
+	if resp, body := call(t, "PATCH", srv.URL+"/v1/sites/demo", "", `{"title":null,"node":"20"}`); resp.StatusCode != http.StatusOK {
+		t.Fatalf("title null: %d %s", resp.StatusCode, body)
+	}
+	if site, _ := b.config(t).FindSite("demo"); site.Title != strings.Repeat("é", 80) {
+		t.Fatalf(`{"title":null} must keep: %+v`, site)
+	}
+	if resp, body := call(t, "PATCH", srv.URL+"/v1/sites/demo", "", `{"title":" CMS Liga "}`); resp.StatusCode != http.StatusOK {
+		t.Fatalf("title CMS Liga: %d %s", resp.StatusCode, body)
+	}
+	statusRowsFromConfig(t, b)
+	if r := siteRow(t, statusRows(t, srv), "demo"); r.Title != "CMS Liga" {
+		t.Fatalf("row title: %+v", r)
+	}
+	if resp, body := call(t, "PATCH", srv.URL+"/v1/sites/demo", "", `{"title":""}`); resp.StatusCode != http.StatusOK {
+		t.Fatalf("title clear: %d %s", resp.StatusCode, body)
+	}
+	if site, _ := b.config(t).FindSite("demo"); site.Title != "" {
+		t.Fatalf(`{"title":""} must clear to the default: %+v`, site)
+	}
+
+	// POST create takes both: host normalized (and canonical "" when equal to the name),
+	// title stored the same verbatim way, and the landing check — already wired for the
+	// primary host — now sees Host through Config.Domain.
+	project := t.TempDir()
+	if resp, body := call(t, "POST", srv.URL+"/v1/sites", "", `{"path":`+jsonString(project)+`,"name":"zoo","host":" LIGA2 ","title":" CMS  Liga "}`); resp.StatusCode != http.StatusOK {
+		t.Fatalf("create host+title: %d %s", resp.StatusCode, body)
+	}
+	if s, ok := b.config(t).FindSite("zoo"); !ok || s.Host != "liga2" || s.Title != "CMS  Liga" {
+		t.Fatalf("create stored wrong: %+v", s)
+	}
+	statusRowsFromConfig(t, b)
+	if r := siteRow(t, statusRows(t, srv), "zoo"); r.Domain != "liga2.test" || r.SiteHost != "liga2" || r.Title != "CMS  Liga" {
+		t.Fatalf("create row: %+v", r)
+	}
+	// A create whose host lands on a served name is refused like the patch, creating
+	// nothing, config.json byte-identical; a non-label is refused before anything.
+	before = configBytes(t, b)
+	resp, body = call(t, "POST", srv.URL+"/v1/sites", "", `{"path":`+jsonString(t.TempDir())+`,"name":"bad","host":"shop"}`)
+	if resp.StatusCode != http.StatusBadRequest || !strings.Contains(body, "shop.test is already served by site shop") {
+		t.Fatalf("create onto a served host: %d %s", resp.StatusCode, body)
+	}
+	if _, ok := b.config(t).FindSite("bad"); ok {
+		t.Fatal("the rejected create made a site")
+	}
+	if resp, body := call(t, "POST", srv.URL+"/v1/sites", "", `{"path":`+jsonString(t.TempDir())+`,"name":"nope","host":"a.b"}`); resp.StatusCode != http.StatusBadRequest || !strings.Contains(body, "single label") {
+		t.Fatalf("create host a.b: %d %s", resp.StatusCode, body)
+	}
+	if !bytes.Equal(before, configBytes(t, b)) {
+		t.Fatal("the rejected creates changed config.json")
+	}
+	// Absent host/title stay the defaults (the name; the keys never enter config.json).
+	if resp, body := call(t, "POST", srv.URL+"/v1/sites", "", `{"path":`+jsonString(t.TempDir())+`,"name":"plain2"}`); resp.StatusCode != http.StatusOK {
+		t.Fatalf("create plain: %d %s", resp.StatusCode, body)
+	}
+	if s, _ := b.config(t).FindSite("plain2"); s.Host != "" || s.Title != "" {
+		t.Fatalf("absent host/title must stay default: %+v", s)
+	}
+}
+
 // TestSettingsTLDRefusesSelfCollision pins the global switch's landing probe at the API:
 // a site whose following alias would ride onto its own pinned host makes the switch refuse,
 // config.json byte-identical — the same refusal the CLI `flock tld` gives.
@@ -1055,13 +1263,31 @@ func TestSiteTLDProxyCollision(t *testing.T) {
 }
 
 // TestSiteStatusJSONAdditive pins SiteStatus's wire format for old clients: the existing keys
-// keep their names and order byte for byte, and the new tld and site_tld keys append last.
+// keep their names and order byte for byte, the tld and site_tld keys append first, and the
+// additive site_host and title keys last — omitted (not just empty) when unset, so a legacy row
+// keeps its exact bytes even when the fields exist.
 func TestSiteStatusJSONAdditive(t *testing.T) {
 	row := SiteStatus{Name: "demo", Domain: "demo.loc", TLD: "loc", SiteTLD: "loc", Domains: []SiteDomain{}, Server: config.ServerFastCGI}
 	got, err := json.Marshal(row)
 	want := `{"name":"demo","domain":"demo.loc","path":"","php":"","php_source":"","php_pinned":"","php_file":"","node":"","node_source":"","node_pinned":"","node_file":"","node_shadowed":"","secured":false,"parked":false,"root":"","root_source":"","root_pinned":"","root_file":"","domains":[],"server":"fastcgi","worker":"","octane_available":false,"tld":"loc","site_tld":"loc"}`
 	if err != nil || string(got) != want {
 		t.Fatalf("got  %s\nwant %s", got, want)
+	}
+	// A row with the overrides set appends site_host and title after site_tld…
+	hostTitle := row
+	hostTitle.Domain = "liga.loc"
+	hostTitle.SiteHost = "liga"
+	hostTitle.Title = "CMS Liga"
+	want2 := `{"name":"demo","domain":"liga.loc","path":"","php":"","php_source":"","php_pinned":"","php_file":"","node":"","node_source":"","node_pinned":"","node_file":"","node_shadowed":"","secured":false,"parked":false,"root":"","root_source":"","root_pinned":"","root_file":"","domains":[],"server":"fastcgi","worker":"","octane_available":false,"tld":"loc","site_tld":"loc","site_host":"liga","title":"CMS Liga"}`
+	if got, err := json.Marshal(hostTitle); err != nil || string(got) != want2 {
+		t.Fatalf("host/title row: got  %s\nwant %s", got, want2)
+	}
+	// …and empty ones are omitted, byte for byte like the legacy row: the keys are absent,
+	// not blank, so old parsers never see them.
+	cleared := hostTitle
+	cleared.Domain, cleared.SiteHost, cleared.Title = "demo.loc", "", ""
+	if got, err := json.Marshal(cleared); err != nil || string(got) != want {
+		t.Fatalf("empty site_host/title must stay omitted: got  %s\nwant %s", got, want)
 	}
 }
 
