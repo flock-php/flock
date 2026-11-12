@@ -16,7 +16,7 @@
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
-                    <TextBlock Text="Host" /><TextBlock Grid.Column="1" Text="127.0.0.1" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                    <TextBlock Text="Host" VerticalAlignment="Center" /><TextBlock Grid.Column="1" Text="127.0.0.1" Foreground="{ThemeResource TextFillColorSecondaryBrush}" VerticalAlignment="Center" />
                 </Grid>
             </Border>
             <Border Style="{StaticResource CardStyle}">
@@ -24,7 +24,7 @@
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
-                    <TextBlock Text="Port" /><TextBlock Grid.Column="1" Text="{Binding Port}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                    <TextBlock Text="Port" VerticalAlignment="Center" /><TextBlock Grid.Column="1" Text="{Binding Port}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" VerticalAlignment="Center" />
                 </Grid>
             </Border>
             <Border Style="{StaticResource CardStyle}">
@@ -32,7 +32,7 @@
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
-                    <TextBlock Text="Status" />
+                    <TextBlock Text="Status" VerticalAlignment="Center" />
                     <Grid Grid.Column="1" ColumnSpacing="8" VerticalAlignment="Center">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="Auto" /><ColumnDefinition Width="Auto" />
@@ -63,7 +63,7 @@
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
-                    <TextBlock Text="Caught emails" /><TextBlock Grid.Column="1" Text="{Binding Count}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                    <TextBlock Text="Caught emails" VerticalAlignment="Center" /><TextBlock Grid.Column="1" Text="{Binding Count}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" VerticalAlignment="Center" />
                 </Grid>
             </Border>
             <Border Style="{StaticResource CardStyle}">
@@ -71,7 +71,7 @@
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
-                    <TextBlock Grid.Column="0" Text="Open Mail" /><Button Grid.Column="1" Content="Open Mail" Click="OpenMail" />
+                    <TextBlock Grid.Column="0" Text="Open Mail" VerticalAlignment="Center" /><Button Grid.Column="1" Content="Open Mail" Click="OpenMail" VerticalAlignment="Center" />
                 </Grid>
             </Border>
         </StackPanel>

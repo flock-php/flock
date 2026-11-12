@@ -273,22 +273,22 @@
                             <ColumnDefinition Width="*" />
                             <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
-                        <StackPanel Orientation="Horizontal" Spacing="8">
+                        <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
                             <FontIcon Glyph="{StaticResource GlyphBug}" FontFamily="{StaticResource SymbolsFont}" FontSize="14" />
-                            <TextBlock Text="Xdebug" />
+                            <TextBlock Text="Xdebug" VerticalAlignment="Center" />
                         </StackPanel>
-                        <ToggleSwitch Grid.Column="1" IsOn="{Binding Xdebug, Mode=TwoWay}" OnContent="" OffContent="" MinWidth="0" />
+                        <ToggleSwitch Grid.Column="1" IsOn="{Binding Xdebug, Mode=TwoWay}" OnContent="" OffContent="" MinWidth="0" VerticalAlignment="Center" />
                     </Grid>
                     <Grid>
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*" />
                             <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
-                        <StackPanel Orientation="Horizontal" Spacing="8">
+                        <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
                             <FontIcon Glyph="{StaticResource GlyphDownload}" FontFamily="{StaticResource SymbolsFont}" FontSize="14" />
-                            <TextBlock Text="Capture dumps" />
+                            <TextBlock Text="Capture dumps" VerticalAlignment="Center" />
                         </StackPanel>
-                        <ToggleSwitch Grid.Column="1" IsOn="{Binding Dumps, Mode=TwoWay}" IsEnabled="{Binding CaptureEnabled}" OnContent="" OffContent="" MinWidth="0" />
+                        <ToggleSwitch Grid.Column="1" IsOn="{Binding Dumps, Mode=TwoWay}" IsEnabled="{Binding CaptureEnabled}" OnContent="" OffContent="" MinWidth="0" VerticalAlignment="Center" />
                     </Grid>
                 </StackPanel>
 

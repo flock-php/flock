@@ -11,7 +11,7 @@
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
-                    <TextBlock Text="Status" />
+                    <TextBlock Text="Status" VerticalAlignment="Center" />
                     <Grid Grid.Column="1" ColumnSpacing="8" VerticalAlignment="Center">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="Auto" /><ColumnDefinition Width="Auto" />
@@ -26,7 +26,7 @@
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
-                    <TextBlock Text="Version" /><TextBlock Grid.Column="1" Text="{Binding VersionText}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                    <TextBlock Text="Version" VerticalAlignment="Center" /><TextBlock Grid.Column="1" Text="{Binding VersionText}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" VerticalAlignment="Center" />
                 </Grid>
             </Border>
             <Border Style="{StaticResource CardStyle}" Visibility="{Binding StatusVisibility}">
@@ -34,7 +34,7 @@
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
-                    <TextBlock Text="Process" /><TextBlock Grid.Column="1" Text="{Binding ProcessText}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                    <TextBlock Text="Process" VerticalAlignment="Center" /><TextBlock Grid.Column="1" Text="{Binding ProcessText}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" VerticalAlignment="Center" />
                 </Grid>
             </Border>
             <Border Style="{StaticResource CardStyle}">
@@ -42,12 +42,12 @@
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
-                    <StackPanel Spacing="1">
+                    <StackPanel Spacing="1" VerticalAlignment="Center">
                         <TextBlock Text="Restart" />
                         <TextBlock Text="Restarts the daemon and every service it runs." Style="{StaticResource CaptionTextBlockStyle}"
                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
                     </StackPanel>
-                    <Button Grid.Column="1" Command="{Binding RestartCommand}">
+                    <Button Grid.Column="1" Command="{Binding RestartCommand}" VerticalAlignment="Center">
                         <controls:BusyContent Text="Restart Daemon" BusyText="Restarting…" IsBusy="{Binding IsRestarting}" />
                     </Button>
                 </Grid>
@@ -73,11 +73,11 @@
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
-                    <StackPanel Spacing="1">
+                    <StackPanel Spacing="1" VerticalAlignment="Center">
                         <TextBlock Text="Folder" />
                         <TextBlock Text="{Binding Root}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextTrimming="CharacterEllipsis" />
                     </StackPanel>
-                    <Button Grid.Column="1" Content="Show in Explorer" Click="ShowRoot" />
+                    <Button Grid.Column="1" Content="Show in Explorer" Click="ShowRoot" VerticalAlignment="Center" />
                 </Grid>
             </Border>
         </StackPanel>
@@ -88,12 +88,12 @@
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
-                    <StackPanel Spacing="1">
+                    <StackPanel Spacing="1" VerticalAlignment="Center">
                         <TextBlock Text="Open Flock at sign-in" />
                         <TextBlock Text="Shows the Flock icon in the notification area when you sign in. The daemon itself always starts at sign-in."
                                    Style="{StaticResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
                     </StackPanel>
-                    <ToggleSwitch x:Name="Startup" Grid.Column="1" MinWidth="0" Toggled="StartupToggled" OnContent="" OffContent="" />
+                    <ToggleSwitch x:Name="Startup" Grid.Column="1" MinWidth="0" Toggled="StartupToggled" OnContent="" OffContent="" VerticalAlignment="Center" />
                 </Grid>
             </Border>
         </StackPanel>
@@ -105,13 +105,13 @@
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
-                    <StackPanel Spacing="1">
+                    <StackPanel Spacing="1" VerticalAlignment="Center">
                         <TextBlock Text="Beta versions" />
                         <TextBlock Text="Get new versions of Flock, PHP and services earlier, including pre-releases. They may not work yet."
                                    Style="{StaticResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
                     </StackPanel>
                     <ToggleSwitch x:Name="Beta" Grid.Column="1" MinWidth="0" IsOn="{Binding IsBeta}" IsEnabled="{Binding BetaEnabled}" Toggled="BetaToggled" OnContent=""
-                                  OffContent="" />
+                                  OffContent="" VerticalAlignment="Center" />
                 </Grid>
             </Border>
             <TextBlock Text="Experimental channel: packages that aren't released yet are offered. `flock channel stable` switches back."

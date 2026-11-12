@@ -204,8 +204,8 @@ impl Inner {
         let filter = gtk::Box::builder().css_classes(["linked"]).build();
         let installed = gtk::ToggleButton::builder().label("Installed").active(self.installed_only.get()).build();
         let all = gtk::ToggleButton::builder().label("All").group(&installed).active(!self.installed_only.get()).build();
-        filter.append(&installed);
         filter.append(&all);
+        filter.append(&installed);
         let this = self.clone();
         installed.connect_toggled(move |b| {
             this.installed_only.set(b.is_active());

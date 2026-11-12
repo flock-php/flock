@@ -3,6 +3,7 @@ using Flock.Tray.Infrastructure;
 using Flock.Tray.ViewModels;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Controls.Primitives;
 namespace Flock.Tray.Settings;
 
 internal sealed partial class NodePane : UserControl, ISettingsPane
@@ -78,7 +79,12 @@ internal sealed partial class NodePane : UserControl, ISettingsPane
             return;
         }
 
-        var menu = new MenuFlyout();
+        var menu = new MenuFlyout
+        {
+            Placement = FlyoutPlacementMode.BottomEdgeAlignedRight,
+            ShouldConstrainToRootBounds = true,
+            MenuFlyoutPresenterStyle = Ui.OpaqueMenuPresenterStyle(),
+        };
         if (row.CanUpdateNpm) menu.Items.Add(Item("Update npm", () => _ = row.UpdateNpmCommand.ExecuteAsync(null)));
         if (row.CanMakeDefault) menu.Items.Add(Item("Make default", () => _ = row.SetDefaultCommand.ExecuteAsync(null)));
         if (row.CanUninstall && row.HasUpdate) menu.Items.Add(Item("Uninstall…", () => _ = UninstallNodeAsync(row)));

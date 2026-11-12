@@ -18,12 +18,12 @@
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" />
                                 </Grid.ColumnDefinitions>
-                                <StackPanel Spacing="1">
+                                <StackPanel Spacing="1" VerticalAlignment="Center">
                                     <TextBlock Text="{Binding Name}" />
                                     <TextBlock Text="{Binding Description}" Style="{StaticResource CaptionTextBlockStyle}"
                                                Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
                                 </StackPanel>
-                                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8">
+                                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
                                     <Button Content="Add" Command="{Binding RegisterCommand}"
                                             Visibility="{Binding IsAvailable, Converter={StaticResource BooleanVisibilityConverter}}" />
                                     <Button Content="Remove" Command="{Binding UnregisterCommand}"

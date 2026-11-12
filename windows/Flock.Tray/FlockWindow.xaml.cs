@@ -67,6 +67,24 @@ internal abstract partial class FlockWindow : Window
         ExtendsContentIntoTitleBar = true;
         AppWindow.TitleBar.PreferredHeightOption = TitleBarHeightOption.Tall;
         SetTitleBar(titleBar);
+        root.Loaded += (_, _) => UpdateTitleBarTheme(root);
+        root.ActualThemeChanged += (sender, _) => UpdateTitleBarTheme(sender);
+        UpdateTitleBarTheme(root);
+    }
+
+    private void UpdateTitleBarTheme(FrameworkElement root)
+    {
+        var light = root.ActualTheme == ElementTheme.Light;
+        var titleBar = AppWindow.TitleBar;
+        var foreground = light ? Colors.Black : Colors.White;
+        titleBar.ButtonForegroundColor = foreground;
+        titleBar.ButtonHoverForegroundColor = foreground;
+        titleBar.ButtonPressedForegroundColor = foreground;
+        titleBar.ButtonInactiveForegroundColor = Colors.Gray;
+        titleBar.ButtonBackgroundColor = Colors.Transparent;
+        titleBar.ButtonInactiveBackgroundColor = Colors.Transparent;
+        titleBar.ButtonHoverBackgroundColor = light ? Microsoft.UI.ColorHelper.FromArgb(255, 230, 230, 230) : Microsoft.UI.ColorHelper.FromArgb(255, 55, 55, 55);
+        titleBar.ButtonPressedBackgroundColor = light ? Microsoft.UI.ColorHelper.FromArgb(255, 240, 240, 240) : Microsoft.UI.ColorHelper.FromArgb(255, 45, 45, 45);
     }
 
     private static string DisplayTitle(string title) => App.Current.Options.Identity.IsDevelopment ? title + " [Dev]" : title;

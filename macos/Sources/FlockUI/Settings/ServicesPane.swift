@@ -25,8 +25,8 @@ struct ServicesPane: View {
             HStack(alignment: .bottom, spacing: 12) {
                 PaneHeader(title: "Services", subtitle: "Databases, caches, search and the tools around your sites. Everything listens on 127.0.0.1 only.")
                 Picker("Show", selection: $filter) {
-                    Text("Installed").tag(ServiceFilter.installed)
                     Text("All").tag(ServiceFilter.all)
+                    Text("Installed").tag(ServiceFilter.installed)
                 }
                 .pickerStyle(.segmented)
                 .labelsHidden()

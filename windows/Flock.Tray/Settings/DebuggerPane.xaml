@@ -9,12 +9,12 @@
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
-                    <StackPanel Spacing="1">
+                    <StackPanel Spacing="1" VerticalAlignment="Center">
                         <TextBlock Text="Detect Xdebug requests" />
                         <TextBlock Text="Xdebug loads only for requests that ask for it, so everything else stays fast." Style="{StaticResource CaptionTextBlockStyle}"
                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
                     </StackPanel>
-                    <ToggleSwitch Grid.Column="1" MinWidth="0" IsOn="{Binding Enabled, Mode=TwoWay}" OnContent="" OffContent="" />
+                    <ToggleSwitch Grid.Column="1" MinWidth="0" IsOn="{Binding Enabled, Mode=TwoWay}" OnContent="" OffContent="" VerticalAlignment="Center" />
                 </Grid>
             </Border>
             <Border Style="{StaticResource CardStyle}">
@@ -22,13 +22,13 @@
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
-                    <StackPanel Spacing="1">
+                    <StackPanel Spacing="1" VerticalAlignment="Center">
                         <TextBlock Text="Detect PhpStorm breakpoints" />
                         <TextBlock Text="While a project has breakpoints in PhpStorm, every request to its site is debugged."
                                    Style="{StaticResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
                     </StackPanel>
                     <ToggleSwitch x:Name="Breakpoints" Grid.Column="1" MinWidth="0" IsOn="{Binding Breakpoints, Mode=TwoWay}" IsEnabled="{Binding Enabled}"
-                                  OnContent="" OffContent="" />
+                                  OnContent="" OffContent="" VerticalAlignment="Center" />
                 </Grid>
             </Border>
         </StackPanel>
@@ -42,10 +42,10 @@
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" />
                                 </Grid.ColumnDefinitions>
-                                <TextBlock Text="{Binding}" />
-                                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6">
-                                    <FontIcon Glyph="&#xEBE8;" FontFamily="{StaticResource SymbolsFont}" />
-                                    <TextBlock Text="Breakpoints in PhpStorm" Style="{StaticResource CaptionTextBlockStyle}" />
+                                <TextBlock Text="{Binding}" VerticalAlignment="Center" />
+                                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                                    <FontIcon Glyph="&#xEBE8;" FontFamily="{StaticResource SymbolsFont}" VerticalAlignment="Center" />
+                                    <TextBlock Text="Breakpoints in PhpStorm" Style="{StaticResource CaptionTextBlockStyle}" VerticalAlignment="Center" />
                                 </StackPanel>
                             </Grid>
                         </Border>
@@ -60,7 +60,7 @@
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
-                    <TextBlock Text="Client port" /><TextBlock Grid.Column="1" Text="9003" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                    <TextBlock Text="Client port" VerticalAlignment="Center" /><TextBlock Grid.Column="1" Text="9003" Foreground="{ThemeResource TextFillColorSecondaryBrush}" VerticalAlignment="Center" />
                 </Grid>
             </Border>
             <Border Style="{StaticResource CardStyle}">
@@ -68,7 +68,7 @@
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
-                    <TextBlock Text="Mode" /><TextBlock Grid.Column="1" Text="debug, develop" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                    <TextBlock Text="Mode" VerticalAlignment="Center" /><TextBlock Grid.Column="1" Text="debug, develop" Foreground="{ThemeResource TextFillColorSecondaryBrush}" VerticalAlignment="Center" />
                 </Grid>
             </Border>
             <Border Style="{StaticResource CardStyle}">

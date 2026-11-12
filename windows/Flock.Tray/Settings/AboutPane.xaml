@@ -9,7 +9,7 @@
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
-                    <TextBlock Text="App" /><TextBlock x:Name="AppVersion" Grid.Column="1" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                    <TextBlock Text="App" VerticalAlignment="Center" /><TextBlock x:Name="AppVersion" Grid.Column="1" Foreground="{ThemeResource TextFillColorSecondaryBrush}" VerticalAlignment="Center" />
                 </Grid>
             </Border>
             <Border Style="{StaticResource CardStyle}">
@@ -17,7 +17,7 @@
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
-                    <TextBlock Text="Daemon" /><TextBlock Text="{Binding DaemonVersion}" Grid.Column="1" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                    <TextBlock Text="Daemon" VerticalAlignment="Center" /><TextBlock Text="{Binding DaemonVersion}" Grid.Column="1" Foreground="{ThemeResource TextFillColorSecondaryBrush}" VerticalAlignment="Center" />
                 </Grid>
             </Border>
             <Border Style="{StaticResource CardStyle}">
@@ -25,11 +25,11 @@
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
-                    <StackPanel Spacing="1">
+                    <StackPanel Spacing="1" VerticalAlignment="Center">
                         <TextBlock Text="Data folder" />
                         <TextBlock Text="{Binding DataFolder}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextTrimming="CharacterEllipsis" />
                     </StackPanel>
-                    <Button Grid.Column="1" Content="Show in Explorer" Click="ShowDataFolder" />
+                    <Button Grid.Column="1" Content="Show in Explorer" Click="ShowDataFolder" VerticalAlignment="Center" />
                 </Grid>
             </Border>
             <Border Style="{StaticResource CardStyle}">
@@ -37,7 +37,7 @@
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
-                    <TextBlock Text="Flock documentation" /><Button Grid.Column="1" Content="Open" Click="OpenDocumentation" />
+                    <TextBlock Text="Flock documentation" VerticalAlignment="Center" /><Button Grid.Column="1" Content="Open" Click="OpenDocumentation" VerticalAlignment="Center" />
                 </Grid>
             </Border>
             <Border Style="{StaticResource CardStyle}">
@@ -45,12 +45,12 @@
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
-                    <StackPanel Spacing="1">
+                    <StackPanel Spacing="1" VerticalAlignment="Center">
                         <TextBlock Text="Discord" />
                         <TextBlock Text="Ask questions, share feedback and see what's coming." Style="{StaticResource CaptionTextBlockStyle}"
                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
                     </StackPanel>
-                    <Button Grid.Column="1" Content="Join" Click="OpenDiscord" />
+                    <Button Grid.Column="1" Content="Join" Click="OpenDiscord" VerticalAlignment="Center" />
                 </Grid>
             </Border>
             <Border Style="{StaticResource CardStyle}">
@@ -58,12 +58,12 @@
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
-                    <StackPanel Spacing="1">
+                    <StackPanel Spacing="1" VerticalAlignment="Center">
                         <TextBlock Text="Support Flock" />
                         <TextBlock Text="Flock is free and open source, forever. Sponsoring helps keep it maintained." Style="{StaticResource CaptionTextBlockStyle}"
                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
                     </StackPanel>
-                    <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8">
+                    <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
                         <Button Content="Star on GitHub" Click="StarOnGitHub" />
                         <Button Content="Sponsor" Click="Sponsor" />
                     </StackPanel>
@@ -74,12 +74,12 @@
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
-                    <StackPanel Spacing="1">
+                    <StackPanel Spacing="1" VerticalAlignment="Center">
                         <TextBlock Text="Found a bug?" />
                         <TextBlock Text="Opens a new GitHub issue with your versions filled in." Style="{StaticResource CaptionTextBlockStyle}"
                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
                     </StackPanel>
-                    <Button Grid.Column="1" Content="Report an issue" Click="ReportIssue" />
+                    <Button Grid.Column="1" Content="Report an issue" Click="ReportIssue" VerticalAlignment="Center" />
                 </Grid>
             </Border>
             <Border Style="{StaticResource CardStyle}">
@@ -87,12 +87,12 @@
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
-                    <StackPanel Spacing="1">
+                    <StackPanel Spacing="1" VerticalAlignment="Center">
                         <TextBlock Text="License" />
                         <TextBlock Text="Copyright © Guava s.r.o. Licensed under the AGPL-3.0." Style="{StaticResource CaptionTextBlockStyle}"
                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
                     </StackPanel>
-                    <Button Grid.Column="1" Content="View" Click="OpenLicense" />
+                    <Button Grid.Column="1" Content="View" Click="OpenLicense" VerticalAlignment="Center" />
                 </Grid>
             </Border>
         </StackPanel>
@@ -103,12 +103,12 @@
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
-                    <StackPanel Spacing="1">
+                    <StackPanel Spacing="1" VerticalAlignment="Center">
                         <TextBlock Text="Uninstall Flock" />
                         <TextBlock Text="Stops Flock and removes it from this PC. Your sites, databases and settings are kept."
                                    Style="{StaticResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
                     </StackPanel>
-                    <Button Grid.Column="1" Content="Uninstall Flock…" Click="ConfirmUninstallClicked" />
+                    <Button Grid.Column="1" Content="Uninstall Flock…" Click="ConfirmUninstallClicked" VerticalAlignment="Center" />
                 </Grid>
             </Border>
         </StackPanel>

@@ -82,7 +82,7 @@ internal sealed partial class ServicesPane : UserControl, ISettingsPane
 
     private void FilterChanged(SelectorBar sender, SelectorBarSelectionChangedEventArgs args)
     {
-        rows.ShowAll = sender.SelectedItem == Filter.Items[1];
+        rows.ShowAll = sender.SelectedItem == Filter.Items[0];
     }
 
     private void ModelChanged()
@@ -103,7 +103,7 @@ internal sealed partial class ServicesPane : UserControl, ISettingsPane
 
     private void SelectedServiceChanged(ServiceViewModel? service)
     {
-        Filter.SelectedItem = Filter.Items[rows.ShowAll ? 1 : 0];
+        Filter.SelectedItem = Filter.Items[rows.ShowAll ? 0 : 1];
         if (service is null)
         {
             DetailHost.Content = Ui.EmptyState(Ui.GlyphServer, "No services");
