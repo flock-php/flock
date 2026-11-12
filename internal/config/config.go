@@ -379,13 +379,24 @@ func siteForDir(sites []Site, dir string, pathOf func(Site) string) (Site, bool)
 }
 
 // Upsert adds or replaces a linked site by name. A worktree has no settings of its own to store:
-// it follows its parent site.
+// it follows its parent site. Replacing a site with a folder at a different path is refused:
+// two folders with the same name would otherwise silently overwrite each other, so only the
+// second one would be served. Re-linking the same folder stays allowed.
 func (c *Config) Upsert(site Site) error {
 	if site.IsWorktree() {
 		return fmt.Errorf("%s is a git worktree of %s and uses its settings — change them on %s", site.Name, site.Parent, site.Parent)
 	}
 	if _, ok := c.FindProxy(site.Name); ok {
 		return fmt.Errorf("%s is a proxy's name — remove it with `flock unproxy %s` first, or choose another name", site.Name, site.Name)
+	}
+	for _, s := range c.Sites {
+		// A parked directory with the same name is only a discovery: linking over
+		// it is the promotion to a linked site, and the parked folder stays parked.
+		// A linked site with the same name is a real collision — refusing keeps the
+		// first site from being silently overwritten by the second folder.
+		if s.Name == site.Name && !s.Parked && realPath(s.Path) != realPath(site.Path) {
+			return fmt.Errorf("%s is already linked to %s — unlink it first if you moved it, or link this folder under a different name", site.Name, s.Path)
+		}
 	}
 	for i, s := range c.Sites {
 		if s.Name == site.Name {

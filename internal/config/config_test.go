@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -63,6 +64,30 @@ func TestSiteForDirPicksDeepestMatch(t *testing.T) {
 func TestSiteNameSanitisesDirectoryNames(t *testing.T) {
 	if got := SiteName("My_App.v2"); got != "my-app-v2" {
 		t.Fatalf("got %q", got)
+	}
+}
+
+// Two folders with the same name must not silently overwrite each other: the
+// second link used to replace the first site, so only one of them was served.
+func TestUpsertRefusesSameNameForAnotherPath(t *testing.T) {
+	cfg := Default()
+	if err := cfg.Upsert(Site{Name: "platform", Path: "/projects/a/platform"}); err != nil {
+		t.Fatal(err)
+	}
+	// Re-linking the same folder with new settings stays allowed.
+	if err := cfg.Upsert(Site{Name: "platform", Path: "/projects/a/platform", Secured: true}); err != nil {
+		t.Fatalf("re-linking the same folder must stay allowed: %v", err)
+	}
+	if err := cfg.Upsert(Site{Name: "platform", Path: "/projects/b/platform"}); err == nil {
+		t.Fatal("linking a second folder under an existing site name must fail")
+	} else if !strings.Contains(err.Error(), "/projects/a/platform") {
+		t.Fatalf("error should name the site it would overwrite: %v", err)
+	}
+	if got := len(cfg.Sites); got != 1 {
+		t.Fatalf("want 1 site, got %d: %+v", got, cfg.Sites)
+	}
+	if got := cfg.Sites[0].Path; got != "/projects/a/platform" {
+		t.Fatalf("first site overwritten: %+v", cfg.Sites[0])
 	}
 }
 
