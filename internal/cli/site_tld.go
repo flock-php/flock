@@ -19,8 +19,8 @@ import (
 )
 
 // newSiteCommand builds `flock site`, the per-site controls: the domain suffix a site is
-// served under (tld) and its primary domain name (host). (The sites list itself is
-// `flock sites`.)
+// served under (tld), its primary domain name (host), and its display name (title). (The
+// sites list itself is `flock sites`.)
 func newSiteCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "site",
@@ -28,7 +28,7 @@ func newSiteCommand() *cobra.Command {
 		Args:  cobra.NoArgs,
 		RunE:  func(cmd *cobra.Command, _ []string) error { return cmd.Help() },
 	}
-	cmd.AddCommand(newSiteTLDCommand(), newSiteHostCommand())
+	cmd.AddCommand(newSiteTLDCommand(), newSiteHostCommand(), newSiteTitleCommand())
 	return cmd
 }
 
