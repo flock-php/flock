@@ -193,7 +193,9 @@ public sealed partial class SiteRowViewModel : ObservableObject
     public bool PhpPinnedHere => Snapshot.PhpPinnedHere;
     public bool NodePinnedHere => Snapshot.NodePinnedHere;
     public bool IsShared => Snapshot.IsShared;
-    public string ListTitle => Snapshot.IsWorktree ? Snapshot.WorktreeLabel : Name;
+    /// <summary>The row's name: a worktree is listed by its branch (as before), a site by its display
+    /// title, falling back to the site name (macOS's title.isEmpty ? name : title).</summary>
+    public string ListTitle => Snapshot.IsWorktree ? Snapshot.WorktreeLabel : Snapshot.Title.Length > 0 ? Snapshot.Title : Name;
     /// <summary>A worktree is indented under its site.</summary>
     public Thickness ListMargin => new(Snapshot.IsWorktree ? 20 : 0, 0, 0, 0);
     public bool IsSettingUp => Snapshot.Worktree is { IsBusy: true };
@@ -320,6 +322,7 @@ public sealed partial class SiteRowViewModel : ObservableObject
                || previous.Boost != current.Boost
                || !ShareEqual(previous.Share, current.Share)
                || previous.Parent != current.Parent
+               || previous.Title != current.Title
                || previous.Branch != current.Branch
                || !WorktreeEqual(previous.Worktree, current.Worktree);
     }

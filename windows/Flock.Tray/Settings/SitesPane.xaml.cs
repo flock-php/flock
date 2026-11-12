@@ -428,7 +428,7 @@ internal sealed partial class SitesPane : UserControl, ISettingsPane
         var panel = new StackPanel { Spacing = 20 };
 
         // Header: name, address and folder, and the site's actions.
-        var name = Ui.Row(8, Ui.Text(site.Name, "SubtitleTextBlockStyle", wrap: false));
+        var name = Ui.Row(8, Ui.Text(DisplayName(site), "SubtitleTextBlockStyle", wrap: false));
         if (site.Parked)
         {
             name.Children.Add(Ui.Badge("Project folder", Ui.Tone.Neutral));
@@ -1320,7 +1320,17 @@ internal sealed partial class SitesPane : UserControl, ISettingsPane
         var nodeMajor = Major(site.Node ?? "");
         var nodeFile = site.NodePinnedHere ? Path.GetFileName(site.NodeFile) : ".nvmrc";
 
-        // Pin and unpin items appear only when there is something to pin or unpin (the menu always has the domain items).
+        // Renames first: the display name through the API, the domain name through the bundled CLI. Worktrees
+        // never see this menu — the details route them to WorktreeDetail, which has no "…" button at all.
+        menu.Items.Add(Item("Rename…", () => Start(site.Name, () => RenameTitleAsync(site))));
+        if (site.Title.Length > 0)
+        {
+            menu.Items.Add(Item("Use the site name", () => Start(site.Name, () => Model.Sites.UpdateAsync(site.Name, new SiteChange(Title: "")))));
+        }
+        menu.Items.Add(Item("Change the domain name…", () => Start(site.Name, () => RenameHostAsync(site))));
+        menu.Items.Add(new MenuFlyoutSeparator());
+
+        // Pin and unpin items appear only when there is something to pin or unpin (the menu always has the rename items).
         if (site.Php.Length > 0 && !(site.PhpSource == Status.VersionSource.Project && site.PhpPinnedHere))
         {
             menu.Items.Add(Item($"Pin PHP {site.Php} to Project…", () => Start(site.Name, () => Pin(site, "php", site.Php,
@@ -1359,10 +1369,143 @@ internal sealed partial class SitesPane : UserControl, ISettingsPane
             }
         }
 
-        var button = Ui.IconButton(Ui.GlyphMore, "Pin versions and the document root to the project", () => { });
+        var button = Ui.IconButton(Ui.GlyphMore, "Rename the site, or pin versions and the document root to the project", () => { });
         button.Flyout = menu;
         button.IsEnabled = menu.Items.Count > 0;
         return button;
+    }
+
+    /// <summary>The site's display name: its title, or the site name when no title is set
+    /// (macOS's title.isEmpty ? name : title).</summary>
+    private static string DisplayName(Status.Site site) => site.Title.Length > 0 ? site.Title : site.Name;
+
+    /// <summary>
+    ///     Renames the display name (macOS's click-to-rename header): a plain API change — the title only
+    ///     changes what Flock shows, never what the site is served as. Empty means inherit again, which the
+    ///     wire spells "title":"" (Kit pins the empty-string three-state for tld and host the same way).
+    ///     A refusal lands in the window's error bar like every other site mutation; a success arrives
+    ///     with the next status poll.
+    /// </summary>
+    private async Task RenameTitleAsync(Status.Site site)
+    {
+        var title = new TextBox { Header = "Display name", PlaceholderText = site.Name, Text = site.Title };
+        var dialog = new ContentDialog
+        {
+            Title = $"Rename {DisplayName(site)}",
+            Content = Ui.Column(12,
+                Ui.Caption("Shown in Flock. Leave empty to use the site name.", Ui.TertiaryText),
+                title),
+            PrimaryButtonText = "Rename",
+            CloseButtonText = "Cancel",
+            DefaultButton = ContentDialogButton.Primary,
+            XamlRoot = Window.XamlRoot
+        };
+        if (await dialog.ShowAsync() != ContentDialogResult.Primary)
+        {
+            return;
+        }
+        await Model.Sites.UpdateAsync(site.Name, new SiteChange(Title: title.Text.Trim()));
+    }
+
+    /// <summary>
+    ///     Changes the domain name — the label the site is served as under its suffix (macOS's
+    ///     RenameHostSheet). Nothing is validated here: the bundled CLI's `flock site host` owns the label
+    ///     rules and retargets the site's and its worktrees' .env files in one run, so its output —
+    ///     refusals included — is what the user reads. Only a site that overrides the name today offers
+    ///     going back to the folder name.
+    /// </summary>
+    private async Task RenameHostAsync(Status.Site site)
+    {
+        var dns = Model.Status?.Dns;
+        var global = dns?.Tld is { Length: > 0 } tld ? tld : "test";
+        var suffix = site.Tld.Length > 0 ? site.Tld : global; // what it serves under (an old daemon names none)
+        var name = new TextBox
+        {
+            Header = "Domain name", PlaceholderText = site.Name,
+            Text = site.SiteHost.Length > 0 ? site.SiteHost : site.Name
+        };
+        var lands = Ui.Caption("", wrap: false);
+        var dialog = new ContentDialog
+        {
+            Title = $"Change the domain name of {DisplayName(site)}",
+            Content = Ui.Column(12,
+                name,
+                lands,
+                Ui.Caption($"The suffix stays .{suffix}; it is chosen on the site's Domain row.", Ui.TertiaryText)),
+            PrimaryButtonText = "Rename",
+            SecondaryButtonText = site.SiteHost.Length > 0 ? "Use the folder name" : "",
+            CloseButtonText = "Cancel",
+            DefaultButton = ContentDialogButton.Primary,
+            XamlRoot = Window.XamlRoot
+        };
+        void UpdateRename()
+        {
+            // Rename needs a label; whether it is a valid one is the CLI's call, not ours (macOS's canRename).
+            dialog.IsPrimaryButtonEnabled = name.Text.Trim().Length > 0;
+            lands.Text = $"The site will be served at {(name.Text.Trim() is { Length: > 0 } typed ? typed : "name")}.{suffix}";
+        }
+        name.TextChanged += (_, _) => UpdateRename();
+        UpdateRename();
+        var result = await dialog.ShowAsync();
+        if (result is not (ContentDialogResult.Primary or ContentDialogResult.Secondary))
+        {
+            return;
+        }
+        var arguments = result == ContentDialogResult.Secondary
+            ? new List<string> { "site", "host", "--default", site.Name }
+            : new List<string> { "site", "host", name.Text.Trim(), site.Name };
+        await RenameHostRunAsync(site, arguments);
+    }
+
+    /// <summary>
+    ///     The CLI run of a domain rename, in its own dialog (macOS's chained ProvisionSheet, T4's
+    ///     ProvisionSuffixAsync): a finished run closes the dialog by itself; a run that ended short keeps
+    ///     the CLI's own words, and a declined elevation prompt adds the finish step, as for the suffix switch.
+    /// </summary>
+    private async Task RenameHostRunAsync(Status.Site site, IReadOnlyList<string> arguments)
+    {
+        var running = Ui.Row(10, new ProgressRing { Width = 16, Height = 16 }, Ui.Caption("Flock is renaming the domain…", wrap: false));
+        var output = Ui.MonoText("", 12);
+        var box = Ui.Card(new ScrollViewer { MaxHeight = 160, HorizontalScrollBarVisibility = ScrollBarVisibility.Auto, Content = output }, new Thickness(12, 10));
+        var declined = Ui.Caption("", Ui.Caution);
+        box.Visibility = Visibility.Collapsed;
+        declined.Visibility = Visibility.Collapsed;
+        var dialog = new ContentDialog
+        {
+            Title = "Renaming the domain…",
+            Content = Ui.Column(10, running, box, declined),
+            CloseButtonText = "Hide",
+            DefaultButton = ContentDialogButton.Close,
+            XamlRoot = Window.XamlRoot
+        };
+        // Closing while the CLI runs is allowed (as in ProvisionSuffixAsync); the late success must not
+        // hide a dialog that is already gone.
+        var closed = false;
+        dialog.Closed += (_, _) => closed = true;
+        var run = domainApply.RunAsync(arguments);
+        var shown = dialog.ShowAsync().AsTask();
+        var (ok, wasDeclined, text) = await run;
+        if (ok)
+        {
+            if (!closed)
+            {
+                dialog.Hide();
+            }
+            await shown;
+            return;
+        }
+        // Ended short: the dialog keeps the CLI's own words, as the suffix switch and the chained install do.
+        dialog.Title = $"Renaming {site.Name}'s domain didn't finish";
+        running.Visibility = Visibility.Collapsed;
+        output.Text = text;
+        box.Visibility = Visibility.Visible;
+        dialog.CloseButtonText = "Close";
+        if (wasDeclined)
+        {
+            declined.Text = "You declined administrator approval. Finish by running `flock site host` in a terminal.";
+            declined.Visibility = Visibility.Visible;
+        }
+        await shown;
     }
 
     private async Task RemoveDomain(Status.Site site, Status.SiteDomain domain)
