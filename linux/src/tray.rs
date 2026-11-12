@@ -102,9 +102,14 @@ impl SiteItem {
             .collect()
     }
 
-    /// "softpack.test · Node.js 22.23.4": what answers at the upstream, or "· Not running".
+    /// "softpack.test · Node.js 22.23.4": what answers at the upstream, or "· Not running"; for a
+    /// server Flock starts with a command, its state ("· Starting…", "· Failed: …").
     fn proxy(proxy: &ProxyStatus) -> Self {
-        SiteItem { label: format!("{} · {}", proxy.domain, proxy.server_text()), url: proxy.url.clone(), worktrees: Vec::new() }
+        let state = match &proxy.command {
+            Some(command) if command.state != "running" => command.text(),
+            _ => proxy.server_text(),
+        };
+        SiteItem { label: format!("{} · {state}", proxy.domain), url: proxy.url.clone(), worktrees: Vec::new() }
     }
 
     /// "feature/auth", with its own database ("· copy") and its setup ("· Composer install…").
@@ -362,5 +367,13 @@ mod tests {
         assert_eq!(proxies[0].label, "blog.test · Not running");
         assert_eq!(proxies[0].url.as_deref(), Some("http://blog.test"));
         assert_eq!(proxies[1].label, "minio.test · Running");
+
+        // A server Flock starts shows its state until it runs.
+        let started: Status = serde_json::from_str(
+            r#"{"proxies":[{"name":"admin","domain":"admin.test","upstream":"http://127.0.0.1:8000","running":false,
+                "command":{"command":"python manage.py runserver 8000","dir":"/home/a/admin","state":"starting","log":"proxy-admin"}}]}"#,
+        )
+        .unwrap();
+        assert_eq!(SiteItem::proxy(&started.proxies[0]).label, "admin.test · Starting…");
     }
 }

@@ -35,7 +35,7 @@ jobs:
         if: github.event_name != 'pull_request'
         runs-on: macos-26
         # Holds the signing secrets; only what may be released runs in it (builds by hand stay unsigned).
-        environment: ${{ (github.event_name == 'merge_group' || inputs.version != '') && 'release' || '' }}
+        environment: ${{ (github.event_name == 'merge_group' || (inputs.version != '' && !startsWith(inputs.version, 'dev-'))) && 'release' || '' }}
         env:
             VERSION: ${{ inputs.version }}
             SIGNING: ${{ secrets.MACOS_CERTIFICATE_P12 != '' }}
@@ -56,12 +56,12 @@ jobs:
 
             # Builds by hand may be ad-hoc signed; what gets released may not.
             -   name: Require signing
-                if: env.SIGNING != 'true' && (github.event_name == 'merge_group' || inputs.version != '')
+                if: env.SIGNING != 'true' && (github.event_name == 'merge_group' || (inputs.version != '' && !startsWith(inputs.version, 'dev-')))
                 run: echo "::error::the MACOS_* signing secrets are not set" && exit 1
 
             # Without the key, the app would never update itself.
             -   name: Require the update key
-                if: env.SPARKLE_PUBLIC_KEY == '' && (github.event_name == 'merge_group' || inputs.version != '')
+                if: env.SPARKLE_PUBLIC_KEY == '' && (github.event_name == 'merge_group' || (inputs.version != '' && !startsWith(inputs.version, 'dev-')))
                 run: echo "::error::the SPARKLE_PUBLIC_KEY variable is not set (go run ./tools/release keygen)" && exit 1
 
             # Into a keychain of its own; build-app.sh signs with $SIGN_IDENTITY and notarizes with the

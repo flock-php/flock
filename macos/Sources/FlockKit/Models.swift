@@ -30,7 +30,7 @@ public struct Status: Decodable, Sendable, Equatable {
     /// Installed PHP versions whose build has no agent extension: they only capture dumps.
     public var captureUnsupported: [String]
     public var sites: [Site]
-    /// Names served by a server of their own, e.g. a Node.js dev server (`flock proxy`).
+    /// Names served by a server of their own, e.g. a dashboard or an object store (`flock proxy`).
     public var proxies: [Proxy]
     public var processes: [Process]
     public var warnings: [String]
@@ -72,7 +72,7 @@ public struct Status: Decodable, Sendable, Equatable {
         }
     }
 
-    /// A name served by a server of its own rather than by PHP, e.g. a Node.js dev server: every
+    /// A name served by a server of its own rather than by a site, e.g. a dashboard or an object store: every
     /// request, WebSocket upgrades included, passes to `upstream` with its Host header.
     public struct Proxy: Decodable, Sendable, Equatable, Identifiable {
         public var name: String
@@ -87,8 +87,79 @@ public struct Status: Decodable, Sendable, Equatable {
         /// "Node.js 22.23.4" for one of Flock's Node.js versions.
         public var running: Bool
         public var server: String?
+        /// The command Flock starts and stops the server with, when the proxy has one.
+        public var command: ProxyCommand?
 
         public var id: String { name }
+    }
+
+    /// The command that starts a proxy's server, and how that went.
+    public struct ProxyCommand: Decodable, Sendable, Equatable {
+        public var command: String
+        /// The folder it runs in.
+        public var dir: String
+        /// Set when the command starts the server in the background (`docker compose up -d`).
+        public var stopCommand: String?
+        public var state: State
+        /// Why it failed, or why it's still starting.
+        public var problem: String?
+        /// The name of its service log: the commands' output.
+        public var log: String
+
+        public enum State: String, Decodable, Sendable {
+            case stopped, starting, running, stopping, failed
+
+            public init(from decoder: Decoder) throws {
+                self = State(rawValue: try decoder.singleValueContainer().decode(String.self)) ?? .stopped
+            }
+        }
+    }
+
+    /// What a site is; the raw values are the API's. Daemons from before types say nothing: PHP.
+    public enum SiteType: String, Decodable, Sendable, Hashable {
+        case php
+        /// A Node.js app whose dev server Flock runs.
+        case node
+
+        public init(from decoder: Decoder) throws {
+            self = SiteType(rawValue: try decoder.singleValueContainer().decode(String.self)) ?? .php
+        }
+    }
+
+    /// A Node.js site's dev server, which Flock starts on the site's first request.
+    public struct SiteNodeServer: Decodable, Sendable, Equatable {
+        public var state: State
+        public var port: Int
+        public var command: String
+        /// Why it failed or can't start.
+        public var problem: String?
+        /// The name of its service log: its output.
+        public var log: String
+
+        public enum State: String, Decodable, Sendable {
+            /// Not running until the next request.
+            case sleeping
+            /// Runs, but doesn't answer yet.
+            case starting
+            case running
+            /// Exited; Flock starts it again after a while.
+            case failed
+
+            public init(from decoder: Decoder) throws {
+                self = State(rawValue: try decoder.singleValueContainer().decode(String.self)) ?? .sleeping
+            }
+        }
+
+        enum CodingKeys: String, CodingKey { case state, port, command, problem, log }
+
+        public init(from decoder: Decoder) throws {
+            let c = try decoder.container(keyedBy: CodingKeys.self)
+            state = try c.decodeIfPresent(State.self, forKey: .state) ?? .sleeping
+            port = try c.decodeIfPresent(Int.self, forKey: .port) ?? 0
+            command = try c.decodeIfPresent(String.self, forKey: .command) ?? ""
+            problem = try c.decodeIfPresent(String.self, forKey: .problem).flatMap { $0.isEmpty ? nil : $0 }
+            log = try c.decodeIfPresent(String.self, forKey: .log) ?? ""
+        }
     }
 
     /// One of a site's extra domains: a subdomain ("tenant1") or an alias ("my-app-2.test").
@@ -159,8 +230,14 @@ public struct Status: Decodable, Sendable, Equatable {
         public var branch: String
         /// How Flock set the worktree up; nil when it hasn't.
         public var worktree: WorktreeSetup?
+        /// A PHP site or a Node.js app; a Node.js app has `nodeServer` instead of the PHP settings.
+        public var type: SiteType
+        public var nodeServer: SiteNodeServer?
 
         public var id: String { name }
+
+        /// A Node.js app, served by its dev server.
+        public var isNode: Bool { type == .node }
 
         /// The site is reachable at a public share URL right now.
         public var shared: Bool { share?.state == .running }
@@ -199,6 +276,7 @@ public struct Status: Decodable, Sendable, Equatable {
             case name, domain, path, php, phpSource, phpPinned, phpFile, node, nodeSource, nodePinned, nodeFile, nodeShadowed
             case secured, parked, url, problem, notice, root, rootSource, rootPinned, rootFile, rootState, rootSuggestions
             case domains, debugging, server, worker, octaneAvailable, boost, share, parent, branch, worktree
+            case type, nodeServer
             case frankenPHP = "frankenphp"
         }
 
@@ -238,6 +316,8 @@ public struct Status: Decodable, Sendable, Equatable {
             parent = try c.decodeIfPresent(String.self, forKey: .parent).flatMap { $0.isEmpty ? nil : $0 }
             branch = try c.decodeIfPresent(String.self, forKey: .branch) ?? ""
             worktree = try c.decodeIfPresent(WorktreeSetup.self, forKey: .worktree)
+            type = try c.decodeIfPresent(SiteType.self, forKey: .type) ?? .php
+            nodeServer = try c.decodeIfPresent(SiteNodeServer.self, forKey: .nodeServer)
         }
     }
 

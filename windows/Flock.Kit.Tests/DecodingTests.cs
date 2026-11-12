@@ -262,6 +262,35 @@ public class DecodingTests
     }
 
     [Fact]
+    public void DecodesWhatFlockRunsForASiteOrProxy()
+    {
+        var status = FlockJson.Decode<Status>("""
+            {"version":"dev","pid":1,"started_at":"2026-10-13T14:10:01Z",
+             "sites":[{"name":"web","domain":"web.test","path":"C:\\code\\web","php":"","secured":true,"parked":true,"type":"node",
+                       "node":"22","node_server":{"state":"running","port":22417,"command":"npm run dev -- --port 22417","log":"node-web"}},
+                      {"name":"docs","domain":"docs.test","path":"C:\\code\\docs","php":"","secured":false,"parked":true,"type":"node",
+                       "node_server":{"state":"failed","port":22418,"command":"npm run dev -- --port 22418","problem":"node_modules is missing: run npm install in the project","log":"node-docs"}},
+                      {"name":"shop","domain":"shop.test","path":"C:\\code\\shop","php":"8.4","secured":false,"parked":true}],
+             "proxies":[{"name":"s3","domain":"s3.test","upstream":"http://127.0.0.1:9000","secured":false,"running":false,
+                         "command":{"command":"docker compose up -d","dir":"C:\\code\\s3","stop_command":"docker compose stop","state":"starting","log":"proxy-s3"}},
+                        {"name":"api","domain":"api.test","upstream":"http://127.0.0.1:8000","secured":false,"running":false}]}
+            """);
+
+        var web = status.Sites[0];
+        Assert.True(web.IsNode);
+        Assert.Equal(("Running on port 22417", false, true, true), (web.NodeServer!.StateLabel, web.NodeServer.CanStart, web.NodeServer.CanStop, web.NodeServer.CanRestart));
+        var docs = status.Sites[1].NodeServer!;
+        Assert.Equal(("Stopped: node_modules is missing: run npm install in the project", true, false), (docs.StateLabel, docs.CanStart, docs.CanStop));
+        // A site an older daemon sends without a type is a PHP site.
+        Assert.Equal((false, Status.SiteType.Php), (status.Sites[2].IsNode, status.Sites[2].Type));
+        Assert.Null(status.Sites[2].NodeServer);
+
+        var s3 = status.Proxies[0].Command!;
+        Assert.Equal(("docker compose stop", "Starting…", false, true, "proxy-s3"), (s3.StopCommand, s3.StateLabel, s3.CanStart, s3.CanStop, s3.Log));
+        Assert.Null(status.Proxies[1].Command);
+    }
+
+    [Fact]
     public void DecodesWhatRunsASite()
     {
         var status = FlockJson.Decode<Status>("""

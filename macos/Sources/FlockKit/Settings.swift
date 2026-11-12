@@ -185,6 +185,8 @@ public struct SettingsChange: Encodable, Sendable {
 /// Body of PATCH /v1/sites/{name}; nil fields are left out. An empty `php` means "use the default".
 /// `server` is "fastcgi" or "frankenphp", `worker` "" (classic) or "octane".
 public struct SiteChange: Encodable, Sendable {
+    /// "php" or "node": what the site is.
+    public var type: String?
     public var secured: Bool?
     public var php: String?
     public var node: String?
@@ -193,12 +195,38 @@ public struct SiteChange: Encodable, Sendable {
     /// The document root on this machine, relative to the project ("" lets the project or detection decide).
     public var root: String?
 
-    public init(secured: Bool? = nil, php: String? = nil, node: String? = nil, server: String? = nil, worker: String? = nil, root: String? = nil) {
+    public init(type: String? = nil, secured: Bool? = nil, php: String? = nil, node: String? = nil, server: String? = nil, worker: String? = nil, root: String? = nil) {
+        self.type = type
         self.secured = secured
         self.php = php
         self.node = node
         self.server = server
         self.worker = worker
         self.root = root
+    }
+}
+
+/// Body of PATCH /v1/proxies/{name}; nil fields are left out. An empty `command` removes the
+/// command, its folder and its stop command.
+public struct ProxyChange: Encodable, Sendable {
+    public var upstream: String?
+    public var secured: Bool?
+    public var command: String?
+    /// The absolute folder the command runs in.
+    public var dir: String?
+    /// For a command that starts the server in the background: the command that stops it.
+    public var stopCommand: String?
+
+    enum CodingKeys: String, CodingKey {
+        case upstream, secured, command, dir
+        case stopCommand = "stop_command"
+    }
+
+    public init(upstream: String? = nil, secured: Bool? = nil, command: String? = nil, dir: String? = nil, stopCommand: String? = nil) {
+        self.upstream = upstream
+        self.secured = secured
+        self.command = command
+        self.dir = dir
+        self.stopCommand = stopCommand
     }
 }

@@ -52,6 +52,10 @@ Visitors can't reach the Vite dev server, and Flock never exposes it: it can rea
 
 This works with Laravel's Vite plugin and its default `public/build` folder. With another setup, run your build yourself before sharing.
 
+## Node.js apps
+
+A [Node.js app](node.md#nodejs-apps) has no build to share: visitors reach its dev server, so they see changes right away, hot reload included. They also see what the dev server shows when something breaks, such as its error overlay and your source code, and Flock says so when you share. Dotfiles such as `.env` and `.git` stay blocked. The dev server keeps running while the share does.
+
 ## What visitors can't see
 
 Your local app is set up for development, so Flock locks a few things down for shared requests:

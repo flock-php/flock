@@ -340,7 +340,8 @@ public sealed class PanelSiteRow(PanelSiteValue value) : ObservableObject
     public bool HasUrl => Url is not null;
     public string SiteTooltip => Url ?? Problem ?? Path;
     public string SecurityGlyph => Secured ? "\uE72E" : "\uE774";
-    public string PhpLabel => $"PHP {Php}";
+    /// <summary>What runs the site: "PHP 8.4", or "Node.js 22" for a Node.js app.</summary>
+    public string PhpLabel => current.IsNode ? $"Node.js {current.Node}" : $"PHP {Php}";
     public string WorkerLabel => Worker == Status.SiteServer.Octane ? "Octane" : "FrankenPHP";
     public string ShareTooltip => $"Shared at {ShareUrl}";
     public Visibility ProblemVisibility => Problem is not null ? Visibility.Visible : Visibility.Collapsed;
@@ -348,6 +349,16 @@ public sealed class PanelSiteRow(PanelSiteValue value) : ObservableObject
     public Visibility FrankenPhpVisibility => IsFrankenPhp ? Visibility.Visible : Visibility.Collapsed;
     public Visibility SharedVisibility => IsShared ? Visibility.Visible : Visibility.Collapsed;
     public Brush SecurityBrush => (Brush)Application.Current.Resources[Secured ? "SystemFillColorSuccessBrush" : "TextFillColorSecondaryBrush"];
+    /// <summary>A Node.js site's dev server as a dot: sleeping, starting, running or failed.</summary>
+    public Visibility DotVisibility => current.NodeServer is not null ? Visibility.Visible : Visibility.Collapsed;
+    public string DotTooltip => current.NodeServer?.StateLabel ?? "";
+    public Brush DotBrush => (Brush)Application.Current.Resources[current.NodeServer?.State switch
+    {
+        Status.NodeServerState.Running => "SystemFillColorSuccessBrush",
+        Status.NodeServerState.Starting => "SystemFillColorCautionBrush",
+        Status.NodeServerState.Failed => "SystemFillColorCriticalBrush",
+        _ => "ControlStrongFillColorDisabledBrush",
+    }];
 
     public void Update(PanelSiteValue value)
     {
@@ -369,11 +380,19 @@ public sealed class PanelProxyRow(Status.Proxy proxy) : ObservableObject
     public string? Problem => current.Problem;
     public bool Running => current.Running;
     public string ServerLabel => current.ServerLabel;
-    public string Tooltip => Running ? $"{Url ?? Domain} → {current.Upstream}" : $"Nothing answers at {current.Upstream}. Start the server there.";
+    public string Tooltip => Running ? $"{Url ?? Domain} → {current.Upstream}"
+        : current.Command is { } command ? $"{command.StateLabel}. Start it in Settings → Sites."
+        : $"Nothing answers at {current.Upstream}. Start the server there.";
     public string SecurityGlyph => current.Secured ? "\uE72E" : "\uE774";
     public Visibility ProblemVisibility => Problem is not null ? Visibility.Visible : Visibility.Collapsed;
     public Brush SecurityBrush => (Brush)Application.Current.Resources[current.Secured ? "SystemFillColorSuccessBrush" : "TextFillColorSecondaryBrush"];
-    public Brush StatusBrush => (Brush)Application.Current.Resources[Running ? "SystemFillColorSuccessBrush" : "ControlStrongFillColorDisabledBrush"];
+    /// <summary>The command's state when Flock starts the server, else whether something answers.</summary>
+    public Brush StatusBrush => (Brush)Application.Current.Resources[current.Command?.State switch
+    {
+        Status.ProxyState.Failed => "SystemFillColorCriticalBrush",
+        Status.ProxyState.Starting or Status.ProxyState.Stopping => "SystemFillColorCautionBrush",
+        _ => Running ? "SystemFillColorSuccessBrush" : "ControlStrongFillColorDisabledBrush",
+    }];
 
     public void Update(Status.Proxy value)
     {

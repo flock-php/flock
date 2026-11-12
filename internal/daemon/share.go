@@ -36,6 +36,16 @@ func (d *daemon) StartShare(name string, allow []string, debug bool) error {
 			return fmt.Errorf("%s isn't served: %s", name, s.Problem)
 		}
 	}
+	if site.Kind() == config.TypeNode {
+		// Visitors reach the dev server: it runs while the share does (see sleepNodeSites).
+		if state, problem, done := d.wakeNode(name); done != nil {
+			done()
+		} else if state == api.NodeFailed {
+			return fmt.Errorf("%s's dev server can't run: %s", name, problem)
+		}
+		return d.shares.Start(share.Request{Site: name, Allow: allow, Debug: debug,
+			Warning: "Visitors reach the app's dev server, so they see its error overlay and source maps when something breaks."})
+	}
 	req := share.Request{Site: name, Allow: allow, Debug: debug}
 	if !debug && share.ConfigCached(site.Path) {
 		req.Warning = "The app's config is cached, so visitors get its own debug setting (APP_DEBUG). Run `php artisan config:clear` and share again to turn debug mode off for them."

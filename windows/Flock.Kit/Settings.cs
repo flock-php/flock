@@ -107,4 +107,10 @@ public sealed record SettingsChange(
 /// Body of PATCH /v1/sites/{name}; null fields are left out. An empty Php means "use the default";
 /// Server is "fastcgi" or "frankenphp", Worker "" (classic) or "octane" (see Status.SiteServer).
 /// </summary>
-public sealed record SiteChange(bool? Secured = null, string? Php = null, string? Node = null, string? Server = null, string? Worker = null, string? Root = null);
+public sealed record SiteChange(bool? Secured = null, string? Php = null, string? Node = null, string? Server = null, string? Worker = null, string? Root = null, string? Type = null);
+
+/// <summary>
+/// A change to a proxy (PATCH /v1/proxies/{name}); null fields stay as they are. An empty Command
+/// removes the command with its folder and stop command.
+/// </summary>
+public sealed record ProxyChange(string? Upstream = null, bool? Secured = null, string? Command = null, string? Dir = null, string? StopCommand = null);

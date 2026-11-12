@@ -26,6 +26,9 @@ internal sealed partial class SitesPane : UserControl, ISettingsPane
     private readonly HashSet<string> restarting = [];
     private readonly SitesViewModel viewModel;
     private bool active;
+    // The output of the selected Node.js site's dev server or proxy's command (see Output).
+    private OutputPanel? output;
+    private bool outputShown;
     private CancellationTokenSource? activeLifetime;
     private Task pendingSecure = Task.CompletedTask;
 
@@ -58,12 +61,14 @@ internal sealed partial class SitesPane : UserControl, ISettingsPane
         activeLifetime?.Dispose();
         activeLifetime = CancellationTokenSource.CreateLinkedTokenSource(hidden);
         ApplyStatus();
+        RefreshDetail(); // the output reads again
         await HandlePendingSecureAsync(hidden);
     }
 
     public Task ReleaseAsync()
     {
         active = false;
+        output?.Stop();
         activeLifetime?.Cancel();
         Model.Changed -= StateChanged;
         viewModel.SelectionChanged -= UpdateRetained;
@@ -73,6 +78,7 @@ internal sealed partial class SitesPane : UserControl, ISettingsPane
     public void Hidden()
     {
         active = false;
+        output?.Stop();
         activeLifetime?.Cancel();
     }
 
@@ -241,6 +247,16 @@ internal sealed partial class SitesPane : UserControl, ISettingsPane
 
     private void RefreshDetail()
     {
+        outputShown = false;
+        ShowDetail();
+        if (!outputShown)
+        {
+            output?.Stop();
+        }
+    }
+
+    private void ShowDetail()
+    {
         if (!loaded)
         {
             return;
@@ -300,14 +316,22 @@ internal sealed partial class SitesPane : UserControl, ISettingsPane
     private async Task AddProxyAsync()
     {
         var tld = Model.Status?.Dns.Tld is { Length: > 0 } t ? t : "test";
-        var name = new TextBox { Header = "Name", PlaceholderText = "my-app" };
-        var upstream = new TextBox { Header = "Upstream", PlaceholderText = "Port, host:port or URL, e.g. 3000" };
+        // The placeholders say what the fields take, so the form fits the smallest window (with the
+        // commands open, it scrolls there).
+        var name = new TextBox { Header = "Name", PlaceholderText = $"my-app → my-app.{tld}" };
+        var upstream = new TextBox { Header = "Upstream", PlaceholderText = "3000, host:port or URL" };
+        ToolTipService.SetToolTip(upstream, "A port means 127.0.0.1.");
+        // Optional, so collapsed: most proxies point at a server that runs anyway.
+        var commands = NewCommandFields(null);
+        var expander = new Expander
+        {
+            Header = "Commands (optional)", Content = commands.Panel, IsExpanded = false,
+            HorizontalAlignment = HorizontalAlignment.Stretch, HorizontalContentAlignment = HorizontalAlignment.Stretch,
+        };
         var dialog = new ContentDialog
         {
             Title = "Add a proxy",
-            Content = Ui.Column(12,
-                Ui.Text($"Flock serves <name>.{tld} from a server of its own, e.g. a Next.js, Nuxt or Vite dev server. A port means 127.0.0.1."),
-                name, upstream),
+            Content = Ui.DialogForm(Window.XamlRoot, Ui.Column(12, name, upstream, expander)),
             PrimaryButtonText = "Add",
             CloseButtonText = "Cancel",
             DefaultButton = ContentDialogButton.Primary,
@@ -323,7 +347,8 @@ internal sealed partial class SitesPane : UserControl, ISettingsPane
         {
             return;
         }
-        if (await Model.Sites.ProxyAsync(proxyName, proxyUpstream) == OperationOutcome.Succeeded)
+        var change = commands.Change;
+        if (await Model.Sites.ProxyAsync(proxyName, proxyUpstream, change.Command is { Length: > 0 } ? change : null) == OperationOutcome.Succeeded)
         {
             Select(proxyName);
         }
@@ -379,13 +404,15 @@ internal sealed partial class SitesPane : UserControl, ISettingsPane
         var upstream = Ui.MonoText(proxy.Upstream);
         upstream.VerticalAlignment = VerticalAlignment.Center;
         var change = Ui.Button("Change…", () => Start(proxy.Name, () => ChangeUpstreamAsync(proxy)));
+        var starts = proxy.Command is null ? " Flock doesn't start the server, so start it as usual, or give it commands below." : "";
         panel.Children.Add(Section("Proxy",
             Field("Server", server),
             Field("HTTPS", https),
             Field("Upstream", Ui.Row(8, upstream, change)),
             Ui.Caption(
-                $"Every request passes to the upstream with its Host header, WebSocket upgrades (hot reload) included. Flock doesn't start the server, so start it as usual. Until it answers, {proxy.Domain} shows a page saying so.",
+                $"Every request passes to the upstream with its Host header, WebSocket upgrades (hot reload) included.{starts} Until it answers, {proxy.Domain} shows a page saying so.",
                 Ui.TertiaryText)));
+        panel.Children.Add(ProxyCommandSection(proxy));
 
         var card = Ui.Card(panel, new Thickness(20, 16, 16, 20));
         card.VerticalAlignment = VerticalAlignment.Top;
@@ -438,8 +465,12 @@ internal sealed partial class SitesPane : UserControl, ISettingsPane
 
         var open = Ui.IconButton(Ui.GlyphOpen, $"Open {site.Url ?? site.Domain}", () => Model.Open(site));
         open.IsEnabled = site.Url is not null;
-        var actions = Ui.Row(0, open, Ui.IconButton(Ui.GlyphFolder, "Show in Explorer", () => Model.Reveal(site.Path)),
-            Ui.IconButton(Ui.GlyphPuzzle, "PHP extensions", () => Start("extensions:" + site.Name, () => ShowExtensions(site))), More(site));
+        var actions = Ui.Row(0, open, Ui.IconButton(Ui.GlyphFolder, "Show in Explorer", () => Model.Reveal(site.Path)));
+        if (!site.IsNode)
+        {
+            actions.Children.Add(Ui.IconButton(Ui.GlyphPuzzle, "PHP extensions", () => Start("extensions:" + site.Name, () => ShowExtensions(site))));
+        }
+        actions.Children.Add(More(site));
         if (!site.Parked)
         {
             actions.Children.Add(Ui.IconButton(Ui.GlyphDelete, "Remove site", () => Start(site.Name, () => RemoveSiteAsync(site))));
@@ -484,41 +515,51 @@ internal sealed partial class SitesPane : UserControl, ISettingsPane
         var addDomain = Ui.Link("Add Domain…", () => Start(site.Name, () => AddDomain(site)));
         addDomain.Padding = new Thickness(0);
         domains.Children.Add(addDomain);
-        var siteSection = Section("Site", Field("HTTPS", https), Field("Domains", domains));
+        var siteSection = Section("Site", Field("Type", TypePicker(site)), Field("HTTPS", https), Field("Domains", domains));
         if (Model.Status?.Dns is { Wildcard: false, WildcardProblem.Length: > 0 } dns)
         {
             siteSection.Children.Add(Ui.Caption($"Subdomains only work when you add them here: {dns.WildcardProblem}.", Ui.Caution));
         }
-        siteSection.Children.Add(Field("Root", RootPicker(site)));
-        foreach (var hint in RootHints(site))
+        // A Node.js app is served by its dev server, not from a folder.
+        if (!site.IsNode)
         {
-            siteSection.Children.Add(hint);
+            siteSection.Children.Add(Field("Root", RootPicker(site)));
+            foreach (var hint in RootHints(site))
+            {
+                siteSection.Children.Add(hint);
+            }
+            siteSection.Children.Add(Ui.Caption(
+                "The folder Flock serves the site from. One picked here applies on this machine only; pin it (…) to write it into .flockrc for everyone.", Ui.TertiaryText));
         }
-        siteSection.Children.Add(Ui.Caption(
-            "The folder Flock serves the site from. One picked here applies on this machine only; pin it (…) to write it into .flockrc for everyone.", Ui.TertiaryText));
         panel.Children.Add(siteSection);
         panel.Children.Add(Share(site));
 
-        // Versions: PHP and Node.js, with what pins or isolates them.
-        var phpPicker = Picker("PHP", php, site.PhpSource, site.PhpPinned, site.PhpFile, config?.DefaultPhp ?? "",
-            config?.Php.Select(p => p.Version).ToList() ?? [],
-            version => new SiteChange(Php: version), site.Name, value => row?.SetDraftPhp(value));
+        // Versions: PHP and Node.js, with what pins or isolates them (a Node.js app has no PHP).
         var nodePicker = Picker("Node", node, site.NodeSource, Major(site.NodePinned), site.NodeFile, config?.DefaultNode ?? "",
             config?.NodeMajors ?? [],
             version => new SiteChange(Node: version), site.Name, value => row?.SetDraftNode(value));
-        var versions = Section("Versions", Field("PHP", phpPicker), Field("Node.js", nodePicker));
+        var versions = Section("Versions");
+        if (!site.IsNode)
+        {
+            var phpPicker = Picker("PHP", php, site.PhpSource, site.PhpPinned, site.PhpFile, config?.DefaultPhp ?? "",
+                config?.Php.Select(p => p.Version).ToList() ?? [],
+                version => new SiteChange(Php: version), site.Name, value => row?.SetDraftPhp(value));
+            versions.Children.Add(Field("PHP", phpPicker));
+        }
+        versions.Children.Add(Field("Node.js", nodePicker));
         foreach (var hint in Hints(site))
         {
             versions.Children.Add(hint);
         }
-        versions.Children.Add(Ui.Caption(
-            "A version picked here applies on this machine only. To set it for everyone working on the project, pin it (…): PHP goes into .flockrc, Node.js into .nvmrc.",
+        versions.Children.Add(Ui.Caption(site.IsNode
+                ? "A version picked here applies on this machine only. To set it for everyone working on the project, pin it (…) into .nvmrc."
+                : "A version picked here applies on this machine only. To set it for everyone working on the project, pin it (…): PHP goes into .flockrc, Node.js into .nvmrc.",
             Ui.TertiaryText));
         panel.Children.Add(versions);
 
-        panel.Children.Add(Server(site, row));
+        panel.Children.Add(site.IsNode ? DevServer(site) : Server(site, row));
 
-        if (Boost(site) is { } boost)
+        if (!site.IsNode && Boost(site) is { } boost)
         {
             panel.Children.Add(Section("Laravel Boost", boost));
         }
@@ -1068,7 +1109,7 @@ internal sealed partial class SitesPane : UserControl, ISettingsPane
             menu.Items.Add(Item($"Pin Node {nodeMajor} to Project…", () => Start(site.Name, () => Pin(site, "node", nodeMajor,
                 $"Writes {nodeMajor} to {nodeFile} in {site.Path}. Commit it, and Flock, nvm and other Node tools use Node {nodeMajor} for this project."))));
         }
-        if (site.RootState is "" or Status.DocumentRootState.Empty && site.RootSource != Status.VersionSource.Project)
+        if (!site.IsNode && site.RootState is "" or Status.DocumentRootState.Empty && site.RootSource != Status.VersionSource.Project)
         {
             menu.Items.Add(Item($"Pin Document Root ({RootLabel(site.Root)}) to Project…", () => Start(site.Name, () => Pin(site, "root", site.Root,
                 $"Writes root={site.Root} to .flockrc in {site.Path}. Commit it, and everyone using Flock on this project serves it from {RootLabel(site.Root)}."))));

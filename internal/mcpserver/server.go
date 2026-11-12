@@ -42,6 +42,9 @@ type Daemon interface {
 
 	LinkSite(ctx context.Context, dir, name string) (api.Status, error)
 	Proxy(ctx context.Context, name, upstream string, secured *bool) (api.Status, error)
+	UpdateProxy(ctx context.Context, name string, change api.ProxyChange) (api.Status, error)
+	StartProxy(ctx context.Context, name string) (api.Status, error)
+	StopProxy(ctx context.Context, name string) (api.Status, error)
 	UpdateSite(ctx context.Context, name string, change api.SiteChange) (api.Status, error)
 	AddDomain(ctx context.Context, name, domain string) (api.Status, error)
 	PinSite(ctx context.Context, name, tool, version string) (api.Status, error)
@@ -50,6 +53,7 @@ type Daemon interface {
 	WorktreeSetup(ctx context.Context, path string) (api.WorktreeStatus, error)
 	UnpinSite(ctx context.Context, name, tool string) (api.Status, error)
 	RestartSite(ctx context.Context, name string) (api.Status, error)
+	StopSite(ctx context.Context, name string) (api.Status, error)
 	UpdateSettings(ctx context.Context, s api.Settings) (api.Status, error)
 }
 

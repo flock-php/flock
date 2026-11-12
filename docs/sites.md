@@ -70,10 +70,10 @@ Remove a link with `flock unlink [name]`.
 
 ## Proxying a local service
 
-Apps that aren't PHP, such as a Next.js, Nuxt or Vite dev server, an object store or a dashboard, run a server of their own on a port. A proxy passes a `.test` domain to that server, so the app gets a name, and HTTPS, like a site:
+Some servers aren't projects Flock serves: an object store such as MinIO, a dashboard, a Docker container, or a Go or Python app. They run a server of their own on a port. A proxy passes a `.test` domain to that server, so it gets a name, and HTTPS, like a site. A Next.js, Nuxt or Vite app in your projects is a site of its own instead: Flock runs its dev server (see [Node.js apps](node.md#nodejs-apps)).
 
 :::app
-On macOS, click **Add Proxy…** in **Settings → Sites**, and give a name and the port (or host:port or URL). Proxies are listed under the sites, here and in the Flock panel, with what serves them (for example Node.js 22, when it's one of Flock's versions) or **Not running**; select one to turn on HTTPS, change its upstream or remove it.
+Click **Add Proxy…** in **Settings → Sites**, and give a name and the port (or host:port or URL). Proxies are listed under the sites, here and in the Flock panel, with what serves them (for example Node.js 22, when it's one of Flock's versions) or **Not running**; select one to turn on HTTPS, change its upstream, give it commands or remove it.
 :::
 
 :::cli
@@ -91,9 +91,32 @@ A port means `127.0.0.1`; give a host and port (`localhost:5173`) or a URL (`htt
 `flock secure softpack` and `flock unsecure softpack` work on proxies too, `flock proxies` lists them with what serves them (or `not running`), and `flock unproxy softpack` removes one.
 :::
 
-Requests pass to the server with their `Host` header, so the app sees `softpack.test`, and WebSocket upgrades pass through too, so hot reload works. Some dev servers only answer the hosts they know: allow the domain in Vite's `server.allowedHosts`, or Next.js's `allowedDevOrigins`. Flock doesn't start the server, so start it as usual. Until it answers, the domain shows a page saying so, which switches to the app once it runs.
+Requests pass to the server with their `Host` header, so the app sees `softpack.test`, and WebSocket upgrades pass through too, so hot reload works. Some dev servers only answer the hosts they know: allow the domain in Vite's `server.allowedHosts`, or Next.js's `allowedDevOrigins`. Until the server answers, the domain shows a page saying so, which switches to the app once it runs.
 
 A proxy's name can't be a linked site's: Flock refuses it. A folder of the same name in a project folder is served by the proxy instead, so `flock proxy softpack 3000` works for `~/Code/softpack`; `flock unproxy softpack` serves the folder again.
+
+### Starting the server with Flock
+
+Flock doesn't start a proxy's server unless you give it the command that does. Then the proxy can be started and stopped from Flock, which runs the command in the folder you choose and shows its output. The command gets Flock's PHP and Node.js versions, as in your terminal, and `PORT` when the upstream is a port. Nothing starts by itself: a proxy's server runs from when you start it until you stop it, or Flock stops.
+
+A command such as `docker compose up -d` starts the server in the background and exits. Give such a command the one that stops the server as well (`docker compose stop`): Flock then runs one to start and the other to stop.
+
+:::app
+Open **Commands (optional)** in the **Add Proxy…** dialog, or select a proxy in **Settings → Sites** and click **Add Commands…**. Give the **Start** command, its **Folder** and, for a server that runs in the background, the **Stop** command. **Start** and **Stop** then sit next to the proxy's state, with the command's output below.
+:::
+
+:::cli
+```bash
+cd ~/Code/admin
+flock proxy admin 8000 --command "python manage.py runserver 8000"   # runs in the current folder, or --dir
+flock proxy start admin
+flock proxy stop admin
+
+flock proxy s3 9000 --command "docker compose up -d" --stop-command "docker compose stop"
+```
+
+`flock logs admin` shows the command's output, and `--command ""` removes the command.
+:::
 
 ## Custom Caddy directives
 
@@ -133,7 +156,7 @@ Site options such as `tls` and `handle_errors` aren't supported, and neither is 
 flock sites
 ```
 
-This lists every linked and parked site with its PHP version, URL and path, and every proxy with its URL and upstream.
+This lists every linked and parked site with its PHP version (its Node.js version for a Node.js app), URL and path, and every proxy with its URL and upstream.
 :::
 
 ## Document root

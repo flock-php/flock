@@ -152,12 +152,21 @@ internal sealed partial class SitesPane
             Field("Site", site)));
 
         // Settings: the site's, so they are changed there.
-        var settings = Section("Settings",
-            Field("PHP", Ui.Text($"PHP {worktree.Php}", wrap: false)),
-            Field("Node.js", Ui.Text(worktree.Node is { Length: > 0 } node ? $"Node {node}" : "None", wrap: false)),
-            Field("HTTPS", Ui.Text(worktree.Secured ? "On" : "Off", wrap: false)));
-        settings.Children.Add(Ui.Caption($"Uses {parent}'s settings: PHP, Node.js, HTTPS and the document root (versions the branch pins apply too). Change them on {parent}.", Ui.TertiaryText));
+        var settings = Section("Settings");
+        if (!worktree.IsNode)
+        {
+            settings.Children.Add(Field("PHP", Ui.Text($"PHP {worktree.Php}", wrap: false)));
+        }
+        settings.Children.Add(Field("Node.js", Ui.Text(worktree.Node is { Length: > 0 } node ? $"Node {node}" : "None", wrap: false)));
+        settings.Children.Add(Field("HTTPS", Ui.Text(worktree.Secured ? "On" : "Off", wrap: false)));
+        settings.Children.Add(Ui.Caption(worktree.IsNode
+            ? $"Uses {parent}'s settings: Node.js and HTTPS (a version the branch pins applies too). Change them on {parent}."
+            : $"Uses {parent}'s settings: PHP, Node.js, HTTPS and the document root (versions the branch pins apply too). Change them on {parent}.", Ui.TertiaryText));
         panel.Children.Add(settings);
+        if (worktree.IsNode)
+        {
+            panel.Children.Add(DevServer(worktree));
+        }
 
         panel.Children.Add(WorktreeDatabase(worktree));
         panel.Children.Add(WorktreeSetup(worktree));

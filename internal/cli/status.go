@@ -11,6 +11,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"flock/internal/api"
+	"flock/internal/config"
 	"flock/internal/project"
 	"flock/internal/share"
 )
@@ -119,14 +120,17 @@ func newSitesCommand() *cobra.Command {
 					if site.Problem != "" {
 						url = "⚠ " + site.Problem
 					}
-					version := site.PHP
+					version, root := site.PHP, rootColumn(docRootOf(site))
 					if site.Server == "frankenphp" {
 						version += " FrankenPHP"
 						if site.Worker == "octane" {
 							version += " (Octane)"
 						}
 					}
-					fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n", site.Name, version, url, rootColumn(docRootOf(site)), site.Path)
+					if site.Type == config.TypeNode {
+						version, root = "Node.js "+site.Node, "-"
+					}
+					fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n", site.Name, version, url, root, site.Path)
 				}
 				printProxyRows(w, proxyRows(&st, s.cfg))
 				return w.Flush()
@@ -138,7 +142,11 @@ func newSitesCommand() *cobra.Command {
 				if site.Secured {
 					scheme = "https"
 				}
-				fmt.Fprintf(w, "%s\t%s\t%s://%s\t%s\t%s\n", site.Name, s.cfg.PHPFor(site), scheme, s.cfg.Domain(site), rootColumn(project.RootFor(&site)), site.Path)
+				version, root := s.cfg.PHPFor(site), rootColumn(project.RootFor(&site))
+				if site.Kind() == config.TypeNode {
+					version, root = "Node.js "+s.cfg.NodeFor(site), "-"
+				}
+				fmt.Fprintf(w, "%s\t%s\t%s://%s\t%s\t%s\n", site.Name, version, scheme, s.cfg.Domain(site), root, site.Path)
 			}
 			printProxyRows(w, proxyRows(nil, s.cfg))
 			return w.Flush()

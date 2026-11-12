@@ -6,6 +6,7 @@
     <UserControl.Resources>
         <settings:BooleanVisibilityConverter x:Key="BooleanVisibilityConverter" /><settings:StringVisibilityConverter x:Key="StringVisibilityConverter" />
         <settings:InverseBooleanVisibilityConverter x:Key="InverseBooleanVisibilityConverter" />
+        <settings:ToneBrushConverter x:Key="ToneBrushConverter" />
     </UserControl.Resources>
     <Grid>
         <Grid ColumnSpacing="16" Visibility="{Binding HasSites, Converter={StaticResource BooleanVisibilityConverter}}">
@@ -19,7 +20,7 @@
                 <StackPanel Orientation="Horizontal" Spacing="8">
                     <Button Content="Add Site…" Click="AddSiteClicked" />
                     <Button Content="Add Proxy…" Click="AddProxyClicked"
-                            ToolTipService.ToolTip="Serve a server of its own, e.g. a Node.js dev server on a port, at a .test domain" />
+                            ToolTipService.ToolTip="Serve a server of its own, e.g. a dashboard or a Docker container, at a .test domain" />
                 </StackPanel>
                 <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" Margin="0,0,14,8">
                     <StackPanel>
@@ -33,10 +34,16 @@
                                     <StackPanel Spacing="1">
                                         <TextBlock Text="{Binding ListTitle}" Style="{StaticResource BodyStrongTextBlockStyle}" TextTrimming="CharacterEllipsis" />
                                         <TextBlock Text="{Binding Domain}" Style="{StaticResource CaptionTextBlockStyle}" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" />
-                                        <TextBlock Text="{Binding Problem}" Foreground="{ThemeResource SystemFillColorCautionBrush}" TextTrimming="CharacterEllipsis"
-                                                   Visibility="{Binding Problem, Converter={StaticResource StringVisibilityConverter}}" />
                                     </StackPanel>
+                                    <!-- A problem shows as an icon, as on proxies; the detail says it in full. -->
                                     <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="4">
+                                        <FontIcon Glyph="&#xE7BA;" FontFamily="{StaticResource SymbolsFont}" FontSize="12"
+                                                  Foreground="{ThemeResource SystemFillColorCautionBrush}" ToolTipService.ToolTip="{Binding Problem}"
+                                                  Visibility="{Binding HasProblem, Converter={StaticResource BooleanVisibilityConverter}}" />
+                                        <!-- A Node.js site's dev server: sleeping, starting, running or failed. -->
+                                        <Ellipse Width="8" Height="8" VerticalAlignment="Center" Fill="{Binding Dot, Converter={StaticResource ToneBrushConverter}}"
+                                                 ToolTipService.ToolTip="{Binding DotTooltip}"
+                                                 Visibility="{Binding HasDot, Converter={StaticResource BooleanVisibilityConverter}}" />
                                         <ProgressRing Width="12" Height="12" ToolTipService.ToolTip="{Binding SetupStep}"
                                                       Visibility="{Binding IsSettingUp, Converter={StaticResource BooleanVisibilityConverter}}" />
                                         <Border Style="{StaticResource BadgeStyle}" ToolTipService.ToolTip="{Binding DatabaseTooltip}"
@@ -74,12 +81,8 @@
                                         <FontIcon Glyph="&#xE7BA;" FontFamily="{StaticResource SymbolsFont}" FontSize="12"
                                                   Foreground="{ThemeResource SystemFillColorCautionBrush}" ToolTipService.ToolTip="{Binding Problem}"
                                                   Visibility="{Binding HasProblem, Converter={StaticResource BooleanVisibilityConverter}}" />
-                                        <Grid ToolTipService.ToolTip="{Binding ServerLabel}" VerticalAlignment="Center">
-                                            <Ellipse Width="8" Height="8" Fill="{ThemeResource SystemFillColorSuccessBrush}"
-                                                     Visibility="{Binding Running, Converter={StaticResource BooleanVisibilityConverter}}" />
-                                            <Ellipse Width="8" Height="8" Fill="{ThemeResource ControlStrongFillColorDisabledBrush}"
-                                                     Visibility="{Binding Running, Converter={StaticResource InverseBooleanVisibilityConverter}}" />
-                                        </Grid>
+                                        <Ellipse Width="8" Height="8" VerticalAlignment="Center" Fill="{Binding Dot, Converter={StaticResource ToneBrushConverter}}"
+                                                 ToolTipService.ToolTip="{Binding DotTooltip}" />
                                         <FontIcon Glyph="&#xE72E;" FontFamily="{StaticResource SymbolsFont}" FontSize="12" ToolTipService.ToolTip="Served over HTTPS"
                                                   Visibility="{Binding Secured, Converter={StaticResource BooleanVisibilityConverter}}" />
                                     </StackPanel>

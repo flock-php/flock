@@ -89,7 +89,7 @@ func TestAllSitesServesWorktreesUnderTheirSite(t *testing.T) {
 	if err := cfg.Upsert(Site{Name: "spike", Path: linked}); err != nil {
 		t.Fatal(err)
 	}
-	if err := cfg.Upsert(Site{Name: "acme", Path: repo, PHP: "8.4", Secured: true, Domains: []string{"tenant1"}}); err != nil {
+	if err := cfg.Upsert(Site{Name: "acme", Path: repo, Type: TypeNode, PHP: "8.4", Secured: true, Domains: []string{"tenant1"}}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -105,7 +105,7 @@ func TestAllSitesServesWorktreesUnderTheirSite(t *testing.T) {
 	if !ok || wt.Parent != "acme" || wt.Branch != "feature/auth" || wt.Path != filepath.Join(parked, "acme-auth") {
 		t.Fatalf("unexpected worktree: %+v", wt)
 	}
-	if cfg.Domain(wt) != "feature-auth.acme.test" || wt.PHP != "8.4" || !wt.Secured || len(wt.Domains) != 0 {
+	if cfg.Domain(wt) != "feature-auth.acme.test" || wt.Type != TypeNode || wt.PHP != "8.4" || !wt.Secured || len(wt.Domains) != 0 {
 		t.Errorf("a worktree is served under its site with the site's settings, not its domains: %+v", wt)
 	}
 	if s, ok := cfg.SiteForDir(filepath.Join(parked, "acme-auth", "app")); !ok || s.Name != "feature-auth.acme" {

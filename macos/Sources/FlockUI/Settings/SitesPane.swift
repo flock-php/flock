@@ -42,10 +42,8 @@ struct SitesPane: View {
         nonmutating set { sharingState.wrappedValue = newValue }
     }
 
-    /// The Add Proxy alert is open; its name and upstream typed so far.
+    /// The Add Proxy sheet is open.
     private let addingProxyState = State<Bool>(initialValue: false)
-    private let newProxyNameState = State<String>(initialValue: "")
-    private let newProxyUpstreamState = State<String>(initialValue: "")
     /// The proxy whose upstream is being changed, and the upstream typed so far.
     private let editingUpstreamState = State<String?>(initialValue: nil)
     private var editingUpstream: String? {
@@ -53,6 +51,14 @@ struct SitesPane: View {
         nonmutating set { editingUpstreamState.wrappedValue = newValue }
     }
     private let upstreamDraftState = State<String>(initialValue: "")
+    /// The proxy whose command is being changed.
+    private let editingCommandState = State<Status.Proxy?>(initialValue: nil)
+    /// The proxy whose server is starting or stopping, while the daemon answers.
+    private let proxyBusyState = State<String?>(initialValue: nil)
+    private var proxyBusy: String? {
+        get { proxyBusyState.wrappedValue }
+        nonmutating set { proxyBusyState.wrappedValue = newValue }
+    }
 
     var body: some View {
         let store = model.settings
@@ -65,7 +71,7 @@ struct SitesPane: View {
             HStack(alignment: .bottom) {
                 PaneHeader(title: "Sites", subtitle: "Sites you added one by one, plus every folder inside your project folders.")
                 Button("Add Proxy…") { addingProxyState.wrappedValue = true }
-                    .help("Serve a server of its own, e.g. a Node.js dev server on a port, at a .\(model.status?.dns.tld ?? "test") domain")
+                    .help("Serve a server of its own, e.g. a dashboard, an object store, a Docker container or a Go or Python app, at a .\(model.status?.dns.tld ?? "test") domain")
                     .padding(.bottom, 6)
                 Button("Add Site…") {
                     for url in SettingsStore.chooseDirectories(prompt: "Add", multiple: false) {
@@ -147,6 +153,14 @@ struct SitesPane: View {
         .sheet(item: extensionsState.projectedValue) { site in
             SiteExtensionsSheet(site: site)
         }
+        .sheet(item: editingCommandState.projectedValue) { proxy in
+            ProxyCommandSheet(proxy: proxy) { change in
+                editingCommandState.wrappedValue = nil
+                Task { await store.perform { _ = try await $0.updateProxy(proxy.name, change) } }
+            } cancel: {
+                editingCommandState.wrappedValue = nil
+            }
+        }
         .sheet(isPresented: Binding(get: { sharing != nil }, set: { if !$0 { sharing = nil } })) {
             ShareSheet(site: sharing ?? "") { allow, debug in
                 let name = sharing ?? ""
@@ -178,25 +192,15 @@ struct SitesPane: View {
         } message: {
             Text(domainHelp)
         }
-        .alert("Add a proxy", isPresented: addingProxyState.projectedValue) {
-            TextField("Name, e.g. my-app", text: newProxyNameState.projectedValue)
-            TextField("Port, host:port or URL, e.g. 3000", text: newProxyUpstreamState.projectedValue)
-            Button("Add") {
-                let name = newProxyNameState.wrappedValue.trimmingCharacters(in: .whitespaces)
-                let upstream = newProxyUpstreamState.wrappedValue.trimmingCharacters(in: .whitespaces)
-                newProxyNameState.wrappedValue = ""
-                newProxyUpstreamState.wrappedValue = ""
-                if !name.isEmpty, !upstream.isEmpty {
-                    selectionState.wrappedValue = name
-                    Task { await store.perform { _ = try await $0.proxy(name: name, upstream: upstream) } }
-                }
-            }
-            Button("Cancel", role: .cancel) {
-                newProxyNameState.wrappedValue = ""
-                newProxyUpstreamState.wrappedValue = ""
-            }
-        } message: {
-            Text("Flock serves <name>.\(model.status?.dns.tld ?? "test") from a server of its own, e.g. a Next.js, Nuxt or Vite dev server. A port means 127.0.0.1.")
+        .sheet(isPresented: addingProxyState.projectedValue) {
+            AddProxySheet(add: { name, upstream, command, dir, stop in
+                addingProxyState.wrappedValue = false
+                selectionState.wrappedValue = name
+                // With commands, one request makes the proxy and its commands.
+                Task { await store.perform { _ = try await $0.proxy(name: name, upstream: upstream, command: command, dir: dir, stopCommand: stop) } }
+            }, cancel: {
+                addingProxyState.wrappedValue = false
+            }, tld: model.status?.dns.tld ?? "test")
         }
         .alert("Change the upstream of \(editingUpstream ?? "")", isPresented: Binding(get: { editingUpstream != nil }, set: { if !$0 { editingUpstream = nil } })) {
             TextField("Port, host:port or URL", text: upstreamDraftState.projectedValue)
@@ -253,8 +257,10 @@ struct SitesPane: View {
             }
             Spacer(minLength: 4)
             if let problem = problem(site) {
-                Image(systemName: "exclamationmark.triangle.fill").font(.caption).foregroundStyle(.orange)
-                    .help(problem)
+                ProblemIcon(text: problem)
+            }
+            if let dot = site.stateDot {
+                StateDot(color: dot.color).help(dot.help)
             }
             if site.shared {
                 Badge(text: "Shared", color: .green)
@@ -280,13 +286,9 @@ struct SitesPane: View {
             }
             Spacer(minLength: 4)
             if let problem = proxy.problem {
-                Image(systemName: "exclamationmark.triangle.fill").font(.caption).foregroundStyle(.orange)
-                    .help(problem)
+                ProblemIcon(text: problem)
             }
-            Circle()
-                .fill(proxy.running ? Color.green : Color.secondary.opacity(0.5))
-                .frame(width: 6, height: 6)
-                .help(proxy.running ? proxy.server ?? "Running" : "Not running")
+            StateDot(color: proxy.stateDot.color).help(proxy.stateDot.help)
             if proxy.secured {
                 Image(systemName: "lock.fill").font(.caption).foregroundStyle(.secondary)
                     .help("Served over HTTPS")
@@ -325,7 +327,9 @@ struct SitesPane: View {
                     Button {
                         confirm = ConfirmAction(
                             title: "Remove \(proxy.name)?", button: "Remove", destructive: true,
-                            message: "Flock stops serving \(proxy.domain). The server at \(proxy.upstream) keeps running.",
+                            message: proxy.command == nil
+                                ? "Flock stops serving \(proxy.domain). The server at \(proxy.upstream) keeps running."
+                                : "Flock stops serving \(proxy.domain), and stops its server if Flock started it.",
                             run: { [name = proxy.name] client in try await client.removeProxy(name) })
                     } label: { Image(systemName: "minus.circle") }
                         .help("Remove proxy")
@@ -341,16 +345,20 @@ struct SitesPane: View {
 
             section("Proxy") {
                 field("Server") {
-                    VStack(alignment: .leading, spacing: 2) {
-                        HStack(spacing: 6) {
-                            Circle()
-                                .fill(proxy.running ? Color.green : Color.secondary.opacity(0.5))
-                                .frame(width: 7, height: 7)
-                            Text(proxy.running ? proxy.server ?? "Running" : "Not running")
-                        }
-                        if !proxy.running {
-                            Text("Nothing answers at \(upstreamLabel(proxy.upstream)) yet.")
-                                .font(.caption).foregroundStyle(.secondary)
+                    if let command = proxy.command {
+                        proxyCommandState(proxy, command)
+                    } else {
+                        VStack(alignment: .leading, spacing: 2) {
+                            HStack(spacing: 6) {
+                                Circle()
+                                    .fill(proxy.running ? Color.green : Color.secondary.opacity(0.5))
+                                    .frame(width: 7, height: 7)
+                                Text(proxy.running ? proxy.server ?? "Running" : "Not running")
+                            }
+                            if !proxy.running {
+                                Text("Nothing answers at \(upstreamLabel(proxy.upstream)) yet.")
+                                    .font(.caption).foregroundStyle(.secondary)
+                            }
                         }
                     }
                 }
@@ -373,10 +381,94 @@ struct SitesPane: View {
                         .controlSize(.small)
                     }
                 }
-                Text("Every request passes to the upstream with its Host header, WebSocket upgrades (hot reload) included. Flock doesn't start the server, so start it as usual. Until it answers, \(proxy.domain) shows a page saying so.")
+                Text(proxy.command == nil
+                     ? "Every request passes to the upstream with its Host header, WebSocket upgrades (hot reload) included. Flock doesn't start the server, so start it as usual, or give it commands below. Until it answers, \(proxy.domain) shows a page saying so."
+                     : "Every request passes to the upstream with its Host header, WebSocket upgrades (hot reload) included. Until it answers, \(proxy.domain) shows a page saying so.")
                     .font(.caption).foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
+
+            section("Commands") {
+                if let command = proxy.command {
+                    field("Start") {
+                        Text(command.command).font(.callout.monospaced()).textSelection(.enabled)
+                            .lineLimit(1).truncationMode(.middle)
+                    }
+                    if let stop = command.stopCommand, !stop.isEmpty {
+                        field("Stop") {
+                            Text(stop).font(.callout.monospaced()).textSelection(.enabled)
+                                .lineLimit(1).truncationMode(.middle)
+                        }
+                    }
+                    field("Folder") {
+                        Text(command.dir).font(.callout.monospaced()).textSelection(.enabled)
+                            .lineLimit(1).truncationMode(.middle)
+                            .help(command.dir)
+                    }
+                }
+                Button(proxy.command == nil ? "Add Commands…" : "Change…") { editingCommandState.wrappedValue = proxy }
+                    .controlSize(.small)
+                Text(proxyCommandsHelp)
+                    .font(.caption).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            if let command = proxy.command {
+                ServerOutput(log: command.log, live: command.state == .starting || command.state == .running || command.state == .stopping)
+            }
+        }
+    }
+
+    /// A proxy's server that Flock starts with its command: its state, and Start or Stop.
+    private func proxyCommandState(_ proxy: Status.Proxy, _ command: Status.ProxyCommand) -> some View {
+        let color: Color
+        let text: String
+        switch command.state {
+        case .stopped: (color, text) = (StateDot.stopped, "Stopped")
+        case .starting: (color, text) = (StateDot.busy, "Starting…")
+        case .running: (color, text) = (StateDot.running, "Running")
+        case .stopping: (color, text) = (StateDot.busy, "Stopping…")
+        case .failed: (color, text) = (StateDot.failed, command.problem.map { "Failed: \($0)" } ?? "Failed")
+        }
+        return VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 6) {
+                StateDot(color: color)
+                Text(text).textSelection(.enabled).fixedSize(horizontal: false, vertical: true)
+                switch command.state {
+                case .stopped, .failed:
+                    Button("Start") { runProxy(proxy.name, start: true) }
+                        .disabled(proxyBusy == proxy.name)
+                case .starting, .running:
+                    Button("Stop") { runProxy(proxy.name, start: false) }
+                        .disabled(proxyBusy == proxy.name)
+                case .stopping:
+                    EmptyView()
+                }
+                if proxyBusy == proxy.name {
+                    ProgressView().controlSize(.mini)
+                }
+            }
+            .controlSize(.small)
+            if command.state == .starting, let problem = command.problem {
+                Text(problem).font(.caption).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
+
+    /// Starts or stops a proxy's server.
+    private func runProxy(_ name: String, start: Bool) {
+        let store = model.settings
+        proxyBusy = name
+        Task {
+            await store.perform { client in
+                if start {
+                    _ = try await client.startProxy(name)
+                } else {
+                    _ = try await client.stopProxy(name)
+                }
+            }
+            proxyBusy = nil
         }
     }
 
@@ -404,7 +496,7 @@ struct SitesPane: View {
         if let domain = site.domains.first(where: { $0.problem != nil }) {
             return "\(domain.host): \(domain.problem ?? "")"
         }
-        if site.server == .frankenphp, let franken = site.frankenPHP, franken.state == .failed || franken.state == .unavailable,
+        if !site.isNode, site.server == .frankenphp, let franken = site.frankenPHP, franken.state == .failed || franken.state == .unavailable,
            !franken.problem.isEmpty {
             return franken.problem
         }
@@ -437,8 +529,10 @@ struct SitesPane: View {
                         .disabled(site.url == nil)
                     Button { reveal(site.path) } label: { Image(systemName: "folder") }
                         .help("Show in Finder")
-                    Button { extensionsState.wrappedValue = site } label: { Image(systemName: "puzzlepiece.extension") }
-                        .help("PHP extensions")
+                    if !site.isNode {
+                        Button { extensionsState.wrappedValue = site } label: { Image(systemName: "puzzlepiece.extension") }
+                            .help("PHP extensions")
+                    }
                     pinMenu(site)
                     if !site.parked {
                         Button {
@@ -460,6 +554,17 @@ struct SitesPane: View {
             }
 
             section("Site") {
+                field("Type") {
+                    Picker("Type", selection: Binding(
+                        get: { site.type },
+                        set: { type in Task { await store.perform { _ = try await $0.updateSite(site.name, SiteChange(type: type.rawValue)) } } }
+                    )) {
+                        Text("PHP").tag(Status.SiteType.php)
+                        Text("Node.js").tag(Status.SiteType.node)
+                    }
+                    .labelsHidden()
+                    .fixedSize()
+                }
                 field("HTTPS") {
                     Toggle("HTTPS", isOn: Binding(
                         get: { site.secured },
@@ -503,10 +608,12 @@ struct SitesPane: View {
                         .font(.caption).foregroundStyle(.orange)
                         .fixedSize(horizontal: false, vertical: true)
                 }
-                field("Root") {
-                    rootPicker(site)
+                if !site.isNode {
+                    field("Root") {
+                        rootPicker(site)
+                    }
+                    rootHints(site)
                 }
-                rootHints(site)
             }
 
             section("Share") {
@@ -514,10 +621,12 @@ struct SitesPane: View {
             }
 
             section("Versions") {
-                field("PHP") {
-                    versionPicker(label: "PHP", current: site.php, source: site.phpSource, pinned: site.phpPinned, file: site.phpFile,
-                                  defaultVersion: store.config?.defaultPHP ?? "", installed: phpVersions) { version in
-                        Task { await store.perform { _ = try await $0.updateSite(site.name, SiteChange(php: version)) } }
+                if !site.isNode {
+                    field("PHP") {
+                        versionPicker(label: "PHP", current: site.php, source: site.phpSource, pinned: site.phpPinned, file: site.phpFile,
+                                      defaultVersion: store.config?.defaultPHP ?? "", installed: phpVersions) { version in
+                            Task { await store.perform { _ = try await $0.updateSite(site.name, SiteChange(php: version)) } }
+                        }
                     }
                 }
                 field("Node.js") {
@@ -527,13 +636,19 @@ struct SitesPane: View {
                     }
                 }
                 hints(site)
-                Text("A version picked here applies on this machine only. To set it for everyone working on the project, pin it (\(Image(systemName: "pin"))): PHP goes into .flockrc, Node.js into .nvmrc.")
+                Text(site.isNode
+                     ? "A version picked here applies on this machine only. To set it for everyone working on the project, pin it (\(Image(systemName: "pin"))): Node.js goes into .nvmrc."
+                     : "A version picked here applies on this machine only. To set it for everyone working on the project, pin it (\(Image(systemName: "pin"))): PHP goes into .flockrc, Node.js into .nvmrc.")
                     .font(.caption).foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
 
-            section("Server") {
-                serverFields(site)
+            if site.isNode {
+                NodeDevServerSection(site: site)
+            } else {
+                section("Server") {
+                    serverFields(site)
+                }
             }
 
             if site.boost == .missing || site.boost == .outdated {
@@ -1022,9 +1137,10 @@ struct SitesPane: View {
     private func pinMenu(_ site: Status.Site) -> some View {
         let nodeMajor = major(site.node ?? "")
         let nodeFile = site.nodePinnedHere ? fileName(site.nodeFile) : ".nvmrc"
-        let canPinPHP = !(site.phpSource == .project && site.phpPinnedHere)
+        // A Node.js app has no PHP version or document root to pin.
+        let canPinPHP = !site.isNode && !(site.phpSource == .project && site.phpPinnedHere)
         let canPinNode = !nodeMajor.isEmpty && !(site.nodeSource == .project && site.nodePinnedHere)
-        let canPinRoot = (site.rootState == .ok || site.rootState == .empty) && site.rootSource != .project
+        let canPinRoot = !site.isNode && (site.rootState == .ok || site.rootState == .empty) && site.rootSource != .project
 
         return Menu {
             if canPinPHP {
