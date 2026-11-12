@@ -38,13 +38,20 @@ where they are.`,
 			}
 
 			words, siteName := "", ""
+			if !def {
+				words, siteName = titleWordsAndSite(s.cfg, args)
+			}
 			switch {
 			case def && len(args) > 1:
 				return fmt.Errorf("usage: flock site title --default [site]")
 			case def && len(args) == 1:
 				siteName = args[0]
-			case !def && len(args) == 0:
-				site, err := siteArg(s, nil)
+			case !def && words == "":
+				// With no words — no arguments at all, or only empty and whitespace ones
+				// (a quoted "" from a script) — show what the app lists the site as now,
+				// exactly as `flock site host ""` shows: empty words are not the clearing
+				// case, --default is.
+				site, err := siteArg(s, siteArgs(siteName))
 				if err != nil {
 					return err
 				}
@@ -54,8 +61,6 @@ where they are.`,
 					cmd.Printf("%s (site title; the site name is %s)\n", site.Title, site.Name)
 				}
 				return nil
-			case !def:
-				words, siteName = titleWordsAndSite(s.cfg, args)
 			}
 
 			title, changed, err := s.changeSiteTitle(words, siteName, def, cmd.OutOrStdout())
@@ -116,6 +121,12 @@ func (s *state) changeSiteTitle(raw, siteName string, def bool, out io.Writer) (
 		// first; SanitizeTitle then applies the stored-text rules (control runes dropped,
 		// trimmed, capped) exactly as Load does for a hand-edited config.json.
 		newTitle = config.SanitizeTitle(strings.Join(strings.Fields(raw), " "))
+		if newTitle == "" {
+			// Empty words are not the clearing case — --default clears (mirroring
+			// changeSiteHost's empty label): RunE routes the input to the show path, this
+			// usage error is the back-stop for direct callers.
+			return "", false, fmt.Errorf("usage: flock site title <words…> [site], or flock site title --default [site]")
+		}
 	}
 	if site.Title == newTitle {
 		if newTitle == "" {

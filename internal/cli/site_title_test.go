@@ -95,6 +95,28 @@ func TestChangeSiteTitleSetsSanitizedAndLeavesTheDomainAlone(t *testing.T) {
 	assertUntouched(t, envsBefore)
 }
 
+// TestChangeSiteTitleEmptyWordsIsAUsageError pins the symmetry with changeSiteHost: empty
+// words (nothing left after the folding) are NOT the clearing case — without --default the
+// core refuses them with the usage line, touching nothing. RunE routes the whole empty-words
+// input to the show path (`flock site title ""` shows, like `flock site host ""` shows);
+// the core check is the back-stop, exactly as for the host label. --default stays the one
+// way to hand the title back to the site name.
+func TestChangeSiteTitleEmptyWordsIsAUsageError(t *testing.T) {
+	s, demoDir, shopDir, wtDir := siteHostFixture(t)
+	untouched := snapshot(t, s, demoDir, shopDir, wtDir)
+	for _, raw := range []string{"", "   ", "\t\n"} {
+		var out strings.Builder
+		_, changed, err := s.changeSiteTitle(raw, "demo", false, &out)
+		if err == nil || !strings.Contains(err.Error(), "usage: flock site title") {
+			t.Errorf("empty words %q: got changed %v err %v, want a usage error", raw, changed, err)
+		}
+		if changed {
+			t.Errorf("empty words %q must change nothing", raw)
+		}
+	}
+	assertUntouched(t, untouched)
+}
+
 // TestChangeSiteTitleRefusesAWorktree: like host and tld, a worktree row is served and
 // shown through its parent — the title belongs to the parent site.
 func TestChangeSiteTitleRefusesAWorktree(t *testing.T) {
