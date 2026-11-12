@@ -5,7 +5,7 @@ Two parts: **A** is sandboxed to a temp home (safe any time, proves the app pick
 
 ## Part A — global TLD + app picker (Plans 1–2), temp home, zero production impact
 
-**App under test:** `build/macos/Flock.app` — build from 7b3ed0a (code) + docs-only after, 2026-11-12 (classes a–l run on it unchanged; m–o need it: the name/domain pencils). The website's
+**App under test:** `build/macos/Flock.app` — build from fd8ef81 (code), 2026-11-12 (classes a–l run on it unchanged; m–o need it: the name/domain pencils). The website's
 `settings-sites-add-domain` screenshot is stale: the PNGs show the old alert, shot before the
 Label + Suffix sheet — regen deferred to the website import (human).
 
