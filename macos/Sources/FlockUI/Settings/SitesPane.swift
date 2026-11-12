@@ -1815,6 +1815,7 @@ private struct RenameHostSheet: View {
                 HStack(spacing: 0) {
                     TextField(site.name, text: draftBinding)
                         .textFieldStyle(.plain)
+                        .multilineTextAlignment(.trailing)
                         .padding(.leading, 8)
                     Text(".\(site.tld.isEmpty ? (model.status?.dns.tld ?? "test") : site.tld)")
                         .foregroundStyle(.secondary)
