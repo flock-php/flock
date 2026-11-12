@@ -11,11 +11,12 @@ import (
 
 	"flock/internal/api"
 	"flock/internal/config"
+	"flock/internal/php"
 	"flock/internal/supervisor"
 )
 
 func TestReverbSiteRunsReverbStartOrSaysWhyNot(t *testing.T) {
-	d := &daemon{root: t.TempDir(), procs: supervisor.New(), restarts: map[string]int{"app": 5, "reverb-app": 2}}
+	d := &daemon{root: t.TempDir(), procs: supervisor.New(), restarts: map[string]int{"app": 5}, reverbRestarts: map[string]int{"app": 2}}
 	cfg := config.Default()
 	cfg.Ports.HTTPS = 8443
 	app := t.TempDir()
@@ -57,13 +58,16 @@ func TestReverbSiteRunsReverbStartOrSaysWhyNot(t *testing.T) {
 }
 
 func TestReleasingAPHPVersionStopsTheReverbServersOnIt(t *testing.T) {
-	cfg := config.Default()
-	cfg.DefaultPHP = "8.4"
-	cfg.Upsert(config.Site{Name: "app", Path: t.TempDir(), Reverb: true})
-	cfg.Upsert(config.Site{Name: "old", Path: t.TempDir(), PHP: "8.3", Reverb: true})
-	cfg.Upsert(config.Site{Name: "off", Path: t.TempDir()})
+	root := t.TempDir()
+	running := map[string]string{
+		"php8.4": php.CGIBinary(root, "8.4"), "php8.4-xdebug": php.CGIBinary(root, "8.4"), "php8.3": php.CGIBinary(root, "8.3"),
+		"dump-server": php.Binary(root, "8.4"),
+		// app's Reverb was started on 8.4. Its pin may say 8.5 by now: it still runs 8.4's php.
+		"reverb-app": php.Binary(root, "8.4"), "reverb-old": php.Binary(root, "8.3"),
+		"frankenphp-off": filepath.Join(root, "frankenphp", "8.4", "frankenphp"),
+	}
 
-	keep := notUsingPHP(cfg, "8.4", []string{"php8.4", "php8.4-xdebug", "php8.3", "dump-server", "reverb-app", "reverb-old", "frankenphp-off"})
+	keep := notUsingPHP(root, "8.4", running)
 
 	want := map[string]bool{"php8.4": false, "php8.4-xdebug": false, "php8.3": true, "dump-server": false,
 		"reverb-app": false, "reverb-old": true, "frankenphp-off": true}
@@ -72,8 +76,9 @@ func TestReleasingAPHPVersionStopsTheReverbServersOnIt(t *testing.T) {
 	}
 
 	// "" releases every version.
-	keep = notUsingPHP(cfg, "", []string{"php8.4", "php8.3", "dump-server", "reverb-app", "reverb-old", "frankenphp-off"})
-	want = map[string]bool{"php8.4": false, "php8.3": false, "dump-server": false, "reverb-app": false, "reverb-old": false, "frankenphp-off": true}
+	keep = notUsingPHP(root, "", running)
+	want = map[string]bool{"php8.4": false, "php8.4-xdebug": false, "php8.3": false, "dump-server": false,
+		"reverb-app": false, "reverb-old": false, "frankenphp-off": true}
 	if !maps.Equal(keep, want) {
 		t.Errorf("keep all = %v, want %v", keep, want)
 	}
@@ -96,7 +101,7 @@ func TestAnEnabledReverbServerSaysWhyItCantRun(t *testing.T) {
 }
 
 func TestABusyReverbPortIsAWarningSoTheReloadIsRetried(t *testing.T) {
-	d := &daemon{root: t.TempDir(), procs: supervisor.New(), restarts: map[string]int{}}
+	d := &daemon{root: t.TempDir(), procs: supervisor.New(), restarts: map[string]int{}, reverbRestarts: map[string]int{}}
 	cfg := config.Default()
 	app := t.TempDir()
 	for _, file := range []string{"artisan", filepath.Join("vendor", "laravel", "reverb", "composer.json")} {

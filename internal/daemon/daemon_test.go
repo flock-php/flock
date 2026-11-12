@@ -410,6 +410,22 @@ func TestProjectFilesFollowsTheConfiguredCaddyfile(t *testing.T) {
 	}
 }
 
+func TestProjectFilesNoticesReverbBeingInstalled(t *testing.T) {
+	site := t.TempDir()
+	d := daemon{cfg: &config.Config{Sites: []config.Site{{Name: "app", Path: site}}}}
+	before := d.projectFiles()
+
+	// composer require laravel/reverb changes no file the fingerprint watches otherwise.
+	writeFile(t, filepath.Join(site, "artisan"), "")
+	if err := os.MkdirAll(filepath.Join(site, "vendor", "laravel", "reverb"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeFile(t, filepath.Join(site, "vendor", "laravel", "reverb", "composer.json"), "{}")
+	if d.projectFiles() == before {
+		t.Fatal("installing Reverb did not change the project fingerprint")
+	}
+}
+
 func TestSiteHandlersProblemsLeaveTheSiteServedWithoutThem(t *testing.T) {
 	dir := t.TempDir()
 	cfg := &config.Config{}

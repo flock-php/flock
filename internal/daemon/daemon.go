@@ -79,9 +79,10 @@ type daemon struct {
 	// binaries is the manifest of prebuilt packages for the configured channel, shared by the managers.
 	binaries *binaries.Catalog
 	// frankenphp installs FrankenPHP builds; restarts counts RestartSite calls per site (see
-	// frankenphp.Site.Restart and reverb.Site.Restart).
-	frankenphp *frankenphp.Manager
-	restarts   map[string]int
+	// frankenphp.Site.Restart), reverbRestarts RestartReverb calls (see reverb.Site.Restart).
+	frankenphp     *frankenphp.Manager
+	restarts       map[string]int
+	reverbRestarts map[string]int
 	// pg manages the PostgreSQL versions, catalog the other services (MySQL, Valkey, Meilisearch, ...).
 	pg      *postgres.Manager
 	catalog *catalog.Manager
@@ -286,7 +287,8 @@ func Run(ctx context.Context, cfg Config) error {
 		return err
 	}
 
-	d := &daemon{root: cfg.Root, version: cfg.Version, startedAt: time.Now(), procs: supervisor.New(), leaves: certs.NewLeaves(), restarts: map[string]int{}}
+	d := &daemon{root: cfg.Root, version: cfg.Version, startedAt: time.Now(), procs: supervisor.New(), leaves: certs.NewLeaves(), restarts: map[string]int{},
+		reverbRestarts: map[string]int{}}
 	defer d.shutdown()
 
 	d.binaries = binaries.NewCatalog(binaries.DefaultSource(cfg.Root, cfg.Version), d.channel)
@@ -422,7 +424,8 @@ var projectWatchInterval = 3 * time.Second
 
 // projectFiles fingerprints the sites, so folders added to or removed from a parked path count,
 // their project files (.flockrc, .nvmrc, .node-version, also in parent directories) by size and
-// modification time, and which of the files that decide their document root exist.
+// modification time, which of the files that decide their document root exist, and whether the
+// project has Laravel Reverb, so installing it offers Reverb without another change.
 func (d *daemon) projectFiles() string {
 	d.mu.Lock()
 	cfg := d.cfg
@@ -433,7 +436,7 @@ func (d *daemon) projectFiles() string {
 	var b strings.Builder
 	seen := map[string]bool{}
 	for _, site := range cfg.AllSites() {
-		fmt.Fprintf(&b, "site %s %s\n", site.Name, site.Path)
+		fmt.Fprintf(&b, "site %s %s reverb=%t\n", site.Name, site.Path, reverb.Installed(site.Path))
 		for _, file := range project.Files(site.Path) {
 			if seen[file] {
 				continue
@@ -1242,27 +1245,17 @@ func (d *daemon) ReleasePHP(minor string) {
 	d.reloadMu.Lock()
 	defer d.reloadMu.Unlock()
 
-	d.mu.Lock()
-	cfg := d.cfg
-	d.mu.Unlock()
-	d.procs.Retain(notUsingPHP(cfg, minor, d.procs.Running()))
+	d.procs.Retain(notUsingPHP(d.root, minor, d.procs.Paths()))
 }
 
-// notUsingPHP marks which of the running processes don't run PHP minor: the dump server, the
-// version's pools and the Reverb servers of the sites on it do.
-func notUsingPHP(cfg *config.Config, minor string, running []string) map[string]bool {
-	// A site's Reverb server is a php.exe of the site's version, named after the site.
-	reverbs := map[string]bool{}
-	if cfg != nil {
-		for _, site := range cfg.AllSites() {
-			if site.Reverb && (minor == "" || project.PHPFor(cfg, &site, site.Path).Version == minor) {
-				reverbs[config.ReverbPortID(site.Name)] = true
-			}
-		}
-	}
+// notUsingPHP marks which of the running processes (name → executable) don't run PHP minor: the
+// dump server, the version's pools, and whatever was started with one of its binaries, such as a
+// site's Reverb server. That is the version it runs, even when the project's pin changed since.
+func notUsingPHP(root, minor string, running map[string]string) map[string]bool {
+	dir := php.Dir(root, minor) + string(filepath.Separator)
 	keep := map[string]bool{}
-	for _, name := range running {
-		keep[name] = !(name == "dump-server" || strings.HasPrefix(name, "php"+minor) || reverbs[name])
+	for name, path := range running {
+		keep[name] = !(name == "dump-server" || strings.HasPrefix(name, "php"+minor) || strings.HasPrefix(path, dir))
 	}
 	return keep
 }
