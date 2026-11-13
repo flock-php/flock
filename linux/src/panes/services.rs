@@ -16,7 +16,7 @@ use crate::api::{
     Catalog, CatalogEntry, CatalogLine, Client, Error, PostgresCustomExtension, PostgresExtension, PostgresExtensions, PostgresMajor,
     PostgresVersions, Service, extension_titles,
 };
-use crate::i18n::{tr, trc};
+use crate::i18n::tr;
 use crate::links::{self, Link};
 use crate::model::AppModel;
 use crate::paths;

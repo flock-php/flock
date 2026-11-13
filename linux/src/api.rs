@@ -7,7 +7,7 @@ use std::time::Duration;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 
-use crate::i18n::{tr, tr_noop, trc};
+use crate::i18n::{tr, tr_noop};
 use crate::paths;
 
 #[derive(Debug, Clone, PartialEq)]
