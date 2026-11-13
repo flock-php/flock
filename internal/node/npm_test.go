@@ -75,6 +75,18 @@ func TestNpmPrefersTheUpdatedOne(t *testing.T) {
 	}
 }
 
+func TestNpxUsesTheUpdatedOne(t *testing.T) {
+	root := t.TempDir()
+	writePackage(t, filepath.Join(modulesDir(VersionDir(root, "26.1.0")), "npm"), "11.20.0")
+	if got := Npx(root, "26.1.0"); filepath.Base(got) != "npx-cli.js" {
+		t.Fatalf("bundled npx: %q", got)
+	}
+	writePackage(t, filepath.Join(modulesDir(GlobalDir(root, "26")), "npm"), "12.2.0")
+	if got := Npx(root, "26.1.0"); filepath.Dir(got) != filepath.Join(modulesDir(GlobalDir(root, "26")), "npm", "bin") {
+		t.Fatalf("updated npx: %q", got)
+	}
+}
+
 func TestLinkCurrentFollowsTheDefault(t *testing.T) {
 	root := t.TempDir()
 	for _, major := range []string{"22", "24"} {

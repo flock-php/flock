@@ -57,6 +57,17 @@ func Npm(root, version string) (npmVersion, cli string) {
 	return "", ""
 }
 
+// Npx returns the npx CLI script from the npm package used by a version.
+func Npx(root, version string) string {
+	for _, dir := range []string{GlobalDir(root, MajorOf(version)), VersionDir(root, version)} {
+		pkg := filepath.Join(modulesDir(dir), "npm")
+		if packageVersion(pkg) != "" {
+			return filepath.Join(pkg, "bin", "npx-cli.js")
+		}
+	}
+	return ""
+}
+
 func packageVersion(dir string) string {
 	data, err := os.ReadFile(filepath.Join(dir, "package.json"))
 	if err != nil {
