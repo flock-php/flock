@@ -111,7 +111,7 @@ struct SuffixPicker: View {
 
     /// The domains the menu offers (also its menu rows, below); the config can hold any other
     /// one, which the custom field edits.
-    static let presets = ["alt", "example", "internal", "loc", "test"]
+    static let presets = ["example", "internal", "loc", "test"]
 
     var body: some View {
         @Bindable var model = suffixModel
