@@ -588,8 +588,6 @@ pub struct SettingsChange {
 /// are dropped from the JSON when there is none.
 #[derive(Deserialize, Debug, Clone, PartialEq, Default)]
 #[serde(default)]
-// Returned by check_tld alone until the picker from plan 3d's tasks 2-4 asks for it.
-#[allow(dead_code)]
 pub struct TldCheck {
     pub ok: bool,
     pub normalized: String,

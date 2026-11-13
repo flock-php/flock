@@ -11,6 +11,7 @@ pub mod node;
 pub mod php;
 pub mod services;
 pub mod sites;
+pub mod suffix;
 mod versions;
 mod worktree_job;
 
