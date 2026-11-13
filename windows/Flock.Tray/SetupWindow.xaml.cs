@@ -14,6 +14,7 @@ internal sealed partial class SetupWindow : FlockWindow
     private List<ConflictingApp> conflicts = [];
     private string defaultPhp = "", defaultNode = "";
     private string output = "";
+    private bool declined;
     private bool sawDefaults;
     private Stage stage;
     private string? startupProblem;
@@ -43,7 +44,6 @@ internal sealed partial class SetupWindow : FlockWindow
         }
         if (value == Stage.Failed)
         {
-            var declined = output.Contains("administrator permission was declined", StringComparison.Ordinal);
             FailedMessage.Text = declined
                 ? "Windows' permission prompt was declined. Flock runs, but *.test sites won't resolve and HTTPS isn't trusted until you allow it."
                 : "Something went wrong. The output below says what; you can try again.";
@@ -76,6 +76,7 @@ internal sealed partial class SetupWindow : FlockWindow
             LogText.Text = output.TrimEnd();
         }, retry: retry);
         output = result.Output;
+        declined = result.PermissionDeclined;
         LogText.Text = output;
 
         model.NeedsSetup = !await model.Installation.IsSetUpAsync();

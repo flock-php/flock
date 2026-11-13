@@ -40,9 +40,11 @@ pub fn aur_package() -> Option<&'static str> {
         .as_deref()
 }
 
-/// The outcome of running flock: whether it succeeded and what it printed.
+/// The outcome of running flock: whether it succeeded, how it exited and what it printed.
 pub struct Output {
     pub ok: bool,
+    /// The exit code, None when flock didn't run or a signal ended it.
+    pub code: Option<i32>,
     pub text: String,
 }
 
@@ -52,6 +54,7 @@ pub fn run(args: &[&str]) -> Output {
     if !flock.exists() {
         return Output {
             ok: false,
+            code: None,
             text: format!("Flock is not installed for this user ({} is missing) — run `flk install` once.", flock.display()),
         };
     }
@@ -59,9 +62,9 @@ pub fn run(args: &[&str]) -> Output {
         Ok(out) => {
             let mut text = String::from_utf8_lossy(&out.stdout).into_owned();
             text.push_str(&String::from_utf8_lossy(&out.stderr));
-            Output { ok: out.status.success(), text: text.trim().to_owned() }
+            Output { ok: out.status.success(), code: out.status.code(), text: text.trim().to_owned() }
         }
-        Err(e) => Output { ok: false, text: format!("{}: {e}", flock.display()) },
+        Err(e) => Output { ok: false, code: None, text: format!("{}: {e}", flock.display()) },
     }
 }
 
@@ -74,7 +77,7 @@ pub fn setup_flock() -> Option<PathBuf> {
 /// calling on_line with every line it prints, then done with the outcome.
 pub fn run_streaming(args: Vec<String>, on_line: impl Fn(&str) + 'static, done: impl FnOnce(Output) + 'static) {
     let Some(flock) = setup_flock() else {
-        done(Output { ok: false, text: "Flock isn't installed: install the flockphp package first.".to_owned() });
+        done(Output { ok: false, code: None, text: "Flock isn't installed: install the flockphp package first.".to_owned() });
         return;
     };
     let (tx, rx) = mpsc::channel::<Result<String, Output>>();
@@ -83,7 +86,7 @@ pub fn run_streaming(args: Vec<String>, on_line: impl Fn(&str) + 'static, done: 
         let mut child = match child {
             Ok(child) => child,
             Err(e) => {
-                let _ = tx.send(Err(Output { ok: false, text: format!("{}: {e}", flock.display()) }));
+                let _ = tx.send(Err(Output { ok: false, code: None, text: format!("{}: {e}", flock.display()) }));
                 return;
             }
         };
@@ -98,8 +101,10 @@ pub fn run_streaming(args: Vec<String>, on_line: impl Fn(&str) + 'static, done: 
             let _ = tx.send(Ok(line));
         }
         let _ = errors.join();
-        let ok = child.wait().is_ok_and(|s| s.success());
-        let _ = tx.send(Err(Output { ok, text: String::new() }));
+        let status = child.wait().ok();
+        let ok = status.is_some_and(|s| s.success());
+        let code = status.and_then(|s| s.code());
+        let _ = tx.send(Err(Output { ok, code, text: String::new() }));
     });
 
     // The lines arrive on this (the UI) thread.
@@ -128,9 +133,9 @@ pub fn run_streaming(args: Vec<String>, on_line: impl Fn(&str) + 'static, done: 
     });
 }
 
-/// The password dialog was dismissed (flock's errDeclined).
+/// The password dialog was dismissed: flock exits with 4 (exitDeclined in internal/cli/exitcodes.go).
 pub fn declined(output: &Output) -> bool {
-    output.text.contains("administrator permission was declined")
+    output.code == Some(4)
 }
 
 /// Another program on one of Flock's ports (`flock conflicts --json`).
@@ -163,4 +168,17 @@ pub fn conflicts() -> Vec<(String, Option<String>, Vec<Conflict>)> {
         }
     }
     apps
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn declined_goes_by_the_exit_code_not_the_text() {
+        let text = "Error: privileged setup: administrator permission was declined".to_owned();
+        assert!(declined(&Output { ok: false, code: Some(4), text: text.clone() }));
+        assert!(!declined(&Output { ok: false, code: Some(1), text }));
+        assert!(!declined(&Output { ok: false, code: None, text: String::new() }));
+    }
 }

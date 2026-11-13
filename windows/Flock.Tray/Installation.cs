@@ -75,7 +75,12 @@ public static class Installation
         }
     }
 
-    public sealed record Result(bool Ok, string Output);
+    /// <summary>The outcome of running flock: whether it succeeded, what it printed and its exit code.</summary>
+    public sealed record Result(bool Ok, string Output, int ExitCode = 1)
+    {
+        /// <summary>The permission prompt was declined: flock exits with 4 (exitDeclined in internal/cli/exitcodes.go).</summary>
+        public bool PermissionDeclined => ExitCode == 4;
+    }
 
     /// <summary>
     /// Starts uninstalling: the installer's uninstaller (which runs `flock uninstall`, then removes

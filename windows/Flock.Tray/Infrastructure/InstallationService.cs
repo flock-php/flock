@@ -52,7 +52,7 @@ public sealed class InstallationService(CliProcessRunner processRunner, Preferen
                 }
             }
         }
-        return new Installation.Result(result.Succeeded, result.Output);
+        return new Installation.Result(result.Succeeded, result.Output, result.ExitCode);
     }
 
     public async Task<bool> IsSetUpAsync(CancellationToken cancellationToken = default)

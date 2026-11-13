@@ -240,6 +240,11 @@ private struct UninstallSheet: View {
         get { outputState.wrappedValue }
         nonmutating set { outputState.wrappedValue = newValue }
     }
+    private let declinedState = State<Bool>(initialValue: false)
+    private var declined: Bool {
+        get { declinedState.wrappedValue }
+        nonmutating set { declinedState.wrappedValue = newValue }
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -282,7 +287,7 @@ private struct UninstallSheet: View {
 
             case .failed:
                 Text("Uninstalling didn't finish").font(.headline)
-                Text(output.contains("administrator permission was declined")
+                Text(declined
                     ? "The password prompt was cancelled, so the DNS setup and the certificate are still in place."
                     : "Something went wrong. The output below says what; you can try again.")
                     .fixedSize(horizontal: false, vertical: true)
@@ -312,6 +317,7 @@ private struct UninstallSheet: View {
             }
         }
         output = result.output
+        declined = result.permissionDeclined
         stage = result.ok ? .done : .failed
     }
 
