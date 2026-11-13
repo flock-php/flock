@@ -713,11 +713,11 @@ public struct Event: Decodable, Sendable, Equatable, Identifiable, Hashable {
         /// "Queries", "Logs", ... for menus and settings.
         public var title: String {
             switch self {
-            case .query: "Queries"
-            case .log: "Logs"
-            case .view: "Views"
-            case .job: "Jobs"
-            case .request: "Requests"
+            case .query: String(localized: "dumps.event_kind.queries")
+            case .log: String(localized: "dumps.event_kind.logs")
+            case .view: String(localized: "dumps.event_kind.views")
+            case .job: String(localized: "dumps.event_kind.jobs")
+            case .request: String(localized: "dumps.event_kind.requests")
             }
         }
     }

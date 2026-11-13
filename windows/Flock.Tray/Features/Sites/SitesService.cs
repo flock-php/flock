@@ -205,7 +205,7 @@ public sealed class SitesService : IAsyncDisposable
         }, token);
         if (outcome is OperationOutcome.Rejected or OperationOutcome.Canceled)
         {
-            return (null, outcome == OperationOutcome.Canceled ? "Extension request canceled." : null);
+            return (null, outcome == OperationOutcome.Canceled ? Strings.Sites_ExtensionCanceled : null);
         }
         return await SiteExtensionsAsync(site, token);
     }
@@ -259,8 +259,8 @@ public sealed class SitesService : IAsyncDisposable
         }
         return outcome switch
         {
-            OperationOutcome.Rejected => "Another change to this site is still running. Try again when it's done.",
-            OperationOutcome.Canceled => "Canceled.",
+            OperationOutcome.Rejected => Strings.Sites_ChangeRunning,
+            OperationOutcome.Canceled => Strings.Common_Canceled,
             _ => errors.Action,
         };
     }

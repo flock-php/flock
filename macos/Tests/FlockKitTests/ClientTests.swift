@@ -118,7 +118,7 @@ struct ClientTests {
         }
         #expect(StubProtocol.requests.first?.method == "DELETE")
         #expect(FlockError.server(status: 409, message: "PHP 8.5 is the default version").localizedDescription == "PHP 8.5 is the default version")
-        #expect(FlockError.server(status: 502, message: "").localizedDescription == "Flock answered with HTTP 502")
+        #expect(FlockError.server(status: 502, message: "").localizedDescription == "app.http_status 502")
     }
 
     @Test func isNotRunningWithoutAPIJSONOrListener() async throws {
