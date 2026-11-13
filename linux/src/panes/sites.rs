@@ -70,7 +70,8 @@ struct Removal {
 
 /// The database modes of a worktree, and how the Database rows name them.
 const DB_MODES: [&str; 3] = ["shared", "copy", "fresh"];
-const DB_CHOICES: [&str; 3] = [tr_noop!("worktrees.database_shared"), tr_noop!("worktrees.database_copy"), tr_noop!("worktrees.database_fresh")];
+const DB_CHOICES: [&str; 3] =
+    [tr_noop!("worktrees.database_shared"), tr_noop!("worktrees.database_copy"), tr_noop!("worktrees.database_fresh")];
 
 impl SitesPane {
     pub fn new(model: Rc<AppModel>, banner: adw::Banner) -> Self {
@@ -227,11 +228,7 @@ impl Inner {
         let sites = status.top_sites();
         // No sites or proxies: only the empty state, centred in the whole pane.
         if sites.is_empty() && status.proxies.is_empty() {
-            let empty = ui::empty(
-                "dev.flock.Flock-sites-symbolic",
-                tr!("sites.no_sites"),
-                tr!("sites.no_sites_description"),
-            );
+            let empty = ui::empty("dev.flock.Flock-sites-symbolic", tr!("sites.no_sites"), tr!("sites.no_sites_description"));
             let buttons = gtk::Box::builder().spacing(12).halign(gtk::Align::Center).build();
             let add = self.add_button();
             add.add_css_class("suggested-action");
@@ -281,13 +278,7 @@ impl Inner {
     /// Add Proxy…: asks for a name and the upstream, then adds the proxy and opens it.
     fn add_proxy_button(self: &Rc<Self>) -> gtk::Button {
         let tld = self.status.borrow().as_ref().map(|s| s.dns.tld.clone()).filter(|t| !t.is_empty()).unwrap_or_else(|| "test".into());
-        let add = gtk::Button::builder()
-            .label(tr!("sites.add_proxy"))
-            .tooltip_text(tr!(
-                "sites.serve_a_server_of_its",
-                tld = tld
-            ))
-            .build();
+        let add = gtk::Button::builder().label(tr!("sites.add_proxy")).tooltip_text(tr!("sites.serve_a_server_of_its", tld = tld)).build();
         let this = self.clone();
         add.connect_clicked(move |_| this.add_proxy(&tld));
         add
@@ -524,16 +515,7 @@ impl Inner {
     }
 
     fn site_group(self: &Rc<Self>, site: &SiteStatus, status: &Status) -> adw::PreferencesGroup {
-        let group = group(
-            tr!("sites.site"),
-            if site.is_node() {
-                ""
-            } else {
-                tr!(
-                    "sites.document_root_is_the_folder"
-                )
-            },
-        );
+        let group = group(tr!("sites.site"), if site.is_node() { "" } else { tr!("sites.document_root_is_the_folder") });
         let kind = adw::ComboRow::builder()
             .title(tr!("sites.type"))
             .model(&gtk::StringList::new(&["PHP", "Node.js"]))
@@ -594,10 +576,7 @@ impl Inner {
         if !status.dns.wildcard && !status.dns.wildcard_problem.is_empty() {
             group.add(
                 &adw::ActionRow::builder()
-                    .title(glib::markup_escape_text(&tr!(
-                        "sites.subdomains_only_here",
-                        problem = status.dns.wildcard_problem
-                    )))
+                    .title(glib::markup_escape_text(&tr!("sites.subdomains_only_here", problem = status.dns.wildcard_problem)))
                     .css_classes(["warning"])
                     .build(),
             );
@@ -626,17 +605,9 @@ impl Inner {
     fn add_domain(self: &Rc<Self>, site: &str, dns: &crate::api::DnsStatus) {
         let tld = if dns.tld.is_empty() { "test" } else { &dns.tld };
         let help = if dns.wildcard || dns.tld.is_empty() {
-            trn!(
-                "sites.every_subdomain_up_to_n",
-                dns.max_depth.max(1),
-                site = site,
-                tld = tld
-            )
+            trn!("sites.every_subdomain_up_to_n", dns.max_depth.max(1), site = site, tld = tld)
         } else {
-            tr!(
-                "sites.wildcard_subdomains_dont_work_here",
-                problem = dns.wildcard_problem
-            )
+            tr!("sites.wildcard_subdomains_dont_work_here", problem = dns.wildcard_problem)
         };
         let entry = gtk::Entry::builder()
             .placeholder_text(tr!("sites.tenant1_a_b_or_site", site = site, tld = tld))
@@ -711,14 +682,9 @@ impl Inner {
                     let root = if rest.as_os_str().is_empty() { ".".to_owned() } else { rest.to_string_lossy().into_owned() };
                     this.change(&s.name, SiteChange { root: Some(root), ..Default::default() });
                 }
-                Err(_) => report(
-                    &this.banner,
-                    Some(tr!(
-                        "sites.choose_folder_in_project_details",
-                        folder = folder.display(),
-                        project = s.path
-                    )),
-                ),
+                Err(_) => {
+                    report(&this.banner, Some(tr!("sites.choose_folder_in_project_details", folder = folder.display(), project = s.path)))
+                }
             }
         });
     }
@@ -740,9 +706,7 @@ impl Inner {
         };
         match &site.share {
             None => {
-                group.set_description(Some(tr!(
-                    "sites.share.explanation"
-                )));
+                group.set_description(Some(tr!("sites.share.explanation")));
                 let row = adw::ActionRow::new();
                 let (this, n) = (self.clone(), name.clone());
                 let share = button(tr!("sites.share.share_ellipsis"), false, move || this.ask_share(&n));
@@ -832,14 +796,15 @@ impl Inner {
         let actions = adw::ActionRow::new();
         if share.can_rebuild {
             let (this, n) = (self.clone(), name.to_owned());
-            let rebuild = button(if share.rebuilding { tr!("sites.share.rebuilding") } else { tr!("sites.rebuild_assets") }, false, move || {
-                let (this, n) = (this.clone(), n.clone());
-                glib::spawn_future_local(async move {
-                    let result = gio::spawn_blocking(move || Client.rebuild_share(&n)).await.expect("share request");
-                    report(&this.banner, result.err().map(|e| e.to_string()));
-                    this.model.refresh();
+            let rebuild =
+                button(if share.rebuilding { tr!("sites.share.rebuilding") } else { tr!("sites.rebuild_assets") }, false, move || {
+                    let (this, n) = (this.clone(), n.clone());
+                    glib::spawn_future_local(async move {
+                        let result = gio::spawn_blocking(move || Client.rebuild_share(&n)).await.expect("share request");
+                        report(&this.banner, result.err().map(|e| e.to_string()));
+                        this.model.refresh();
+                    });
                 });
-            });
             rebuild.set_sensitive(!share.rebuilding);
             rebuild.set_tooltip_text(Some(tr!("sites.runs_npm_run_build_again")));
             actions.add_suffix(&rebuild);
@@ -853,19 +818,12 @@ impl Inner {
     fn ask_share(self: &Rc<Self>, name: &str) {
         let allow = adw::EntryRow::builder().title(tr!("sites.share.allow_header")).build();
         allow.set_tooltip_text(Some("colleague@acme.com, *@client.com"));
-        let debug = adw::SwitchRow::builder()
-            .title(tr!("sites.share.show_errors"))
-            .subtitle(tr!("sites.share.show_errors_explanation"))
-            .build();
+        let debug =
+            adw::SwitchRow::builder().title(tr!("sites.share.show_errors")).subtitle(tr!("sites.share.show_errors_explanation")).build();
         let list = gtk::ListBox::builder().css_classes(["boxed-list"]).selection_mode(gtk::SelectionMode::None).build();
         list.append(&allow);
         list.append(&debug);
-        let dialog = adw::AlertDialog::new(
-            Some(&tr!("sites.share.title", site = name)),
-            Some(tr!(
-                "sites.share.allow_explanation"
-            )),
-        );
+        let dialog = adw::AlertDialog::new(Some(&tr!("sites.share.title", site = name)), Some(tr!("sites.share.allow_explanation")));
         dialog.set_extra_child(Some(&list));
         dialog.add_responses(&[("cancel", tr!("common.cancel")), ("share", tr!("sites.share.share"))]);
         dialog.set_response_appearance("share", adw::ResponseAppearance::Suggested);
@@ -888,12 +846,7 @@ impl Inner {
     }
 
     fn versions_group(self: &Rc<Self>, site: &SiteStatus, config: &Config) -> adw::PreferencesGroup {
-        let group = group(
-            tr!("versions.versions"),
-            tr!(
-                "sites.version_picked_here_applies_on_this_machine"
-            ),
-        );
+        let group = group(tr!("versions.versions"), tr!("sites.version_picked_here_applies_on_this_machine"));
         let php: Vec<String> = config.php.iter().flatten().map(|p| p.version.clone()).collect();
         let mut node: Vec<String> = config.node.iter().flatten().map(|v| major(v)).collect();
         node.dedup();
@@ -958,11 +911,7 @@ impl Inner {
         if !site.node_shadowed.is_empty() {
             group.add(
                 &adw::ActionRow::builder()
-                    .title(glib::markup_escape_text(&tr!(
-                        "sites.node_wins",
-                        pinned = site.node_pinned,
-                        other = site.node_shadowed
-                    )))
+                    .title(glib::markup_escape_text(&tr!("sites.node_wins", pinned = site.node_pinned, other = site.node_shadowed)))
                     .css_classes(["warning"])
                     .build(),
             );
@@ -972,9 +921,7 @@ impl Inner {
 
     fn server_group(self: &Rc<Self>, site: &SiteStatus) -> adw::PreferencesGroup {
         let footer = if site.server == "frankenphp" && !site.octane_available {
-            tr!(
-                "sites.frankenphp_needs_php_8_2_or"
-            )
+            tr!("sites.frankenphp_needs_php_8_2_or")
         } else {
             tr!("sites.frankenphp_needs_php_8_2")
         };
@@ -1069,10 +1016,7 @@ impl Inner {
 
     /// A Node.js site's dev server: its state with Start, Stop and Restart, and the command it runs.
     fn dev_server_group(self: &Rc<Self>, site: &SiteStatus, server: &SiteNodeServer) -> adw::PreferencesGroup {
-        let group = group(
-            tr!("sites.server"),
-            tr!("sites.flock_runs_the_projects_dev"),
-        );
+        let group = group(tr!("sites.server"), tr!("sites.flock_runs_the_projects_dev"));
         let mut subtitle = server.text();
         if let Some(note) = server.note() {
             subtitle.push('\n');
@@ -1124,30 +1068,14 @@ impl Inner {
 
     fn boost_group(self: &Rc<Self>, site: &SiteStatus) -> adw::PreferencesGroup {
         let missing = site.boost == "missing";
-        let group = group(
-            "Laravel Boost",
-            if missing {
-                tr!(
-                    "sites.boost_missing"
-                )
-            } else {
-                tr!("sites.boost_outdated")
-            },
-        );
+        let group = group("Laravel Boost", if missing { tr!("sites.boost_missing") } else { tr!("sites.boost_outdated") });
         let row = adw::ActionRow::new();
         let (this, s) = (self.clone(), site.clone());
         row.add_suffix(&button(if missing { tr!("sites.boost_add") } else { tr!("sites.boost_update") }, false, move || {
             let name = s.name.clone();
             this.confirm(
-                &if missing {
-                    tr!("sites.boost_add_question", site = s.name)
-                } else {
-                    tr!("sites.boost_update_question", site = s.name)
-                },
-                &tr!(
-                    "sites.writes_ai_guidelines_flock_md",
-                    path = s.path
-                ),
+                &if missing { tr!("sites.boost_add_question", site = s.name) } else { tr!("sites.boost_update_question", site = s.name) },
+                &tr!("sites.writes_ai_guidelines_flock_md", path = s.path),
                 if missing { tr!("common.add") } else { tr!("common.update") },
                 false,
                 move |c| c.add_boost_guideline(&name),
@@ -1184,11 +1112,7 @@ impl Inner {
                 false,
                 pin(
                     tr!("sites.pin_php_question", version = site.php, site = site.name),
-                    tr!(
-                        "sites.writes_php_version_to_flockrc",
-                        version = site.php,
-                        path = site.path
-                    ),
+                    tr!("sites.writes_php_version_to_flockrc", version = site.php, path = site.path),
                     "php",
                     site.php.clone(),
                 ),
@@ -1201,12 +1125,7 @@ impl Inner {
                 false,
                 pin(
                     tr!("sites.pin_node_question", version = node, site = site.name),
-                    tr!(
-                        "sites.writes_version_to_file_in",
-                        version = node,
-                        file = node_file,
-                        path = site.path
-                    ),
+                    tr!("sites.writes_version_to_file_in", version = node, file = node_file, path = site.path),
                     "node",
                     node.clone(),
                 ),
@@ -1220,12 +1139,7 @@ impl Inner {
                 false,
                 pin(
                     tr!("sites.pin_root_question", root = label, site = site.name),
-                    tr!(
-                        "sites.writes_root_value_to_flockrc",
-                        value = site.root,
-                        path = site.path,
-                        root = label
-                    ),
+                    tr!("sites.writes_root_value_to_flockrc", value = site.root, path = site.path, root = label),
                     "root",
                     site.root.clone(),
                 ),
@@ -1247,10 +1161,7 @@ impl Inner {
             items.push(unpin(
                 tr!("sites.unpin_php_item", file = file_name(&site.php_file)),
                 tr!("sites.unpin_php_question", site = site.name),
-                tr!(
-                    "sites.removes_the_php_version_from",
-                    file = site.php_file
-                ),
+                tr!("sites.removes_the_php_version_from", file = site.php_file),
                 "php",
             ));
         }
@@ -1258,10 +1169,7 @@ impl Inner {
             items.push(unpin(
                 tr!("sites.unpin_node_item", file = file_name(&site.node_file)),
                 tr!("sites.unpin_node_question", site = site.name),
-                tr!(
-                    "sites.removes_the_node_js_version",
-                    path = site.path
-                ),
+                tr!("sites.removes_the_node_js_version", path = site.path),
                 "node",
             ));
         }
@@ -1269,10 +1177,7 @@ impl Inner {
             items.push(unpin(
                 tr!("sites.unpin_root_item").to_owned(),
                 tr!("sites.unpin_root_question", site = site.name),
-                tr!(
-                    "sites.removes_root_from_flockrc_in",
-                    path = site.path
-                ),
+                tr!("sites.removes_root_from_flockrc_in", path = site.path),
                 "root",
             ));
         }
@@ -1288,26 +1193,14 @@ impl Inner {
 
     /// A site's worktrees and New Worktree….
     fn worktrees_group(self: &Rc<Self>, site: &SiteStatus, status: &Status) -> adw::PreferencesGroup {
-        let group = group(
-            tr!("worktrees.worktrees"),
-            &tr!(
-                "sites.each_git_worktree_of_site",
-                site = site.name,
-                domain = site.domain
-            ),
-        );
+        let group = group(tr!("worktrees.worktrees"), &tr!("sites.each_git_worktree_of_site", site = site.name, domain = site.domain));
         let add = gtk::Button::builder().label(tr!("worktrees.new")).css_classes(["flat"]).build();
         let (this, s) = (self.clone(), site.clone());
         add.connect_clicked(move |_| this.new_worktree(&s));
         group.set_header_suffix(Some(&add));
         let worktrees = status.worktrees_of(&site.name);
         if worktrees.is_empty() {
-            group.add(
-                &adw::ActionRow::builder()
-                    .title(tr!("sites.no_worktrees"))
-                    .subtitle(tr!("sites.create_one_here_with_git"))
-                    .build(),
-            );
+            group.add(&adw::ActionRow::builder().title(tr!("sites.no_worktrees")).subtitle(tr!("sites.create_one_here_with_git")).build());
         }
         for worktree in worktrees {
             group.add(&self.site_row(worktree));
@@ -1341,8 +1234,7 @@ impl Inner {
         list.append(&branch_row);
         list.append(&from);
         list.append(&database);
-        let dialog =
-            adw::AlertDialog::new(Some(&tr!("worktrees.new_title", site = site.name)), Some(&new_worktree_text(site, "", false)));
+        let dialog = adw::AlertDialog::new(Some(&tr!("worktrees.new_title", site = site.name)), Some(&new_worktree_text(site, "", false)));
         dialog.set_extra_child(Some(&list));
         dialog.add_responses(&[("cancel", tr!("common.cancel")), ("create", tr!("worktrees.create"))]);
         dialog.set_response_appearance("create", adw::ResponseAppearance::Suggested);
@@ -1506,7 +1398,10 @@ impl Inner {
     /// Branch, folder and address, and the versions it gets from its site (or the branch's pins).
     fn worktree_info(self: &Rc<Self>, site: &SiteStatus) -> adw::PreferencesGroup {
         let group = group(tr!("worktrees.worktree"), "");
-        group.add(&info_row(tr!("worktrees.new.branch"), if site.branch.is_empty() { tr!("worktrees.detached_head") } else { site.branch.as_str() }));
+        group.add(&info_row(
+            tr!("worktrees.new.branch"),
+            if site.branch.is_empty() { tr!("worktrees.detached_head") } else { site.branch.as_str() },
+        ));
         let folder = info_row(tr!("general.folder"), &site.path);
         let open_folder = gtk::Button::builder()
             .icon_name("folder-symbolic")
@@ -1578,7 +1473,9 @@ impl Inner {
         let (label, parent) = (site.worktree_label(), site.parent.clone());
         let own = site.own_database().map(str::to_owned);
         let (title, body) = match (&own, db) {
-            (Some(name), _) => (tr!("worktrees.drop_question", database = name), tr!("worktrees.its_database_database_is_dropped", database = name)),
+            (Some(name), _) => {
+                (tr!("worktrees.drop_question", database = name), tr!("worktrees.its_database_database_is_dropped", database = name))
+            }
             (None, "shared") => (
                 tr!("worktrees.use_site_s_database", site = parent),
                 tr!("sites.worktree_then_uses_site_s", worktree = label, site = parent),
@@ -1587,10 +1484,7 @@ impl Inner {
                 let body = tr!("sites.flock_copies_site_s_database", site = parent);
                 (tr!("sites.give_worktree_a_copy_of", worktree = label), body)
             }
-            (None, _) => (
-                tr!("sites.give_worktree_a_fresh_database", worktree = label),
-                tr!("worktrees.give_fresh_details").to_owned(),
-            ),
+            (None, _) => (tr!("sites.give_worktree_a_fresh_database", worktree = label), tr!("worktrees.give_fresh_details").to_owned()),
         };
         let dialog = adw::AlertDialog::new(Some(&title), Some(&body));
         dialog.add_responses(&[("cancel", tr!("common.cancel")), ("switch", tr!("worktrees.switch"))]);
@@ -1649,7 +1543,13 @@ impl Inner {
     fn run_setup(self: &Rc<Self>, site: &SiteStatus, again: bool) {
         let path = site.path.clone();
         let start: worktree_job::Start = Box::new(move |c: Client| c.setup_worktree(&path, again).map(|_| path));
-        worktree_job::open(&self.stack, self.model.clone(), &tr!("worktrees.setting_up_title", worktree = site.worktree_label()), start, |_| {});
+        worktree_job::open(
+            &self.stack,
+            self.model.clone(),
+            &tr!("worktrees.setting_up_title", worktree = site.worktree_label()),
+            start,
+            |_| {},
+        );
     }
 
     fn ask_remove(self: &Rc<Self>, site: &SiteStatus) {
@@ -1736,15 +1636,9 @@ impl Inner {
 
     fn proxy_group(self: &Rc<Self>, proxy: &ProxyStatus) -> adw::PreferencesGroup {
         let footer = if proxy.command.is_some() {
-            tr!(
-                "sites.every_request_passes_to_the",
-                domain = proxy.domain
-            )
+            tr!("sites.every_request_passes_to_the", domain = proxy.domain)
         } else {
-            tr!(
-                "sites.proxy_footnote_no_commands",
-                domain = proxy.domain
-            )
+            tr!("sites.proxy_footnote_no_commands", domain = proxy.domain)
         };
         let group = group(tr!("sites.proxy"), &footer);
         match &proxy.command {
@@ -1901,9 +1795,7 @@ impl Inner {
         column.append(&list);
         column.append(
             &gtk::Label::builder()
-                .label(tr!(
-                    "sites.extensions_footnote"
-                ))
+                .label(tr!("sites.extensions_footnote"))
                 .wrap(true)
                 .xalign(0.0)
                 .css_classes(["caption", "dim-label"])
@@ -2002,11 +1894,7 @@ fn extension_row(ext: &PhpExtension, php: &str, path: &str, require: Rc<dyn Fn(S
         add.connect_clicked(move |button| {
             let dialog = adw::AlertDialog::new(
                 Some(&tr!("sites.require_ext_name_in_composer", name = name)),
-                Some(&tr!(
-                    "sites.require_tooltip",
-                    name = name,
-                    path = path
-                )),
+                Some(&tr!("sites.require_tooltip", name = name, path = path)),
             );
             dialog.add_responses(&[("cancel", tr!("common.cancel")), ("require", tr!("sites.require"))]);
             dialog.set_response_appearance("require", adw::ResponseAppearance::Suggested);
@@ -2073,15 +1961,15 @@ impl CommandFields {
         choose.connect_clicked(move |button| {
             let window = button.root().and_downcast::<gtk::Window>();
             let entry = entry.clone();
-            gtk::FileDialog::builder().title(tr!("sites.choose_folder_linux")).accept_label(tr!("sites.server.choose")).build().select_folder(
-                window.as_ref(),
-                gio::Cancellable::NONE,
-                move |result| {
+            gtk::FileDialog::builder()
+                .title(tr!("sites.choose_folder_linux"))
+                .accept_label(tr!("sites.server.choose"))
+                .build()
+                .select_folder(window.as_ref(), gio::Cancellable::NONE, move |result| {
                     if let Some(path) = result.ok().and_then(|f| f.path()) {
                         entry.set_text(&path.to_string_lossy());
                     }
-                },
-            );
+                });
         });
         folder_row.add_suffix(&choose);
         Self { start, stop, folder, rows: [start_row, stop_row, folder_row] }
@@ -2295,26 +2183,13 @@ fn setup_error(setup: &WorktreeStatus) -> String {
 /// What the New Worktree dialog says it does with the branch typed in.
 fn new_worktree_text(site: &SiteStatus, branch: &str, exists: bool) -> String {
     if branch.is_empty() {
-        return tr!(
-            "worktrees.new.explain_unnamed",
-            site = site.name
-        );
+        return tr!("worktrees.new.explain_unnamed", site = site.name);
     }
     let address = format!("{}.{}", slug(branch), site.domain);
     if exists {
-        return tr!(
-            "worktrees.new.explain_existing",
-            branch = branch,
-            site = site.name,
-            address = address
-        );
+        return tr!("worktrees.new.explain_existing", branch = branch, site = site.name, address = address);
     }
-    tr!(
-        "worktrees.new.explain_new",
-        site = site.name,
-        branch = branch,
-        address = address
-    )
+    tr!("worktrees.new.explain_new", site = site.name, branch = branch, address = address)
 }
 
 /// The name a worktree is served under, as Flock makes it from the branch (config.WorktreeSlug):
@@ -2383,22 +2258,12 @@ fn proxy_dot(proxy: &ProxyStatus) -> gtk::Label {
 /// Why the site isn't served from its root, or a root set here over the project's.
 fn root_hint(site: &SiteStatus) -> Option<String> {
     match site.root_state.as_deref().unwrap_or_default() {
-        "not_found" => Some(
-            tr!(
-                "sites.no_public_www_web_or"
-            )
-            .to_owned(),
-        ),
+        "not_found" => Some(tr!("sites.no_public_www_web_or").to_owned()),
         "missing" => Some(tr!("sites.root_missing", root = site.root)),
-        "empty" => Some(tr!(
-            "sites.root_no_index",
-            root = root_label(&site.root)
-        )),
-        _ if site.root_source == "isolated" && site.root_pinned_here() => Some(tr!(
-            "sites.root_shadowed",
-            root = root_label(&site.root),
-            pinned = root_label(&site.root_pinned)
-        )),
+        "empty" => Some(tr!("sites.root_no_index", root = root_label(&site.root))),
+        _ if site.root_source == "isolated" && site.root_pinned_here() => {
+            Some(tr!("sites.root_shadowed", root = root_label(&site.root), pinned = root_label(&site.root_pinned)))
+        }
         _ => None,
     }
 }

@@ -15,10 +15,7 @@ pub struct MailPane {
 
 impl MailPane {
     pub fn new() -> Self {
-        Self {
-            view: PaneView::new(tr!("mail.flock_catches_every_email_your_apps")),
-            shown: RefCell::default(),
-        }
+        Self { view: PaneView::new(tr!("mail.flock_catches_every_email_your_apps")), shown: RefCell::default() }
     }
 }
 

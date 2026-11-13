@@ -175,15 +175,15 @@ impl MailWindow {
     fn show_empty(&self) {
         let env = self.env.borrow().clone();
         if env.is_empty() || !self.messages.borrow().is_empty() {
-            let (title, text) = if self.messages.borrow().is_empty() { (tr!("mail.no_mail_title_case"), "") } else { (tr!("mail.no_message_selected_title_case"), "") };
+            let (title, text) = if self.messages.borrow().is_empty() {
+                (tr!("mail.no_mail_title_case"), "")
+            } else {
+                (tr!("mail.no_message_selected_title_case"), "")
+            };
             self.detail.set_child(Some(&ui::empty("mail-unread-symbolic", title, text)));
             return;
         }
-        let page = ui::empty(
-            "mail-unread-symbolic",
-            tr!("mail.catch_your_apps_mail"),
-            tr!("mail.add_these_lines_to_your"),
-        );
+        let page = ui::empty("mail-unread-symbolic", tr!("mail.catch_your_apps_mail"), tr!("mail.add_these_lines_to_your"));
         let code = gtk::Label::builder().label(&env).selectable(true).xalign(0.0).css_classes(["monospace", "card"]).build();
         code.set_margin_top(6);
         page.set_child(Some(&code));
@@ -200,7 +200,9 @@ impl MailWindow {
             match gio::spawn_blocking(move || Client.mail_detail(&i)).await.expect("mail request") {
                 Ok(detail) if this.selected.borrow().as_deref() == Some(id.as_str()) => this.show_detail(&detail),
                 Ok(_) => {}
-                Err(e) => this.detail.set_child(Some(&ui::empty("dialog-warning-symbolic", tr!("mail.could_not_load_message"), &e.to_string()))),
+                Err(e) => {
+                    this.detail.set_child(Some(&ui::empty("dialog-warning-symbolic", tr!("mail.could_not_load_message"), &e.to_string())))
+                }
             }
         });
     }
@@ -217,7 +219,8 @@ impl MailWindow {
         let subject = if detail.subject.is_empty() { tr!("mail.no_subject") } else { &detail.subject };
         header.append(&gtk::Label::builder().label(subject).xalign(0.0).wrap(true).selectable(true).css_classes(["title-3"]).build());
         let fields = gtk::Grid::builder().column_spacing(10).row_spacing(2).build();
-        let mut rows = vec![(tr!("mail.detail.from"), detail.from.clone()), (tr!("mail.detail.to"), detail.to.clone().unwrap_or_default().join(", "))];
+        let mut rows =
+            vec![(tr!("mail.detail.from"), detail.from.clone()), (tr!("mail.detail.to"), detail.to.clone().unwrap_or_default().join(", "))];
         let cc = detail.cc.clone().unwrap_or_default();
         if !cc.is_empty() {
             rows.push((tr!("mail.detail.cc"), cc.join(", ")));
@@ -278,7 +281,11 @@ impl MailWindow {
                     .build(),
             );
         }
-        stack.add_titled(&gtk::ScrolledWindow::builder().child(&headers).vexpand(true).build(), Some("headers"), tr!("mail.detail.headers"));
+        stack.add_titled(
+            &gtk::ScrolledWindow::builder().child(&headers).vexpand(true).build(),
+            Some("headers"),
+            tr!("mail.detail.headers"),
+        );
         if detail.html.is_empty() {
             stack.set_visible_child_name("text");
         }
@@ -290,11 +297,9 @@ impl MailWindow {
                 glib::spawn_future_local(async move {
                     match gio::spawn_blocking(move || Client.mail_raw(&id)).await.expect("mail request") {
                         Ok(text) => raw.set_child(Some(&ui::monospace(&text))),
-                        Err(e) => raw.set_child(Some(&ui::empty(
-                            "dialog-warning-symbolic",
-                            tr!("mail.could_not_load_the_raw"),
-                            &e.to_string(),
-                        ))),
+                        Err(e) => {
+                            raw.set_child(Some(&ui::empty("dialog-warning-symbolic", tr!("mail.could_not_load_the_raw"), &e.to_string())))
+                        }
                     }
                 });
             }

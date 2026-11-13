@@ -127,7 +127,10 @@ fn install_question(target: Target, purpose: &str) -> Resolution<Target> {
 
 /// The pane that lists it.
 fn already_installed(name: &str, pane: &str) -> Resolution<Target> {
-    Resolution::inform(tr!("links.install.already_installed_title", name = name), tr!("links.install.already_installed_message", pane = pane))
+    Resolution::inform(
+        tr!("links.install.already_installed_title", name = name),
+        tr!("links.install.already_installed_message", pane = pane),
+    )
 }
 
 fn installing(name: &str, pane: &str) -> Resolution<Target> {
@@ -287,9 +290,10 @@ impl InstallLink {
 pub fn resolve_secure(site: &str, sites: &[SiteStatus]) -> Resolution<String> {
     match sites.iter().find(|s| s.name.eq_ignore_ascii_case(site)) {
         None => Resolution::inform(tr!("links.secure.unknown_title", site = site), tr!("links.secure.unknown_message")),
-        Some(s) if s.secured => {
-            Resolution::inform(tr!("links.secure.already_secured_title", site = s.name), tr!("links.secure.already_secured_message", domain = s.domain))
-        }
+        Some(s) if s.secured => Resolution::inform(
+            tr!("links.secure.already_secured_title", site = s.name),
+            tr!("links.secure.already_secured_message", domain = s.domain),
+        ),
         Some(s) => Resolution {
             title: tr!("links.secure.secure_title", site = s.name),
             message: tr!("links.secure.secure_message", domain = s.domain),

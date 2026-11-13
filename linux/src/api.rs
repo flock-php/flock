@@ -20,9 +20,7 @@ impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             Error::NotRunning => f.write_str(tr!("app.not_running")),
-            Error::Server { status, message } if message.is_empty() => {
-                f.write_str(&tr!("app.http_status", status = status))
-            }
+            Error::Server { status, message } if message.is_empty() => f.write_str(&tr!("app.http_status", status = status)),
             Error::Server { message, .. } => write!(f, "{message}"),
         }
     }

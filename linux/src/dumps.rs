@@ -47,7 +47,8 @@ impl DumpsWindow {
         let latest_only =
             gtk::ToggleButton::builder().icon_name("document-open-recent-symbolic").tooltip_text(tr!("dumps.latest_request_only")).build();
         latest_only.set_active(true);
-        let options = gtk::MenuButton::builder().icon_name("view-more-symbolic").tooltip_text(tr!("dumps.capture_options_and_editor")).build();
+        let options =
+            gtk::MenuButton::builder().icon_name("view-more-symbolic").tooltip_text(tr!("dumps.capture_options_and_editor")).build();
         let clear = gtk::Button::builder().icon_name("user-trash-symbolic").tooltip_text(tr!("logs.clear")).build();
         header.pack_start(&capture);
         header.pack_start(&latest_only);
@@ -156,11 +157,7 @@ impl DumpsWindow {
         let unsupported = status.as_ref().filter(|s| s.dumps).and_then(|s| s.capture_unsupported.clone()).unwrap_or_default();
         self.note.set_visible(!unsupported.is_empty());
         if !unsupported.is_empty() {
-            self.note.set_label(&trn!(
-                "dumps.php_versions_only_capture_dumps",
-                unsupported.len(),
-                versions = unsupported.join(", ")
-            ));
+            self.note.set_label(&trn!("dumps.php_versions_only_capture_dumps", unsupported.len(), versions = unsupported.join(", ")));
         }
     }
 
@@ -213,7 +210,8 @@ impl DumpsWindow {
         });
         column.append(&in_page);
         column.append(&gtk::Separator::new(gtk::Orientation::Horizontal));
-        column.append(&gtk::Label::builder().label(tr!("dumps.open_sources_in_sentence_case")).xalign(0.0).css_classes(["heading"]).build());
+        column
+            .append(&gtk::Label::builder().label(tr!("dumps.open_sources_in_sentence_case")).xalign(0.0).css_classes(["heading"]).build());
         let editor = gtk::DropDown::from_strings(&EDITORS.map(|(_, name)| i18n::translate(name)));
         let current = prefs::load().editor;
         editor.set_selected(EDITORS.iter().position(|(id, _)| *id == current).unwrap_or(0) as u32);
@@ -286,11 +284,7 @@ impl DumpsWindow {
             let page = ui::empty(
                 "applications-science-symbolic",
                 if all.is_empty() { tr!("dumps.nothing_captured_yet") } else { tr!("dumps.nothing_matches") },
-                if capturing {
-                    tr!("dumps.empty_capturing")
-                } else {
-                    tr!("dumps.capture_is_off_turn_it_on")
-                },
+                if capturing { tr!("dumps.empty_capturing") } else { tr!("dumps.capture_is_off_turn_it_on") },
             );
             self.content.set_child(Some(&page));
             return;
@@ -312,10 +306,7 @@ impl DumpsWindow {
     }
 
     fn confirm_clear(self: &Rc<Self>) {
-        let dialog = adw::AlertDialog::new(
-            Some(tr!("dumps.clear_everything_captured")),
-            Some(tr!("dumps.every_captured_dump_query_log")),
-        );
+        let dialog = adw::AlertDialog::new(Some(tr!("dumps.clear_everything_captured")), Some(tr!("dumps.every_captured_dump_query_log")));
         dialog.add_responses(&[("cancel", tr!("common.cancel")), ("clear", tr!("logs.clear"))]);
         dialog.set_response_appearance("clear", adw::ResponseAppearance::Destructive);
         let this = self.clone();

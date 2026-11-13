@@ -21,9 +21,7 @@ pub struct DumpsPane {
 
 impl DumpsPane {
     pub fn new(model: Rc<AppModel>, banner: adw::Banner) -> Self {
-        let view = PaneView::new(tr!(
-            "dumps.send_dump_and_dd_output"
-        ));
+        let view = PaneView::new(tr!("dumps.send_dump_and_dd_output"));
         Self { view, model, banner, shown: RefCell::default() }
     }
 }
@@ -48,19 +46,14 @@ impl Pane for DumpsPane {
             let banner = banner.clone();
             model.change_settings(SettingsChange { dumps: Some(on), ..Default::default() }, move |e| report(&banner, e));
         }));
-        let captured =
-            format!("{}, {}", trn!("dumps.n_dumps", status.dump_count), trn!("app.n_events", status.event_count));
+        let captured = format!("{}, {}", trn!("dumps.n_dumps", status.dump_count), trn!("app.n_events", status.event_count));
         main.add(&open_row(tr!("dumps.captured"), &captured, tr!("dumps.open"), "app.dumps"));
 
         let unsupported = status.capture_unsupported.clone().unwrap_or_default();
         let mut footer = tr!("dumps.dd_always_shows_in_the").to_owned();
         if !unsupported.is_empty() {
             footer.push(' ');
-            footer.push_str(&trn!(
-                "dumps.php_versions_only_capture_dumps_their",
-                unsupported.len(),
-                versions = unsupported.join(", ")
-            ));
+            footer.push_str(&trn!("dumps.php_versions_only_capture_dumps_their", unsupported.len(), versions = unsupported.join(", ")));
         }
         let kinds = group(tr!("dumps.while_capturing"), &footer);
         for (kind, title) in EVENT_KINDS {

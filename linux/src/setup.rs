@@ -127,26 +127,9 @@ impl SetupView {
 
     fn intro(self: &Rc<Self>) {
         let list = item_list(&[
-            (
-                "network-server-symbolic",
-                tr!("setup.background"),
-                tr!("setup.flock_daemon_serves_your_sites_and"),
-                "",
-            ),
-            (
-                "utilities-terminal-symbolic",
-                tr!("setup.terminal_title"),
-                tr!("setup.terminal_description"),
-                "",
-            ),
-            (
-                "channel-secure-symbolic",
-                tr!("setup.trusted_https_title"),
-                tr!(
-                    "setup.linux_asks_for_your_password_once"
-                ),
-                "",
-            ),
+            ("network-server-symbolic", tr!("setup.background"), tr!("setup.flock_daemon_serves_your_sites_and"), ""),
+            ("utilities-terminal-symbolic", tr!("setup.terminal_title"), tr!("setup.terminal_description"), ""),
+            ("channel-secure-symbolic", tr!("setup.trusted_https_title"), tr!("setup.linux_asks_for_your_password_once"), ""),
         ]);
         let body = gtk::Box::builder().orientation(gtk::Orientation::Vertical).spacing(12).build();
         body.append(&list);
@@ -158,12 +141,7 @@ impl SetupView {
         body.append(&crate::panes::general::language());
         let this = self.clone();
         let set_up = self.button(tr!("setup.window_title"), true, move || this.run());
-        self.page(
-            tr!("setup.welcome"),
-            tr!("setup.flock_runs_your_laravel_sites_php"),
-            Some(body.upcast_ref()),
-            &[set_up],
-        );
+        self.page(tr!("setup.welcome"), tr!("setup.flock_runs_your_laravel_sites_php"), Some(body.upcast_ref()), &[set_up]);
         self.next_steps.replace(None);
     }
 
@@ -192,10 +170,8 @@ impl SetupView {
                     Some(hint) if !hint.is_empty() => format!("{}{}", hint[..1].to_uppercase(), &hint[1..]),
                     _ => tr!("app.conflict.quit", app = app),
                 };
-                let ports: Vec<String> = conflicts
-                    .iter()
-                    .filter_map(|c| c.port.map(|p| tr!("app.conflict.port", port = p, service = c.service)))
-                    .collect();
+                let ports: Vec<String> =
+                    conflicts.iter().filter_map(|c| c.port.map(|p| tr!("app.conflict.port", port = p, service = c.service))).collect();
                 (title, tr!("app.program_uses_ports", program = conflicts[0].holder, ports = and(ports)))
             })
             .collect();
@@ -205,10 +181,7 @@ impl SetupView {
         let again = self.button(tr!("setup.check_again_title_case"), true, move || this.run());
         self.page(
             tr!("setup.stop_other_web_servers_first"),
-            &tr!(
-                "setup.flock_needs_these_ports_and",
-                tld = tld
-            ),
+            &tr!("setup.flock_needs_these_ports_and", tld = tld),
             Some(list.upcast_ref()),
             &[self.back_button(), again],
         );
@@ -249,11 +222,7 @@ impl SetupView {
     fn failed(self: &Rc<Self>, output: &installation::Output) {
         let (log, buffer) = log_view();
         append(&buffer, &output.text);
-        let text = if installation::declined(output) {
-            tr!("setup.password_prompt_was_cancelled_flock")
-        } else {
-            tr!("setup.failed")
-        };
+        let text = if installation::declined(output) { tr!("setup.password_prompt_was_cancelled_flock") } else { tr!("setup.failed") };
         let this = self.clone();
         let again = self.button(tr!("setup.try_again"), true, move || this.run());
         self.page(tr!("setup.did_not_finish"), text, Some(log.upcast_ref()), &[self.back_button(), again]);
@@ -274,9 +243,7 @@ impl SetupView {
         body.append(&group);
         body.append(
             &gtk::Label::builder()
-                .label(markdown_links(tr!(
-                    "setup.star"
-                )))
+                .label(markdown_links(tr!("setup.star")))
                 .use_markup(true)
                 .wrap(true)
                 .xalign(0.0)
@@ -330,10 +297,7 @@ impl SetupView {
                     item(
                         "folder-download-symbolic",
                         &tr!("setup.installing", names = names(&pending)),
-                        &trn!(
-                            "setup.flock_makes_them_the_default",
-                            pending.len()
-                        ),
+                        &trn!("setup.flock_makes_them_the_default", pending.len()),
                         "",
                     )
                 } else {
@@ -365,18 +329,8 @@ impl SetupView {
                 "warning",
             ));
         }
-        add(item(
-            "utilities-terminal-symbolic",
-            tr!("setup.new_terminal"),
-            tr!("setup.new_terminal_description"),
-            "",
-        ));
-        add(item(
-            "dev.flock.Flock-sites-symbolic",
-            tr!("setup.link_project"),
-            tr!("setup.link_project_description"),
-            "",
-        ));
+        add(item("utilities-terminal-symbolic", tr!("setup.new_terminal"), tr!("setup.new_terminal_description"), ""));
+        add(item("dev.flock.Flock-sites-symbolic", tr!("setup.link_project"), tr!("setup.link_project_description"), ""));
     }
 }
 
@@ -386,10 +340,7 @@ pub fn uninstall(parent: &impl IsA<gtk::Widget>, model: Rc<AppModel>) {
     let purge = gtk::CheckButton::with_label(tr!("about.also_delete_data"));
     let dialog = adw::AlertDialog::new(
         Some(tr!("about.uninstall_question")),
-        Some(&tr!(
-            "setup.flock_stops_and_is_removed",
-            folder = crate::paths::root().display()
-        )),
+        Some(&tr!("setup.flock_stops_and_is_removed", folder = crate::paths::root().display())),
     );
     dialog.set_extra_child(Some(&purge));
     dialog.add_responses(&[("cancel", tr!("common.cancel")), ("uninstall", tr!("common.uninstall"))]);
@@ -405,13 +356,26 @@ pub fn uninstall(parent: &impl IsA<gtk::Widget>, model: Rc<AppModel>) {
         }
         let (log, buffer) = log_view();
         let status = gtk::Label::builder().label(tr!("about.uninstalling_flock")).xalign(0.0).css_classes(["heading"]).build();
-        let column = gtk::Box::builder().orientation(gtk::Orientation::Vertical).spacing(12).margin_top(12).margin_bottom(18).margin_start(18).margin_end(18).build();
+        let column = gtk::Box::builder()
+            .orientation(gtk::Orientation::Vertical)
+            .spacing(12)
+            .margin_top(12)
+            .margin_bottom(18)
+            .margin_start(18)
+            .margin_end(18)
+            .build();
         column.append(&status);
         column.append(&log);
         let view = adw::ToolbarView::new();
         view.add_top_bar(&adw::HeaderBar::new());
         view.set_content(Some(&column));
-        let progress = adw::Dialog::builder().title(tr!("about.uninstall_flock")).content_width(560).content_height(380).child(&view).can_close(false).build();
+        let progress = adw::Dialog::builder()
+            .title(tr!("about.uninstall_flock"))
+            .content_width(560)
+            .content_height(380)
+            .child(&view)
+            .can_close(false)
+            .build();
         progress.present(Some(&parent));
         installation::run_streaming(
             args,
@@ -419,9 +383,7 @@ pub fn uninstall(parent: &impl IsA<gtk::Widget>, model: Rc<AppModel>) {
             move |output| {
                 progress.set_can_close(true);
                 status.set_label(if output.ok {
-                    tr!(
-                        "setup.flock_was_uninstalled_remove_the"
-                    )
+                    tr!("setup.flock_was_uninstalled_remove_the")
                 } else if installation::declined(&output) {
                     tr!("about.password_prompt_was_cancelled_so")
                 } else {

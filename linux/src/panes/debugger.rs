@@ -45,12 +45,7 @@ impl Pane for DebuggerPane {
         }
         self.shown.replace(Some(data.clone()));
 
-        let detect = group(
-            "",
-            tr!(
-                "debugger.xdebug_loads_only_for_requests"
-            ),
-        );
+        let detect = group("", tr!("debugger.xdebug_loads_only_for_requests"));
         detect.add(
             &self.toggle(tr!("debugger.detect_requests"), status.xdebug, |on| SettingsChange { xdebug: Some(on), ..Default::default() }),
         );
@@ -78,9 +73,7 @@ impl Pane for DebuggerPane {
         ide.add(&info_row(tr!("debugger.mode"), "debug, develop"));
         let start = adw::ActionRow::builder()
             .title(tr!("debugger.start_session"))
-            .subtitle(tr!(
-                "debugger.start_session_description"
-            ))
+            .subtitle(tr!("debugger.start_session_description"))
             .subtitle_selectable(true)
             .build();
         ide.add(&start);
@@ -88,8 +81,10 @@ impl Pane for DebuggerPane {
 
         let availability = group(tr!("debugger.availability"), "");
         for php in data.config.as_ref().and_then(|c| c.php.clone()).unwrap_or_default() {
-            let row =
-                info_row(&format!("PHP {}", php.version), if php.xdebug_available { tr!("debugger.available") } else { tr!("debugger.not_in_build") });
+            let row = info_row(
+                &format!("PHP {}", php.version),
+                if php.xdebug_available { tr!("debugger.available") } else { tr!("debugger.not_in_build") },
+            );
             availability.add(&row);
         }
         groups.push(availability.upcast());

@@ -35,9 +35,7 @@ struct Inner {
 impl NodePane {
     pub fn new(model: Rc<AppModel>, banner: adw::Banner) -> Self {
         Self(Rc::new(Inner {
-            view: PaneView::new(tr!(
-                "node.subtitle"
-            )),
+            view: PaneView::new(tr!("node.subtitle")),
             model,
             banner,
             versions: RefCell::default(),
@@ -138,9 +136,7 @@ impl Inner {
         if !versions.check_error.is_empty() {
             footer = tr!("versions.could_not_check_updates", error = versions.check_error) + "\n\n";
         }
-        footer.push_str(tr!(
-            "node.official_node_js_builds_the"
-        ));
+        footer.push_str(tr!("node.official_node_js_builds_the"));
         let list = group(tr!("versions.versions"), &footer);
         list.set_header_suffix(Some(&self.check_button(versions.checked_at.as_deref())));
         let releases = versions.versions.unwrap_or_default();
@@ -229,11 +225,7 @@ impl Inner {
         } else {
             if release.update {
                 let update = install(&tr!("general.update_to", version = release.latest), true);
-                update.set_tooltip_text(Some(&tr!(
-                    "node.downloads_node_js_new_then",
-                    new = release.latest,
-                    old = release.installed
-                )));
+                update.set_tooltip_text(Some(&tr!("node.downloads_node_js_new_then", new = release.latest, old = release.installed)));
                 actions.append(&update);
             }
             if !release.npm_latest.is_empty() {
@@ -264,10 +256,7 @@ impl Inner {
                     confirm(
                         &r,
                         &tr!("node.uninstall_node_version", version = m),
-                        &tr!(
-                            "node.uninstall_details",
-                            version = m
-                        ),
+                        &tr!("node.uninstall_details", version = m),
                         tr!("common.uninstall"),
                         move || {
                             let m2 = m.clone();

@@ -42,9 +42,7 @@ struct Inner {
 impl PhpPane {
     pub fn new(model: Rc<AppModel>, banner: adw::Banner) -> Self {
         Self(Rc::new(Inner {
-            view: PaneView::new(tr!(
-                "php.every_installed_version_runs_its"
-            )),
+            view: PaneView::new(tr!("php.every_installed_version_runs_its")),
             model,
             banner,
             versions: RefCell::default(),
@@ -248,10 +246,7 @@ impl Inner {
         }
         if release.prerelease {
             let pre = badge(tr!("versions.prerelease"), "warning");
-            pre.set_tooltip_text(Some(&tr!(
-                "php.php_version_isnt_released_yet",
-                version = release.latest
-            )));
+            pre.set_tooltip_text(Some(&tr!("php.php_version_isnt_released_yet", version = release.latest)));
             row.add_suffix(&pre);
         }
         if installed && release.xdebug {
@@ -354,10 +349,7 @@ impl Inner {
                         confirm(
                             &r,
                             &tr!("php.uninstall_php_version", version = m),
-                            &tr!(
-                                "php.uninstall_details",
-                                version = m
-                            ),
+                            &tr!("php.uninstall_details", version = m),
                             tr!("common.uninstall"),
                             move || {
                                 let m2 = m.clone();
@@ -464,9 +456,7 @@ impl Inner {
                         confirm(
                             &r,
                             &tr!("php.uninstall_franken_question", version = m),
-                            tr!(
-                                "php.sites_that_run_on_frankenphp"
-                            ),
+                            tr!("php.sites_that_run_on_frankenphp"),
                             tr!("common.uninstall"),
                             move || {
                                 let m2 = m.clone();

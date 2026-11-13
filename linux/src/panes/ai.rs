@@ -26,9 +26,7 @@ struct Inner {
 
 impl AiPane {
     pub fn new(banner: adw::Banner) -> Self {
-        let view = PaneView::new(tr!(
-            "ai.subtitle"
-        ));
+        let view = PaneView::new(tr!("ai.subtitle"));
         Self(Rc::new(Inner { view, banner, mcp: RefCell::default(), working: RefCell::default(), loaded: Cell::new(false) }))
     }
 }
@@ -66,10 +64,7 @@ impl Inner {
 
     fn render(self: &Rc<Self>) {
         let mcp = self.mcp.borrow().clone();
-        let clients = group(
-            tr!("ai.clients"),
-            tr!("ai.added_once"),
-        );
+        let clients = group(tr!("ai.clients"), tr!("ai.added_once"));
         match &mcp {
             Some(mcp) => {
                 for client in mcp.clients.iter().flatten() {

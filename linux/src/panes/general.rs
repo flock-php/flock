@@ -26,12 +26,7 @@ pub struct GeneralPane {
 
 impl GeneralPane {
     pub fn new(model: Rc<AppModel>, banner: adw::Banner) -> Self {
-        Self {
-            view: PaneView::new(tr!("general.subtitle")),
-            model,
-            banner,
-            shown: RefCell::default(),
-        }
+        Self { view: PaneView::new(tr!("general.subtitle")), model, banner, shown: RefCell::default() }
     }
 
     fn daemon(&self, status: &Status) -> adw::PreferencesGroup {
@@ -44,8 +39,11 @@ impl GeneralPane {
         state.add_suffix(&value);
         group.add(&state);
         // What "Needs attention" is about.
-        let down =
-            status.processes.iter().filter(|p| !p.up).map(|p| format!("{}: {}", p.name, p.last_error.as_deref().unwrap_or(tr!("menu.down"))));
+        let down = status
+            .processes
+            .iter()
+            .filter(|p| !p.up)
+            .map(|p| format!("{}: {}", p.name, p.last_error.as_deref().unwrap_or(tr!("menu.down"))));
         for warning in status.warnings.iter().cloned().chain(down) {
             let row = adw::ActionRow::builder().title(glib::markup_escape_text(&warning)).css_classes(["warning"]).build();
             row.add_prefix(&gtk::Image::from_icon_name("dialog-warning-symbolic"));
@@ -55,7 +53,8 @@ impl GeneralPane {
         group.add(&info_row(tr!("general.process"), &tr!("general.pid", pid = status.pid)));
 
         let model = self.model.clone();
-        let restart = busy_button(tr!("general.restart_daemon"), tr!("general.restarting"), self.model.is_restarting(), move || model.restart());
+        let restart =
+            busy_button(tr!("general.restart_daemon"), tr!("general.restarting"), self.model.is_restarting(), move || model.restart());
         let row = adw::ActionRow::new();
         row.add_suffix(&restart);
         group.add(&row);
@@ -64,11 +63,7 @@ impl GeneralPane {
 
     fn network(&self, config: &Config, status: &Status) -> adw::PreferencesGroup {
         let footer = if config.ports.http != 80 || config.ports.https != 443 {
-            tr!(
-                "general.ports",
-                http = config.ports.http,
-                https = config.ports.https
-            )
+            tr!("general.ports", http = config.ports.http, https = config.ports.https)
         } else {
             String::new()
         };
@@ -93,16 +88,11 @@ impl GeneralPane {
     fn startup(&self) -> adw::PreferencesGroup {
         let group = group(tr!("general.startup"), "");
         let banner = self.banner.clone();
-        group.add(&switch_row(
-            tr!("setup.open_flock_at_login"),
-            tr!("general.shows_the_flock_icon_in"),
-            autostart::enabled(),
-            move |on| {
-                if let Err(e) = autostart::set(on) {
-                    report(&banner, Some(tr!("general.could_not_change_startup", error = e)));
-                }
-            },
-        ));
+        group.add(&switch_row(tr!("setup.open_flock_at_login"), tr!("general.shows_the_flock_icon_in"), autostart::enabled(), move |on| {
+            if let Err(e) = autostart::set(on) {
+                report(&banner, Some(tr!("general.could_not_change_startup", error = e)));
+            }
+        }));
         group
     }
 
@@ -114,10 +104,7 @@ impl GeneralPane {
         let aur = installation::aur_package();
         match aur {
             // The desktop's updater doesn't update AUR packages.
-            Some(package) => version.set_subtitle(&glib::markup_escape_text(&tr!(
-                "general.new_versions_come_from_the",
-                package = package
-            ))),
+            Some(package) => version.set_subtitle(&glib::markup_escape_text(&tr!("general.new_versions_come_from_the", package = package))),
             None => version.set_subtitle(tr!("general.new_versions_come_with_your")),
         }
         if let Some((name, updater)) = system_updater().filter(|_| aur.is_none()) {
@@ -172,22 +159,20 @@ impl GeneralPane {
         beta.set_sensitive(config.channel != "experimental");
         group.add(&beta);
         if config.channel == "experimental" {
-            let row = adw::ActionRow::builder()
-                .title(tr!("general.experimental_channel_packages_that_arent"))
-                .css_classes(["warning"])
-                .build();
+            let row =
+                adw::ActionRow::builder().title(tr!("general.experimental_channel_packages_that_arent")).css_classes(["warning"]).build();
             group.add(&row);
         }
         group
     }
 
     fn project_folders(&self, config: &Config) -> adw::PreferencesGroup {
-        let group = group(
-            tr!("general.project_folders"),
-            &tr!("general.project_folders_description", tld = config.tld),
-        );
-        let add =
-            gtk::Button::builder().icon_name("list-add-symbolic").tooltip_text(tr!("general.add_project_folders_title")).css_classes(["flat"]).build();
+        let group = group(tr!("general.project_folders"), &tr!("general.project_folders_description", tld = config.tld));
+        let add = gtk::Button::builder()
+            .icon_name("list-add-symbolic")
+            .tooltip_text(tr!("general.add_project_folders_title"))
+            .css_classes(["flat"])
+            .build();
         let (model, banner) = (self.model.clone(), self.banner.clone());
         add.connect_clicked(move |button| {
             let window = button.root().and_downcast::<gtk::Window>();
@@ -286,7 +271,8 @@ pub fn language() -> adw::PreferencesGroup {
         .selected(codes.iter().position(|code| *code == saved).unwrap_or(0) as u32)
         .build();
     let note = adw::ActionRow::builder().title(tr!("general.language_restart_note")).build();
-    let restart = gtk::Button::builder().label(tr!("general.relaunch_flock")).action_name("app.relaunch").valign(gtk::Align::Center).build();
+    let restart =
+        gtk::Button::builder().label(tr!("general.relaunch_flock")).action_name("app.relaunch").valign(gtk::Align::Center).build();
     note.add_suffix(&restart);
     // Only when the choice speaks another language than this run, e.g. not "System default" → its own.
     let pending = |preference: &str| i18n::resolve_next(preference) != i18n::language();
@@ -329,9 +315,5 @@ fn domain_explanation(tld: &str, status: &Status) -> String {
     }
     let problem =
         if status.dns.wildcard_problem.is_empty() { tr!("general.flocks_dns_server_isnt_running") } else { &status.dns.wildcard_problem };
-    tr!(
-        "general.tld_doesnt_resolve_problem_linux",
-        tld = tld,
-        problem = problem
-    )
+    tr!("general.tld_doesnt_resolve_problem_linux", tld = tld, problem = problem)
 }

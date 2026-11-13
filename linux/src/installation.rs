@@ -51,10 +51,7 @@ pub struct Output {
 pub fn run(args: &[&str]) -> Output {
     let flock = paths::flock_binary();
     if !flock.exists() {
-        return Output {
-            ok: false,
-            text: tr!("app.flock_is_not_installed_for_this", path = flock.display()),
-        };
+        return Output { ok: false, text: tr!("app.flock_is_not_installed_for_this", path = flock.display()) };
     }
     match i18n::system_language(Command::new(&flock).args(args)).output() {
         Ok(out) => {

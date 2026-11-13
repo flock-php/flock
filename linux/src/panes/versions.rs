@@ -19,11 +19,7 @@ pub fn detail(row: &adw::ActionRow, job: Option<&Job>, yanked: &str, update: boo
             (if job.error.is_empty() { tr!("versions.download_failed").to_owned() } else { job.error.clone() }, Some("error"))
         }
         _ if !yanked.is_empty() => {
-            let text = if update {
-                tr!("services.withdrawn_update", reason = yanked)
-            } else {
-                tr!("services.withdrawn", reason = yanked)
-            };
+            let text = if update { tr!("services.withdrawn_update", reason = yanked) } else { tr!("services.withdrawn", reason = yanked) };
             (text, Some("warning"))
         }
         _ => (idle.to_owned(), if update { Some("accent") } else { None }),

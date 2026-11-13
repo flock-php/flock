@@ -34,17 +34,12 @@ impl AboutPane {
         }
 
         let support = gtk::Box::builder().orientation(gtk::Orientation::Vertical).spacing(8).build();
-        support.append(
-            &gtk::Label::builder()
-                .label(tr!("about.support_description"))
-                .wrap(true)
-                .css_classes(["dim-label"])
-                .build(),
-        );
+        support.append(&gtk::Label::builder().label(tr!("about.support_description")).wrap(true).css_classes(["dim-label"]).build());
         let support_links = gtk::Box::builder().spacing(8).halign(gtk::Align::Center).build();
-        for (label, url) in
-            [(tr!("about.star_on_github"), "https://github.com/flock-php/flock"), (tr!("about.sponsor"), "https://github.com/sponsors/flock-php")]
-        {
+        for (label, url) in [
+            (tr!("about.star_on_github"), "https://github.com/flock-php/flock"),
+            (tr!("about.sponsor"), "https://github.com/sponsors/flock-php"),
+        ] {
             support_links.append(&link_button(label, url));
         }
         support.append(&support_links);
@@ -73,12 +68,7 @@ impl AboutPane {
                 .css_classes(["caption", "dim-label"])
                 .build(),
         );
-        column.append(
-            &gtk::Label::builder()
-                .label(tr!("about.license_description"))
-                .css_classes(["caption", "dim-label"])
-                .build(),
-        );
+        column.append(&gtk::Label::builder().label(tr!("about.license_description")).css_classes(["caption", "dim-label"]).build());
 
         let page = adw::StatusPage::builder()
             .icon_name("network-server-symbolic")
