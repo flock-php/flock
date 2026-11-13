@@ -15,9 +15,10 @@
 //! Windows control's `DraftNormalized`, `SelectedTag` and `Select`
 //! (windows/Flock.Tray/Controls/SuffixPickerControl.xaml.cs).
 
-// The picker's first callers land with plan 3d's tasks 3-5; until then its binary-target chain is
-// reachable from the unit tests only, which the dead_code lint can't see (same doctrine as the
-// allows in api.rs — drop when the General pane builds one).
+// The General pane (plan 3d task 3) builds pickers and calls draft/can_apply/set_changed; the
+// selection API the sites dialogs use (set_selected, set_custom, set_selected_inherit,
+// is_inherit) waits for task 4, and the dead_code lint can't see unit-test uses (same doctrine
+// as the allows in api.rs — drop when task 4 builds them).
 #![allow(dead_code)]
 
 use std::cell::{Cell, RefCell};

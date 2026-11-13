@@ -72,8 +72,6 @@ impl Client {
 
     /// Asks the daemon to normalize and validate a suffix without applying it, to preview while
     /// the user types (the answer is always 200, see TldCheck).
-    // The suffix picker that calls this lands with plan 3d's tasks 2-4.
-    #[allow(dead_code)]
     pub fn check_tld(&self, tld: &str) -> Result<TldCheck, Error> {
         self.request("POST", "/v1/tld/check", Some(&serde_json::json!({ "tld": tld })), DEFAULT_TIMEOUT)
     }

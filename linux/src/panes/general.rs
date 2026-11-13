@@ -7,7 +7,8 @@ use std::rc::Rc;
 use adw::prelude::*;
 use gtk::{gio, glib};
 
-use super::common::{PaneView, group, info_row, report, status_dot, switch_row};
+use super::common::{PaneView, code_block, group, info_row, report, status_dot, switch_row};
+use super::suffix::{Draft, SuffixPicker};
 use super::versions::busy_button;
 use super::{Data, Pane};
 use crate::api::{Client, Config, Status};
@@ -59,6 +60,12 @@ impl GeneralPane {
         group
     }
 
+    /// The global domain switch (spec 4): the suffix picker with the daemon's live verdict, and
+    /// an Apply that runs the whole switch through the packaged CLI — `flock tld` raises the
+    /// desktop's polkit password prompt itself, so the app does no privilege work. The picker
+    /// compares against the config's tld: the CLI writes the config first and only then does the
+    /// DNS and certificate steps, so after a declined prompt the refreshed pane already sits on
+    /// the new suffix, which is what the recovery sentence tells the user about.
     fn network(&self, config: &Config, status: &Status) -> adw::PreferencesGroup {
         let footer = if config.ports.http != 80 || config.ports.https != 443 {
             format!(
@@ -69,9 +76,103 @@ impl GeneralPane {
             String::new()
         };
         let group = group("Network", &footer);
-        let row = info_row("Domain", &format!("*.{}", config.tld));
-        row.set_subtitle(&glib::markup_escape_text(&domain_explanation(&config.tld, status)));
-        group.add(&row);
+        // The picker makes no network call itself: this closure is the daemon call, run on the
+        // thread it spawns after its own debounce (panes/suffix.rs).
+        let picker = SuffixPicker::new(&config.tld, false, |tld| Client.check_tld(&tld));
+        let domain = picker.row();
+        domain.set_title("Domain");
+        domain.set_subtitle(&glib::markup_escape_text(&domain_explanation(&config.tld, status)));
+        group.add(&domain);
+        group.add(&picker.entry());
+        group.add(&picker.verdict());
+        // While the switch runs, the CLI's last output line shows under the picker.
+        let progress = gtk::Label::builder().wrap(true).xalign(0.0).css_classes(["dim-label"]).visible(false).build();
+        group.add(&progress);
+
+        let apply = gtk::Button::builder().label("Apply").valign(gtk::Align::Center).sensitive(false).build();
+        picker.set_changed({
+            let (apply, picker) = (apply.clone(), picker.clone());
+            move || apply.set_sensitive(picker.can_apply())
+        });
+        // The previous failed run's output row, removed when the picker starts another one.
+        let output: Rc<RefCell<Option<adw::ExpanderRow>>> = Rc::new(RefCell::default());
+        {
+            let (picker, domain, entry, progress, group, banner, model, output) = (
+                picker.clone(),
+                domain.clone(),
+                picker.entry(),
+                progress.clone(),
+                group.clone(),
+                self.banner.clone(),
+                self.model.clone(),
+                output,
+            );
+            apply.connect_clicked(move |button| {
+                // Only a draft the daemon accepted enables Apply, and General offers no Inherit,
+                // so the run's value is always a normalized suffix — the only thing argv takes.
+                let Some(Draft::Custom(suffix)) = picker.draft() else { return };
+                // The stream's closures outlive the click: every handle they touch is a clone.
+                let (button, picker, domain, entry, group, banner, model) =
+                    (button.clone(), picker.clone(), domain.clone(), entry.clone(), group.clone(), banner.clone(), model.clone());
+                let (output, running, finished) = (output.clone(), progress.clone(), progress.clone());
+                // Busy until the CLI is done: the spinner box busy_button shows, and the picker
+                // disabled so no draft can drift while the password prompt is up.
+                button.set_sensitive(false);
+                let content = gtk::Box::builder().spacing(6).build();
+                content.append(&gtk::Spinner::builder().spinning(true).build());
+                content.append(&gtk::Label::new(Some("Switching…")));
+                button.set_child(Some(&content));
+                domain.set_sensitive(false);
+                entry.set_sensitive(false);
+                running.set_visible(false);
+                clear_output(&group, &output);
+                installation::run_streaming(
+                    vec!["tld".to_owned(), suffix.clone()],
+                    move |line| {
+                        running.set_label(line.trim());
+                        running.set_visible(true);
+                    },
+                    move |out| {
+                        finished.set_visible(false);
+                        if out.ok {
+                            // The new tld is the config's current one: the refresh re-renders the
+                            // pane, and the picker seeds there with a free banner.
+                            report(&banner, None);
+                            model.refresh();
+                            return;
+                        }
+                        // The run didn't finish; the picker returns for a retry or another choice.
+                        button.set_label("Apply");
+                        button.set_sensitive(picker.can_apply());
+                        domain.set_sensitive(true);
+                        entry.set_sensitive(true);
+                        if installation::declined(&out) {
+                            // The prompt came after the config switch and before the DNS and
+                            // certificate steps, so the recovery sentence is the whole story.
+                            report(
+                                &banner,
+                                Some(format!(
+                                    "You declined the password. Flock’s config is on .{suffix} already; \
+                                     finish the switch by running `flock install` in a terminal."
+                                )),
+                            );
+                        } else {
+                            report(&banner, Some(format!("Switching to .{suffix} didn’t finish.")));
+                            if !out.text.trim().is_empty() {
+                                let expander = adw::ExpanderRow::builder().title("Output").build();
+                                expander.add_row(&code_block(out.text.trim()));
+                                group.add(&expander);
+                                output.borrow_mut().replace(expander);
+                            }
+                        }
+                        model.refresh();
+                    },
+                );
+            });
+        }
+        let actions = adw::ActionRow::new();
+        actions.add_suffix(&apply);
+        group.add(&actions);
         group
     }
 
@@ -276,6 +377,14 @@ fn confirm_unpark(button: &gtk::Button, path: &str, model: Rc<AppModel>, banner:
             model.perform(move |client: Client| client.unpark(&path), move |e| report(&banner, e));
         }
     });
+}
+
+/// Takes the output row of a previous failed `flock tld` run out of the Network group, so a
+/// retry doesn't stack its failure text under the old one.
+fn clear_output(group: &adw::PreferencesGroup, output: &RefCell<Option<adw::ExpanderRow>>) {
+    if let Some(expander) = output.borrow_mut().take() {
+        group.remove(&expander);
+    }
 }
 
 /// How names under the TLD resolve: Flock's DNS server through systemd-resolved, which has no
