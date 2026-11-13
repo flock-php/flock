@@ -168,15 +168,13 @@ async fn shoot(id: &str, app: &adw::Application, model: &Rc<model::AppModel>, wi
             row.downcast::<adw::ExpanderRow>().expect("expander row").set_expanded(true);
         }
         "settings-sites-add-domain" => {
-            let row = find(&window, &|w| w.downcast_ref::<adw::ActionRow>().is_some_and(|r| r.title() == "Add Domain…"))
-                .ok_or("no Add Domain… row")?;
+            let row = find(&window, &|w| w.downcast_ref::<adw::ActionRow>().is_some_and(|r| r.title() == "Add Alias…"))
+                .ok_or("no Add Alias… row")?;
             ActionRowExt::activate(&row.downcast::<adw::ActionRow>().expect("row"));
             settle(500).await;
-            let dialog = find(&window, &|w| w.is::<adw::AlertDialog>()).ok_or("no Add Domain dialog")?;
-            let entry = find(&dialog, &|w| w.is::<gtk::Entry>()).ok_or("no domain entry")?;
-            let entry = entry.downcast::<gtk::Entry>().expect("entry");
-            entry.set_text("admin");
-            entry.set_position(-1);
+            let dialog = find(&window, &|w| w.is::<adw::Dialog>()).ok_or("no Add Alias dialog")?;
+            let entry = find(&dialog, &|w| w.is::<adw::EntryRow>()).ok_or("no alias name entry")?;
+            entry.downcast::<adw::EntryRow>().expect("entry row").set_text("admin");
         }
         "settings-sites-pin" => {
             let button = find(&window, &|w| {

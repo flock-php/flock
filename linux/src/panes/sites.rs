@@ -17,14 +17,16 @@ use adw::prelude::*;
 use base64::Engine;
 use gtk::{gdk, gio, glib};
 
-use super::common::{PaneView, ask_link, group, info_row, report, status_dot};
+use super::common::{PaneView, ask_link, code_block, group, info_row, report, status_dot};
+use super::suffix::{Draft, INHERIT, PRESETS, SuffixPicker};
 use super::versions::{MenuItem, badge, button, more_menu};
 use super::worktree_job;
 use super::{Data, Pane};
 use crate::api::{
-    Branches, Client, Config, Error, ExtensionReport, PhpExtension, ProxyStatus, ShareStatus, SiteChange, SiteStatus, Status,
-    WorktreeStatus,
+    Branches, Client, Config, DnsStatus, Error, ExtensionReport, PhpExtension, ProxyStatus, ShareStatus, SiteChange, SiteDomain,
+    SiteStatus, Status, WorktreeStatus,
 };
+use crate::installation;
 use crate::links::{self, Link};
 use crate::model::AppModel;
 use crate::prefs;
@@ -421,7 +423,8 @@ impl Inner {
         let config = self.config.borrow().clone().unwrap_or_default();
         let status = self.status.borrow().clone().unwrap_or_default();
         let mut groups: Vec<gtk::Widget> = vec![self.header(site).upcast()];
-        groups.push(self.site_group(site, &status).upcast());
+        groups.push(self.site_group(site).upcast());
+        groups.extend(self.domain_groups(site, &status).into_iter().map(|g| g.upcast()));
         groups.push(self.share_group(site).upcast());
         groups.push(self.versions_group(site, &config).upcast());
         groups.push(self.server_group(site).upcast());
@@ -488,7 +491,7 @@ impl Inner {
         header
     }
 
-    fn site_group(self: &Rc<Self>, site: &SiteStatus, status: &Status) -> adw::PreferencesGroup {
+    fn site_group(self: &Rc<Self>, site: &SiteStatus) -> adw::PreferencesGroup {
         let group = group(
             "Site",
             "The document root is the folder Flock serves the site from. One picked here applies on this machine only; pin it to write it into .flockrc for everyone.",
@@ -497,51 +500,7 @@ impl Inner {
         let (this, name) = (self.clone(), site.name.clone());
         https.connect_active_notify(move |row| this.change(&name, SiteChange { secured: Some(row.is_active()), ..Default::default() }));
         group.add(&https);
-
-        for domain in site.domains.iter().flatten() {
-            let title = if domain.alias { format!("{} (alias)", domain.host) } else { domain.host.clone() };
-            let row = adw::ActionRow::builder().title(glib::markup_escape_text(&title)).build();
-            row.add_prefix(&gtk::Image::from_icon_name("network-workgroup-symbolic"));
-            if let Some(problem) = &domain.problem {
-                row.set_subtitle(&glib::markup_escape_text(problem));
-                row.add_css_class("warning");
-            } else if let Some(url) = domain.url.clone() {
-                row.set_activatable(true);
-                row.connect_activated(move |r| launch_uri(r, &url));
-            }
-            let remove = gtk::Button::builder()
-                .icon_name("list-remove-symbolic")
-                .tooltip_text(format!("Remove {}", domain.host))
-                .valign(gtk::Align::Center)
-                .css_classes(["flat"])
-                .build();
-            let (this, s, entry, host) = (self.clone(), site.name.clone(), domain.entry.clone(), domain.host.clone());
-            remove.connect_clicked(move |_| {
-                let (s2, e2) = (s.clone(), entry.clone());
-                this.confirm(&format!("Remove {host}?"), &format!("{host} is no longer served by {s}."), "Remove", true, move |c| {
-                    c.remove_domain(&s2, &e2)
-                });
-            });
-            row.add_suffix(&remove);
-            group.add(&row);
-        }
-        let add =
-            adw::ActionRow::builder().title("Add Domain…").subtitle("Extra domains: subdomains and aliases").activatable(true).build();
-        add.add_prefix(&gtk::Image::from_icon_name("list-add-symbolic"));
-        let (this, s, dns) = (self.clone(), site.name.clone(), status.dns.clone());
-        add.connect_activated(move |_| this.add_domain(&s, &dns));
-        group.add(&add);
-        if !status.dns.wildcard && !status.dns.wildcard_problem.is_empty() {
-            group.add(
-                &adw::ActionRow::builder()
-                    .title(glib::markup_escape_text(&format!(
-                        "Subdomains only work when you add them here: {}.",
-                        status.dns.wildcard_problem
-                    )))
-                    .css_classes(["warning"])
-                    .build(),
-            );
-        }
+        self.domain_rows(site, &group);
 
         group.add(&self.root_row(site));
         if let Some(hint) = root_hint(site) {
@@ -560,33 +519,523 @@ impl Inner {
         group
     }
 
-    fn add_domain(self: &Rc<Self>, site: &str, dns: &crate::api::DnsStatus) {
-        let tld = if dns.tld.is_empty() { "test" } else { &dns.tld };
-        let help = if dns.wildcard || dns.tld.is_empty() {
-            format!(
-                "Every subdomain up to {} levels below the site already works. Add a full name like {site}-2.{tld} for an alias, or a subdomain (tenant1, a.b) so it is listed here and also resolves on Windows machines without wildcard DNS.",
-                dns.max_depth.max(1)
-            )
-        } else {
-            format!(
-                "Wildcard subdomains don't work here ({}), so add each subdomain you use (tenant1, a.b). A full name adds an alias.",
-                dns.wildcard_problem
-            )
+    /// The Site group's Domain row (macOS's field("Domain")): the shared suffix picker with the
+    /// daemon's live verdict, and an Apply that runs the whole switch through the packaged CLI —
+    /// `flock site tld` raises the desktop's polkit password prompt itself, like General's global
+    /// switch (general.rs) does for `flock tld`. A site without a suffix of its own sits on
+    /// Inherit; its `site_tld` picks the menu, and one the menu doesn't offer sits in the custom
+    /// field. Inherit has no verdict to wait for, so its Apply is offered only while the site
+    /// pins a suffix today (macOS's canApplySuffix).
+    fn domain_rows(self: &Rc<Self>, site: &SiteStatus, group: &adw::PreferencesGroup) {
+        let status = self.status.borrow().clone().unwrap_or_default();
+        let dns = &status.dns;
+        let global = if dns.tld.is_empty() { "test".to_owned() } else { dns.tld.clone() };
+        // Apply compares against the suffix the site is served under today; an old daemon names
+        // none, and then the global one stands in for the Inherit row's label.
+        let current = if site.tld.is_empty() { global.clone() } else { site.tld.clone() };
+        // The picker makes no network call itself: this closure is the daemon call, run on the
+        // thread it spawns after its own debounce (panes/suffix.rs).
+        let picker = SuffixPicker::new(&current, true, |tld| Client.check_tld(&tld));
+        picker.row().set_title("Domain");
+        picker.row().set_subtitle(&glib::markup_escape_text(&format!(
+            "The suffix {} is served under. Inherit follows Flock’s global (.{global}); a picked suffix pins {} to its own.",
+            site.name, site.name
+        )));
+        if !site.site_tld.is_empty() {
+            if PRESETS.contains(&site.site_tld.as_str()) {
+                picker.set_selected(&site.site_tld);
+            } else {
+                picker.set_custom(&site.site_tld);
+            }
+        }
+        group.add(&picker.row());
+        group.add(&picker.entry());
+        group.add(&picker.verdict());
+        // While the switch runs, the CLI's last output line shows under the picker.
+        let progress = gtk::Label::builder().wrap(true).xalign(0.0).css_classes(["dim-label"]).visible(false).build();
+        group.add(&progress);
+        let apply = gtk::Button::builder().label("Apply").valign(gtk::Align::Center).sensitive(false).build();
+        let actions = adw::ActionRow::new();
+        actions.add_suffix(&apply);
+        group.add(&actions);
+
+        let running = Rc::new(Cell::new(false));
+        let pinned = !site.site_tld.is_empty();
+        let gate = {
+            let (apply, picker, running) = (apply.clone(), picker.clone(), running.clone());
+            move || apply.set_sensitive(!running.get() && if picker.is_inherit() { pinned } else { picker.can_apply() })
         };
-        let entry = gtk::Entry::builder().placeholder_text(format!("tenant1, a.b or {site}-2.{tld}")).activates_default(true).build();
-        let dialog = adw::AlertDialog::new(Some(&format!("Add a domain to {site}")), Some(&help));
-        dialog.set_extra_child(Some(&entry));
-        dialog.add_responses(&[("cancel", "Cancel"), ("add", "Add")]);
-        dialog.set_response_appearance("add", adw::ResponseAppearance::Suggested);
-        dialog.set_default_response(Some("add"));
-        let (this, site) = (self.clone(), site.to_owned());
-        dialog.choose(Some(&self.stack), gio::Cancellable::NONE, move |response| {
-            let domain = entry.text().trim().to_owned();
-            if response == "add" && !domain.is_empty() {
-                let site = site.clone();
-                this.perform(move |c| c.add_domain(&site, &domain, ""));
+        picker.set_changed(gate.clone());
+        gate();
+        let output: Rc<RefCell<Option<adw::ExpanderRow>>> = Rc::new(RefCell::default());
+        {
+            let (this, group) = (self.clone(), group.clone());
+            let (name, global) = (site.name.clone(), global.clone());
+            apply.connect_clicked(move |button| {
+                // The draft is captured now, so a mid-run edit can't change what runs; Inherit
+                // names the global suffix in the declined sentence, as on macOS.
+                let (inherit, applied) = match picker.draft() {
+                    Some(Draft::Inherit) => (true, global.clone()),
+                    Some(Draft::Custom(suffix)) => (false, suffix),
+                    None => return,
+                };
+                let mut args = vec!["site".to_owned(), "tld".to_owned()];
+                args.push(if inherit { "--inherit".to_owned() } else { applied.clone() });
+                args.push(name.clone());
+                // Busy until the CLI is done: the spinner box busy_button shows, and the picker
+                // disabled so no draft can drift while the password prompt is up.
+                running.set(true);
+                gate();
+                let content = gtk::Box::builder().spacing(6).build();
+                content.append(&gtk::Spinner::builder().spinning(true).build());
+                content.append(&gtk::Label::new(Some("Applying…")));
+                button.set_child(Some(&content));
+                picker.row().set_sensitive(false);
+                picker.entry().set_sensitive(false);
+                progress.set_visible(false);
+                clear_output(&group, &output);
+                let (banner, model) = (this.banner.clone(), this.model.clone());
+                let (button, group, gate, running, picker, name, progress_line, progress_done, output) = (
+                    button.clone(),
+                    group.clone(),
+                    gate.clone(),
+                    running.clone(),
+                    picker.clone(),
+                    name.clone(),
+                    progress.clone(),
+                    progress.clone(),
+                    output.clone(),
+                );
+                installation::run_streaming(
+                    args,
+                    move |line| {
+                        progress_line.set_label(line.trim());
+                        progress_line.set_visible(true);
+                    },
+                    move |out| {
+                        running.set(false);
+                        progress_done.set_visible(false);
+                        if out.ok {
+                            // The CLI already wrote the site's suffix: the refresh re-seeds this
+                            // row's picker with the new one.
+                            report(&banner, None);
+                            model.refresh();
+                            return;
+                        }
+                        // The run didn't finish; the picker returns for a retry or another choice.
+                        button.set_label("Apply");
+                        picker.row().set_sensitive(true);
+                        picker.entry().set_sensitive(true);
+                        gate();
+                        if installation::declined(&out) {
+                            // The prompt came after the site's suffix was switched and before the
+                            // DNS and certificate steps, so the recovery sentence is the whole
+                            // story.
+                            report(
+                                &banner,
+                                Some(format!(
+                                    "You declined the password. Flock’s config is on .{applied} for {name} already; \
+                                     finish the switch by running `flock install` in a terminal."
+                                )),
+                            );
+                        } else {
+                            report(&banner, Some(format!("Switching {name} to .{applied} didn’t finish.")));
+                            if !out.text.trim().is_empty() {
+                                let expander = adw::ExpanderRow::builder().title("Output").build();
+                                expander.add_row(&code_block(out.text.trim()));
+                                group.add(&expander);
+                                output.borrow_mut().replace(expander);
+                            }
+                        }
+                        model.refresh();
+                    },
+                );
+            });
+        }
+    }
+
+    /// The site's extra domains, split the way both sibling apps show them: aliases are names of
+    /// their own beside the site, subdomains hang under its domain (macOS's field("Aliases") and
+    /// field("Subdomains")). Both groups always stand: an empty one shows only its Add row, as
+    /// on macOS.
+    fn domain_groups(self: &Rc<Self>, site: &SiteStatus, status: &Status) -> Vec<adw::PreferencesGroup> {
+        let domains = site.domains.clone().unwrap_or_default();
+        let aliases = group("Aliases", "");
+        for domain in domains.iter().filter(|d| d.alias) {
+            aliases.add(&self.domain_row(site, domain));
+        }
+        aliases.add(&self.add_domain_row(site, "Add Alias…", "Another name for the site, with its own subdomains", true));
+        let subdomains = group("Subdomains", "");
+        for domain in domains.iter().filter(|d| !d.alias) {
+            subdomains.add(&self.domain_row(site, domain));
+        }
+        subdomains.add(&self.add_domain_row(
+            site,
+            "Add Subdomain…",
+            &format!("A name under {}, following the site’s suffix", site.domain),
+            false,
+        ));
+        if !status.dns.wildcard && !status.dns.wildcard_problem.is_empty() {
+            subdomains.add(
+                &adw::ActionRow::builder()
+                    .title(glib::markup_escape_text(&format!(
+                        "Subdomains only work when you add them here: {}.",
+                        status.dns.wildcard_problem
+                    )))
+                    .css_classes(["warning"])
+                    .build(),
+            );
+        }
+        vec![aliases, subdomains]
+    }
+
+    /// One row of the Aliases and Subdomains lists: the name (its problem, if any) and Remove.
+    fn domain_row(self: &Rc<Self>, site: &SiteStatus, domain: &SiteDomain) -> adw::ActionRow {
+        let row = adw::ActionRow::builder().title(glib::markup_escape_text(&domain.host)).build();
+        row.add_prefix(&gtk::Image::from_icon_name("network-workgroup-symbolic"));
+        if let Some(problem) = &domain.problem {
+            row.set_subtitle(&glib::markup_escape_text(problem));
+            row.add_css_class("warning");
+        } else if let Some(url) = domain.url.clone() {
+            row.set_activatable(true);
+            row.connect_activated(move |r| launch_uri(r, &url));
+        }
+        let remove = gtk::Button::builder()
+            .icon_name("list-remove-symbolic")
+            .tooltip_text(format!("Remove {}", domain.host))
+            .valign(gtk::Align::Center)
+            .css_classes(["flat"])
+            .build();
+        let (this, s, entry, host) = (self.clone(), site.name.clone(), domain.entry.clone(), domain.host.clone());
+        remove.connect_clicked(move |_| {
+            let (s2, e2) = (s.clone(), entry.clone());
+            this.confirm(&format!("Remove {host}?"), &format!("{host} is no longer served by {s}."), "Remove", true, move |c| {
+                c.remove_domain(&s2, &e2)
+            });
+        });
+        row.add_suffix(&remove);
+        row
+    }
+
+    /// The link at the end of one domain list that opens its add dialog.
+    fn add_domain_row(self: &Rc<Self>, site: &SiteStatus, title: &str, subtitle: &str, alias: bool) -> adw::ActionRow {
+        let row = adw::ActionRow::builder().title(title).subtitle(subtitle).activatable(true).build();
+        row.add_prefix(&gtk::Image::from_icon_name("list-add-symbolic"));
+        let (this, site, status) = (self.clone(), site.clone(), self.status.borrow().clone().unwrap_or_default());
+        row.connect_activated(move |_| if alias { this.add_alias(&site, &status) } else { this.add_subdomain(&site, &status) });
+        row
+    }
+
+    /// Adds an alias (macOS's AddAliasSheet): a name of its own beside the site, served under the
+    /// picked suffix — Inherit rides the site's suffix and moves with it, a picked suffix pins the
+    /// alias in place, even one equal to the site's own. The add goes through the API; a refusal
+    /// is the dialog's own red line, never the pane's banner, so the label and suffix stand for a
+    /// retry. A suffix new to this machine is provisioned on the spot: the add chains the bundled
+    /// CLI's `flock install`, polkit prompt included, in a sheet of its own.
+    fn add_alias(self: &Rc<Self>, site: &SiteStatus, status: &Status) {
+        let dns = &status.dns;
+        let global = if dns.tld.is_empty() { "test".to_owned() } else { dns.tld.clone() };
+        let site_suffix = if site.tld.is_empty() { global } else { site.tld.clone() };
+        let name = adw::EntryRow::builder().title("Name, e.g. api2").activates_default(true).build();
+        // A fresh picker per open (task 2's ruling): it lands on Inherit, as the macOS sheet does.
+        let picker = SuffixPicker::new(&site_suffix, true, |tld| Client.check_tld(&tld));
+        picker.set_selected_inherit();
+        picker.row().set_title("Suffix");
+        let help = gtk::Label::builder().wrap(true).xalign(0.0).css_classes(["caption", "dim-label"]).build();
+        let error = gtk::Label::builder().wrap(true).xalign(0.0).selectable(true).css_classes(["error"]).visible(false).build();
+        let list = gtk::ListBox::builder().css_classes(["boxed-list"]).selection_mode(gtk::SelectionMode::None).build();
+        list.append(&name);
+        list.append(&picker.row());
+        list.append(&picker.entry());
+        let buttons = gtk::Box::builder().spacing(6).halign(gtk::Align::End).build();
+        let cancel = gtk::Button::builder().label("Cancel").valign(gtk::Align::Center).css_classes(["flat"]).build();
+        let add = gtk::Button::builder().label("Add").valign(gtk::Align::Center).sensitive(false).build();
+        add.add_css_class("suggested-action");
+        buttons.append(&cancel);
+        buttons.append(&add);
+        let column = dialog_column();
+        column.append(&list);
+        column.append(&picker.verdict());
+        column.append(&help);
+        column.append(&error);
+        column.append(&buttons);
+        let dialog =
+            adw::Dialog::builder().title(format!("Add an alias to {}", site.name)).content_width(460).child(&dialog_view(&column)).build();
+        dialog.set_default_widget(Some(&add));
+        dialog.set_focus(Some(&name));
+
+        let submitting = Rc::new(Cell::new(false));
+        let update: Rc<dyn Fn()> = Rc::new({
+            let (name, picker, help, add, submitting) = (name.clone(), picker.clone(), help.clone(), add.clone(), submitting.clone());
+            let (site_name, site_suffix) = (site.name.clone(), site_suffix.clone());
+            let (wildcard, problem) = (dns.wildcard, dns.wildcard_problem.clone());
+            move || {
+                let label = name.text().trim().to_owned();
+                let preview = if label.is_empty() { "name".to_owned() } else { label.clone() };
+                // The suffix an unchecked draft previews is the one the sheet itself names (macOS).
+                let shown = match picker.draft() {
+                    Some(Draft::Inherit) => site_suffix.clone(),
+                    Some(Draft::Custom(suffix)) => suffix,
+                    None => "suffix".to_owned(),
+                };
+                let mut text = format!(
+                    "An alias is a separate name for {site_name}, with its own subdomains. The label is one word, no dots; \
+                     {preview}.{shown} is what lands. Inherit follows {site_name}’s suffix (.{site_suffix}) and moves with it; \
+                     a picked suffix pins the alias in place."
+                );
+                if !wildcard && !problem.is_empty() {
+                    text.push_str(&format!(" Listing names matters here: wildcard subdomains don’t work ({problem})."));
+                }
+                help.set_label(&text);
+                // Add needs a label, and on a picked suffix the daemon's verdict: a pending or
+                // refused check keeps it off (macOS's canAdd — a draft is a checked, normalized
+                // suffix or Inherit, and a suffix equal to the site's own is a legal pin).
+                let suffix_ready = picker.draft().is_some();
+                add.set_sensitive(!submitting.get() && !label.is_empty() && suffix_ready);
             }
         });
+        name.connect_changed({
+            let update = update.clone();
+            move |_| update()
+        });
+        picker.set_changed({
+            let update = update.clone();
+            move || update()
+        });
+        update();
+        cancel.connect_clicked({
+            let dialog = dialog.clone();
+            move |_| {
+                dialog.close();
+            }
+        });
+        add.connect_clicked({
+            let (name, picker, add, error, dialog, submitting, update) =
+                (name.clone(), picker.clone(), add.clone(), error.clone(), dialog.clone(), submitting.clone(), update.clone());
+            let (this, site_name, dns) = (self.clone(), site.name.clone(), dns.clone());
+            move |_| {
+                let domain = name.text().trim().to_owned();
+                let suffix = match picker.draft() {
+                    Some(Draft::Inherit) => INHERIT.to_owned(),
+                    Some(Draft::Custom(suffix)) => suffix,
+                    None => return,
+                };
+                if domain.is_empty() || submitting.get() {
+                    return;
+                }
+                // Review Focus 3: the chain condition reads the state before the add moves it.
+                let fresh = is_new_suffix(&dns, &suffix);
+                submitting.set(true);
+                error.set_visible(false);
+                update();
+                let content = gtk::Box::builder().spacing(6).build();
+                content.append(&gtk::Spinner::builder().spinning(true).build());
+                content.append(&gtk::Label::new(Some("Adding…")));
+                add.set_child(Some(&content));
+                // Both request halves get their own clones: the click closure is Fn and may run again.
+                let (job, add, error, dialog, submitting, update, done_name, done_suffix) = (
+                    this.clone(),
+                    add.clone(),
+                    error.clone(),
+                    dialog.clone(),
+                    submitting.clone(),
+                    update.clone(),
+                    site_name.clone(),
+                    suffix.clone(),
+                );
+                let (req_name, req_domain, req_suffix) = (site_name.clone(), domain.clone(), suffix.clone());
+                this.model.perform(
+                    move |c| c.add_domain(&req_name, &req_domain, &req_suffix),
+                    move |e| {
+                        submitting.set(false);
+                        add.set_label("Add");
+                        update();
+                        match e {
+                            Some(message) => {
+                                // A refusal is the dialog's own red line, never the banner: the
+                                // typed label and suffix stand for a retry (macOS).
+                                error.set_label(&message);
+                                error.set_visible(true);
+                            }
+                            None => {
+                                // The add landed: the pane shows it through the status this very
+                                // request returned. A suffix new to the machine provisions next.
+                                dialog.close();
+                                if fresh {
+                                    job.chain_install(&done_name, &done_suffix);
+                                }
+                            }
+                        }
+                    },
+                );
+            }
+        });
+        dialog.present(Some(&self.stack));
+    }
+
+    /// Adds a subdomain (macOS's AddSubdomainSheet): one name under the site's domain ("tenant1",
+    /// "a.b"). There is no suffix to pick — it hangs under the site and follows its suffix — so
+    /// there is nothing to provision either: the site's suffix is served already. The add goes
+    /// through the legacy classification (no suffix); the daemon decides what lands.
+    fn add_subdomain(self: &Rc<Self>, site: &SiteStatus, status: &Status) {
+        let dns = &status.dns;
+        let depth = dns.max_depth.max(1);
+        let name = adw::EntryRow::builder().title("Name, e.g. tenant1 or a.b").activates_default(true).build();
+        let help = gtk::Label::builder().wrap(true).xalign(0.0).css_classes(["caption", "dim-label"]).build();
+        let error = gtk::Label::builder().wrap(true).xalign(0.0).selectable(true).css_classes(["error"]).visible(false).build();
+        let list = gtk::ListBox::builder().css_classes(["boxed-list"]).selection_mode(gtk::SelectionMode::None).build();
+        list.append(&name);
+        let buttons = gtk::Box::builder().spacing(6).halign(gtk::Align::End).build();
+        let cancel = gtk::Button::builder().label("Cancel").valign(gtk::Align::Center).css_classes(["flat"]).build();
+        let add = gtk::Button::builder().label("Add").valign(gtk::Align::Center).sensitive(false).build();
+        add.add_css_class("suggested-action");
+        buttons.append(&cancel);
+        buttons.append(&add);
+        let column = dialog_column();
+        column.append(&list);
+        column.append(&help);
+        column.append(&error);
+        column.append(&buttons);
+        let dialog = adw::Dialog::builder()
+            .title(format!("Add a subdomain to {}", site.name))
+            .content_width(460)
+            .child(&dialog_view(&column))
+            .build();
+        dialog.set_default_widget(Some(&add));
+        dialog.set_focus(Some(&name));
+
+        let submitting = Rc::new(Cell::new(false));
+        let update: Rc<dyn Fn()> = Rc::new({
+            let (name, help, add, submitting) = (name.clone(), help.clone(), add.clone(), submitting.clone());
+            let (domain, wildcard, problem) = (site.domain.clone(), dns.wildcard, dns.wildcard_problem.clone());
+            move || {
+                let typed = name.text().trim().to_owned();
+                let preview = if typed.is_empty() { "name".to_owned() } else { typed.clone() };
+                // Why list a name that already works: here, and on machines without wildcard DNS
+                // (macOS's subdomainHelp, the two worlds apart).
+                let mut text = format!("{preview}.{domain} hangs under the site’s domain and follows its suffix.");
+                if wildcard {
+                    text.push_str(&format!(
+                        " Every subdomain up to {depth} levels deep already works without listing; list it to see it here \
+                         and on machines without wildcard DNS."
+                    ));
+                } else {
+                    text.push_str(&format!(" Listing matters here: wildcard subdomains don’t work ({problem}), so add each name you use."));
+                }
+                help.set_label(&text);
+                // Add needs a name and nothing else — there is no check to wait for (macOS).
+                add.set_sensitive(!submitting.get() && !typed.is_empty());
+            }
+        });
+        name.connect_changed({
+            let update = update.clone();
+            move |_| update()
+        });
+        update();
+        cancel.connect_clicked({
+            let dialog = dialog.clone();
+            move |_| {
+                dialog.close();
+            }
+        });
+        add.connect_clicked({
+            let (name, add, error, dialog, submitting, update) =
+                (name.clone(), add.clone(), error.clone(), dialog.clone(), submitting.clone(), update.clone());
+            let (this, site_name) = (self.clone(), site.name.clone());
+            move |_| {
+                let domain = name.text().trim().to_owned();
+                if domain.is_empty() || submitting.get() {
+                    return;
+                }
+                submitting.set(true);
+                error.set_visible(false);
+                update();
+                let content = gtk::Box::builder().spacing(6).build();
+                content.append(&gtk::Spinner::builder().spinning(true).build());
+                content.append(&gtk::Label::new(Some("Adding…")));
+                add.set_child(Some(&content));
+                let (add, error, dialog, submitting, update) =
+                    (add.clone(), error.clone(), dialog.clone(), submitting.clone(), update.clone());
+                let (req_name, req_domain) = (site_name.clone(), domain.clone());
+                this.model.perform(
+                    move |c| c.add_domain(&req_name, &req_domain, ""),
+                    move |e| {
+                        submitting.set(false);
+                        add.set_label("Add");
+                        update();
+                        match e {
+                            Some(message) => {
+                                error.set_label(&message);
+                                error.set_visible(true);
+                            }
+                            None => {
+                                dialog.close();
+                            }
+                        }
+                    },
+                );
+            }
+        });
+        dialog.present(Some(&self.stack));
+    }
+
+    /// The chained `flock install` for a suffix new to the machine (macOS's chainInstall in its
+    /// ProvisionSheet, Windows's second ProvisionSuffixAsync dialog): the alias is in the config
+    /// already, and the bundled CLI makes the suffix resolve with trusted certificates, the polkit
+    /// prompt included — so the run and its password dialog belong to this sheet, not the pane.
+    /// Success closes the sheet by itself; a failure keeps it open with the CLI's own words, and a
+    /// declined prompt adds that the alias stands and `flock install` finishes it. However it
+    /// ended, the pane refreshes when the sheet closes (macOS's onDismiss).
+    fn chain_install(self: &Rc<Self>, site: &str, suffix: &str) {
+        let suffix = suffix.to_owned();
+        let site = site.to_owned();
+        let spinner = gtk::Spinner::builder().spinning(true).valign(gtk::Align::Center).build();
+        let progress =
+            gtk::Label::builder().label(format!("Flock is making .{suffix} resolve…")).wrap(true).xalign(0.0).hexpand(true).build();
+        let running = gtk::Box::builder().spacing(8).build();
+        running.append(&spinner);
+        running.append(&progress);
+        let note = gtk::Label::builder().wrap(true).xalign(0.0).css_classes(["warning"]).visible(false).build();
+        let expander = adw::ExpanderRow::builder().title("Output").build();
+        let output = gtk::ListBox::builder().css_classes(["boxed-list"]).selection_mode(gtk::SelectionMode::None).visible(false).build();
+        output.append(&expander);
+        let column = dialog_column();
+        column.append(&running);
+        column.append(&note);
+        column.append(&output);
+        let dialog =
+            adw::Dialog::builder().title(format!("Provisioning .{suffix}…")).content_width(520).child(&dialog_view(&column)).build();
+        dialog.connect_closed({
+            let model = self.model.clone();
+            move |_| model.refresh()
+        });
+        dialog.present(Some(&self.stack));
+        installation::run_streaming(
+            vec!["install".to_owned()],
+            move |line| progress.set_label(line.trim()),
+            move |out| {
+                spinner.set_spinning(false);
+                if out.ok {
+                    // Provisioned: the sheet closes itself, and the close refreshes the rows.
+                    dialog.close();
+                    return;
+                }
+                // Ended short: the sheet keeps the CLI's own words, as General's Domain card does.
+                dialog.set_title(&format!("Provisioning .{suffix} didn’t finish"));
+                running.set_visible(false);
+                if installation::declined(&out) {
+                    note.set_label(&format!(
+                        "You declined the password. The alias is added to {site}; finish by running `flock install` \
+                         in a terminal to make .{suffix} resolve."
+                    ));
+                    note.set_visible(true);
+                }
+                if !out.text.trim().is_empty() {
+                    expander.add_row(&code_block(out.text.trim()));
+                    output.set_visible(true);
+                }
+            },
+        );
     }
 
     /// The document root: the project's or the detected one first (following the project), the
@@ -1906,6 +2355,45 @@ fn launch_file(widget: &impl IsA<gtk::Widget>, path: &str) {
     gtk::FileLauncher::new(Some(&gio::File::for_path(path))).launch(window.as_ref(), gio::Cancellable::NONE, |_| {});
 }
 
+/// A dialog's content column: spaced and margined, as the extension list and the worktree job
+/// sheet build theirs.
+fn dialog_column() -> gtk::Box {
+    gtk::Box::builder()
+        .orientation(gtk::Orientation::Vertical)
+        .spacing(12)
+        .margin_top(12)
+        .margin_bottom(18)
+        .margin_start(18)
+        .margin_end(18)
+        .build()
+}
+
+/// The dialog's view: a header bar to close from, and the content column.
+fn dialog_view(column: &gtk::Box) -> adw::ToolbarView {
+    let view = adw::ToolbarView::new();
+    view.add_top_bar(&adw::HeaderBar::new());
+    view.set_content(Some(column));
+    view
+}
+
+/// Whether the suffix an alias just settled on is new to this machine (Review Focus 3, macOS's
+/// `isNewSuffix`): never for Inherit (the site's suffix is provisioned by definition) nor for the
+/// global one (`dns.tld`) nor for a suffix something already serves under (`dns.suffixes`; a row
+/// without a tld is the ledger's contract and counts as nothing). A daemon from before the list
+/// chains once, and `flock install` is idempotent.
+fn is_new_suffix(dns: &DnsStatus, suffix: &str) -> bool {
+    !suffix.is_empty() && suffix != INHERIT && suffix != dns.tld && !dns.suffixes.iter().any(|s| !s.tld.is_empty() && s.tld == suffix)
+}
+
+/// Takes the output row of a previous failed `flock site tld` run out of the Site group, so a
+/// retry doesn't stack its failure text under the old one (general.rs's clear_output does the
+/// same for the global switch's identical Expander).
+fn clear_output(group: &adw::PreferencesGroup, output: &RefCell<Option<adw::ExpanderRow>>) {
+    if let Some(expander) = output.borrow_mut().take() {
+        group.remove(&expander);
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1915,5 +2403,43 @@ mod tests {
         assert_eq!(slug("Feature/Auth_2.x"), "feature-auth-2-x");
         assert_eq!(slug("fix//ümlaut-"), "fix-mlaut");
         assert_eq!(slug("brave-otter"), "brave-otter");
+    }
+
+    fn dns(tld: &str, suffixes: &[&str]) -> DnsStatus {
+        DnsStatus {
+            tld: tld.to_owned(),
+            suffixes: suffixes.iter().map(|t| crate::api::SuffixStatus { tld: t.to_string(), ..Default::default() }).collect(),
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn inherit_and_an_empty_suffix_never_chain_the_install() {
+        // An inherited alias rides the site's suffix, which is provisioned by definition.
+        assert!(!is_new_suffix(&dns("test", &["test"]), INHERIT));
+        assert!(!is_new_suffix(&dns("test", &[]), ""));
+    }
+
+    #[test]
+    fn a_suffix_something_serves_under_never_chains() {
+        // The global one, and any suffix the ledger lists (Review Focus 3: no chain on an
+        // active suffix).
+        assert!(!is_new_suffix(&dns("test", &["test", "loc"]), "test"));
+        assert!(!is_new_suffix(&dns("test", &["test", "loc"]), "loc"));
+    }
+
+    #[test]
+    fn a_suffix_nothing_serves_under_chains_the_install_once() {
+        assert!(is_new_suffix(&dns("test", &["test", "loc"]), "internal"));
+        // A daemon from before the suffixes list: the first picked suffix chains once, and
+        // `flock install` is idempotent.
+        assert!(is_new_suffix(&dns("test", &[]), "internal"));
+    }
+
+    #[test]
+    fn suffix_rows_without_a_tld_are_not_active_suffixes() {
+        // The legacy ledger contract (3c): rows with an empty tld stand for nothing served, so
+        // they can't stop the chain.
+        assert!(is_new_suffix(&dns("test", &[""]), "internal"));
     }
 }
