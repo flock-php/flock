@@ -514,7 +514,7 @@ mod tests {
 
     #[test]
     fn parses_po_entries() {
-        let po = "msgid \"\"\nmsgstr \"Language: cs\\n\"\n\n#. a note\nmsgid \"sites.open\"\nmsgstr \"\"\n\"Otevřít „{name}“\"\n\n\
+        let po = "msgid \"\"\nmsgstr \"\"\n\"Language: cs\\n\"\n\n#. a note\nmsgid \"sites.open\"\nmsgstr \"\"\n\"Otevřít „{name}“\"\n\n\
                   msgid \"sites.count\"\nmsgid_plural \"sites.count\"\nmsgstr[0] \"{n} web\"\nmsgstr[1] \"{n} weby\"\nmsgstr[2] \"{n} webů\"\n\n\
                   #, fuzzy, c-format\nmsgid \"sites.fuzzy\"\nmsgstr \"Nejisté\"\n\n\
                   msgid \"sites.untranslated\"\nmsgstr \"\"\n";
