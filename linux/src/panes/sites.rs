@@ -584,7 +584,7 @@ impl Inner {
             let domain = entry.text().trim().to_owned();
             if response == "add" && !domain.is_empty() {
                 let site = site.clone();
-                this.perform(move |c| c.add_domain(&site, &domain));
+                this.perform(move |c| c.add_domain(&site, &domain, ""));
             }
         });
     }

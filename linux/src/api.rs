@@ -70,6 +70,14 @@ impl Client {
         self.request("POST", "/v1/settings", Some(change), DEFAULT_TIMEOUT)
     }
 
+    /// Asks the daemon to normalize and validate a suffix without applying it, to preview while
+    /// the user types (the answer is always 200, see TldCheck).
+    // The suffix picker that calls this lands with plan 3d's tasks 2-4.
+    #[allow(dead_code)]
+    pub fn check_tld(&self, tld: &str) -> Result<TldCheck, Error> {
+        self.request("POST", "/v1/tld/check", Some(&serde_json::json!({ "tld": tld })), DEFAULT_TIMEOUT)
+    }
+
     pub fn config(&self) -> Result<Config, Error> {
         self.request("GET", "/v1/config", None::<&()>, DEFAULT_TIMEOUT)
     }
@@ -278,13 +286,8 @@ impl Client {
         self.request("DELETE", &proxy_path(name), None::<&()>, DEFAULT_TIMEOUT)
     }
 
-    pub fn add_domain(&self, site: &str, domain: &str) -> Result<Status, Error> {
-        self.request(
-            "POST",
-            &format!("/v1/sites/{}/domains", escape(site)),
-            Some(&serde_json::json!({ "domain": domain })),
-            DEFAULT_TIMEOUT,
-        )
+    pub fn add_domain(&self, site: &str, domain: &str, suffix: &str) -> Result<Status, Error> {
+        self.request("POST", &format!("/v1/sites/{}/domains", escape(site)), Some(&add_domain_body(domain, suffix)), DEFAULT_TIMEOUT)
     }
 
     pub fn remove_domain(&self, site: &str, entry: &str) -> Result<Status, Error> {
@@ -531,6 +534,16 @@ fn proxy_path(name: &str) -> String {
     format!("/v1/proxies/{}", escape(name))
 }
 
+/// The body of POST /v1/sites/{name}/domains: the suffix joins it only when set, so an old
+/// daemon (and the legacy full-host flow) sees exactly the body it expects.
+fn add_domain_body(domain: &str, suffix: &str) -> serde_json::Value {
+    let mut body = serde_json::json!({ "domain": domain });
+    if !suffix.is_empty() {
+        body["suffix"] = serde_json::json!(suffix);
+    }
+    body
+}
+
 /// POST /v1/proxies: secured is left out to keep an existing proxy's setting.
 #[derive(Serialize, Debug, Clone, PartialEq)]
 pub struct ProxyChange {
@@ -565,6 +578,23 @@ pub struct SettingsChange {
     pub default_php: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub default_node: Option<String>,
+    /// The local suffix sites are served under; the daemon normalizes and validates it.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tld: Option<String>,
+}
+
+/// POST /v1/tld/check (api.TLDCheck): the daemon's verdict on a suffix typed in the app,
+/// without applying it. normalized is always what the daemon would store; warning and error
+/// are dropped from the JSON when there is none.
+#[derive(Deserialize, Debug, Clone, PartialEq, Default)]
+#[serde(default)]
+// Returned by check_tld alone until the picker from plan 3d's tasks 2-4 asks for it.
+#[allow(dead_code)]
+pub struct TldCheck {
+    pub ok: bool,
+    pub normalized: String,
+    pub warning: String,
+    pub error: String,
 }
 
 /// GET /v1/status (api.Status).
@@ -1030,9 +1060,24 @@ pub struct Service {
 #[serde(default)]
 pub struct DnsStatus {
     pub tld: String,
+    /// The address of the embedded DNS server, when it runs.
+    pub addr: String,
     pub wildcard: bool,
     pub wildcard_problem: String,
     pub max_depth: u32,
+    /// The wildcard health of every active suffix (the global one included); an older daemon
+    /// sends none.
+    pub suffixes: Vec<SuffixStatus>,
+}
+
+/// One active suffix's DNS health: whether every name under it resolves to Flock, and when it
+/// does not, why (see DnsStatus.wildcard and its wildcard_problem).
+#[derive(Deserialize, Debug, Clone, PartialEq, Default)]
+#[serde(default)]
+pub struct SuffixStatus {
+    pub tld: String,
+    pub wildcard: bool,
+    pub problem: String,
 }
 
 #[derive(Deserialize, Debug, Clone, PartialEq, Default)]
@@ -1101,6 +1146,14 @@ pub struct SiteStatus {
     /// "", missing, current, outdated or custom.
     pub boost: String,
     pub share: Option<ShareStatus>,
+    /// The suffix the site is served under: its site_tld override ("" is inherit, then this is
+    /// the global one). site_host is the raw host override and title the display name: both
+    /// empty (and absent on the wire) when the site follows its name. An older daemon sends
+    /// none of the four.
+    pub tld: String,
+    pub site_tld: String,
+    pub site_host: String,
+    pub title: String,
 }
 
 impl SiteStatus {
@@ -1367,6 +1420,15 @@ pub struct SiteChange {
     pub worker: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub root: Option<String>,
+    /// The site's own suffix: "" is inherit, else the daemon normalizes and validates it.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tld: Option<String>,
+    /// The name part of the site's domain: "" is the default (the site's name).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub host: Option<String>,
+    /// The display name: "" shows the site name again.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub title: Option<String>,
 }
 
 /// GET /v1/sites/{name}/extensions (phpext.Report).
@@ -1538,5 +1600,81 @@ mod tests {
         let custom = state.custom.unwrap();
         assert!(custom[0].linked && custom[0].version == "1.2" && custom[0].problem.is_empty());
         assert!(!custom[1].linked && custom[1].problem.contains("lib/"));
+    }
+
+    // An older daemon's row: none of the domain keys exist, so every one of them defaults empty.
+    #[test]
+    fn decodes_a_legacy_domain_row() {
+        let json = r#"{"dns":{"tld":"test","wildcard":true,"max_depth":4},
+            "sites":[{"name":"acme","domain":"acme.test","path":"/home/a/acme","server":"fastcgi","worker":""}]}"#;
+        let status: Status = serde_json::from_str(json).unwrap();
+        let site = &status.sites[0];
+        assert!(site.tld.is_empty() && site.site_tld.is_empty() && site.site_host.is_empty() && site.title.is_empty());
+        assert!(status.dns.addr.is_empty() && status.dns.suffixes.is_empty());
+    }
+
+    // A current daemon's row: the suffixes and overrides on the site, the DNS server's address and
+    // the per-suffix health (problem only where a suffix does not resolve by wildcard).
+    #[test]
+    fn decodes_the_domain_fields() {
+        let json = r#"{"dns":{"tld":"test","addr":"127.0.0.1:53535","wildcard":true,"max_depth":4,
+                "suffixes":[{"tld":"test","wildcard":true},{"tld":"loc","wildcard":false,"problem":"the DNS rule is missing"}]},
+            "sites":[{"name":"acme","domain":"acme.test","path":"/home/a/acme",
+                "tld":"test","site_tld":"loc","site_host":"acme-blog","title":"ACME Blog"}]}"#;
+        let status: Status = serde_json::from_str(json).unwrap();
+        assert_eq!(status.dns.addr, "127.0.0.1:53535");
+        assert_eq!(
+            status.dns.suffixes,
+            [
+                SuffixStatus { tld: "test".into(), wildcard: true, problem: String::new() },
+                SuffixStatus { tld: "loc".into(), wildcard: false, problem: "the DNS rule is missing".into() }
+            ]
+        );
+        let site = &status.sites[0];
+        assert_eq!(site.tld, "test");
+        assert_eq!(site.site_tld, "loc");
+        assert_eq!(site.site_host, "acme-blog");
+        assert_eq!(site.title, "ACME Blog");
+    }
+
+    #[test]
+    fn decodes_a_tld_check() {
+        // The daemon drops warning and error from the JSON when there is none.
+        let ok: TldCheck = serde_json::from_str(r#"{"ok":true,"normalized":"test"}"#).unwrap();
+        assert!(ok.ok && ok.normalized == "test" && ok.warning.is_empty() && ok.error.is_empty());
+        let warned: TldCheck = serde_json::from_str(r#"{"ok":true,"normalized":"alt","warning":"browsers may resolve alt"}"#).unwrap();
+        assert!(warned.ok && warned.warning.contains("browsers") && warned.error.is_empty());
+        let rejected: TldCheck = serde_json::from_str(r#"{"ok":false,"normalized":"","error":"not a valid suffix"}"#).unwrap();
+        assert!(!rejected.ok && rejected.error == "not a valid suffix");
+    }
+
+    #[test]
+    fn encodes_a_settings_change() {
+        // Only the fields that are set go on the wire; an explicit "" goes as "", so the daemon
+        // can tell the two apart.
+        let changed = serde_json::to_value(SettingsChange { tld: Some("test".into()), ..Default::default() }).unwrap();
+        assert_eq!(changed, serde_json::json!({ "tld": "test" }));
+        let cleared = serde_json::to_value(SettingsChange { tld: Some(String::new()), ..Default::default() }).unwrap();
+        assert_eq!(cleared, serde_json::json!({ "tld": "" }));
+        assert!(serde_json::to_value(SettingsChange::default()).unwrap().get("tld").is_none());
+    }
+
+    #[test]
+    fn encodes_a_site_change() {
+        // A title rename sends ONLY title; a host reset sends "" (not the same as leaving it out).
+        let renamed = serde_json::to_value(SiteChange { title: Some("ACME Blog".into()), ..Default::default() }).unwrap();
+        assert_eq!(renamed, serde_json::json!({ "title": "ACME Blog" }));
+        let reset = serde_json::to_value(SiteChange { host: Some(String::new()), ..Default::default() }).unwrap();
+        assert_eq!(reset, serde_json::json!({ "host": "" }));
+        let suffix = serde_json::to_value(SiteChange { tld: Some("loc".into()), ..Default::default() }).unwrap();
+        assert_eq!(suffix, serde_json::json!({ "tld": "loc" }));
+        assert!(serde_json::to_value(SiteChange::default()).unwrap().as_object().unwrap().is_empty());
+    }
+
+    #[test]
+    fn shapes_the_add_domain_body() {
+        // Without a suffix the body is exactly what old daemons expect; with one it joins the tail.
+        assert_eq!(add_domain_body("acme-2.test", ""), serde_json::json!({ "domain": "acme-2.test" }));
+        assert_eq!(add_domain_body("tenant1", "inherit"), serde_json::json!({ "domain": "tenant1", "suffix": "inherit" }));
     }
 }
