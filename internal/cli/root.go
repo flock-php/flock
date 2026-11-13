@@ -14,7 +14,7 @@ var Version = "dev"
 func NewRootCommand() *cobra.Command {
 	root := &cobra.Command{
 		Use:           "flock",
-		Short:         "Flock — a native local Laravel development environment",
+		Short:         "Flock â€” a native local Laravel development environment",
 		SilenceUsage:  true,
 		SilenceErrors: false,
 	}
@@ -25,7 +25,7 @@ func NewRootCommand() *cobra.Command {
 	root.AddCommand(
 		newInstallCommand(), newConflictsCommand(), newUninstallCommand(), newPrivilegedSetupCommand(),
 		newDaemonCommand(), newRestartCommand(), newStartCommand(), newStopCommand(), newStatusCommand(), newLogsCommand(), newVersionCommand(), newUpdateCommand(),
-		newSitesCommand(), newLinkCommand(), newUnlinkCommand(), newParkCommand(), newUnparkCommand(), newProxyCommand(), newUnproxyCommand(), newProxiesCommand(),
+		newSitesCommand(), newLinkCommand(), newUnlinkCommand(), newParkCommand(), newUnparkCommand(), newProxyCommand(), newUnproxyCommand(), newProxiesCommand(), newTypeCommand(),
 		newSecureCommand(true), newSecureCommand(false), newDomainCommand(), newWorktreeCommand(), newShareCommand(), newUseCommand(),
 		newIsolateCommand(), newUnisolateCommand(), newIsolatedCommand(), newPinCommand(), newUnpinCommand(), newRootCommand(),
 		newPHPCommand(), newNodeCommand(), newServicesCommand(), newXdebugCommand(), newDebugCommand(), newFrankenPHPCommand(), newDumpsCommand(), newEventsCommand(), newMailCommand(),

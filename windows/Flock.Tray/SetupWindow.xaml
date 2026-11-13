@@ -150,6 +150,7 @@
                             </StackPanel>
                         </Border>
                     </StackPanel>
+                    <TextBlock TextWrapping="Wrap" Foreground="{ThemeResource TextFillColorSecondaryBrush}" Margin="1,16,0,8">Flock is free and open source. If you like it, <Hyperlink NavigateUri="https://github.com/flock-php/flock">a star on GitHub</Hyperlink> helps others find it.</TextBlock>
                     <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8" Margin="0,8,0,0">
                         <Button Content="Open Settings" Click="OpenSettingsClicked" />
                         <Button Content="Done" Click="CloseClicked" Style="{StaticResource AccentButtonStyle}" />

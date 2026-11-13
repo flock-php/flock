@@ -7,6 +7,7 @@ import (
 	"mime"
 	"net/http"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -29,6 +30,45 @@ type Share struct {
 	FPM []string
 	// Debug turns the app's debug mode on for visitors (APP_DEBUG=true), whatever .env says.
 	Debug bool
+
+	// Proxy is set for a Node.js app's share: its dev server ("localhost:<port>"), which gets the
+	// site's own Host (Domain) and Origin (Origin, e.g. "https://app.test"), so the dev server's
+	// host checks take the tunnel's requests. Root, Public and FPM are unused then.
+	Proxy  string
+	Domain string
+	Origin string
+	// Node is the Node.js site's name: its visitors start its dev server like the site's own do
+	// (see Site.Node), e.g. after it was stopped while the share ran.
+	Node string
+}
+
+// nodeShareBlock serves a Node.js app's share from its dev server, with the same forwarded headers
+// as a PHP share's. flock_share blocks dotfiles but the dev servers' own folders (see
+// blockedNodeSharePath).
+func nodeShareBlock(s Share) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "\nhttp://:%d {\n\tbind 127.0.0.1\n\timport flock_site\n", s.Port)
+	b.WriteString("\theader {\n\t\tX-Robots-Tag \"noindex, nofollow\"\n\t\tReferrer-Policy same-origin\n\t}\n")
+	for _, h := range []string{"X-Forwarded-Port", "X-Forwarded-Prefix", "Forwarded", "X-Original-URL", "X-Rewrite-URL"} {
+		fmt.Fprintf(&b, "\trequest_header -%s\n", h)
+	}
+	b.WriteString("\tflock_share * \"\"\n")
+	if s.Node != "" {
+		fmt.Fprintf(&b, "\tflock_wake %s\n", quote(s.Node))
+	}
+	fmt.Fprintf(&b, "\treverse_proxy %s {\n", quote(s.Proxy))
+	for _, h := range [][2]string{
+		{"Host", s.Domain},
+		{"X-Forwarded-Proto", "https"},
+		{"X-Forwarded-Host", "{host}"},
+		{"X-Forwarded-For", "{http.request.header.CF-Connecting-IP}"},
+	} {
+		fmt.Fprintf(&b, "\t\theader_up %s %s\n", h[0], quote(h[1]))
+	}
+	// Only a request that has an Origin gets the site's (a WebSocket's, a form's).
+	fmt.Fprintf(&b, "\t\theader_up Origin %s %s\n", quote(".+"), quote(s.Origin))
+	b.WriteString("\t}\n}\n")
+	return b.String()
 }
 
 // shareBlock serves a share. Requests come from cloudflared on loopback, so:
@@ -41,6 +81,9 @@ type Share struct {
 //     server's tags for the build (see sharerewrite.go);
 //   - search engines are asked not to index it, and links out don't send the tunnel's URL along.
 func shareBlock(s Share) string {
+	if s.Proxy != "" {
+		return nodeShareBlock(s)
+	}
 	var b strings.Builder
 	fmt.Fprintf(&b, "\nhttp://:%d {\n\tbind 127.0.0.1\n\timport flock_site\n", s.Port)
 	b.WriteString("\theader {\n\t\tX-Robots-Tag \"noindex, nofollow\"\n\t\tReferrer-Policy same-origin\n\t}\n")
@@ -126,6 +169,13 @@ func (s *shareHandler) UnmarshalCaddyfile(d *caddyfile.Dispenser) error {
 }
 
 func (s shareHandler) ServeHTTP(w http.ResponseWriter, r *http.Request, next caddyhttp.Handler) error {
+	if s.Public == "" {
+		// A Node.js app's share (see nodeShareBlock).
+		if blockedNodeSharePath(r.URL.Path) {
+			return caddyhttp.Error(http.StatusNotFound, nil)
+		}
+		return next.ServeHTTP(w, r)
+	}
 	if blockedSharePath(r.URL.Path) {
 		return caddyhttp.Error(http.StatusNotFound, nil)
 	}
@@ -181,6 +231,26 @@ func blockedSharePath(p string) bool {
 	}
 	for _, tool := range devTools {
 		if segs[0] == tool {
+			return true
+		}
+	}
+	return false
+}
+
+// nodeDotFolders are the folders starting with a dot that Node.js dev servers serve from: Vite's
+// pre-bundled dependencies (node_modules/.vite), SvelteKit's, Nuxt's and Astro's generated code.
+var nodeDotFolders = []string{".vite", ".svelte-kit", ".nuxt", ".astro", ".well-known"}
+
+// blockedNodeSharePath reports whether a Node.js app's share answers 404 for a request path: any
+// other segment starting with a dot (.env, .env.local, .git, .npmrc), backslashes and NUL. The dev
+// server is what serves the files, so the rest of blockedSharePath's Windows file name tricks don't
+// apply; its module paths have colons (/@id/virtual:..., /@fs/C:/...).
+func blockedNodeSharePath(p string) bool {
+	if strings.ContainsAny(p, "\\\x00") {
+		return true
+	}
+	for _, seg := range strings.Split(strings.ToLower(p), "/") {
+		if strings.HasPrefix(seg, ".") && !slices.Contains(nodeDotFolders, seg) {
 			return true
 		}
 	}

@@ -12,13 +12,15 @@ import (
 	"strings"
 
 	"gopkg.in/yaml.v3"
+
+	"flock/internal/project"
 )
 
 // Project files with the `worktrees:` settings: ConfigFile is committed, LocalFile is this
 // machine's and stays out of git.
 const (
-	ConfigFile = "flock.yml"
-	LocalFile  = "flock.local.yml"
+	ConfigFile = project.ConfigFile
+	LocalFile  = project.LocalFile
 )
 
 // DefaultPath is where `flock worktree add` puts a worktree, relative to the site's folder.

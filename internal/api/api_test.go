@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -34,15 +35,31 @@ type fakeBackend struct {
 	pg         *postgres.Manager
 	frankenphp *frankenphp.Manager
 	binaries   *binaries.Catalog
+
+	proxyCalls []string // "start <name>", "stop <name>"
 }
 
 func (f *fakeBackend) PHP() *php.Manager { return f.php }
+
+func (f *fakeBackend) StartProxy(name string) error {
+	if name == "missing" {
+		return fmt.Errorf("%w: no proxy named %s", ErrInvalidRequest, name)
+	}
+	f.proxyCalls = append(f.proxyCalls, "start "+name)
+	return nil
+}
+
+func (f *fakeBackend) StopProxy(name string) error {
+	f.proxyCalls = append(f.proxyCalls, "stop "+name)
+	return nil
+}
 
 func (f *fakeBackend) PostgresVersions() *postgres.Manager     { return f.pg }
 func (f *fakeBackend) Catalog() *catalog.Manager               { return f.catalog }
 func (f *fakeBackend) FrankenPHP() *frankenphp.Manager         { return f.frankenphp }
 func (f *fakeBackend) Binaries() *binaries.Catalog             { return f.binaries }
 func (f *fakeBackend) RestartSite(string) error                { return nil }
+func (f *fakeBackend) StopSite(string) error                   { return nil }
 func (f *fakeBackend) Shares() *share.Manager                  { return nil }
 func (f *fakeBackend) StartShare(string, []string, bool) error { return nil }
 func (f *fakeBackend) CreateWorktree(context.Context, WorktreeCreate) (WorktreeCreated, error) {
@@ -573,5 +590,109 @@ func TestProxyEndpoints(t *testing.T) {
 	}
 	if resp, _ := call(t, "DELETE", srv.URL+"/v1/proxies/soft-pack", "", ""); resp.StatusCode != http.StatusBadRequest {
 		t.Fatalf("unproxying twice, got %d", resp.StatusCode)
+	}
+}
+
+func TestProxyCommandEndpoints(t *testing.T) {
+	b := &fakeBackend{root: t.TempDir()}
+	srv := serve(t, b, "")
+	dir := t.TempDir()
+	dirJSON, _ := json.Marshal(dir)
+
+	body := `{"name":"app","upstream":"3000","command":"npm run dev","dir":` + string(dirJSON) + `}`
+	if resp, out := call(t, "POST", srv.URL+"/v1/proxies", "", body); resp.StatusCode != http.StatusOK {
+		t.Fatalf("proxy with a command: %d %s", resp.StatusCode, out)
+	}
+	if p, _ := b.config(t).FindProxy("app"); p.Command != "npm run dev" || p.Dir != dir || p.Background() {
+		t.Fatalf("command not stored: %+v", p)
+	}
+
+	// A new upstream keeps the command; a stop command makes it a background one.
+	if resp, out := call(t, "POST", srv.URL+"/v1/proxies", "", `{"name":"app","upstream":"3001"}`); resp.StatusCode != http.StatusOK {
+		t.Fatalf("re-proxy: %d %s", resp.StatusCode, out)
+	}
+	if resp, out := call(t, "PATCH", srv.URL+"/v1/proxies/app", "", `{"command":"docker compose up -d","stop_command":"docker compose stop"}`); resp.StatusCode != http.StatusOK {
+		t.Fatalf("stop command: %d %s", resp.StatusCode, out)
+	}
+	if p, _ := b.config(t).FindProxy("app"); p.Upstream != "http://127.0.0.1:3001" || p.Command != "docker compose up -d" || !p.Background() || p.Dir != dir {
+		t.Fatalf("after the changes: %+v", p)
+	}
+
+	for _, bad := range []string{`{"dir":"/no/such/folder"}`, `{"command":"a\nb"}`, `{"stop_command":"x\ny"}`} {
+		if resp, _ := call(t, "PATCH", srv.URL+"/v1/proxies/app", "", bad); resp.StatusCode != http.StatusBadRequest {
+			t.Errorf("%s must be rejected, got %d", bad, resp.StatusCode)
+		}
+	}
+	if resp, _ := call(t, "POST", srv.URL+"/v1/proxies", "", `{"name":"web","upstream":"4000","command":"npm run dev"}`); resp.StatusCode != http.StatusBadRequest {
+		t.Errorf("a command without its folder must be rejected, got %d", resp.StatusCode)
+	}
+
+	// An empty command removes it, with its folder and stop command.
+	if resp, out := call(t, "PATCH", srv.URL+"/v1/proxies/app", "", `{"command":""}`); resp.StatusCode != http.StatusOK {
+		t.Fatalf("remove the command: %d %s", resp.StatusCode, out)
+	}
+	if p, _ := b.config(t).FindProxy("app"); p.Command != "" || p.Dir != "" || p.StopCommand != "" {
+		t.Fatalf("command not removed: %+v", p)
+	}
+
+	for _, action := range []string{"start", "stop"} {
+		if resp, out := call(t, "POST", srv.URL+"/v1/proxies/app/"+action, "", ""); resp.StatusCode != http.StatusOK {
+			t.Fatalf("%s: %d %s", action, resp.StatusCode, out)
+		}
+	}
+	if resp, _ := call(t, "POST", srv.URL+"/v1/proxies/missing/start", "", ""); resp.StatusCode != http.StatusBadRequest {
+		t.Errorf("starting a missing proxy, got %d", resp.StatusCode)
+	}
+	if strings.Join(b.proxyCalls, ", ") != "start app, stop app" {
+		t.Fatalf("calls: %v", b.proxyCalls)
+	}
+}
+
+func TestSwitchingASitesType(t *testing.T) {
+	b := &fakeBackend{root: t.TempDir()}
+	cfg := config.Default()
+	cfg.Upsert(config.Site{Name: "app", Path: t.TempDir()})
+	if err := cfg.Save(b.root); err != nil {
+		t.Fatal(err)
+	}
+	srv := serve(t, b, "")
+
+	if resp, body := call(t, "PATCH", srv.URL+"/v1/sites/app", "", `{"type":"node"}`); resp.StatusCode != http.StatusOK {
+		t.Fatalf("to node: %d %s", resp.StatusCode, body)
+	}
+	if s, _ := b.config(t).FindSite("app"); s.Type != config.TypeNode {
+		t.Fatalf("type: %q", s.Type)
+	}
+	if resp, _ := call(t, "PATCH", srv.URL+"/v1/sites/app", "", `{"server":"frankenphp"}`); resp.StatusCode != http.StatusBadRequest {
+		t.Errorf("a Node.js site got a PHP server: %d", resp.StatusCode)
+	}
+	if resp, _ := call(t, "PATCH", srv.URL+"/v1/sites/app", "", `{"type":"ruby"}`); resp.StatusCode != http.StatusBadRequest {
+		t.Errorf("an unknown type was taken: %d", resp.StatusCode)
+	}
+}
+
+func TestClearingAServiceLog(t *testing.T) {
+	b := &fakeBackend{root: t.TempDir()}
+	srv := serve(t, b, "")
+	log := filepath.Join(b.root, "log", "proxy-app.log")
+	if err := os.MkdirAll(filepath.Dir(log), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(log, []byte("ready on :3000\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	if resp, _ := call(t, "DELETE", srv.URL+"/v1/logs/services/proxy-app", "", ""); resp.StatusCode != http.StatusNoContent {
+		t.Fatalf("clear: %d", resp.StatusCode)
+	}
+	if data, _ := os.ReadFile(log); len(data) != 0 {
+		t.Fatalf("not cleared: %q", data)
+	}
+	// A log that doesn't exist is empty already.
+	if resp, _ := call(t, "DELETE", srv.URL+"/v1/logs/services/proxy-gone", "", ""); resp.StatusCode != http.StatusNoContent {
+		t.Fatalf("clear a missing log: %d", resp.StatusCode)
+	}
+	if resp, _ := call(t, "DELETE", srv.URL+"/v1/logs/services/..%2Fconfig.json", "", ""); resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("a path must be refused, got %d", resp.StatusCode)
 	}
 }

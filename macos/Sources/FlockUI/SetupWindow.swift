@@ -126,6 +126,11 @@ struct SetupWindow: View {
                         seenDefaults = new
                     }
                 }
+                Text("Flock is free and open source. If you like it, [a star on GitHub](https://github.com/flock-php/flock) helps others find it.")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.horizontal, 32)
                 buttons {
                     Button("Open Settings") {
                         dismissWindow(id: WindowID.setup)

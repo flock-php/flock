@@ -1,5 +1,6 @@
 # Labels pull requests by the files they change, as .github/labeler.yml says: "documentation" for
-# PRs that change only docs/. Checked again on every push, and taken off once that's no longer true.
+# PRs that change only docs/, and "os: mac", "os: windows" or "os: linux" for PRs that change that
+# platform's app. Checked again on every push, and taken off once that's no longer true.
 name: Labeler
 
 on:

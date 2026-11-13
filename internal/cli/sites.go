@@ -62,6 +62,9 @@ func newLinkCommand() *cobra.Command {
 			if existing, ok := s.cfg.FindSite(name); ok && !existing.Parked {
 				site.Node, site.Domains = existing.Node, existing.Domains
 				if existing.Path == cwd {
+					site.Type = existing.Type // another folder gets the type it suggests
+				}
+				if existing.Path == cwd {
 					site.Root = existing.Root // relative to the project, so only for the same folder
 				}
 				if phpVersion == "" {
@@ -84,7 +87,9 @@ func newLinkCommand() *cobra.Command {
 				scheme = "https"
 			}
 			cmd.Printf("linked %s → %s://%s\n", cwd, scheme, s.cfg.Domain(site))
-			if r := project.RootFor(&site); r.State != "" {
+			if stored, _ := s.cfg.FindSite(site.Name); stored.Kind() == config.TypeNode {
+				cmd.Printf("%s is a Node.js app: Flock starts its dev server (npm run dev) on the first visit\n", site.Name)
+			} else if r := project.RootFor(&site); r.State != "" {
 				printRoot(cmd, site.Name, site.Path, r)
 			}
 			return nil

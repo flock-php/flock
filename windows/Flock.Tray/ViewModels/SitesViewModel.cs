@@ -137,6 +137,16 @@ public sealed partial class ProxyRowViewModel(Status.Proxy proxy) : ObservableOb
     public string? Problem => Snapshot.Problem;
     public bool HasProblem => Snapshot.Problem is not null;
 
+    /// <summary>The dot in the list: the command's state when Flock starts the server, else whether something answers.</summary>
+    public string Dot => Snapshot.Command?.State switch
+    {
+        Status.ProxyState.Failed => nameof(Ui.Tone.Critical),
+        Status.ProxyState.Starting or Status.ProxyState.Stopping => nameof(Ui.Tone.Caution),
+        _ => Running ? nameof(Ui.Tone.Success) : nameof(Ui.Tone.Neutral),
+    };
+
+    public string DotTooltip => Snapshot.Command is { State: not Status.ProxyState.Stopped } command ? command.StateLabel : ServerLabel;
+
     internal bool Apply(Status.Proxy value)
     {
         var previous = Snapshot;
@@ -144,7 +154,15 @@ public sealed partial class ProxyRowViewModel(Status.Proxy proxy) : ObservableOb
         OnPropertyChanged(string.Empty);
         return previous.Name != value.Name || previous.Domain != value.Domain || previous.Upstream != value.Upstream
                || previous.Secured != value.Secured || previous.Url != value.Url || previous.Problem != value.Problem
-               || previous.Running != value.Running || previous.Server != value.Server;
+               || previous.Running != value.Running || previous.Server != value.Server
+               || !CommandEqual(previous.Command, value.Command);
+    }
+
+    private static bool CommandEqual(Status.ProxyCommand? previous, Status.ProxyCommand? current)
+    {
+        return previous is null && current is null || previous is not null && current is not null &&
+            previous.Command == current.Command && previous.Dir == current.Dir && previous.StopCommand == current.StopCommand &&
+            previous.State == current.State && previous.Problem == current.Problem && previous.Log == current.Log;
     }
 }
 
@@ -186,6 +204,17 @@ public sealed partial class SiteRowViewModel : ObservableObject
     public string NodeFile => Snapshot.NodeFile;
     public string NodeShadowed => Snapshot.NodeShadowed;
     public string? Problem => Summary(Snapshot);
+    public bool HasProblem => Problem is not null;
+    /// <summary>A Node.js site shows its dev server's state as a dot; a PHP site is served while Flock runs.</summary>
+    public bool HasDot => Snapshot.NodeServer is not null;
+    public string Dot => Snapshot.NodeServer?.State switch
+    {
+        Status.NodeServerState.Running => nameof(Ui.Tone.Success),
+        Status.NodeServerState.Starting => nameof(Ui.Tone.Caution),
+        Status.NodeServerState.Failed => nameof(Ui.Tone.Critical),
+        _ => nameof(Ui.Tone.Neutral),
+    };
+    public string DotTooltip => Snapshot.NodeServer?.StateLabel ?? "";
     public bool OctaneAvailable => Snapshot.OctaneAvailable;
     public Status.SiteFrankenPhp? FrankenPhp => Snapshot.FrankenPhp;
     public string Boost => Snapshot.Boost;
@@ -271,7 +300,7 @@ public sealed partial class SiteRowViewModel : ObservableObject
                 Domains.Insert(index, row);
             }
         }
-        foreach (var property in new[] { nameof(Name), nameof(Domain), nameof(Path), nameof(Url), nameof(Secured), nameof(Php), nameof(Node), nameof(Server), nameof(Worker), nameof(Parked), nameof(PhpSource), nameof(PhpPinned), nameof(PhpFile), nameof(NodeSource), nameof(NodePinned), nameof(NodeFile), nameof(NodeShadowed), nameof(Problem), nameof(OctaneAvailable), nameof(FrankenPhp), nameof(Boost), nameof(IsFrankenPhp), nameof(PhpPinnedHere), nameof(NodePinnedHere), nameof(IsShared), nameof(ListTitle), nameof(ListMargin), nameof(IsSettingUp), nameof(SetupStep), nameof(HasOwnDatabase), nameof(DatabaseLabel), nameof(DatabaseTooltip) })
+        foreach (var property in new[] { nameof(Name), nameof(Domain), nameof(Path), nameof(Url), nameof(Secured), nameof(Php), nameof(Node), nameof(Server), nameof(Worker), nameof(Parked), nameof(PhpSource), nameof(PhpPinned), nameof(PhpFile), nameof(NodeSource), nameof(NodePinned), nameof(NodeFile), nameof(NodeShadowed), nameof(Problem), nameof(HasProblem), nameof(HasDot), nameof(Dot), nameof(DotTooltip), nameof(OctaneAvailable), nameof(FrankenPhp), nameof(Boost), nameof(IsFrankenPhp), nameof(PhpPinnedHere), nameof(NodePinnedHere), nameof(IsShared), nameof(ListTitle), nameof(ListMargin), nameof(IsSettingUp), nameof(SetupStep), nameof(HasOwnDatabase), nameof(DatabaseLabel), nameof(DatabaseTooltip) })
         {
             OnPropertyChanged(property);
         }
@@ -321,7 +350,16 @@ public sealed partial class SiteRowViewModel : ObservableObject
                || !ShareEqual(previous.Share, current.Share)
                || previous.Parent != current.Parent
                || previous.Branch != current.Branch
-               || !WorktreeEqual(previous.Worktree, current.Worktree);
+               || !WorktreeEqual(previous.Worktree, current.Worktree)
+               || previous.Type != current.Type
+               || !NodeServerEqual(previous.NodeServer, current.NodeServer);
+    }
+
+    private static bool NodeServerEqual(Status.SiteNodeServer? previous, Status.SiteNodeServer? current)
+    {
+        return previous is null && current is null || previous is not null && current is not null &&
+            previous.State == current.State && previous.Port == current.Port && previous.Command == current.Command &&
+            previous.Problem == current.Problem && previous.Log == current.Log;
     }
 
     private static bool WorktreeEqual(Status.WorktreeSetup? previous, Status.WorktreeSetup? current)

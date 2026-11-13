@@ -8,14 +8,17 @@ package web
 import (
 	"crypto/tls"
 	_ "embed"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 
 	"github.com/caddyserver/caddy/v2"
 	"github.com/caddyserver/caddy/v2/caddyconfig"
+	"github.com/caddyserver/caddy/v2/caddyconfig/caddyfile"
 	_ "github.com/caddyserver/caddy/v2/caddyconfig/httpcaddyfile"
 	_ "github.com/caddyserver/caddy/v2/modules/standard"
 
@@ -27,7 +30,10 @@ type Site struct {
 	Domain  string   // e.g. watchtower.test
 	Aliases []string // other names served like Domain, e.g. watchtower-2.test
 	Root    string   // document root, e.g. <path>/public
-	FPM     []string // FastCGI upstreams: "unix/<socket>" (PHP-FPM) or "127.0.0.1:<port>" (php-cgi workers)
+	// Handlers are optional Caddy HTTP handler directives included in the ordered route that serves
+	// the site. They are not included in the HTTP-to-HTTPS redirect or Flock's unlinked page.
+	Handlers string
+	FPM      []string // FastCGI upstreams: "unix/<socket>" (PHP-FPM) or "127.0.0.1:<port>" (php-cgi workers)
 	// DebugFPM are the upstreams of the pool that loads Xdebug. Requests that ask for Xdebug go
 	// there, and with Debugging (the project has breakpoints) every request does.
 	DebugFPM  []string
@@ -36,14 +42,17 @@ type Site struct {
 	// of a proxied name (config.Proxy: "http://127.0.0.1:3000", no Root). When set, requests go there
 	// instead of to FPM; those that ask for Xdebug still go to DebugFPM.
 	Proxy string
+	// Node is set on a Node.js site: its name, which every request passes to Config.Wake first
+	// (starting its dev server, at Proxy, when it isn't running).
+	Node string
 	// CertFile and KeyFile (from certs.SiteCert, covering Domain and *.Domain) are set when the site
 	// is secured. Deeper subdomains and aliases get certificates from Config.Issue.
 	CertFile string
 	KeyFile  string
 }
 
-// proxied reports whether the site is a proxied name (config.Proxy) rather than a PHP site.
-func (s Site) proxied() bool { return s.Root == "" && s.Proxy != "" }
+// proxied reports whether the site is a proxied name (config.Proxy) rather than a site.
+func (s Site) proxied() bool { return s.Root == "" && s.Proxy != "" && s.Node == "" }
 
 // Waiting is a linked site that can't be served because its PHP isn't installed: its names get
 // Flock's page saying so (and offering the install) instead of the "not linked" page.
@@ -96,6 +105,8 @@ type Config struct {
 	// TLD limits the names HTTPS answers for; Issue makes a certificate for one of them.
 	TLD   string
 	Issue func(name string) (*tls.Certificate, error)
+	// Wake is told of the requests to Node.js sites (see Site.Node).
+	Wake WakeFunc
 }
 
 // hosts are the names one of a site's names (its domain or an alias) answers to: the name itself
@@ -114,11 +125,14 @@ func hosts(name string) []string {
 func Caddyfile(cfg Config) string {
 	var b strings.Builder
 
+	// Caddy sorts handle and route before abort. "order abort first" keeps the remote guard ahead
+	// of every handler, such as a site's Xdebug handle pair, also on the wildcard listener.
 	fmt.Fprintf(&b, `{
 	admin off
 	persist_config off
 	auto_https disable_certs
 	skip_install_trust
+	order abort first
 	http_port %d
 	https_port %d
 	storage file_system %s
@@ -238,6 +252,14 @@ func unlinked(cfg Config) string {
 // of the upstream's own (reverse_proxy passes those through, whatever their status). PHP sites
 // served by FrankenPHP proxy too, but keep Caddy's plain 502.
 func upstreamDown(s Site, cfg Config) string {
+	if s.Node != "" {
+		// A Node.js site's dev server is starting (flock_wake sets its state and problem).
+		return fmt.Sprintf("\thandle_errors 502 {\n\t\tvars flock_node_site %s\n"+
+			// The state in X-Flock-Page, so the waiting page reloads once it changes (to say why it failed).
+			"\t\troot * %s\n\t\trewrite * /unlinked.html\n\t\theader Cache-Control no-store\n\t\theader X-Flock-Page node-{http.vars.flock_node_state}\n"+
+			"\t\ttemplates\n\t\tfile_server {\n\t\t\tstatus 503\n\t\t}\n\t}\n",
+			quote(s.Node), quote(pagesDir(cfg)))
+	}
 	if !s.proxied() {
 		return ""
 	}
@@ -253,22 +275,102 @@ const xdebugRequest = `{cookie.XDEBUG_SESSION} != "" || {cookie.XDEBUG_TRIGGER} 
 	`{query.XDEBUG_SESSION} != "" || {query.XDEBUG_SESSION_START} != "" || {query.XDEBUG_TRIGGER} != ""`
 
 func app(s Site) string {
-	root := ""
-	if s.Root != "" {
-		root = fmt.Sprintf("\troot * %s\n", quote(s.Root))
+	if strings.TrimSpace(s.Handlers) == "" {
+		return root(s, "\t") + dispatch(s, "\t")
 	}
+
+	// A route keeps the written order, so the custom handlers run before the Xdebug/default handle
+	// pair. The remote abort still runs first: it is ordered before every directive, route too.
+	return "\troute {\n" + root(s, "\t\t") + handlers(s.Handlers, "\t\t") + dispatch(s, "\t\t") + "\t}\n"
+}
+
+func root(s Site, indent string) string {
+	if s.Root == "" {
+		return ""
+	}
+	return fmt.Sprintf("%sroot * %s\n", indent, quote(s.Root))
+}
+
+func dispatch(s Site, indent string) string {
 	serve := func(indent string) string { return php(s.FPM, indent) }
 	if s.Proxy != "" {
 		serve = func(indent string) string { return proxy(s.Proxy, indent) }
 	}
+	if s.Node != "" {
+		return fmt.Sprintf("%sflock_wake %s\n", indent, quote(s.Node)) + proxy(s.Proxy, indent)
+	}
 	switch {
 	case len(s.DebugFPM) == 0:
-		return root + serve("\t")
+		return serve(indent)
 	case s.Debugging:
-		return root + php(s.DebugFPM, "\t")
+		return php(s.DebugFPM, indent)
 	}
-	return root + fmt.Sprintf("\t@xdebug expression `%s`\n\thandle @xdebug {\n%s\t}\n\thandle {\n%s\t}\n",
-		xdebugRequest, php(s.DebugFPM, "\t\t"), serve("\t\t"))
+	return fmt.Sprintf("%[1]s@xdebug expression `%[2]s`\n%[1]shandle @xdebug {\n%[3]s%[1]s}\n%[1]shandle {\n%[4]s%[1]s}\n",
+		indent, xdebugRequest, php(s.DebugFPM, indent+"\t"), serve(indent+"\t"))
+}
+
+func handlers(caddy, indent string) string {
+	caddy = strings.TrimSpace(strings.ReplaceAll(caddy, "\r\n", "\n"))
+	if caddy == "" {
+		return ""
+	}
+	return indent + strings.ReplaceAll(caddy, "\n", "\n"+indent) + "\n"
+}
+
+// CheckHandlers reports whether s.Handlers can be served: the directives must stay inside the
+// site's route (balanced braces), import nothing, and adapt in the site exactly as it is served,
+// e.g. without a matcher named like one of Flock's. Errors name the lines as name:line.
+func CheckHandlers(s Site, name string) error {
+	text := strings.ReplaceAll(s.Handlers, "\r\n", "\n")
+	tokens, err := caddyfile.Tokenize([]byte(text), name)
+	if err != nil {
+		return err
+	}
+	depth := 0
+	for i, t := range tokens {
+		if t.Quoted() {
+			continue
+		}
+		switch {
+		case t.Text == "{":
+			depth++
+		case t.Text == "}":
+			if depth--; depth < 0 {
+				return fmt.Errorf("%s:%d: } without a matching {", name, t.Line)
+			}
+		case t.Text == "import" && (i == 0 || tokens[i-1].Line+tokens[i-1].NumLineBreaks() < t.Line):
+			return fmt.Errorf("%s:%d: import isn't supported here", name, t.Line)
+		}
+	}
+	if depth > 0 {
+		return fmt.Errorf("%s: %d { without a matching }", name, depth)
+	}
+
+	// Adapt the site on its own and point the error at the line of the file, not of the config.
+	const placeholder = "flock-site-handlers"
+	cf := Caddyfile(Config{StorageDir: "caddy", LogFile: "web.log", HTTPPort: 80, HTTPSPort: 443, TLD: "test", Sites: []Site{s}})
+	first := strings.Index(cf, handlers(s.Handlers, "\t\t"))
+	if first < 0 {
+		return nil
+	}
+	trimmed := len(text) - len(strings.TrimLeft(text, " \t\n"))
+	offset := strings.Count(cf[:first], "\n") - strings.Count(text[:trimmed], "\n")
+	lines := strings.Count(strings.TrimRight(text, " \t\n"), "\n") + 1
+	if _, _, err := caddyconfig.GetAdapter("caddyfile").Adapt([]byte(cf), map[string]any{"filename": placeholder}); err != nil {
+		at := regexp.MustCompile(`,? at ` + placeholder + `:(\d+)`)
+		message := at.ReplaceAllStringFunc(err.Error(), func(m string) string {
+			n, _ := strconv.Atoi(at.FindStringSubmatch(m)[1])
+			if n -= offset; n < 1 || n > lines {
+				return ""
+			}
+			return fmt.Sprintf(", at %s:%d", name, n)
+		})
+		if !strings.Contains(message, name) {
+			message = name + ": " + message
+		}
+		return errors.New(message)
+	}
+	return nil
 }
 
 // proxy sends every request to a FrankenPHP process, which serves the static files too, or to a
@@ -367,6 +469,9 @@ func Apply(cfg Config) error {
 		return err
 	}
 	previous := currentCerts.Swap(source)
+	if cfg.Wake != nil {
+		currentWake.Store(&cfg.Wake)
+	}
 	if err := caddy.Load(json, true); err != nil {
 		currentCerts.Store(previous)
 		return err

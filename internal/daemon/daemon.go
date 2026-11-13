@@ -12,6 +12,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -100,6 +101,8 @@ type daemon struct {
 	sites    []api.SiteStatus
 	proxies  []api.ProxyStatus
 	probe    serverProbe // what answers at the proxies' upstreams
+	runs     proxyRuns   // the proxies' commands Flock started (see StartProxy)
+	node     nodeRuns    // the Node.js sites' dev servers (see wakeNode)
 	warnings []string
 	problems map[string]string // why an installed catalog service isn't running, by id
 	// breakpoints finds PhpStorm breakpoints; breakpointSites is what the last reload found, by site path.
@@ -284,7 +287,7 @@ func Run(ctx context.Context, cfg Config) error {
 	d := &daemon{root: cfg.Root, version: cfg.Version, startedAt: time.Now(), procs: supervisor.New(), leaves: certs.NewLeaves(), restarts: map[string]int{}}
 	defer d.shutdown()
 
-	d.binaries = binaries.NewCatalog(binaries.DefaultSource(cfg.Root), d.channel)
+	d.binaries = binaries.NewCatalog(binaries.DefaultSource(cfg.Root, cfg.Version), d.channel)
 	go d.binaries.Run(ctx)
 	d.pg = postgres.NewManager(cfg.Root, d.binaries, pgService{d})
 	d.php = php.NewManager(cfg.Root, d.binaries)
@@ -301,6 +304,7 @@ func Run(ctx context.Context, cfg Config) error {
 	d.catalog = catalog.NewManager(cfg.Root, catalog.Kinds(runtime.GOOS), d.binaries, d.Mutate)
 	go d.catalog.Run(ctx)
 	d.worktrees = worktree.NewManager(cfg.Root)
+	go d.sleepNodeSites(ctx, nodeIdle, nodeSleepCheck)
 	d.shares = share.NewManager(cfg.Root, d.binaries)
 	d.shares.Changed = func() {
 		if err := d.reload(); err != nil {
@@ -442,8 +446,43 @@ func (d *daemon) projectFiles() string {
 				fmt.Fprintf(&b, "%s\n", file)
 			}
 		}
+		// The settings files and the Caddy directives they name (see siteHandlers).
+		files := project.SettingsFiles(cfg, site)
+		if file, _, _ := project.CaddyFile(cfg, site); file != "" {
+			files = append(files, file)
+		}
+		for _, file := range files {
+			if info, err := os.Stat(file); err == nil {
+				fmt.Fprintf(&b, "%s %d %d\n", file, info.Size(), info.ModTime().UnixNano())
+			}
+		}
 	}
 	return b.String()
+}
+
+// siteHandlers reads the Caddy directives a site's flock.yml or flock.local.yml names with
+// `caddyfile:` (see project.CaddyFile) and checks them in ws, the site as it is served. A problem
+// is a warning: the site is served without them, and the other sites aren't affected.
+func siteHandlers(cfg *config.Config, site config.Site, ws web.Site) (handlers, problem string) {
+	file, from, err := project.CaddyFile(cfg, site)
+	if err != nil {
+		return "", fmt.Sprintf("caddyfile: %s: %v", site.Name, err)
+	}
+	if file == "" {
+		return "", ""
+	}
+	data, err := os.ReadFile(file)
+	if errors.Is(err, os.ErrNotExist) {
+		return "", fmt.Sprintf("caddyfile: %s: %s names %s, which doesn't exist", site.Name, from, file)
+	}
+	if err != nil {
+		return "", fmt.Sprintf("caddyfile: %s: %v", site.Name, err)
+	}
+	ws.Handlers = string(data)
+	if err := web.CheckHandlers(ws, file); err != nil {
+		return "", fmt.Sprintf("caddyfile: %s is served without its directives: %v", site.Name, err)
+	}
+	return ws.Handlers, ""
 }
 
 // breakpointInterval is how often the sites' PhpStorm workspaces are checked for breakpoints.
@@ -611,12 +650,19 @@ func (d *daemon) reload() error {
 		return debugPools[version]
 	}
 
-	// shareable are the served sites a share can serve: their document root and PHP version.
-	type shareable struct{ root, version string }
+	// shareable are the served sites a share can serve: their document root and PHP version, or a
+	// Node.js app's dev server and the origin it's served at.
+	type shareable struct{ root, version, node, domain, origin string }
 	shareables := map[string]shareable{}
 
 	sites := cfg.AllSites()
 	extras := cfg.DomainsBySite(sites)
+	// The Node.js sites' dev servers and ports; takenPorts are Flock's own and those given out.
+	nodeSpecs, nodePorts := map[string]supervisor.Spec{}, map[string]int{}
+	takenPorts := map[int]bool{}
+	for port := range cfg.UsedPorts("") {
+		takenPorts[port] = true
+	}
 	for _, site := range sites {
 		domain := cfg.Domain(site)
 		phpVersion, nodeVersion := project.PHPFor(cfg, &site, site.Path), project.NodeFor(cfg, &site, site.Path)
@@ -647,6 +693,33 @@ func (d *daemon) reload() error {
 				}
 			}
 			status.Domains = append(status.Domains, sd)
+		}
+
+		status.Type = site.Kind()
+		if site.Kind() == config.TypeNode {
+			// Served by its dev server, which the first request starts (see wakeNode).
+			port := d.nodePort(site.Name, takenPorts)
+			takenPorts[port] = true
+			spec := d.nodeSpec(cfg, site, port, nodeVersion.Version)
+			nodeSpecs[site.Name], nodePorts[site.Name] = spec, port
+			status.Server, status.Worker, status.OctaneAvailable, status.PHP = "", "", false, ""
+			status.NodeServer = &api.SiteNodeServer{State: api.NodeSleeping, Port: port, Command: spec.Shell, Log: spec.Name, Problem: nodeSiteProblem(site)}
+			if d.node.isAwake(site.Name) && !runningAsRoot() {
+				d.procs.Ensure(spec)
+				keep[spec.Name] = true
+			}
+			ws := web.Site{Domain: domain, Aliases: aliases, Proxy: "localhost:" + strconv.Itoa(port), Node: site.Name}
+			if site.Secured {
+				if ws.CertFile, ws.KeyFile, err = ca.SiteCert(domain); err != nil {
+					return fmt.Errorf("certificate for %s: %w", domain, err)
+				}
+			}
+			status.URL = scheme + "://" + domain + portSuffix(scheme, cfg)
+			shareables[site.Name] = shareable{node: ws.Proxy, domain: domain, origin: scheme + "://" + domain + portSuffix(scheme, cfg)}
+			webSites = append(webSites, ws)
+			domains = append(append(domains, domain), served...)
+			statuses = append(statuses, status)
+			continue
 		}
 
 		root := project.RootFor(&site)
@@ -728,10 +801,18 @@ func (d *daemon) reload() error {
 		status.URL = scheme + "://" + domain + portSuffix(scheme, cfg)
 		shareables[site.Name] = shareable{root: ws.Root, version: version}
 
+		// Checked once the site is complete: its directives adapt in the block it is served with.
+		if handlers, problem := siteHandlers(cfg, site, ws); problem != "" {
+			warnings = append(warnings, problem)
+		} else {
+			ws.Handlers = handlers
+		}
 		webSites = append(webSites, ws)
 		domains = append(append(domains, domain), served...)
 		statuses = append(statuses, status)
 	}
+
+	d.node.keep(nodeSpecs, nodePorts)
 
 	// Proxied names pass every request to their own server. A site's name wins over a proxy's: they
 	// can only clash through a parked directory or a config edited by hand.
@@ -740,9 +821,19 @@ func (d *daemon) reload() error {
 		taken[name] = true
 	}
 	var proxies []api.ProxyStatus
+	commands := map[string]bool{}
 	for _, p := range cfg.Proxies {
 		domain := cfg.ProxyDomain(p)
-		status := api.ProxyStatus{Name: p.Name, Domain: domain, Upstream: p.Upstream, Secured: p.Secured}
+		status := api.ProxyStatus{Name: p.Name, Domain: domain, Upstream: p.Upstream, Secured: p.Secured, Command: proxyCommandStatus(p)}
+		if p.Command != "" {
+			commands[p.Name] = true
+			// Started from Flock, a command that is the server keeps running until stopped.
+			if !p.Background() && d.runs.isStarted(p.Name) {
+				spec := d.proxySpec(cfg, p)
+				d.procs.Ensure(spec)
+				keep[spec.Name] = true
+			}
+		}
 		if taken[domain] {
 			status.Problem = domain + " is served by a site of the same name"
 			proxies = append(proxies, status)
@@ -762,6 +853,7 @@ func (d *daemon) reload() error {
 		domains = append(domains, domain)
 		proxies = append(proxies, status)
 	}
+	d.runs.retain(commands)
 
 	// Shares always go through the version's normal FastCGI pool, also for FrankenPHP sites: only
 	// FastCGI takes the per-request settings that keep a share safe (see web.Share).
@@ -775,6 +867,10 @@ func (d *daemon) reload() error {
 		for _, s := range d.shares.Serving() {
 			info, ok := shareables[s.Site]
 			if !ok {
+				continue
+			}
+			if info.node != "" {
+				shares = append(shares, web.Share{Port: s.Port, Proxy: info.node, Domain: info.domain, Origin: info.origin, Node: s.Site})
 				continue
 			}
 			upstreams, err := pool(info.version)
@@ -919,6 +1015,7 @@ func (d *daemon) applyWeb(cfg *config.Config, bind string, sites []web.Site, wai
 		Shares:     shares,
 		TLD:        cfg.TLD,
 		Issue:      func(name string) (*tls.Certificate, error) { return d.leaves.Get(ca, name) },
+		Wake:       d.wakeNode,
 	})
 	if err != nil {
 		return err
@@ -1037,6 +1134,7 @@ func (d *daemon) Status() api.Status {
 	served := d.proxies
 	d.mu.Unlock()
 	proxies := d.probe.live(d.root, served)
+	d.liveProxyCommands(proxies)
 
 	d.mu.Lock()
 	defer d.mu.Unlock()
@@ -1050,6 +1148,7 @@ func (d *daemon) Status() api.Status {
 		Processes: d.procs.Status(),
 		Warnings:  d.warnings,
 	}
+	d.liveNodeSites(st.Sites)
 	if d.mail != nil {
 		st.Mail = d.mail.Addr()
 	}

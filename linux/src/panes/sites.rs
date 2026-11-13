@@ -3,27 +3,32 @@
 //! Laravel Boost. Version and root pickers offer the project's pin (or the default) first, then
 //! what isolates the site on this machine; the pin menu writes them into the project.
 //!
+//! A Node.js site has no PHP settings: its detail shows its dev server instead, which Flock starts
+//! on the site's first visit, with the server's output.
+//!
 //! A site's git worktrees are listed under it. A worktree's detail shows its setup and database
 //! instead of settings: it uses its site's.
 //!
 //! Proxies (`flock proxy`) follow the sites in a group of their own; a proxy's detail shows what
-//! answers at its upstream, its HTTPS and its upstream. Site and proxy names never clash (the
-//! daemon refuses it), so one selection covers both.
+//! answers at its upstream, its HTTPS and its upstream, and the command that starts its server
+//! (with Start, Stop and its output) when it has one. Site and proxy names never clash (the daemon
+//! refuses it), so one selection covers both.
 
 use std::cell::{Cell, RefCell};
 use std::rc::Rc;
+use std::time::Duration;
 
 use adw::prelude::*;
 use base64::Engine;
 use gtk::{gdk, gio, glib};
 
-use super::common::{PaneView, ask_link, group, info_row, report, status_dot};
+use super::common::{PaneView, ask_link, group, info_row, report, state_dot, status_dot};
 use super::versions::{MenuItem, badge, button, more_menu};
 use super::worktree_job;
 use super::{Data, Pane};
 use crate::api::{
-    Branches, Client, Config, Error, ExtensionReport, PhpExtension, ProxyStatus, ShareStatus, SiteChange, SiteStatus, Status,
-    WorktreeStatus,
+    Branches, Client, Config, Error, ExtensionReport, PhpExtension, ProxyChange, ProxyCommand, ProxyCommandChange, ProxyStatus,
+    ShareStatus, SiteChange, SiteNodeServer, SiteStatus, Status, WorktreeStatus,
 };
 use crate::links::{self, Link};
 use crate::model::AppModel;
@@ -49,6 +54,8 @@ struct Inner {
     expanded: RefCell<Vec<String>>,
     /// The folder of the worktree being removed.
     removing: RefCell<Option<String>>,
+    /// The output of a dev server or a proxy's command, moved into each detail that shows one.
+    output: Rc<Output>,
 }
 
 /// A worktree to remove: its folder, name, what it is listed as and its site.
@@ -71,6 +78,7 @@ impl SitesPane {
         let stack = gtk::Stack::builder().transition_type(gtk::StackTransitionType::SlideLeftRight).build();
         stack.add_named(&list.scrolled, Some("list"));
         stack.add_named(&detail.scrolled, Some("detail"));
+        let output = Output::new(banner.clone());
         Self(Rc::new(Inner {
             stack,
             list,
@@ -84,6 +92,7 @@ impl SitesPane {
             shown: RefCell::default(),
             expanded: RefCell::new(prefs::load().expanded_sites),
             removing: RefCell::default(),
+            output,
         }))
     }
 }
@@ -144,8 +153,13 @@ impl Inner {
         } else if let Some(proxy) = selected.as_deref().and_then(|name| self.proxy(name)) {
             self.render_proxy(&proxy);
         } else {
+            self.output.detach();
             self.stack.set_visible_child_name("list");
             self.render_list();
+        }
+        // The detail shown has no output (any more).
+        if self.output.group.parent().is_none() {
+            self.output.stop();
         }
     }
 
@@ -265,7 +279,9 @@ impl Inner {
         let tld = self.status.borrow().as_ref().map(|s| s.dns.tld.clone()).filter(|t| !t.is_empty()).unwrap_or_else(|| "test".into());
         let add = gtk::Button::builder()
             .label("Add Proxy…")
-            .tooltip_text(format!("Serve a server of its own, e.g. a Node.js dev server on a port, at a .{tld} domain"))
+            .tooltip_text(format!(
+                "Serve a server of its own, e.g. a dashboard, an object store, a Docker container or a Go or Python app, at a .{tld} domain"
+            ))
             .build();
         let this = self.clone();
         add.connect_clicked(move |_| this.add_proxy(&tld));
@@ -273,18 +289,24 @@ impl Inner {
     }
 
     fn add_proxy(self: &Rc<Self>, tld: &str) {
-        let name = adw::EntryRow::builder().title("Name, e.g. my-app").build();
-        let upstream = adw::EntryRow::builder().title("Port, host:port or URL, e.g. 3000").activates_default(true).build();
+        // Stacked: side by side, they don't fit the dialog at the window's smallest.
+        let name = adw::EntryRow::builder().title("Name").tooltip_text(format!("e.g. my-app → my-app.{tld}")).build();
+        let upstream = adw::EntryRow::builder()
+            .title("Upstream")
+            .tooltip_text("3000, host:port or URL. A port means 127.0.0.1.")
+            .activates_default(true)
+            .build();
+        let commands = adw::ExpanderRow::builder().title("Commands (optional)").expanded(false).build();
+        let fields = CommandFields::new(&ProxyCommand::default());
+        for row in &fields.rows {
+            commands.add_row(row);
+        }
         let list = gtk::ListBox::builder().css_classes(["boxed-list"]).selection_mode(gtk::SelectionMode::None).build();
         list.append(&name);
         list.append(&upstream);
-        let dialog = adw::AlertDialog::new(
-            Some("Add a proxy"),
-            Some(&format!(
-                "Flock serves <name>.{tld} from a server of its own, e.g. a Next.js, Nuxt or Vite dev server. A port means 127.0.0.1."
-            )),
-        );
-        dialog.set_extra_child(Some(&list));
+        list.append(&commands);
+        let dialog = adw::AlertDialog::new(Some("Add a proxy"), None);
+        dialog.set_extra_child(Some(&scrolling_form(&list, &self.stack)));
         dialog.add_responses(&[("cancel", "Cancel"), ("add", "Add")]);
         dialog.set_response_appearance("add", adw::ResponseAppearance::Suggested);
         dialog.set_default_response(Some("add"));
@@ -296,8 +318,9 @@ impl Inner {
             }
             // Its detail shows once the daemon added it; the new status renders it.
             let (pane, banner, n) = (this.clone(), this.banner.clone(), name.clone());
+            let change = ProxyChange::new(&name, &upstream, None).with_commands(fields.change());
             this.model.perform(
-                move |c| c.proxy(&name, &upstream, None),
+                move |c| c.add_proxy(&change),
                 move |e| {
                     if e.is_none() {
                         pane.selected.replace(Some(n.clone()));
@@ -424,9 +447,14 @@ impl Inner {
         groups.push(self.site_group(site, &status).upcast());
         groups.push(self.share_group(site).upcast());
         groups.push(self.versions_group(site, &config).upcast());
-        groups.push(self.server_group(site).upcast());
-        if site.boost == "missing" || site.boost == "outdated" {
-            groups.push(self.boost_group(site).upcast());
+        if let Some(server) = site.node_server.as_ref().filter(|_| site.is_node()) {
+            groups.push(self.dev_server_group(site, server).upcast());
+            groups.push(self.output.show(&server.log, server.live()));
+        } else {
+            groups.push(self.server_group(site).upcast());
+            if site.boost == "missing" || site.boost == "outdated" {
+                groups.push(self.boost_group(site).upcast());
+            }
         }
         groups.push(self.worktrees_group(site, &status).upcast());
         self.detail.set_groups(&groups);
@@ -460,10 +488,12 @@ impl Inner {
         let path = site.path.clone();
         folder.connect_clicked(move |b| launch_file(b, &path));
         actions.append(&folder);
-        let extensions = icon_button("application-x-addon-symbolic", "PHP extensions");
-        let (this, s) = (self.clone(), site.clone());
-        extensions.connect_clicked(move |_| this.show_extensions(&s));
-        actions.append(&extensions);
+        if !site.is_node() {
+            let extensions = icon_button("application-x-addon-symbolic", "PHP extensions");
+            let (this, s) = (self.clone(), site.clone());
+            extensions.connect_clicked(move |_| this.show_extensions(&s));
+            actions.append(&extensions);
+        }
         actions.append(&self.pin_menu(site));
         if !site.parked {
             let remove = icon_button("user-trash-symbolic", "Remove site");
@@ -491,8 +521,24 @@ impl Inner {
     fn site_group(self: &Rc<Self>, site: &SiteStatus, status: &Status) -> adw::PreferencesGroup {
         let group = group(
             "Site",
-            "The document root is the folder Flock serves the site from. One picked here applies on this machine only; pin it to write it into .flockrc for everyone.",
+            if site.is_node() {
+                ""
+            } else {
+                "The document root is the folder Flock serves the site from. One picked here applies on this machine only; pin it to write it into .flockrc for everyone."
+            },
         );
+        let kind = adw::ComboRow::builder()
+            .title("Type")
+            .model(&gtk::StringList::new(&["PHP", "Node.js"]))
+            .selected(u32::from(site.is_node()))
+            .build();
+        let (this, name) = (self.clone(), site.name.clone());
+        kind.connect_selected_notify(move |row| {
+            let kind = if row.selected() == 1 { "node" } else { "php" };
+            this.change(&name, SiteChange { kind: Some(kind.to_owned()), ..Default::default() });
+        });
+        group.add(&kind);
+
         let https = adw::SwitchRow::builder().title("HTTPS").active(site.secured).build();
         let (this, name) = (self.clone(), site.name.clone());
         https.connect_active_notify(move |row| this.change(&name, SiteChange { secured: Some(row.is_active()), ..Default::default() }));
@@ -543,6 +589,9 @@ impl Inner {
             );
         }
 
+        if site.is_node() {
+            return group;
+        }
         group.add(&self.root_row(site));
         if let Some(hint) = root_hint(site) {
             let row = adw::ActionRow::builder()
@@ -821,17 +870,19 @@ impl Inner {
         let php: Vec<String> = config.php.iter().flatten().map(|p| p.version.clone()).collect();
         let mut node: Vec<String> = config.node.iter().flatten().map(|v| major(v)).collect();
         node.dedup();
-        let (this, name) = (self.clone(), site.name.clone());
-        group.add(&version_row(
-            "PHP",
-            &site.php,
-            &site.php_source,
-            &site.php_pinned,
-            &site.php_file,
-            &config.default_php,
-            &php,
-            move |v| this.change(&name, SiteChange { php: Some(v), ..Default::default() }),
-        ));
+        if !site.is_node() {
+            let (this, name) = (self.clone(), site.name.clone());
+            group.add(&version_row(
+                "PHP",
+                &site.php,
+                &site.php_source,
+                &site.php_pinned,
+                &site.php_file,
+                &config.default_php,
+                &php,
+                move |v| this.change(&name, SiteChange { php: Some(v), ..Default::default() }),
+            ));
+        }
         let (this, name) = (self.clone(), site.name.clone());
         group.add(&version_row(
             "Node",
@@ -843,7 +894,7 @@ impl Inner {
             &node,
             move |v| this.change(&name, SiteChange { node: Some(v), ..Default::default() }),
         ));
-        if site.php_source == "isolated" && !site.php_pinned.is_empty() && site.php_pinned != site.php {
+        if !site.is_node() && site.php_source == "isolated" && !site.php_pinned.is_empty() && site.php_pinned != site.php {
             let file = file_name(&site.php_file);
             let row = adw::ActionRow::builder()
                 .title(glib::markup_escape_text(&format!(
@@ -978,6 +1029,59 @@ impl Inner {
         );
     }
 
+    /// A Node.js site's dev server: its state with Start, Stop and Restart, and the command it runs.
+    fn dev_server_group(self: &Rc<Self>, site: &SiteStatus, server: &SiteNodeServer) -> adw::PreferencesGroup {
+        let group =
+            group("Server", "Flock runs the project's dev script when the site is visited, and stops it after 30 minutes without visits.");
+        let mut subtitle = server.text();
+        if let Some(note) = server.note() {
+            subtitle.push('\n');
+            subtitle.push_str(note);
+        }
+        let row = adw::ActionRow::builder().title("Dev server").subtitle(glib::markup_escape_text(&subtitle)).build();
+        row.add_prefix(&state_dot(&server.state));
+        let restarting = self.restarting.borrow().as_deref() == Some(site.name.as_str());
+        if restarting {
+            row.add_suffix(&gtk::Spinner::builder().spinning(true).build());
+        }
+        let name = site.name.clone();
+        let buttons: Vec<gtk::Button> = match server.state.as_str() {
+            "sleeping" | "failed" => {
+                let this = self.clone();
+                vec![button("Start", false, move || this.restart(&name))]
+            }
+            state => {
+                let (this, n) = (self.clone(), name.clone());
+                let mut buttons = vec![button("Stop", false, move || {
+                    let n = n.clone();
+                    this.perform(move |c| c.stop_site(&n));
+                })];
+                if state == "running" {
+                    let this = self.clone();
+                    buttons.push(button("Restart", false, move || this.restart(&name)));
+                }
+                buttons
+            }
+        };
+        for button in buttons {
+            button.set_sensitive(!restarting);
+            row.add_suffix(&button);
+        }
+        group.add(&row);
+
+        let command = adw::ActionRow::builder().title("Command").build();
+        command.add_suffix(
+            &gtk::Label::builder()
+                .label(&server.command)
+                .selectable(true)
+                .css_classes(["monospace", "dim-label"])
+                .ellipsize(gtk::pango::EllipsizeMode::Middle)
+                .build(),
+        );
+        group.add(&command);
+        group
+    }
+
     fn boost_group(self: &Rc<Self>, site: &SiteStatus) -> adw::PreferencesGroup {
         let missing = site.boost == "missing";
         let group = group(
@@ -1011,10 +1115,10 @@ impl Inner {
     fn pin_menu(self: &Rc<Self>, site: &SiteStatus) -> gtk::MenuButton {
         let node = major(&site.node);
         let node_file = if site.node_pinned_here() { file_name(&site.node_file) } else { ".nvmrc".to_owned() };
-        let can_pin_php = !(site.php_source == "project" && site.php_pinned_here());
+        let can_pin_php = !site.is_node() && !(site.php_source == "project" && site.php_pinned_here());
         let can_pin_node = !node.is_empty() && !(site.node_source == "project" && site.node_pinned_here());
         let state = site.root_state.clone().unwrap_or_default();
-        let can_pin_root = (state.is_empty() || state == "empty") && site.root_source != "project";
+        let can_pin_root = !site.is_node() && (state.is_empty() || state == "empty") && site.root_source != "project";
         let mut items: Vec<MenuItem> = Vec::new();
         let s = site.clone();
         let pin = {
@@ -1266,6 +1370,11 @@ impl Inner {
 
     fn render_worktree(self: &Rc<Self>, site: &SiteStatus) {
         let mut groups: Vec<gtk::Widget> = vec![self.worktree_header(site).upcast(), self.worktree_info(site).upcast()];
+        // A Node.js site's worktree runs a dev server of its own.
+        if let Some(server) = site.node_server.as_ref().filter(|_| site.is_node()) {
+            groups.push(self.dev_server_group(site, server).upcast());
+            groups.push(self.output.show(&server.log, server.live()));
+        }
         if let Some(setup) = &site.worktree {
             groups.push(self.database_group(site, setup).upcast());
         }
@@ -1340,7 +1449,7 @@ impl Inner {
         }
         group.add(&address);
         let versions = [("PHP", &site.php, &site.php_source, &site.php_file), ("Node.js", &site.node, &site.node_source, &site.node_file)];
-        for (label, version, source, file) in versions {
+        for (label, version, source, file) in versions.into_iter().filter(|(label, ..)| !site.is_node() || *label != "PHP") {
             let row = info_row(label, if version.is_empty() { "—" } else { version.as_str() });
             if source == "project" && !file.is_empty() {
                 row.set_subtitle(&glib::markup_escape_text(&format!("The branch pins it in {}", file_name(file))));
@@ -1482,7 +1591,11 @@ impl Inner {
 
     /// A proxy: its address and actions, then what answers at its upstream, its HTTPS and upstream.
     fn render_proxy(self: &Rc<Self>, proxy: &ProxyStatus) {
-        let groups: Vec<gtk::Widget> = vec![self.proxy_header(proxy).upcast(), self.proxy_group(proxy).upcast()];
+        let mut groups: Vec<gtk::Widget> =
+            vec![self.proxy_header(proxy).upcast(), self.proxy_group(proxy).upcast(), self.commands_group(proxy).upcast()];
+        if let Some(command) = &proxy.command {
+            groups.push(self.output.show(&command.log, command.live()));
+        }
         self.detail.set_groups(&groups);
     }
 
@@ -1532,19 +1645,33 @@ impl Inner {
     }
 
     fn proxy_group(self: &Rc<Self>, proxy: &ProxyStatus) -> adw::PreferencesGroup {
-        let group = group(
-            "Proxy",
-            &format!(
-                "Every request passes to the upstream with its Host header, WebSocket upgrades (hot reload) included. Flock doesn't start the server, so start it as usual. Until it answers, {} shows a page saying so.",
+        let footer = if proxy.command.is_some() {
+            format!(
+                "Every request passes to the upstream with its Host header, WebSocket upgrades (hot reload) included. Until the server answers, {} shows a page saying so.",
                 proxy.domain
-            ),
-        );
-        let server = info_row("Server", &proxy.server_text());
-        server.add_prefix(&status_dot(proxy.running));
-        if !proxy.running {
-            server.set_subtitle(&glib::markup_escape_text(&format!("Nothing answers at {} yet.", proxy.upstream_label())));
+            )
+        } else {
+            format!(
+                "Every request passes to the upstream with its Host header, WebSocket upgrades (hot reload) included. Flock doesn't start the server, so start it as usual, or give it commands below. Until it answers, {} shows a page saying so.",
+                proxy.domain
+            )
+        };
+        let group = group("Proxy", &footer);
+        match &proxy.command {
+            Some(command) => {
+                let row = self.command_state_row(&proxy.name, command);
+                row.add_prefix(&proxy_dot(proxy));
+                group.add(&row);
+            }
+            None => {
+                let server = info_row("Server", &proxy.server_text());
+                server.add_prefix(&status_dot(proxy.running));
+                if !proxy.running {
+                    server.set_subtitle(&glib::markup_escape_text(&format!("Nothing answers at {} yet.", proxy.upstream_label())));
+                }
+                group.add(&server);
+            }
         }
-        group.add(&server);
 
         let https = adw::SwitchRow::builder().title("HTTPS").active(proxy.secured).build();
         let (this, name) = (self.clone(), proxy.name.clone());
@@ -1559,6 +1686,86 @@ impl Inner {
         upstream.add_suffix(&button("Change…", false, move || this.change_upstream(&p)));
         group.add(&upstream);
         group
+    }
+
+    /// The commands that start and stop a proxy's server and the folder they run in, or Add
+    /// Commands… when it has none.
+    fn commands_group(self: &Rc<Self>, proxy: &ProxyStatus) -> adw::PreferencesGroup {
+        let group = group("Commands", "");
+        let (this, p) = (self.clone(), proxy.clone());
+        match &proxy.command {
+            Some(command) => {
+                group.add(&info_row("Start", &command.command));
+                if !command.stop_command.is_empty() {
+                    group.add(&info_row("Stop", &command.stop_command));
+                }
+                group.add(&info_row("Folder", &command.dir));
+                group.set_header_suffix(Some(&button("Change…", false, move || this.change_command(&p))));
+            }
+            None => {
+                group.set_description(Some("Give Flock the commands that start and stop the server, so you can start it here."));
+                let row = adw::ActionRow::new();
+                row.add_suffix(&button("Add Commands…", false, move || this.change_command(&p)));
+                group.add(&row);
+            }
+        }
+        group
+    }
+
+    /// A proxy's server that Flock starts: its state, with Start or Stop.
+    fn command_state_row(self: &Rc<Self>, name: &str, command: &ProxyCommand) -> adw::ActionRow {
+        let mut subtitle = command.text();
+        if let Some(note) = command.note() {
+            subtitle.push('\n');
+            subtitle.push_str(note);
+        }
+        let row = adw::ActionRow::builder().title("Server").subtitle(glib::markup_escape_text(&subtitle)).build();
+        let (this, name) = (self.clone(), name.to_owned());
+        let action = if command.can_start() {
+            button("Start", false, move || {
+                let name = name.clone();
+                this.perform(move |c| c.start_proxy(&name));
+            })
+        } else {
+            button("Stop", false, move || {
+                let name = name.clone();
+                this.perform(move |c| c.stop_proxy(&name));
+            })
+        };
+        action.set_sensitive(command.state != "stopping");
+        row.add_suffix(&action);
+        row
+    }
+
+    /// Asks for the commands that start and, for a server that runs in the background, stop a
+    /// proxy's server, and the folder they run in. Remove Commands (or an empty Start) removes them.
+    fn change_command(self: &Rc<Self>, proxy: &ProxyStatus) {
+        let current = proxy.command.clone().unwrap_or_default();
+        let fields = CommandFields::new(&current);
+        let list = gtk::ListBox::builder().css_classes(["boxed-list"]).selection_mode(gtk::SelectionMode::None).build();
+        for row in &fields.rows {
+            list.append(row);
+        }
+        let dialog = adw::AlertDialog::new(Some(&format!("Commands of {}", proxy.name)), None);
+        dialog.set_extra_child(Some(&scrolling_form(&list, &self.stack)));
+        dialog.add_response("cancel", "Cancel");
+        if !current.command.is_empty() {
+            dialog.add_response("remove", "Remove Commands");
+            dialog.set_response_appearance("remove", adw::ResponseAppearance::Destructive);
+        }
+        dialog.add_response("save", "Save");
+        dialog.set_response_appearance("save", adw::ResponseAppearance::Suggested);
+        dialog.set_default_response(Some("save"));
+        let (this, name) = (self.clone(), proxy.name.clone());
+        dialog.choose(Some(&self.stack), gio::Cancellable::NONE, move |response| {
+            let change = match response.as_str() {
+                "save" => fields.change(),
+                "remove" => ProxyCommandChange::default(),
+                _ => return,
+            };
+            let name = name.clone();
+            this.perform(move |c| c.update_proxy(&name, &change));
+        });
     }
 
     /// Asks for a proxy's new upstream; its HTTPS stays as it is.
@@ -1714,7 +1921,223 @@ fn extension_row(ext: &PhpExtension, php: &str, path: &str, require: Rc<dyn Fn(S
     row
 }
 
-/// A site's suffixes in the list: what it warns about, its share and its lock.
+/// A dialog's form, which scrolls when it's taller than the window leaves room for: the dialog's
+/// heading and buttons stay visible. The window has no minimum size of its own (its content's), so
+/// the room comes from its height now, between 120 and 480 pixels.
+fn scrolling_form(form: &impl IsA<gtk::Widget>, parent: &impl IsA<gtk::Widget>) -> gtk::ScrolledWindow {
+    // The heading, the buttons and the dialog's margins take about this much.
+    const CHROME: i32 = 220;
+    let window = parent.root().map_or(640, |root| root.height());
+    gtk::ScrolledWindow::builder()
+        .child(form)
+        .hscrollbar_policy(gtk::PolicyType::Never)
+        .propagate_natural_height(true)
+        .max_content_height((window - CHROME).clamp(120, 480))
+        .build()
+}
+
+/// The Start, Stop and Folder fields of a proxy's commands, for the dialogs that add or change
+/// them. The folder is the home folder until one is chosen.
+struct CommandFields {
+    start: gtk::Entry,
+    stop: gtk::Entry,
+    folder: gtk::Entry,
+    rows: [adw::ActionRow; 3],
+}
+
+impl CommandFields {
+    fn new(current: &ProxyCommand) -> Self {
+        // The labels in the UI's font, what's typed in monospace.
+        let field = |title: &str, text: &str, placeholder: &str| {
+            let entry = gtk::Entry::builder()
+                .text(text)
+                .placeholder_text(placeholder)
+                .hexpand(true)
+                .valign(gtk::Align::Center)
+                .css_classes(["monospace"])
+                .build();
+            let row = adw::ActionRow::builder().title(title).build();
+            row.add_suffix(&entry);
+            (row, entry)
+        };
+        let (start_row, start) = field("Start", &current.command, "npm run dev");
+        let (stop_row, stop) = field("Stop", &current.stop_command, "docker compose stop");
+        stop_row.set_subtitle("Only for a server that runs in the background, like docker compose up -d.");
+        let dir = if current.dir.is_empty() { glib::home_dir().to_string_lossy().into_owned() } else { current.dir.clone() };
+        let (folder_row, folder) = field("Folder", &dir, "");
+        let choose = gtk::Button::builder().label("Choose…").valign(gtk::Align::Center).css_classes(["flat"]).build();
+        let entry = folder.clone();
+        choose.connect_clicked(move |button| {
+            let window = button.root().and_downcast::<gtk::Window>();
+            let entry = entry.clone();
+            gtk::FileDialog::builder().title("Choose Folder").accept_label("Choose").build().select_folder(
+                window.as_ref(),
+                gio::Cancellable::NONE,
+                move |result| {
+                    if let Some(path) = result.ok().and_then(|f| f.path()) {
+                        entry.set_text(&path.to_string_lossy());
+                    }
+                },
+            );
+        });
+        folder_row.add_suffix(&choose);
+        Self { start, stop, folder, rows: [start_row, stop_row, folder_row] }
+    }
+
+    /// The commands as typed: none without a start command.
+    fn change(&self) -> ProxyCommandChange {
+        ProxyCommandChange::new(&self.start.text(), &self.folder.text(), &self.stop.text())
+    }
+}
+
+/// The Output group of a dev server or a proxy's command: the last lines its log has, with Clear
+/// and Open Log. The pane keeps one and moves it into each detail it renders, so a new status
+/// doesn't reload the text or lose its scroll position. While the log is live (the server starts or
+/// runs) it's read every second, as long as the pane shows it.
+struct Output {
+    group: adw::PreferencesGroup,
+    view: gtk::TextView,
+    scrolled: gtk::ScrolledWindow,
+    open: gtk::Button,
+    /// The log shown ("" when none is) and whether it changes.
+    log: RefCell<String>,
+    live: Cell<bool>,
+    /// Counts the polls started, so an older one stops.
+    run: Cell<u32>,
+    polling: Cell<bool>,
+}
+
+impl Output {
+    fn new(banner: adw::Banner) -> Rc<Self> {
+        let group = group("Output", "");
+        let view = gtk::TextView::builder()
+            .editable(false)
+            .cursor_visible(false)
+            .monospace(true)
+            .top_margin(8)
+            .bottom_margin(8)
+            .left_margin(8)
+            .right_margin(8)
+            .build();
+        let scrolled = gtk::ScrolledWindow::builder().child(&view).height_request(240).css_classes(["card"]).build();
+        let buttons = gtk::Box::builder().spacing(6).valign(gtk::Align::Center).build();
+        let clear = gtk::Button::builder().label("Clear").css_classes(["flat"]).build();
+        let open = gtk::Button::builder().label("Open Log").css_classes(["flat"]).action_name("app.open").build();
+        buttons.append(&clear);
+        buttons.append(&open);
+        group.set_header_suffix(Some(&buttons));
+        group.add(&scrolled);
+        let this = Rc::new(Self {
+            group,
+            view,
+            scrolled,
+            open,
+            log: RefCell::default(),
+            live: Cell::new(false),
+            run: Cell::new(0),
+            polling: Cell::new(false),
+        });
+
+        let weak = Rc::downgrade(&this);
+        clear.connect_clicked(move |_| {
+            let Some(this) = weak.upgrade() else { return };
+            let (name, banner) = (this.log.borrow().clone(), banner.clone());
+            glib::spawn_future_local(async move {
+                let result = gio::spawn_blocking(move || Client.clear_service_log(&name)).await.expect("log request");
+                if result.is_ok() {
+                    this.view.buffer().set_text("");
+                }
+                report(&banner, result.err().map(|e| e.to_string()));
+            });
+        });
+        // Shown again (the window was hidden): reading the log goes on.
+        let weak = Rc::downgrade(&this);
+        this.view.connect_map(move |_| {
+            if let Some(this) = weak.upgrade().filter(|o| o.live.get() && !o.polling.get() && !o.log.borrow().is_empty()) {
+                this.poll();
+            }
+        });
+        this
+    }
+
+    /// The group for a detail, showing log: detached from the detail it was in, which the caller
+    /// replaces. Reading the log starts again only when log or live changed.
+    fn show(self: &Rc<Self>, log: &str, live: bool) -> gtk::Widget {
+        self.detach();
+        let changed = *self.log.borrow() != log;
+        if changed {
+            self.log.replace(log.to_owned());
+            self.view.buffer().set_text("");
+            self.open.set_action_target_value(Some(&format!("logs/services/{log}").to_variant()));
+        }
+        let live_changed = self.live.replace(live) != live;
+        if changed || live_changed || (live && !self.polling.get()) {
+            self.poll();
+        }
+        self.group.clone().upcast()
+    }
+
+    /// Takes the group out of the detail it's in.
+    fn detach(&self) {
+        if let Some(parent) = self.group.parent().and_downcast::<gtk::Box>() {
+            parent.remove(&self.group);
+        }
+    }
+
+    /// Stops reading the log: the detail shown has no output.
+    fn stop(&self) {
+        self.run.set(self.run.get() + 1);
+        self.polling.set(false);
+        self.log.replace(String::new());
+        self.live.set(false);
+    }
+
+    /// Reads the log now and, while it's live and shown, every second.
+    fn poll(self: &Rc<Self>) {
+        let run = self.run.get() + 1;
+        self.run.set(run);
+        self.polling.set(true);
+        let this = self.clone();
+        glib::spawn_future_local(async move {
+            loop {
+                let name = this.log.borrow().clone();
+                let text = gio::spawn_blocking(move || Client.service_log_tail(&name, 300)).await.expect("log request").unwrap_or_default();
+                if this.run.get() != run {
+                    return;
+                }
+                this.set_text(&text);
+                if !this.live.get() {
+                    this.polling.set(false);
+                    return;
+                }
+                glib::timeout_future(Duration::from_secs(1)).await;
+                if this.run.get() != run {
+                    return;
+                }
+                // Hidden (another pane, the window closed): reading goes on once it's shown.
+                if !this.view.is_mapped() {
+                    this.polling.set(false);
+                    return;
+                }
+            }
+        });
+    }
+
+    /// Shows the log's text, scrolled to its end, when it changed.
+    fn set_text(&self, text: &str) {
+        let buffer = self.view.buffer();
+        if buffer.text(&buffer.start_iter(), &buffer.end_iter(), false) == text {
+            return;
+        }
+        buffer.set_text(text);
+        // Once the new text is laid out.
+        let adjustment = self.scrolled.vadjustment();
+        glib::idle_add_local_once(move || adjustment.set_value(adjustment.upper() - adjustment.page_size()));
+    }
+}
+
+/// A site's suffixes in the list: what it warns about, its dev server's state (a Node.js site's),
+/// its share and its lock.
 fn site_suffixes(site: &SiteStatus) -> Vec<gtk::Widget> {
     let mut widgets: Vec<gtk::Widget> = Vec::new();
     if let Some(problem) = problem(site) {
@@ -1722,6 +2145,11 @@ fn site_suffixes(site: &SiteStatus) -> Vec<gtk::Widget> {
         warning.add_css_class("warning");
         warning.set_tooltip_text(Some(&problem));
         widgets.push(warning.upcast());
+    }
+    if let Some(server) = site.node_server.as_ref().filter(|_| site.is_node()) {
+        let dot = state_dot(&server.state);
+        dot.set_tooltip_text(Some(&server.text()));
+        widgets.push(dot.upcast());
     }
     if site.shared() {
         widgets.push(badge("Shared", "success").upcast());
@@ -1791,7 +2219,8 @@ fn slug(branch: &str) -> String {
     out.trim_matches('-').to_owned()
 }
 
-/// What a site's list row warns about: the site, its document root, a domain, or its FrankenPHP.
+/// What a site's list row warns about: the site, its document root, a domain, or its FrankenPHP. A
+/// dev server that failed shows in its dot.
 fn problem(site: &SiteStatus) -> Option<String> {
     if let Some(p) = site.problem.clone().or_else(|| site.notice.clone()) {
         return Some(p);
@@ -1815,8 +2244,8 @@ fn proxy_suffixes(proxy: &ProxyStatus) -> Vec<gtk::Widget> {
         warning.set_tooltip_text(Some(problem));
         widgets.push(warning.upcast());
     }
-    let dot = status_dot(proxy.running);
-    dot.set_tooltip_text(Some(&proxy.server_text()));
+    let dot = proxy_dot(proxy);
+    dot.set_tooltip_text(Some(&proxy.command.as_ref().map_or_else(|| proxy.server_text(), ProxyCommand::text)));
     widgets.push(dot.upcast());
     if proxy.secured {
         let lock = gtk::Image::from_icon_name("channel-secure-symbolic");
@@ -1825,6 +2254,15 @@ fn proxy_suffixes(proxy: &ProxyStatus) -> Vec<gtk::Widget> {
         widgets.push(lock.upcast());
     }
     widgets
+}
+
+/// A proxy's dot: its command's state while that starts, stops or failed (amber, red), else
+/// whether something answers at its upstream (green, grey).
+fn proxy_dot(proxy: &ProxyStatus) -> gtk::Label {
+    match proxy.command.as_ref().map(|c| c.state.as_str()) {
+        Some(state @ ("starting" | "stopping" | "failed")) => state_dot(state),
+        _ => status_dot(proxy.running),
+    }
 }
 
 /// Why the site isn't served from its root, or a root set here over the project's.

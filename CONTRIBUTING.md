@@ -1,7 +1,10 @@
 # Contributing to Flock
 
-Thanks for your interest in Flock! Bug reports, ideas and questions are welcome as
-[issues](https://github.com/flock-php/flock/issues).
+Thanks for your interest in Flock! Bug reports and feature requests are welcome as
+[issues](https://github.com/flock-php/flock/issues/new/choose). For questions and help, use
+[Discussions](https://github.com/flock-php/flock/discussions) or
+[Discord](https://discord.flockphp.com). Please report security issues privately, as described in
+the [security policy](https://github.com/flock-php/.github/blob/main/SECURITY.md).
 
 ## Pull requests start with an issue
 

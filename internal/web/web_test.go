@@ -1,6 +1,7 @@
 package web
 
 import (
+	"encoding/json"
 	"strings"
 	"testing"
 
@@ -45,6 +46,60 @@ func TestCaddyfileRoutesSitesAndSubdomains(t *testing.T) {
 		if !strings.Contains(cf, want) {
 			t.Errorf("missing %q in:\n%s", want, cf)
 		}
+	}
+}
+
+func TestCaddyfileRunsSiteHandlersInOrderBeforePHP(t *testing.T) {
+	cfg := testConfig()
+	cfg.Sites[1].DebugFPM = []string{"unix//run/php84-xdebug.sock"}
+	cfg.Sites[1].Handlers = "handle /custom {\r\n\theader X-Flock-Custom yes\r\n\trespond custom 200\r\n}\r\n"
+	cf := Caddyfile(cfg)
+	want := "\troute {\n\t\troot * " + quote(cfg.Sites[1].Root) + "\n\t\thandle /custom {\n\t\t\theader X-Flock-Custom yes\n\t\t\trespond custom 200\n\t\t}\n\t\t@xdebug"
+	if !strings.Contains(cf, want) {
+		t.Fatalf("custom handlers are not in the route between the root and PHP:\n%s", cf)
+	}
+	if strings.Contains(cf, "\r") {
+		t.Fatalf("CRLF line endings kept:\n%q", cf)
+	}
+	adapted, _, err := caddyconfig.GetAdapter("caddyfile").Adapt([]byte(cf), nil)
+	if err != nil {
+		t.Fatalf("%v\n%s", err, cf)
+	}
+	if !strings.Contains(string(adapted), `"X-Flock-Custom"`) {
+		t.Fatalf("custom header missing from adapted config:\n%s", adapted)
+	}
+}
+
+func TestCheckHandlers(t *testing.T) {
+	site := Site{Domain: "app.test", Root: "/code/app/public", FPM: []string{"unix//run/php85.sock"}, DebugFPM: []string{"unix//run/php85-xdebug.sock"}}
+	for _, tc := range []struct {
+		name, handlers, want string
+	}{
+		{"cors", "@cors_preflight method OPTIONS\nheader Access-Control-Allow-Origin \"https://admin.example.test\"\nrespond @cors_preflight 204\n", ""},
+		{"docs example", "@cors_preflight method OPTIONS\n\nheader {\n    Access-Control-Allow-Origin \"https://admin.example.test\"\n    Access-Control-Allow-Methods \"GET, POST, PUT, PATCH, DELETE, OPTIONS\"\n    Access-Control-Allow-Headers \"Content-Type, Authorization\"\n    Vary \"Origin\"\n}\n\nrespond @cors_preflight 204\n", ""},
+		{"braces in quotes", "respond \"{ not a block\" 200\n", ""},
+		{"placeholders", "header X-Host {host}\n", ""},
+		{"breakout", "header X-A b\n}\n}\n:9999 {\n\tfile_server\n", "app.caddy:2: } without a matching {"},
+		{"unclosed", "handle {\n\trespond x\n", "app.caddy: 1 { without a matching }"},
+		{"import", "header X-A b\nimport /etc/caddy/*\n", "app.caddy:2: import isn't supported here"},
+		{"unknown directive", "header X-A b\nfoo bar\n", "app.caddy: parsing caddyfile tokens for 'route': unrecognized directive: foo"},
+		{"nested error", "\n\nheader X-A b\nrespond 204 {\n\tclose\n\tnope\n}\n", "unrecognized subdirective 'nope', at app.caddy:6"},
+		{"Flock's matcher", "@xdebug path /x\nrespond @xdebug 200\n", "app.caddy"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			s := site
+			s.Handlers = tc.handlers
+			err := CheckHandlers(s, "app.caddy")
+			switch {
+			case tc.want == "" && err != nil:
+				t.Fatalf("unexpected error: %v", err)
+			case tc.want != "" && (err == nil || !strings.Contains(err.Error(), tc.want)):
+				t.Fatalf("got %v, want an error with %q", err, tc.want)
+			}
+			if err != nil && strings.Contains(err.Error(), "flock-site-handlers") {
+				t.Fatalf("error names the generated config: %v", err)
+			}
+		})
 	}
 }
 
@@ -164,5 +219,59 @@ func TestCaddyfileProxiesNamesToTheirServer(t *testing.T) {
 	}
 	if strings.Contains(cf, `root * ""`) {
 		t.Errorf("a proxy has no document root:\n%s", cf)
+	}
+}
+
+// TestCaddyfileRejectsRemoteClientsBeforeAnyHandler checks the adapted config of every kind of
+// block: Caddy sorts handle and route before abort, so a site's Xdebug handle pair must not run
+// before the remote guard.
+func TestCaddyfileRejectsRemoteClientsBeforeAnyHandler(t *testing.T) {
+	cfg := testConfig()
+	cfg.Sites = append(cfg.Sites,
+		Site{Domain: "xdebug.test", Root: "/code/xdebug/public", FPM: []string{"unix//run/php85.sock"}, DebugFPM: []string{"unix//run/php85-xdebug.sock"}},
+		Site{Domain: "franken.test", Root: "/code/franken/public", Proxy: "127.0.0.1:21000", DebugFPM: []string{"unix//run/php84-xdebug.sock"}},
+	)
+
+	adapted, _, err := caddyconfig.GetAdapter("caddyfile").Adapt([]byte(Caddyfile(cfg)), nil)
+	if err != nil {
+		t.Fatalf("%v\n%s", err, Caddyfile(cfg))
+	}
+	type route struct {
+		Match  []map[string]any `json:"match"`
+		Handle []struct {
+			Handler string  `json:"handler"`
+			Abort   bool    `json:"abort"`
+			Routes  []route `json:"routes"`
+		} `json:"handle"`
+	}
+	var parsed struct {
+		Apps struct {
+			HTTP struct {
+				Servers map[string]struct {
+					Routes []route `json:"routes"`
+				} `json:"servers"`
+			} `json:"http"`
+		} `json:"apps"`
+	}
+	if err := json.Unmarshal(adapted, &parsed); err != nil {
+		t.Fatal(err)
+	}
+
+	checked := 0
+	for name, server := range parsed.Apps.HTTP.Servers {
+		for i, r := range server.Routes {
+			// A site block is a host-matched route around a subroute of its directives.
+			first := r
+			if len(r.Handle) == 1 && r.Handle[0].Handler == "subroute" && len(r.Handle[0].Routes) > 0 {
+				first = r.Handle[0].Routes[0]
+			}
+			if len(first.Handle) == 0 || first.Handle[0].Handler != "static_response" || !first.Handle[0].Abort {
+				t.Errorf("%s route %d (%v) does not start with the remote abort", name, i, r.Match)
+			}
+			checked++
+		}
+	}
+	if checked == 0 {
+		t.Fatalf("no routes in:\n%s", adapted)
 	}
 }

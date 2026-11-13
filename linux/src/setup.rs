@@ -262,7 +262,18 @@ impl SetupView {
         });
         let this = self.clone();
         let done = self.button("Done", true, move || this.finish());
-        self.page("Flock is ready", "", Some(group.upcast_ref()), &[settings, done]);
+        let body = gtk::Box::builder().orientation(gtk::Orientation::Vertical).spacing(18).build();
+        body.append(&group);
+        body.append(
+            &gtk::Label::builder()
+                .label("Flock is free and open source. If you like it, <a href=\"https://github.com/flock-php/flock\">a star on GitHub</a> helps others find it.")
+                .use_markup(true)
+                .wrap(true)
+                .xalign(0.0)
+                .css_classes(["dim-label"])
+                .build(),
+        );
+        self.page("Flock is ready", "", Some(body.upcast_ref()), &[settings, done]);
     }
 
     /// The next steps, with the first run's installs of the newest PHP and Node.js LTS as the
