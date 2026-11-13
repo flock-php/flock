@@ -35,6 +35,8 @@ pub struct MainWindow {
     top: gtk::Stack,
     setup: Rc<SetupView>,
     title: adw::WindowTitle,
+    /// Flock's on/off switch: off stops the daemon and everything it runs.
+    power: gtk::Switch,
     stack: gtk::Stack,
     content: adw::NavigationPage,
     split: adw::NavigationSplitView,
@@ -71,8 +73,10 @@ impl MainWindow {
         quit.append(Some("Quit Flock"), Some("app.quit"));
         menu.append_section(None, &quit);
         let menu_button = gtk::MenuButton::builder().icon_name("open-menu-symbolic").menu_model(&menu).primary(true).build();
+        let power = gtk::Switch::builder().valign(gtk::Align::Center).tooltip_text("Turn Flock on or off").build();
         let sidebar_header = adw::HeaderBar::builder().title_widget(&title).build();
         sidebar_header.pack_end(&menu_button);
+        sidebar_header.pack_end(&power);
         let sidebar_view = adw::ToolbarView::new();
         sidebar_view.add_top_bar(&sidebar_header);
         sidebar_view.set_content(Some(&gtk::ScrolledWindow::builder().child(&sidebar).build()));
@@ -136,6 +140,7 @@ impl MainWindow {
             top,
             setup,
             title,
+            power,
             stack,
             content,
             split,
@@ -151,6 +156,7 @@ impl MainWindow {
             action_error: RefCell::new(None),
         });
         this.connect();
+        this.sync_power();
         this.select("general");
         this
     }
@@ -178,6 +184,14 @@ impl MainWindow {
         let model = self.model.clone();
         self.unavailable_button.connect_clicked(move |_| model.restart());
 
+        // Set from the status too (sync_power), which already matches it then.
+        let model = self.model.clone();
+        self.power.connect_active_notify(move |power| match (power.is_active(), model.status().is_some()) {
+            (true, false) => model.start(),
+            (false, true) => model.stop(),
+            _ => {}
+        });
+
         let weak = Rc::downgrade(self);
         self.setup.connect_finish(move || {
             if let Some(this) = weak.upgrade() {
@@ -193,6 +207,7 @@ impl MainWindow {
         self.model.subscribe(move || {
             if let Some(this) = weak.upgrade() {
                 this.title.set_subtitle(&this.model.headline());
+                this.sync_power();
                 this.show_action_error();
                 if this.window.is_visible() {
                     this.reload();
@@ -205,6 +220,15 @@ impl MainWindow {
                 this.reload();
             }
         });
+    }
+
+    /// Shows whether Flock runs. While it starts or stops, the switch keeps the requested state.
+    fn sync_power(&self) {
+        let busy = self.model.is_restarting();
+        self.power.set_sensitive(!busy);
+        if !busy {
+            self.power.set_active(self.model.status().is_some());
+        }
     }
 
     /// Shows a failed action in the banner the panes report their errors in, once.

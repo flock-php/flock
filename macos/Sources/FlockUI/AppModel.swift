@@ -211,6 +211,20 @@ final class AppModel {
 
     /// Runs `flock restart` (which also starts a stopped daemon via launchd).
     func restart() async {
+        await run("restart")
+    }
+
+    /// Runs `flock start` after `stop`.
+    func start() async {
+        await run("start")
+    }
+
+    /// Runs `flock stop`: the daemon and everything it runs stop until `start`.
+    func stop() async {
+        await run("stop")
+    }
+
+    private func run(_ command: String) async {
         isRestarting = true
         defer { isRestarting = false }
 
@@ -221,7 +235,7 @@ final class AppModel {
                 : "Flock is not installed for this user (\(binary.path) is missing) — run `flock install` once."
             return
         }
-        let result = await Installation.run(binary, ["restart"])
+        let result = await Installation.run(binary, [command])
         actionError = result.ok ? nil : result.output
         await refresh()
     }

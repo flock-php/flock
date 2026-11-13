@@ -179,7 +179,15 @@ public sealed class RuntimeService
         NotifyChanged();
     }
 
-    public async Task RestartAsync()
+    public Task RestartAsync() => RunLifecycleAsync("restart");
+
+    /// <summary>Starts the daemon after <see cref="StopAsync" />.</summary>
+    public Task StartAsync() => RunLifecycleAsync("start");
+
+    /// <summary>Stops the daemon and everything it runs until <see cref="StartAsync" /> or the next sign-in.</summary>
+    public Task StopAsync() => RunLifecycleAsync("stop");
+
+    private async Task RunLifecycleAsync(string command)
     {
         if (operations.IsRunning("lifecycle"))
         {
@@ -189,10 +197,10 @@ public sealed class RuntimeService
         NotifyChanged();
         var outcome = await operations.RunMutationAsync("lifecycle", operationErrors, async token =>
         {
-            var result = await processRunner.RunAsync(FlockPaths.FlockBinary, ["restart"], TimeSpan.FromMinutes(2), token);
+            var result = await processRunner.RunAsync(FlockPaths.FlockBinary, [command], TimeSpan.FromMinutes(2), token);
             if (!result.Succeeded)
             {
-                throw new FlockException(result.Output.Length == 0 ? $"Could not restart Flock ({FlockPaths.FlockBinary})." : result.Output);
+                throw new FlockException(result.Output.Length == 0 ? $"Could not {command} Flock ({FlockPaths.FlockBinary})." : result.Output);
             }
         }, CancellationToken.None);
         ActionError = outcome switch

@@ -72,6 +72,14 @@ struct PanelView: View {
             if model.isRestarting || model.isUpdating {
                 ProgressView().controlSize(.small)
             }
+            // Flock's on/off switch: off stops the daemon and everything it runs.
+            if !model.needsSetup {
+                Toggle("Flock", isOn: Binding(get: { model.isRunning }, set: { on in Task { on ? await model.start() : await model.stop() } }))
+                    .labelsHidden()
+                    .toggleStyle(.switch)
+                    .controlSize(.small)
+                    .disabled(model.isRestarting || model.isUpdating)
+            }
         }
     }
 
@@ -199,10 +207,10 @@ struct PanelView: View {
     private func toggles(_ status: Status) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             Toggle(isOn: Binding(get: { status.xdebug }, set: { on in Task { await model.setXdebug(on) } })) {
-                Label("Xdebug", systemImage: "ladybug")
+                Label("Xdebug", systemImage: "ladybug").frame(maxWidth: .infinity, alignment: .leading)
             }
             Toggle(isOn: Binding(get: { status.dumps }, set: { on in Task { await model.setDumps(on) } })) {
-                Label("Capture dumps & queries", systemImage: "tray.and.arrow.down")
+                Label("Capture dumps & queries", systemImage: "tray.and.arrow.down").frame(maxWidth: .infinity, alignment: .leading)
             }
         }
         .toggleStyle(.switch)
@@ -235,17 +243,6 @@ struct PanelView: View {
                     open(WindowID.setup)
                 }
                 .buttonStyle(.borderedProminent)
-            }
-        } else {
-            VStack(alignment: .leading, spacing: 8) {
-                Text(model.isUpdating ? "Updating Flock…" : model.error ?? "Flock is not running")
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-                Button("Start Flock") {
-                    Task { await model.restart() }
-                }
-                .disabled(model.isRestarting || model.isUpdating)
             }
         }
     }

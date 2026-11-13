@@ -30,6 +30,8 @@ pub enum Command {
     /// Turns Xdebug or capturing dumps on or off.
     Change(SettingsChange),
     Restart,
+    Start,
+    Stop,
     Quit,
     /// The desktop's tray went away (the extension was turned off) or came back.
     Available(bool),
@@ -267,10 +269,12 @@ impl ksni::Tray for FlockTray {
                     MenuItem::Separator,
                 ]);
             }
-            items.extend([
-                item("Settings…", || Command::Open("settings")),
-                item(if self.state.running { "Restart Flock" } else { "Start Flock" }, || Command::Restart),
-            ]);
+            items.push(item("Settings…", || Command::Open("settings")));
+            if self.state.running {
+                items.extend([item("Restart Flock", || Command::Restart), item("Stop Flock", || Command::Stop)]);
+            } else {
+                items.push(item("Start Flock", || Command::Start));
+            }
         }
         items.push(item("Quit Flock", || Command::Quit));
         items

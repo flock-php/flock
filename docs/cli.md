@@ -16,6 +16,8 @@ This page lists the `flock` commands. The other pages show where to find each ac
 | `flock uninstall [--purge]` | Remove Flock. Keeps site settings and databases unless `--purge` is given |
 | `flock status` | Show the state of the daemon and its services |
 | `flock restart` | Restart the daemon and all services |
+| `flock start` | Start the daemon and all services after `flock stop` |
+| `flock stop` | Stop the daemon and all services until `flock start` |
 | `flock logs [name] [-n 50] [-f]` | Show service logs (daemon, web, php8.5-fpm on macOS and Linux or php8.5-cgi on Windows, postgres, …), or of what Flock runs for a site or proxy by its name (its FrankenPHP, dev server or command). Without a name, lists the logs |
 | `flock update` | Update Flock, CLI and daemon included: the app installs the new version (on Linux, apt or dnf) |
 | `flock version` | Print the Flock version |
