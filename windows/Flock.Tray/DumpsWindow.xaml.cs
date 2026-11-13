@@ -19,7 +19,7 @@ internal sealed partial class DumpsWindow : FlockWindow
     private bool released;
     private Task timelineLoad = Task.CompletedTask;
 
-    public DumpsWindow(DumpsViewModel viewModel) : base(Strings.Pane_Dumps, 920, 620)
+    public DumpsWindow(DumpsViewModel viewModel) : base(Strings.Settings_Pane_Dumps, 920, 620)
     {
         this.viewModel = viewModel;
         InitializeComponent();
@@ -141,7 +141,7 @@ internal sealed partial class DumpsWindow : FlockWindow
         var visibleDumps = viewModel.VisibleDumps;
         var visibleEvents = viewModel.VisibleEvents;
         var count = visibleDumps.Count + visibleEvents.Count(e => e.Kind != EventKind.Request);
-        Heading = count == 0 ? Strings.Pane_Dumps : $"{Strings.Pane_Dumps} ({count})";
+        Heading = count == 0 ? Strings.Settings_Pane_Dumps : $"{Strings.Settings_Pane_Dumps} ({count})";
         if (count == 0)
         {
             ContentHost.Content = Ui.EmptyState(Ui.GlyphBug, viewModel.Dumps.Count == 0 && viewModel.Events.Count == 0 ? Strings.Dumps_NoneYet : Strings.Dumps_NoneMatching,

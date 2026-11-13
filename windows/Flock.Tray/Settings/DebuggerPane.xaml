@@ -46,7 +46,7 @@
                                 <TextBlock Text="{Binding}" />
                                 <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6">
                                     <FontIcon Glyph="&#xEBE8;" FontFamily="{StaticResource SymbolsFont}" />
-                                    <TextBlock Text="{l:Loc Key=Debugger_BreakpointsInPhpStorm}" Style="{StaticResource CaptionTextBlockStyle}" />
+                                    <TextBlock Text="{l:Loc Key=Debugger_BreakpointsInPhpstorm}" Style="{StaticResource CaptionTextBlockStyle}" />
                                 </StackPanel>
                             </Grid>
                         </Border>

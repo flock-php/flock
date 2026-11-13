@@ -12,12 +12,16 @@ namespace Flock.Tray.Settings;
 internal static class LanguageSetting
 {
     /// <summary>The Language preference of each item of the picker, in order.</summary>
-    private static readonly string[] Choices = [Localization.System, "en", "cs", "es"];
+    private static readonly string[] Choices = [Localization.System, .. Localization.Languages];
 
     public static StackPanel Create(PreferencesService preferences)
     {
         // The languages' own names, the same in every language.
-        var picker = new ComboBox { MinWidth = 200, Items = { Strings.General_LanguageSystem, "English", "Čeština", "Español" } };
+        var picker = new ComboBox { MinWidth = 200, Items = { Strings.General_LanguageSystem } };
+        foreach (var language in Localization.Languages)
+        {
+            picker.Items.Add(Localization.LanguageNames[language]);
+        }
         picker.SelectedIndex = Math.Max(0, Array.IndexOf(Choices, preferences.Snapshot.Language));
         Ui.AutomationName(picker, Strings.General_AppLanguage);
 

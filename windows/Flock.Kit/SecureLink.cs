@@ -57,13 +57,13 @@ public sealed record SecureLink(string Site)
 public sealed record SecureLinkResolution(string Title, string Message, string? Site = null)
 {
     public static SecureLinkResolution Secure(Status.Site site) => new(
-        Localization.Format(Strings.SecureLink_SecureTitle, site.Name),
-        Localization.Format(Strings.SecureLink_SecureMessage, site.Domain),
+        Localization.Format(Strings.Links_Secure_SecureTitle, site.Name),
+        Localization.Format(Strings.Links_Secure_SecureMessage, site.Domain),
         site.Name);
 
     public static SecureLinkResolution AlreadySecured(Status.Site site) =>
-        new(Localization.Format(Strings.SecureLink_AlreadySecuredTitle, site.Name), Localization.Format(Strings.SecureLink_AlreadySecuredMessage, site.Domain));
+        new(Localization.Format(Strings.Links_Secure_AlreadySecuredTitle, site.Name), Localization.Format(Strings.Links_Secure_AlreadySecuredMessage, site.Domain));
 
     public static SecureLinkResolution Unknown(string name) =>
-        new(Localization.Format(Strings.SecureLink_UnknownTitle, name), Strings.SecureLink_UnknownMessage);
+        new(Localization.Format(Strings.Links_Secure_UnknownTitle, name), Strings.Links_Secure_UnknownMessage);
 }

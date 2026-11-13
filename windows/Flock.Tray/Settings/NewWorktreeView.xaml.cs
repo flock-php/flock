@@ -20,7 +20,7 @@ internal sealed partial class NewWorktreeView : UserControl
     {
         this.site = site;
         InitializeComponent();
-        DatabaseBox.Items.Add(Strings.Worktree_ProjectDefault);
+        DatabaseBox.Items.Add(Strings.Worktrees_ProjectDefault);
         foreach (var item in SitesPane.DatabaseChoices)
         {
             DatabaseBox.Items.Add(item);
@@ -59,13 +59,13 @@ internal sealed partial class NewWorktreeView : UserControl
         values.Clear();
         if (branches.Current.Length == 0)
         {
-            FromBox.Items.Add(Strings.NewWorktree_CurrentCommit);
+            FromBox.Items.Add(Strings.Worktrees_New_CurrentCommit);
             values.Add("");
         }
         foreach (var name in branches.Ordered())
         {
-            FromBox.Items.Add(name == branches.Current ? Localization.Format(Strings.NewWorktree_CurrentBranch, name)
-                : name == branches.Default ? Localization.Format(Strings.NewWorktree_DefaultBranch, name) : name);
+            FromBox.Items.Add(name == branches.Current ? Localization.Format(Strings.Worktrees_New_CurrentBranch, name)
+                : name == branches.Default ? Localization.Format(Strings.Worktrees_New_DefaultBranch, name) : name);
             values.Add(name);
         }
         if (branches.Remote.Count > 0)
@@ -93,8 +93,8 @@ internal sealed partial class NewWorktreeView : UserControl
         FromBox.IsEnabled = loaded && !Exists;
         var typed = Branch;
         var address = $"{SiteBranches.Slug(typed)}.{site.Domain}";
-        ExplanationText.Text = typed.Length == 0 ? Localization.Format(Strings.NewWorktree_ExplainUnnamed, site.Name)
-            : Exists ? Localization.Format(Strings.NewWorktree_ExplainExisting, typed, site.Name, address)
-            : Localization.Format(Strings.NewWorktree_ExplainNew, typed, site.Name, address);
+        ExplanationText.Text = typed.Length == 0 ? Localization.Format(Strings.Worktrees_New_ExplainUnnamed, site.Name)
+            : Exists ? Localization.Format(Strings.Worktrees_New_ExplainExisting, typed, site.Name, address)
+            : Localization.Format(Strings.Worktrees_New_ExplainNew, site.Name, typed, address);
     }
 }

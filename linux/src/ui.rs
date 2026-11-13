@@ -15,16 +15,16 @@ pub fn relative_time(time: &str) -> String {
     };
     let seconds = now.difference(&time).as_seconds();
     match seconds {
-        ..60 => tr!("just now").to_owned(),
-        60..3600 => trn!("a minute ago", "{n} minutes ago", seconds / 60),
-        3600..86400 => trn!("an hour ago", "{n} hours ago", seconds / 3600),
-        _ => local_time(&time, tr!("%e %b")),
+        ..60 => tr!("common.time.just_now").to_owned(),
+        60..3600 => trn!("common.n_minutes_ago", seconds / 60),
+        3600..86400 => trn!("common.n_hours_ago", seconds / 3600),
+        _ => local_time(&time, tr!("common.e_b")),
     }
 }
 
 /// A daemon time in the user's time zone, e.g. "24 Oct 2026, 14:03:12".
 pub fn date_time(time: &str) -> String {
-    glib::DateTime::from_iso8601(time, None).map(|t| local_time(&t, tr!("%e %b %Y, %H:%M:%S"))).unwrap_or_default()
+    glib::DateTime::from_iso8601(time, None).map(|t| local_time(&t, tr!("common.e_b_y_h_m"))).unwrap_or_default()
 }
 
 /// "14:03:12.481" for a timeline.

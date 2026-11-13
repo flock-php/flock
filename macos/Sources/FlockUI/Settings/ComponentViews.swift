@@ -92,19 +92,19 @@ struct CheckForUpdatesLine: View {
         HStack(spacing: 5) {
             if !error.isEmpty {
                 Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.orange)
-                    .help("The last check failed: \(error)")
+                    .help("common.last_check_failed \(error)")
             }
             if let checkedAt {
-                Text("Last checked \(checkedAt, format: .relative(presentation: .named))")
+                Text("versions.last_checked \(checkedAt, format: .relative(presentation: .named))")
             } else {
-                Text("Not checked yet")
+                Text("versions.not_checked")
             }
             Text(verbatim: "·")
             if checkingState.wrappedValue {
                 ProgressView().controlSize(.mini)
-                Text("Checking…")
+                Text("versions.checking")
             } else {
-                Button("Check for Updates") {
+                Button("general.check_for_updates") {
                     checkingState.wrappedValue = true
                     Task {
                         await check()
@@ -169,12 +169,12 @@ struct ComponentJobProgress: View {
                 ProgressView().progressViewStyle(.linear)
             }
             HStack(spacing: 10) {
-                Text("It keeps going when you close this window.")
+                Text("common.it_keeps_going_when_you")
                     .font(.caption).foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
                 Spacer(minLength: 4)
-                Button("Show Log", action: showLog).buttonStyle(.link).font(.caption)
-                Button("Cancel", action: cancel).controlSize(.small)
+                Button("sites.show_log", action: showLog).buttonStyle(.link).font(.caption)
+                Button("common.cancel", action: cancel).controlSize(.small)
             }
         }
     }
@@ -202,9 +202,9 @@ struct ComponentJobFailure: View {
             HStack(alignment: .top, spacing: 8) {
                 Image(systemName: "exclamationmark.octagon.fill").foregroundStyle(.red)
                 VStack(alignment: .leading, spacing: 3) {
-                    Text(job.action == .update ? "Couldn't update \(name)" : "Couldn't install \(name)")
+                    Text(job.action == .update ? "common.couldnt_update \(name)" : "common.couldnt_install \(name)")
                         .font(.callout.weight(.semibold))
-                    Text(job.error.isEmpty ? String(localized: "The install stopped with an error. The log has the details.") : job.error)
+                    Text(job.error.isEmpty ? String(localized: "common.install_stopped_with_an_error") : job.error)
                         .font(.caption).foregroundStyle(.secondary)
                         .textSelection(.enabled)
                         .lineLimit(4)
@@ -213,10 +213,10 @@ struct ComponentJobFailure: View {
                 }
             }
             HStack(spacing: 8) {
-                Button("Show Log", action: showLog).buttonStyle(.link).font(.caption)
+                Button("sites.show_log", action: showLog).buttonStyle(.link).font(.caption)
                 Spacer()
-                Button("Dismiss", action: dismiss).controlSize(.small)
-                Button("Try Again", action: retry).controlSize(.small).buttonStyle(.borderedProminent)
+                Button("sites.share.dismiss", action: dismiss).controlSize(.small)
+                Button("setup.try_again", action: retry).controlSize(.small).buttonStyle(.borderedProminent)
             }
         }
         .padding(10)
@@ -247,7 +247,7 @@ struct UpdateStrip: View {
             if busy {
                 ProgressView().controlSize(.small)
             } else {
-                Button("Update", action: update)
+                Button("common.update", action: update)
                     .buttonStyle(.borderedProminent)
                     .controlSize(.small)
                     .disabled(disabled)
@@ -275,17 +275,17 @@ struct JobLogSheet: View {
                     ProgressView().controlSize(.small)
                 }
                 Spacer()
-                Button("Copy") {
+                Button("common.copy") {
                     NSPasteboard.general.clearContents()
                     NSPasteboard.general.setString(text, forType: .string)
                 }
                 .disabled(text.isEmpty)
-                Button("Done") { dismiss() }.keyboardShortcut(.defaultAction)
+                Button("common.done") { dismiss() }.keyboardShortcut(.defaultAction)
             }
 
             ScrollViewReader { proxy in
                 ScrollView {
-                    Text(text.isEmpty ? String(localized: "No log yet.") : text)
+                    Text(text.isEmpty ? String(localized: "worktrees.job.no_log_yet") : text)
                         .font(.system(.caption, design: .monospaced))
                         .foregroundStyle(text.isEmpty ? .secondary : .primary)
                         .textSelection(.enabled)

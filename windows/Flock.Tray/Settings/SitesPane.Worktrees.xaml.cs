@@ -15,12 +15,12 @@ internal sealed partial class SitesPane
 {
     // The database pickers' modes and their labels, in their order.
     internal static readonly string[] DatabaseModes = [Status.WorktreeDatabase.Shared, Status.WorktreeDatabase.Copy, Status.WorktreeDatabase.Fresh];
-    internal static string[] DatabaseChoices => [Strings.Worktree_DatabaseShared, Strings.Worktree_DatabaseCopy, Strings.Worktree_DatabaseFresh];
+    internal static string[] DatabaseChoices => [Strings.Worktrees_DatabaseShared, Strings.Worktrees_DatabaseCopy, Strings.Worktrees_DatabaseFresh];
 
     /// <summary>A site's worktrees (each selects it) and New Worktree.</summary>
     private StackPanel Worktrees(Status.Site site)
     {
-        var section = Section(Strings.Worktree_Worktrees);
+        var section = Section(Strings.Worktrees_Worktrees);
         var worktrees = Model.Status?.WorktreesOf(site.Name) ?? [];
         foreach (var worktree in worktrees)
         {
@@ -33,18 +33,18 @@ internal sealed partial class SitesPane
         }
         if (worktrees.Count == 0)
         {
-            section.Children.Add(Ui.Caption(Localization.Format(Strings.Worktree_Explanation, site.Domain), Ui.TertiaryText));
+            section.Children.Add(Ui.Caption(Localization.Format(Strings.Worktrees_Explanation, site.Domain), Ui.TertiaryText));
         }
-        section.Children.Add(Ui.Button(Strings.Worktree_New, () => Start(site.Name, () => NewWorktree(site)), glyph: Ui.GlyphAdd));
+        section.Children.Add(Ui.Button(Strings.Worktrees_New, () => Start(site.Name, () => NewWorktree(site)), glyph: Ui.GlyphAdd));
         return section;
     }
 
     /// <summary>A worktree's state in its site's list: its setup, or its own database.</summary>
     private static UIElement WorktreeSummary(Status.Site worktree) => worktree.Worktree switch
     {
-        { IsBusy: true } setup => Ui.Row(6, new ProgressRing { Width = 12, Height = 12 }, Ui.Caption(setup.Step.Length > 0 ? setup.Step : Strings.Worktree_SettingUp, wrap: false)),
-        { IsFailed: true } => Ui.Caption(Strings.Worktree_SetupFailed, Ui.Critical, wrap: false),
-        { HasOwnDatabase: true } setup => Ui.Badge(setup.DbMode.Length > 0 ? setup.DbMode : Strings.Worktree_OwnDatabase, Ui.Tone.Neutral),
+        { IsBusy: true } setup => Ui.Row(6, new ProgressRing { Width = 12, Height = 12 }, Ui.Caption(setup.Step.Length > 0 ? setup.Step : Strings.Worktrees_SettingUp, wrap: false)),
+        { IsFailed: true } => Ui.Caption(Strings.Worktrees_SetupFailed, Ui.Critical, wrap: false),
+        { HasOwnDatabase: true } setup => Ui.Badge(setup.DbMode.Length > 0 ? setup.DbMode : Strings.Worktrees_OwnDatabase, Ui.Tone.Neutral),
         _ => Ui.Row(0),
     };
 
@@ -55,9 +55,9 @@ internal sealed partial class SitesPane
         var form = new NewWorktreeView(site);
         var dialog = new ContentDialog
         {
-            Title = Localization.Format(Strings.Worktree_NewTitle, site.Name),
+            Title = Localization.Format(Strings.Worktrees_NewTitle, site.Name),
             Content = form,
-            PrimaryButtonText = Strings.Worktree_Create,
+            PrimaryButtonText = Strings.Worktrees_Create,
             CloseButtonText = Strings.Common_Cancel,
             DefaultButton = ContentDialogButton.Primary,
             XamlRoot = Window.XamlRoot,
@@ -75,7 +75,7 @@ internal sealed partial class SitesPane
             }
             args.Cancel = true;
             var (name, start, db) = (form.Branch, form.Start, form.Database);
-            job = new WorktreeJobView(dialog, Model, Localization.Format(Strings.Worktree_NewTitle, site.Name));
+            job = new WorktreeJobView(dialog, Model, Localization.Format(Strings.Worktrees_NewTitle, site.Name));
             run = job.RunAsync(cancellationToken => Model.Sites.CreateWorktreeAsync(site.Name, name, start, db, cancellationToken));
         };
         var load = form.LoadBranchesAsync(Model.Sites, token);
@@ -103,7 +103,7 @@ internal sealed partial class SitesPane
         var panel = new StackPanel { Spacing = 20 };
 
         // Header: branch, address and folder, and the worktree's actions.
-        var heading = Ui.Column(2, Ui.Row(8, Ui.Text(label, "SubtitleTextBlockStyle", wrap: false), Ui.Badge(Strings.Worktree_Worktree, Ui.Tone.Neutral)));
+        var heading = Ui.Column(2, Ui.Row(8, Ui.Text(label, "SubtitleTextBlockStyle", wrap: false), Ui.Badge(Strings.Worktrees_Worktree, Ui.Tone.Neutral)));
         if (worktree.Url is { } url)
         {
             var link = Ui.Link(url, () => Model.Open(worktree));
@@ -116,7 +116,7 @@ internal sealed partial class SitesPane
 
         var open = Ui.IconButton(Ui.GlyphOpen, Localization.Format(Strings.Common_OpenTarget, worktree.Url ?? worktree.Domain), () => Model.Open(worktree));
         open.IsEnabled = worktree.Url is not null;
-        var actions = Ui.Row(0, open, Ui.IconButton(Ui.GlyphDelete, Strings.Worktree_Remove, () => Start(worktree.Name, () => RemoveWorktree(worktree))));
+        var actions = Ui.Row(0, open, Ui.IconButton(Ui.GlyphDelete, Strings.Worktrees_Remove, () => Start(worktree.Name, () => RemoveWorktree(worktree))));
         actions.VerticalAlignment = VerticalAlignment.Top;
         var header = new Grid { ColumnSpacing = 8 };
         header.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
@@ -145,23 +145,23 @@ internal sealed partial class SitesPane
         folder.Children.Add(reveal);
         UIElement address = worktree.Url is { } shown ? WorktreeLink(shown, () => Model.Open(worktree)) : Ui.Text(worktree.Domain, wrap: false);
         UIElement site = hasParent ? WorktreeLink(parent, () => Select(parent)) : Ui.Text(parent, wrap: false);
-        panel.Children.Add(Section(Strings.Worktree_Worktree,
-            Field(Strings.NewWorktree_Branch, Ui.Text(worktree.Branch.Length > 0 ? worktree.Branch : Strings.Worktree_DetachedHead, wrap: false)),
+        panel.Children.Add(Section(Strings.Worktrees_Worktree,
+            Field(Strings.Worktrees_New_Branch, Ui.Text(worktree.Branch.Length > 0 ? worktree.Branch : Strings.Worktrees_DetachedHead, wrap: false)),
             Field(Strings.General_Folder, folder),
             Field("URL", address),
             Field(Strings.Sites_Site, site)));
 
         // Settings: the site's, so they are changed there.
-        var settings = Section(Strings.Worktree_Settings);
+        var settings = Section(Strings.Worktrees_Settings);
         if (!worktree.IsNode)
         {
             settings.Children.Add(Field("PHP", Ui.Text($"PHP {worktree.Php}", wrap: false)));
         }
-        settings.Children.Add(Field("Node.js", Ui.Text(worktree.Node is { Length: > 0 } node ? $"Node {node}" : Strings.Worktree_None, wrap: false)));
-        settings.Children.Add(Field("HTTPS", Ui.Text(worktree.Secured ? Strings.Worktree_On : Strings.Worktree_Off, wrap: false)));
+        settings.Children.Add(Field("Node.js", Ui.Text(worktree.Node is { Length: > 0 } node ? $"Node {node}" : Strings.Worktrees_None, wrap: false)));
+        settings.Children.Add(Field("HTTPS", Ui.Text(worktree.Secured ? Strings.Worktrees_On : Strings.Worktrees_Off, wrap: false)));
         settings.Children.Add(Ui.Caption(worktree.IsNode
-            ? Localization.Format(Strings.Worktree_UsesSiteSettingsNode, parent)
-            : Localization.Format(Strings.Worktree_UsesSiteSettings, parent), Ui.TertiaryText));
+            ? Localization.Format(Strings.Worktrees_UsesSiteSettingsNode, parent)
+            : Localization.Format(Strings.Worktrees_UsesSiteSettings, parent), Ui.TertiaryText));
         panel.Children.Add(settings);
         if (worktree.IsNode)
         {
@@ -187,7 +187,7 @@ internal sealed partial class SitesPane
     private StackPanel WorktreeDatabase(Status.Site worktree)
     {
         var setup = worktree.Worktree;
-        var picker = new ComboBox { MinWidth = 150, PlaceholderText = Strings.Worktree_ProjectDefault };
+        var picker = new ComboBox { MinWidth = 150, PlaceholderText = Strings.Worktrees_ProjectDefault };
         foreach (var item in DatabaseChoices)
         {
             picker.Items.Add(item);
@@ -211,16 +211,16 @@ internal sealed partial class SitesPane
             picker.SelectedIndex = selected;
             Start(worktree.Name, () => SwitchDatabase(worktree, mode));
         };
-        Ui.AutomationName(picker, Strings.NewWorktree_Database);
+        Ui.AutomationName(picker, Strings.Worktrees_New_Database);
         if (setup is null)
         {
-            ToolTipService.SetToolTip(picker, Strings.Worktree_SetUpFirst);
+            ToolTipService.SetToolTip(picker, Strings.Worktrees_SetUpFirst);
         }
 
-        var current = setup is { HasOwnDatabase: true } ? setup.Database : Strings.Worktree_DatabaseShared;
-        var section = Section(Strings.NewWorktree_Database, Field(Strings.Worktree_Current, Ui.Text(current, wrap: false, selectable: true)),
-            Field(Strings.NewWorktree_Database, picker));
-        section.Children.Add(Ui.Caption(Strings.Worktree_SharedDatabaseNote, Ui.TertiaryText));
+        var current = setup is { HasOwnDatabase: true } ? setup.Database : Strings.Worktrees_DatabaseShared;
+        var section = Section(Strings.Worktrees_New_Database, Field(Strings.Worktrees_Current, Ui.Text(current, wrap: false, selectable: true)),
+            Field(Strings.Worktrees_New_Database, picker));
+        section.Children.Add(Ui.Caption(Strings.Worktrees_SharedDatabaseNote, Ui.TertiaryText));
         return section;
     }
 
@@ -233,12 +233,12 @@ internal sealed partial class SitesPane
         {
             var dropped = mode switch
             {
-                Status.WorktreeDatabase.Copy => Strings.Worktree_DropDetailsCopy,
-                Status.WorktreeDatabase.Fresh => Strings.Worktree_DropDetailsFresh,
-                _ => Strings.Worktree_DropDetailsShared,
+                Status.WorktreeDatabase.Copy => Strings.Worktrees_DropDetailsCopy,
+                Status.WorktreeDatabase.Fresh => Strings.Worktrees_DropDetailsFresh,
+                _ => Strings.Worktrees_DropDetailsShared,
             };
-            if (!await Window.Confirm(Localization.Format(Strings.Worktree_DropQuestion, setup.Database), Localization.Format(dropped, label, parent, setup.Database),
-                    Strings.Worktree_Switch, destructive: true))
+            if (!await Window.Confirm(Localization.Format(Strings.Worktrees_DropQuestion, setup.Database), Localization.Format(dropped, label, parent, setup.Database),
+                    Strings.Worktrees_Switch, destructive: true))
             {
                 return;
             }
@@ -247,45 +247,45 @@ internal sealed partial class SitesPane
         {
             var (question, details) = mode switch
             {
-                Status.WorktreeDatabase.Copy => (Strings.Worktree_GiveCopyQuestion, Strings.Worktree_GiveCopyDetails),
-                Status.WorktreeDatabase.Fresh => (Strings.Worktree_GiveFreshQuestion, Strings.Worktree_GiveFreshDetails),
-                _ => (Strings.Worktree_GiveSharedQuestion, Strings.Worktree_GiveSharedDetails),
+                Status.WorktreeDatabase.Copy => (Strings.Worktrees_GiveCopyQuestion, Strings.Worktrees_GiveCopyDetails),
+                Status.WorktreeDatabase.Fresh => (Strings.Worktrees_GiveFreshQuestion, Strings.Worktrees_GiveFreshDetails),
+                _ => (Strings.Worktrees_GiveSharedQuestion, Strings.Worktrees_GiveSharedDetails),
             };
-            if (!await Window.Confirm(Localization.Format(question, label, parent), details, Strings.Worktree_Switch))
+            if (!await Window.Confirm(Localization.Format(question, label, parent), details, Strings.Worktrees_Switch))
             {
                 return;
             }
         }
-        await FollowJob(Localization.Format(Strings.Worktree_SwitchingDatabase, label), worktree.Path, token => Model.Sites.SwitchWorktreeDatabaseAsync(worktree.Name, worktree.Path, mode, token));
+        await FollowJob(Localization.Format(Strings.Worktrees_SwitchingDatabase, label), worktree.Path, token => Model.Sites.SwitchWorktreeDatabaseAsync(worktree.Name, worktree.Path, mode, token));
     }
 
     /// <summary>The worktree's setup: queued, running (the step), set up or failed (why), with its log and Run Setup Again.</summary>
     private StackPanel WorktreeSetup(Status.Site worktree)
     {
-        var section = Section(Strings.Worktree_Setup);
+        var section = Section(Strings.Worktrees_Setup);
         if (worktree.Worktree is not { } setup)
         {
-            section.Children.Add(Ui.Caption(Strings.Worktree_NotSetUp));
-            section.Children.Add(Ui.Button(Strings.Worktree_SetUpAction, () => Start(worktree.Name, () => FollowJob(Localization.Format(Strings.Worktree_SettingUpTitle, worktree.WorktreeLabel), worktree.Path,
+            section.Children.Add(Ui.Caption(Strings.Worktrees_NotSetUp));
+            section.Children.Add(Ui.Button(Strings.Worktrees_SetUpAction, () => Start(worktree.Name, () => FollowJob(Localization.Format(Strings.Worktrees_SettingUpTitle, worktree.WorktreeLabel), worktree.Path,
                 token => Model.Sites.SetupWorktreeAsync(worktree.Name, worktree.Path, again: false, token)))));
             return section;
         }
 
         if (setup.IsBusy)
         {
-            var step = setup.State == Status.WorktreeState.Queued ? Strings.Worktree_Waiting
-                : setup.Step.Length > 0 ? setup.Step + "…" : Strings.Worktree_SettingUp;
+            var step = setup.State == Status.WorktreeState.Queued ? Strings.Worktrees_Waiting
+                : setup.Step.Length > 0 ? setup.Step + "…" : Strings.Worktrees_SettingUp;
             section.Children.Add(Ui.Caption(step, wrap: false));
             section.Children.Add(new ProgressBar { IsIndeterminate = true, HorizontalAlignment = HorizontalAlignment.Left, Width = 320 });
         }
         else if (setup.IsFailed)
         {
-            section.Children.Add(Warning(setup.Error.Length > 0 ? setup.Error : Strings.Worktree_SetupFailedSentence));
-            section.Children.Add(Ui.Caption(Strings.Worktree_StillServed));
+            section.Children.Add(Warning(setup.Error.Length > 0 ? setup.Error : Strings.Worktrees_SetupFailedSentence));
+            section.Children.Add(Ui.Caption(Strings.Worktrees_StillServed));
         }
         else
         {
-            section.Children.Add(Ui.Row(6, Ui.StatusDot(true), Ui.Caption(Strings.Worktree_IsSetUp, wrap: false)));
+            section.Children.Add(Ui.Row(6, Ui.StatusDot(true), Ui.Caption(Strings.Worktrees_IsSetUp, wrap: false)));
         }
 
         var buttons = Ui.Row(8);
@@ -294,13 +294,13 @@ internal sealed partial class SitesPane
             var name = worktree.Name;
             var log = setup.Log;
             buttons.Children.Add(Ui.Button(Strings.Sites_ShowLog, () => Start("log:" + name, () => JobLogDialog.ShowAsync(Window,
-                Localization.Format(Strings.Worktree_SetupLogTitle, worktree.WorktreeLabel),
+                Localization.Format(Strings.Worktrees_SetupLogTitle, worktree.WorktreeLabel),
                 token => Model.Client.ServiceLogAsync(log, 400, token),
                 () => Model.Status?.Sites.FirstOrDefault(s => s.Name == name)?.Worktree?.IsBusy == true))));
         }
-        var again = Ui.Button(Strings.Worktree_RunAgain, () => Start(worktree.Name, () => FollowJob(Localization.Format(Strings.Worktree_SettingUpTitle, worktree.WorktreeLabel),
+        var again = Ui.Button(Strings.Worktrees_RunAgain, () => Start(worktree.Name, () => FollowJob(Localization.Format(Strings.Worktrees_SettingUpTitle, worktree.WorktreeLabel),
             worktree.Path, token => Model.Sites.SetupWorktreeAsync(worktree.Name, worktree.Path, again: true, token))),
-            tooltip: Strings.Worktree_RunAgainTooltip);
+            tooltip: Strings.Worktrees_RunAgainTooltip);
         again.IsEnabled = !setup.IsBusy;
         buttons.Children.Add(again);
         section.Children.Add(buttons);
@@ -319,11 +319,11 @@ internal sealed partial class SitesPane
     {
         var label = worktree.WorktreeLabel;
         var details = worktree.Worktree is { HasOwnDatabase: true } setup
-            ? Localization.Format(Strings.Worktree_RemoveDetailsDatabase, worktree.Path, setup.Database)
-            : Localization.Format(Strings.Worktree_RemoveDetails, worktree.Path);
+            ? Localization.Format(Strings.Worktrees_RemoveDetailsDatabase, worktree.Path, setup.Database)
+            : Localization.Format(Strings.Worktrees_RemoveDetails, worktree.Path);
         if (worktree.Branch.Length > 0)
         {
-            details += " " + Localization.Format(Strings.Worktree_BranchStays, worktree.Branch);
+            details += " " + Localization.Format(Strings.Worktrees_BranchStays, worktree.Branch);
         }
         if (!await Window.Confirm(Localization.Format(Strings.Common_RemoveQuestion, label), details, Strings.Common_Remove, destructive: true))
         {
@@ -332,14 +332,14 @@ internal sealed partial class SitesPane
         var error = await Model.Sites.RemoveWorktreeAsync(worktree.Name, worktree.Path, force: false);
         if (error is not null)
         {
-            if (!await Window.Confirm(Localization.Format(Strings.Worktree_CouldNotRemove, label), error, Strings.Worktree_RemoveAnyway, destructive: true))
+            if (!await Window.Confirm(Localization.Format(Strings.Worktrees_CouldNotRemove, label), error, Strings.Worktrees_RemoveAnyway, destructive: true))
             {
                 return;
             }
             error = await Model.Sites.RemoveWorktreeAsync(worktree.Name, worktree.Path, force: true);
             if (error is not null)
             {
-                await Ui.Inform(Window.XamlRoot, Localization.Format(Strings.Worktree_CouldNotRemove, label), error);
+                await Ui.Inform(Window.XamlRoot, Localization.Format(Strings.Worktrees_CouldNotRemove, label), error);
                 return;
             }
         }

@@ -170,7 +170,7 @@ public sealed class Status
 
         /// <summary>What answers at the upstream: the server's name, "Running" or "Not running".</summary>
         [JsonIgnore]
-        public string ServerLabel => Running ? Server is { Length: > 0 } server ? server : Strings.Proxy_Running : Strings.Proxy_NotRunning;
+        public string ServerLabel => Running ? Server is { Length: > 0 } server ? server : Strings.Sites_Proxy_Running : Strings.Sites_Proxy_NotRunning;
     }
 
     /// <summary>The command that starts a proxy's server, and how that went.</summary>
@@ -197,11 +197,11 @@ public sealed class Status
         [JsonIgnore]
         public string StateLabel => State switch
         {
-            ProxyState.Starting => Strings.Server_Starting,
-            ProxyState.Running => Strings.Proxy_Running,
-            ProxyState.Stopping => Strings.Server_Stopping,
-            ProxyState.Failed => Problem.Length > 0 ? Localization.Format(Strings.Server_FailedBecause, Problem) : Strings.Server_Failed,
-            _ => Strings.Server_Stopped,
+            ProxyState.Starting => Strings.Sites_Server_Starting,
+            ProxyState.Running => Strings.Sites_Proxy_Running,
+            ProxyState.Stopping => Strings.Sites_Server_Stopping,
+            ProxyState.Failed => Problem.Length > 0 ? Localization.Format(Strings.Sites_Server_FailedBecause, Problem) : Strings.Sites_Server_Failed,
+            _ => Strings.Sites_Server_Stopped,
         };
     }
 
@@ -238,10 +238,10 @@ public sealed class Status
         [JsonIgnore]
         public string StateLabel => State switch
         {
-            NodeServerState.Starting => Strings.Server_Starting,
-            NodeServerState.Running => Localization.Format(Strings.Server_RunningOnPort, Port),
-            NodeServerState.Failed => Problem.Length > 0 ? Localization.Format(Strings.Server_StoppedBecause, Problem) : Strings.Server_Stopped,
-            _ => Strings.Server_Sleeping,
+            NodeServerState.Starting => Strings.Sites_Server_Starting,
+            NodeServerState.Running => Localization.Format(Strings.Sites_Server_RunningOnPort, Port),
+            NodeServerState.Failed => Problem.Length > 0 ? Localization.Format(Strings.Sites_Server_StoppedBecause, Problem) : Strings.Sites_Server_Stopped,
+            _ => Strings.Sites_Server_Sleeping,
         };
     }
 
@@ -730,11 +730,11 @@ public static class EventKind
 
     public static string Name(string kind) => kind switch
     {
-        Query => Strings.EventKind_Queries,
-        Log => Strings.EventKind_Logs,
-        View => Strings.EventKind_Views,
-        Job => Strings.EventKind_Jobs,
-        Request => Strings.EventKind_Requests,
+        Query => Strings.Dumps_EventKind_Queries,
+        Log => Strings.Dumps_EventKind_Logs,
+        View => Strings.Dumps_EventKind_Views,
+        Job => Strings.Dumps_EventKind_Jobs,
+        Request => Strings.Dumps_EventKind_Requests,
         _ => kind,
     };
 }

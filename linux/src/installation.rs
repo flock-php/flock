@@ -53,7 +53,7 @@ pub fn run(args: &[&str]) -> Output {
     if !flock.exists() {
         return Output {
             ok: false,
-            text: tr!("Flock is not installed for this user ({path} is missing) — run `flk install` once.", path = flock.display()),
+            text: tr!("app.flock_is_not_installed_for_this", path = flock.display()),
         };
     }
     match i18n::system_language(Command::new(&flock).args(args)).output() {
@@ -75,7 +75,7 @@ pub fn setup_flock() -> Option<PathBuf> {
 /// calling on_line with every line it prints, then done with the outcome.
 pub fn run_streaming(args: Vec<String>, on_line: impl Fn(&str) + 'static, done: impl FnOnce(Output) + 'static) {
     let Some(flock) = setup_flock() else {
-        done(Output { ok: false, text: tr!("Flock isn't installed: install the flockphp package first.").to_owned() });
+        done(Output { ok: false, text: tr!("app.flock_isnt_installed_install_the").to_owned() });
         return;
     };
     let (tx, rx) = mpsc::channel::<Result<String, Output>>();

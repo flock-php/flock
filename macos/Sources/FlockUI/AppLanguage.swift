@@ -5,19 +5,34 @@ import SwiftUI
 /// localization at launch from AppleLanguages in the app's own defaults, which is also what System
 /// Settings → Language & Region → Applications sets; without it, the user's languages decide. The
 /// choice is read back from there, so both stay the same. A change applies when Flock starts again.
-enum AppLanguage: String, CaseIterable, Identifiable {
-    case system, en, cs, es
+struct AppLanguage: Hashable, Identifiable {
+    /// "system", or the code of one of appLanguages.
+    let rawValue: String
+
+    /// The user's languages decide.
+    static let system = AppLanguage(code: "system")
+
+    /// System, then the languages Flock is translated to (Languages.swift, generated from lang/).
+    static let allCases = [AppLanguage.system] + appLanguages.map { AppLanguage(code: $0.code) }
+
+    private init(code: String) {
+        rawValue = code
+    }
+
+    /// One of allCases; nil for a language Flock doesn't have.
+    init?(rawValue: String) {
+        guard let language = Self.allCases.first(where: { $0.rawValue == rawValue }) else { return nil }
+        self = language
+    }
 
     var id: String { rawValue }
 
     /// The picker's names: each language in itself, so it can be found from any language.
     var name: String {
-        switch self {
-        case .system: String(localized: "System default")
-        case .en: "English"
-        case .cs: "Čeština"
-        case .es: "Español"
+        if self == .system {
+            return String(localized: "general.language_system")
         }
+        return appLanguages.first { $0.code == rawValue }?.name ?? rawValue
     }
 
     /// The app's own defaults; UserDefaults.standard would also answer from NSGlobalDomain.
@@ -28,8 +43,10 @@ enum AppLanguage: String, CaseIterable, Identifiable {
     static var selected: AppLanguage {
         let languages = UserDefaults.standard.persistentDomain(forName: domain)?["AppleLanguages"] as? [String]
         guard let first = languages?.first else { return .system }
+        // A regional variant Flock has ("pt-BR"), else the language ("de-AT" is "de").
         let code = first.split(whereSeparator: { $0 == "-" || $0 == "_" }).first.map(String.init) ?? first
-        guard let language = AppLanguage(rawValue: code.lowercased()), language != .system else { return .system }
+        let match = AppLanguage(rawValue: first.replacingOccurrences(of: "_", with: "-")) ?? AppLanguage(rawValue: code.lowercased())
+        guard let language = match, language != .system else { return .system }
         return language
     }
 
@@ -89,7 +106,7 @@ struct LanguagePicker: View {
 
     var body: some View {
         let selected = selectedState.wrappedValue
-        Picker("Language", selection: Binding(get: { selected }, set: {
+        Picker("general.language", selection: Binding(get: { selected }, set: {
             AppLanguage.select($0)
             selectedState.wrappedValue = AppLanguage.selected
         })) {
@@ -97,11 +114,11 @@ struct LanguagePicker: View {
         }
         if selected.localization != AppLanguage.running {
             HStack {
-                Text("Flock uses the new language after it restarts.")
+                Text("general.language_restart_note")
                     .font(.caption).foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
                 Spacer()
-                Button("Relaunch Flock") {
+                Button("general.relaunch_flock") {
                     do {
                         try AppLanguage.relaunch()
                     } catch {

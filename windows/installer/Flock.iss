@@ -50,12 +50,7 @@ ShowLanguageDialog=no
 SignTool=flock
 #endif
 
-[Languages]
-Name: "en"; MessagesFile: "compiler:Default.isl"
-Name: "cs"; MessagesFile: "compiler:Languages\Czech.isl"
-Name: "es"; MessagesFile: "compiler:Languages\Spanish.isl"
-
-; Setup's own messages in each language, generated from i18n/ (tools/i18n).
+; Setup's languages ([Languages], English first) and its own messages in each, generated from lang/ (tools/i18n).
 #include "Strings.iss"
 
 [Files]
@@ -84,7 +79,7 @@ Root: HKCU; Subkey: "Software\Classes\flock\DefaultIcon"; ValueType: string; Val
 Root: HKCU; Subkey: "Software\Classes\flock\shell\open\command"; ValueType: string; ValueName: ""; ValueData: """{app}\FlockTray.exe"" ""%1"""
 
 [Run]
-Filename: "{app}\FlockTray.exe"; Description: "{cm:OpenFlock}"; Flags: postinstall nowait skipifsilent
+Filename: "{app}\FlockTray.exe"; Description: "{cm:Installer_OpenFlock}"; Flags: postinstall nowait skipifsilent
 ; The app updates itself by running this installer silently with /RELAUNCH; it starts again quietly.
 Filename: "{app}\FlockTray.exe"; Parameters: "--background"; Flags: nowait; Check: HasParam('/RELAUNCH')
 
@@ -123,15 +118,15 @@ begin
           '', SW_HIDE, ewWaitUntilTerminated, ResultCode) and (ResultCode = 0) then
     Exit;
 
-  Result := CustomMessage('PrivilegedFailed');
+  Result := CustomMessage('Installer_PrivilegedFailed');
   if LoadStringsFromFile(Output, Lines) then
     for I := 0 to GetArrayLength(Lines) - 1 do
       if Pos('Error: ', Lines[I]) = 1 then
         Result := Copy(Lines[I], 8, Length(Lines[I]));
   if Pos('declined', Result) > 0 then
-    Result := CustomMessage('PrivilegedDeclined')
+    Result := CustomMessage('Installer_PrivilegedDeclined')
   else
-    Result := FmtMessage(CustomMessage('UpdateNotInstalled'), [Result]);
+    Result := FmtMessage(CustomMessage('Installer_UpdateNotInstalled'), [Result]);
 end;
 
 // The running tray app locks its files; an update replaces them, and the new app starts afterwards.

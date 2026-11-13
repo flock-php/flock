@@ -51,12 +51,12 @@ public class CliProcessRunner
         {
             if (!process.Start())
             {
-                return new CliProcessResult(false, -1, Strings.Process_DidNotStart);
+                return new CliProcessResult(false, -1, Strings.App_DidNotStart);
             }
         }
         catch (Exception error) when (error is System.ComponentModel.Win32Exception or InvalidOperationException)
         {
-            return new CliProcessResult(false, -1, Localization.Format(Strings.Process_CouldNotRun, fileName, error.Message));
+            return new CliProcessResult(false, -1, Localization.Format(Strings.App_CouldNotRun, fileName, error.Message));
         }
 
         using var deadlineCts = deadline is { } limit ? new CancellationTokenSource(limit) : null;

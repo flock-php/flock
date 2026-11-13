@@ -453,7 +453,7 @@ public sealed class TrayService : ITrayIcon, IDisposable
         logger?.LogError(error, "Tray operation {Operation} failed.", operation);
         try
         {
-            Failure?.Invoke(Localization.Format(Strings.Tray_Failure, operation));
+            Failure?.Invoke(Localization.Format(Strings.Menu_Failure, operation));
         }
         catch (Exception callbackError)
         {

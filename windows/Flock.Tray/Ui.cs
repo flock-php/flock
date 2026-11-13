@@ -487,19 +487,19 @@ internal static class Ui
         var span = DateTimeOffset.Now - date;
         return span.TotalSeconds switch
         {
-            < 45 => Strings.Time_JustNow,
-            < 90 => Strings.Time_MinuteAgo,
-            < 3600 => Localization.Plural(Strings.ResourceManager, "Time_MinutesAgo", (int)Math.Round(span.TotalMinutes)),
-            < 5400 => Strings.Time_HourAgo,
-            < 86400 => Localization.Plural(Strings.ResourceManager, "Time_HoursAgo", (int)Math.Round(span.TotalHours)),
-            < 172800 => Strings.Time_Yesterday,
+            < 45 => Strings.Common_Time_JustNow,
+            < 90 => Strings.Common_Time_MinuteAgo,
+            < 3600 => Localization.Plural(Strings.ResourceManager, "Common_Time_MinutesAgo", (int)Math.Round(span.TotalMinutes)),
+            < 5400 => Strings.Common_Time_HourAgo,
+            < 86400 => Localization.Plural(Strings.ResourceManager, "Common_Time_HoursAgo", (int)Math.Round(span.TotalHours)),
+            < 172800 => Strings.Common_Time_Yesterday,
             _ => date.ToLocalTime().ToString("d", CultureInfo.CurrentCulture),
         };
     }
 
     public static string Bytes(long size) => size switch
     {
-        < 1024 => Localization.Plural(Strings.ResourceManager, "Size_Bytes", size),
+        < 1024 => Localization.Plural(Strings.ResourceManager, "Common_Size_Bytes", size),
         < 1024 * 1024 => $"{size / 1024.0:0.#} KB",
         < 1024L * 1024 * 1024 => $"{size / (1024.0 * 1024):0.#} MB",
         _ => $"{size / (1024.0 * 1024 * 1024):0.#} GB",

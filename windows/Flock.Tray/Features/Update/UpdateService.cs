@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Reflection;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
@@ -40,7 +41,7 @@ public sealed class UpdateProcessLauncher : IUpdateProcessLauncher
         using var process = Process.Start(start);
         if (process is null)
         {
-            return new CliProcessResult(false, -1, Strings.Update_InstallerNotStarted);
+            return new CliProcessResult(false, -1, Strings.Updates_InstallerNotStarted);
         }
         // Setup kills this app only after its privileged preflight succeeds. A declined UAC prompt
         // returns here with the existing app still running. Do not cancel or kill the installer.
@@ -183,11 +184,11 @@ public sealed class UpdateFileVerifier(IAuthenticodeVerifier authenticode) : IUp
         var length = new FileInfo(path).Length;
         if (update.Length <= 0 || length != update.Length)
         {
-            throw new InvalidDataException(Localization.Format(Strings.Update_WrongLength, length, update.Length));
+            throw new InvalidDataException(Localization.Format(Strings.Updates_WrongLength, length, update.Length));
         }
         if (string.IsNullOrWhiteSpace(update.Sha256))
         {
-            throw new InvalidDataException(Strings.Update_NoChecksum);
+            throw new InvalidDataException(Strings.Updates_NoChecksum);
         }
 
         await using (var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read,
@@ -196,20 +197,20 @@ public sealed class UpdateFileVerifier(IAuthenticodeVerifier authenticode) : IUp
             var hash = Convert.ToHexString(await SHA256.HashDataAsync(stream, cancellationToken));
             if (!hash.Equals(update.Sha256, StringComparison.OrdinalIgnoreCase))
             {
-                throw new InvalidDataException(Strings.Update_ChecksumMismatch);
+                throw new InvalidDataException(Strings.Updates_ChecksumMismatch);
             }
         }
 
         var signature = await Task.Run(() => authenticode.Verify(path), cancellationToken);
         if (signature.TrustCode != 0)
         {
-            throw new InvalidDataException(Localization.Format(Strings.Update_UntrustedSignature, $"0x{signature.TrustCode:X8}"));
+            throw new InvalidDataException(Localization.Format(Strings.Updates_UntrustedSignature, $"0x{signature.TrustCode:X8}"));
         }
         if (!string.Equals(signature.Publisher, Publisher, StringComparison.Ordinal))
         {
             throw new InvalidDataException(signature.Publisher is { } publisher
-                ? Localization.Format(Strings.Update_WrongPublisher, publisher, Publisher)
-                : Localization.Format(Strings.Update_UnknownPublisher, Publisher));
+                ? Localization.Format(Strings.Updates_WrongPublisher, publisher, Publisher)
+                : Localization.Format(Strings.Updates_UnknownPublisher, Publisher));
         }
     }
 }
@@ -253,8 +254,8 @@ public sealed class UpdateService(HttpClient http,
     public string Summary => State switch
     {
         UpdatePhase.Checking => Strings.Versions_Checking,
-        UpdatePhase.Downloading => Localization.Format(Strings.Update_Downloading, Progress / 100.0),
-        UpdatePhase.Installing => Strings.Update_Installing,
+        UpdatePhase.Downloading => Localization.Format(Strings.Updates_Downloading, (Progress / 100.0).ToString("P0", CultureInfo.CurrentCulture)),
+        UpdatePhase.Installing => Strings.Updates_Installing,
         _ when Error is not null => Error,
         _ when Available is { } update => Localization.Format(Strings.Services_VersionAvailable, update.Version),
         _ when IsUpToDate => Strings.Versions_UpToDate,
@@ -391,7 +392,7 @@ public sealed class UpdateService(HttpClient http,
     {
         if (Available is not { } update)
         {
-            throw new InvalidOperationException(Strings.Update_NoneAvailable);
+            throw new InvalidOperationException(Strings.Updates_NoneAvailable);
         }
 
         ownershipTransferred = false;
@@ -411,7 +412,7 @@ public sealed class UpdateService(HttpClient http,
             if (!result.Succeeded)
             {
                 var message = File.Exists(resultPath) ? (await File.ReadAllTextAsync(resultPath)).Trim() : result.Output;
-                throw new InvalidOperationException(message.Length > 0 ? message : Localization.Format(Strings.Update_SetupExited, result.ExitCode));
+                throw new InvalidOperationException(message.Length > 0 ? message : Localization.Format(Strings.Updates_SetupExited, result.ExitCode));
             }
             transferred = true;
             ownershipTransferred = true;
@@ -521,10 +522,10 @@ public sealed class UpdateService(HttpClient http,
         var message = error switch
         {
             InvalidDataException => error.Message,
-            OperationCanceledException => Strings.Update_TookTooLong,
-            HttpRequestException => Strings.Update_ServerUnreachable,
-            UnauthorizedAccessException => Strings.Update_FileAccess,
-            _ => error.Message.Length > 0 ? error.Message : Strings.Update_NotCompleted,
+            OperationCanceledException => Strings.Updates_TookTooLong,
+            HttpRequestException => Strings.Updates_ServerUnreachable,
+            UnauthorizedAccessException => Strings.Updates_FileAccess,
+            _ => error.Message.Length > 0 ? error.Message : Strings.Updates_NotCompleted,
         };
         if (action)
         {

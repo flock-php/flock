@@ -30,9 +30,9 @@ public sealed class JobLogViewModel : ObservableObject, IAsyncDisposable
     public string DisplayText => state switch
     {
         JobLogState.Loading => Strings.Common_Loading,
-        JobLogState.Missing => Strings.JobLog_NoLogYet,
+        JobLogState.Missing => Strings.Worktrees_Job_NoLogYet,
         JobLogState.Empty => Strings.Common_EmptyParenthesized,
-        JobLogState.Failed => Strings.JobLog_CouldNotLoadShort,
+        JobLogState.Failed => Strings.Worktrees_Job_CouldNotLoadShort,
         _ => text,
     };
     public string? Error => error;

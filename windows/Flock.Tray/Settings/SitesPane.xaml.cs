@@ -51,7 +51,7 @@ internal sealed partial class SitesPane : UserControl, ISettingsPane
     {
     }
 
-    public string Title => Strings.Pane_Sites;
+    public string Title => Strings.Settings_Pane_Sites;
     public string Subtitle => Strings.Sites_Subtitle;
     public UIElement Root => this;
     public bool ScrollsItself => true;
@@ -327,7 +327,7 @@ internal sealed partial class SitesPane : UserControl, ISettingsPane
         var commands = NewCommandFields(null);
         var expander = new Expander
         {
-            Header = Strings.Proxy_CommandsOptional, Content = commands.Panel, IsExpanded = false,
+            Header = Strings.Sites_Proxy_CommandsOptional, Content = commands.Panel, IsExpanded = false,
             HorizontalAlignment = HorizontalAlignment.Stretch, HorizontalContentAlignment = HorizontalAlignment.Stretch,
         };
         var dialog = new ContentDialog
@@ -675,8 +675,8 @@ internal sealed partial class SitesPane : UserControl, ISettingsPane
                     section.Children.Add(line);
                 }
             }
-            var restart = Ui.Button(Strings.Panel_Restart, () => Start(site.Name, () => Restart(site.Name)),
-                tooltip: Strings.Sites_RestartFrankenPhpTooltip);
+            var restart = Ui.Button(Strings.Menu_Restart, () => Start(site.Name, () => Restart(site.Name)),
+                tooltip: Strings.Sites_RestartFrankenphpTooltip);
             restart.IsEnabled = site.FrankenPhp is { IsRunning: true } && !restarting.Contains(site.Name);
             var log = site.FrankenPhp is { Log.Length: > 0 } f ? f.Log : $"frankenphp-{site.Name}";
             var buttons = Ui.Row(8, restart, Ui.Button(Strings.Sites_ShowLog, () => App.Current.OpenLog(new LogsViewModel.ServiceSource(log))));
@@ -687,8 +687,8 @@ internal sealed partial class SitesPane : UserControl, ISettingsPane
             section.Children.Add(buttons);
         }
         section.Children.Add(Ui.Caption(franken && !site.OctaneAvailable
-            ? Strings.Sites_FrankenPhpFootnoteOctane
-            : Strings.Sites_FrankenPhpFootnote, Ui.TertiaryText));
+            ? Strings.Sites_FrankenphpFootnoteOctane
+            : Strings.Sites_FrankenphpFootnote, Ui.TertiaryText));
         return section;
     }
 
@@ -697,13 +697,13 @@ internal sealed partial class SitesPane : UserControl, ISettingsPane
     {
         if (state.IsRunning)
         {
-            var text = Localization.Format(site.Worker == Status.SiteServer.Octane ? Strings.Sites_FrankenPhpRunningWorker : Strings.Sites_FrankenPhpRunning,
+            var text = Localization.Format(site.Worker == Status.SiteServer.Octane ? Strings.Sites_FrankenphpRunningWorker : Strings.Sites_FrankenphpRunning,
                 state.Version, state.PhpVersion);
             yield return Ui.Row(6, Ui.StatusDot(true), Ui.Caption(text, wrap: false));
         }
         else if (state.IsInstalling)
         {
-            var downloading = Localization.Format(Strings.Sites_DownloadingFrankenPhp, site.Php);
+            var downloading = Localization.Format(Strings.Sites_DownloadingFrankenphp, site.Php);
             yield return Ui.Caption(state.HasProgress ? $"{downloading} {state.Progress.ToString("P0", CultureInfo.CurrentCulture)}" : downloading, wrap: false);
             yield return new ProgressBar
             {
@@ -1165,7 +1165,7 @@ internal sealed partial class SitesPane : UserControl, ISettingsPane
             "root" => Strings.Sites_PinRootQuestion,
             _ => Strings.Sites_PinNodeQuestion
         };
-        if (await Window.Confirm(Localization.Format(question, shown, site.Name), details + " " + Strings.Sites_ChangesAFile, Strings.Sites_Pin))
+        if (await Window.Confirm(Localization.Format(question, shown, site.Name), details + " " + Strings.Sites_ChangesAfile, Strings.Sites_Pin))
         {
             await Model.Sites.PinAsync(site.Name, tool, version);
         }

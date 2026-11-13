@@ -9,7 +9,7 @@ namespace Flock.Tray;
 /// </summary>
 internal static class AppLanguage
 {
-    /// <summary>The language the running app shows ("en", "cs", "es").</summary>
+    /// <summary>The language the running app shows: "en" or another of Localization.Languages.</summary>
     public static string Current { get; private set; } = "en";
 
     /// <summary>The system's preferred UI languages at startup, before Apply set the UI culture.</summary>

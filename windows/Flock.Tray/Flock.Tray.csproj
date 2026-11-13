@@ -51,14 +51,9 @@
         <Content Include="Assets\*.ico;Assets\*.png" CopyToOutputDirectory="PreserveNewest"/>
     </ItemGroup>
     <ItemGroup>
-        <!-- Translations: Strings.cs.resx and Strings.es.resx build into satellite assemblies (cs\, es\). XAML reads them with {l:Loc}.
-             The build generates the internal Strings class from Strings.resx into obj\, so no generated code is committed or needs an IDE tool. -->
-        <EmbeddedResource Update="Strings.resx" StronglyTypedLanguage="CSharp" StronglyTypedNamespace="Flock.Tray" StronglyTypedClassName="Strings"
-                          StronglyTypedManifestPrefix="Flock.Tray" StronglyTypedFileName="$(IntermediateOutputPath)Strings.g.cs"/>
+        <!-- The texts are Flock.Kit's Strings, generated from lang/; XAML reads them with {l:Loc}. -->
+        <Using Include="Flock.Kit.Strings" Alias="Strings"/>
     </ItemGroup>
-    <!-- WinUI compiles the C# for its second XAML pass (XamlPreCompile) before PrepareResources reaches ResGen, so the
-         Strings class is generated ahead of the XAML compiler; ResGen then has nothing left to do. -->
-    <Target Name="GenerateStringsBeforeXaml" BeforeTargets="MarkupCompilePass1" DependsOnTargets="PrepareResourceNames;ResGen"/>
     <!-- Hide SDK payload links in the IDE while keeping their output-copy metadata. -->
     <Target Name="HideWindowsAppSDKPayloadLinks" AfterTargets="AddMicrosoftWindowsAppSDKPayloadFilesFromComponents">
         <ItemGroup>

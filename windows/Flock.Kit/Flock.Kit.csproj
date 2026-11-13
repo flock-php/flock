@@ -11,9 +11,9 @@
         <UseWindowsForms>false</UseWindowsForms>
     </PropertyGroup>
     <ItemGroup>
-        <!-- Translations: Strings.cs.resx and Strings.es.resx build into satellite assemblies (cs\, es\). The build generates
-             the internal Strings class from Strings.resx into obj\, so no generated code is committed or needs an IDE tool. -->
+        <!-- The apps' texts, generated from lang/ by tools/i18n: each Strings.<language>.resx builds into a satellite assembly
+             (cs\, es\, ...). The build generates the public Strings class, which the tray app uses too, into obj\. -->
         <EmbeddedResource Update="Strings.resx" StronglyTypedLanguage="CSharp" StronglyTypedNamespace="Flock.Kit" StronglyTypedClassName="Strings"
-                          StronglyTypedManifestPrefix="Flock.Kit" StronglyTypedFileName="$(IntermediateOutputPath)Strings.g.cs"/>
+                          StronglyTypedManifestPrefix="Flock.Kit" StronglyTypedFileName="$(IntermediateOutputPath)Strings.g.cs" PublicClass="true"/>
     </ItemGroup>
 </Project>

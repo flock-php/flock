@@ -86,7 +86,7 @@ public sealed class CatalogService : IAsyncDisposable
                     var target = entry.Lines.SingleOrDefault(candidate => candidate.Id == line);
                     if (target is not { Installed: true })
                     {
-                        throw new InvalidOperationException(Localization.Format(Strings.Catalog_NoLongerInstalled, $"{entry.Name} {line}"));
+                        throw new InvalidOperationException(Localization.Format(Strings.Services_Catalog_NoLongerInstalled, $"{entry.Name} {line}"));
                     }
                     if (!target.Update)
                     {
@@ -96,7 +96,7 @@ public sealed class CatalogService : IAsyncDisposable
                     var outcome = await InstallForBatchAsync(id, line, token);
                     if (outcome == OperationOutcome.Rejected)
                     {
-                        throw new InvalidOperationException(Localization.Format(Strings.Catalog_UpdateRejected, $"{entry.Name} {line}"));
+                        throw new InvalidOperationException(Localization.Format(Strings.Services_Catalog_UpdateRejected, $"{entry.Name} {line}"));
                     }
                     if (outcome != OperationOutcome.Succeeded)
                     {
@@ -110,7 +110,7 @@ public sealed class CatalogService : IAsyncDisposable
                     }
                     if (entry.Lines.SingleOrDefault(candidate => candidate.Id == line)?.Update == true)
                     {
-                        throw new InvalidOperationException(Localization.Format(Strings.Catalog_UpdateUnfinished, $"{entry.Name} {line}"));
+                        throw new InvalidOperationException(Localization.Format(Strings.Services_Catalog_UpdateUnfinished, $"{entry.Name} {line}"));
                     }
                 }
                 return OperationOutcome.Succeeded;
@@ -210,10 +210,10 @@ public sealed class CatalogService : IAsyncDisposable
         {
             var snapshot = await client.CatalogAsync(token);
             Apply(snapshot);
-            var entry = snapshot[id] ?? throw new InvalidOperationException(Localization.Format(Strings.Catalog_ServiceGone, id));
+            var entry = snapshot[id] ?? throw new InvalidOperationException(Localization.Format(Strings.Services_Catalog_ServiceGone, id));
             if (!entry.Available)
             {
-                throw new InvalidOperationException(Localization.Format(Strings.Catalog_Unavailable, entry.Name));
+                throw new InvalidOperationException(Localization.Format(Strings.Services_Catalog_Unavailable, entry.Name));
             }
             return entry;
         }
@@ -232,7 +232,7 @@ public sealed class CatalogService : IAsyncDisposable
             var target = entry.Lines.SingleOrDefault(candidate => candidate.Id == line);
             if (target is not { Installed: true })
             {
-                throw new InvalidOperationException(Localization.Format(Strings.Catalog_NoLongerInstalled, $"{entry.Name} {line}"));
+                throw new InvalidOperationException(Localization.Format(Strings.Services_Catalog_NoLongerInstalled, $"{entry.Name} {line}"));
             }
             if (entry.Job is null || entry.Job.IsFailed)
             {

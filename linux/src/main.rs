@@ -255,8 +255,8 @@ fn main() -> glib::ExitCode {
         .activate(|app: &adw::Application, _, _| match relaunch() {
             Ok(()) => app.quit(),
             Err(e) => {
-                let dialog = adw::AlertDialog::new(Some(&tr!("Could not relaunch Flock: {error}", error = e)), None);
-                dialog.add_response("ok", tr!("OK"));
+                let dialog = adw::AlertDialog::new(Some(&tr!("app.could_not_relaunch", error = e)), None);
+                dialog.add_response("ok", tr!("common.ok"));
                 dialog.present(app.active_window().as_ref());
             }
         })

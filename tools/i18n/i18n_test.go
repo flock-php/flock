@@ -1,24 +1,23 @@
 package main
 
 import (
+	"bytes"
 	"os"
 	"path/filepath"
-	"slices"
 	"strings"
 	"testing"
 )
 
-// A small i18n/ in a temporary repository root, with the folders the apps' files go to.
-func catalogs(t *testing.T, en, cs, es string) string {
+// A small repository: lang/ and the apps' code that uses its keys.
+func repository(t *testing.T, files map[string]string) string {
 	t.Helper()
 	root := t.TempDir()
-	for _, dir := range []string{"i18n", "macos/Resources", "windows/Flock.Kit", "windows/Flock.Tray", "windows/installer", "linux/po"} {
-		if err := os.MkdirAll(filepath.Join(root, dir), 0o755); err != nil {
+	for path, content := range files {
+		path = filepath.Join(root, filepath.FromSlash(path))
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 			t.Fatal(err)
 		}
-	}
-	for name, content := range map[string]string{"en.json": en, "cs.json": cs, "es.json": es} {
-		if err := os.WriteFile(filepath.Join(root, "i18n", name), []byte(content), 0o644); err != nil {
+		if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -27,7 +26,7 @@ func catalogs(t *testing.T, en, cs, es string) string {
 
 func read(t *testing.T, root, path string) string {
 	t.Helper()
-	data, err := os.ReadFile(filepath.Join(root, path))
+	data, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(path)))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -36,31 +35,61 @@ func read(t *testing.T, root, path string) string {
 
 const (
 	sampleEN = `{
-  "Update to {version}": {"note": "{version}: a PHP version", "macos": true, "windows": "Tray.General_UpdateTo", "linux": true},
-  "{n} sites": {"one": "{n} site", "macos": "%lld sites", "windows": "Kit.Sites", "linux": true},
-  "Settings": {"macos": true, "windows": "Tray.Settings", "linux": true},
-  "Update [noun]": {"macos": "Update noun", "linux": true},
-  "The update was not installed: {reason}": {"windows": "Setup.UpdateNotInstalled"},
-  "PHP": {"translate": false, "macos": true}
+  "php.update_to": {"text": "Update to {version}", "note": "{version}: a PHP version"},
+  "sites.count": {"one": "{n} site", "other": "{n} sites"},
+  "settings.title": "Settings",
+  "installer.not_installed": "The update was not installed: {reason}",
+  "common.php": {"text": "PHP", "translate": false}
 }`
 	sampleCS = `{
-  "Update to {version}": "Aktualizovat na {version}",
-  "{n} sites": {"one": "{n} web", "few": "{n} weby", "other": "{n} webů"},
-  "Settings": "Nastavení",
-  "Update [noun]": "Aktualizace",
-  "The update was not installed: {reason}": "Aktualizace nebyla nainstalována: {reason}"
+  "php.update_to": "Aktualizovat na {version}",
+  "sites.count": {"one": "{n} web", "few": "{n} weby", "other": "{n} webů"},
+  "settings.title": "Nastavení",
+  "installer.not_installed": "Aktualizace nebyla nainstalována: {reason}"
 }`
 	sampleES = `{
-  "Update to {version}": "Actualizar a {version}",
-  "{n} sites": {"one": "{n} sitio", "other": "{n} sitios"},
-  "Settings": {"macos": "Ajustes", "default": "Configuración"},
-  "Update [noun]": "Actualización",
-  "The update was not installed: {reason}": "La actualización no se instaló: {reason}"
+  "php.update_to": "Actualizar a {version}",
+  "sites.count": {"one": "{n} sitio", "other": "{n} sitios"},
+  "settings.title": {"macos": "Ajustes", "default": "Configuración"},
+  "installer.not_installed": "La actualización no se instaló: {reason}"
 }`
+	sampleSwift = `struct V: View {
+    var body: some View {
+        Text("php.update_to \(version)")
+        Text("sites.count \(count)")
+        Button("settings.title") {}
+        Text("common.php")
+    }
+    @AppStorage("services.filter") var filter = ""
+}`
+	sampleRust = `fn x() { tr!("php.update_to", version = v); trn!("sites.count", n); tr!("settings.title"); }`
+	sampleCSharp = `var a = Strings.Php_UpdateTo; var b = Localization.Plural(Strings.ResourceManager, "Sites_Count", n); var c = Strings.Settings_Title;`
+	sampleInno   = `Result := CustomMessage('Installer_NotInstalled');`
 )
 
+func sample(overrides map[string]string) map[string]string {
+	files := map[string]string{
+		"lang/en/app.json":                    sampleEN,
+		"lang/cs/app.json":                    sampleCS,
+		"lang/es/app.json":                    sampleES,
+		"macos/Sources/FlockUI/View.swift":    sampleSwift,
+		"linux/src/main.rs":                   sampleRust,
+		"windows/Flock.Tray/Pane.cs":          sampleCSharp,
+		"windows/installer/Flock.iss":         sampleInno,
+		"windows/Flock.Kit.Tests/SomeTest.cs": `Strings.Not_A_Key`,
+	}
+	for path, content := range overrides {
+		if content == "" {
+			delete(files, path)
+		} else {
+			files[path] = content
+		}
+	}
+	return files
+}
+
 func TestGeneratesEveryAppsFiles(t *testing.T) {
-	root := catalogs(t, sampleEN, sampleCS, sampleES)
+	root := repository(t, sample(nil))
 	if err := run(root, false); err != nil {
 		t.Fatal(err)
 	}
@@ -70,11 +99,10 @@ func TestGeneratesEveryAppsFiles(t *testing.T) {
 
 	xcstrings := read(t, root, "macos/Resources/Localizable.xcstrings")
 	for _, want := range []string{
-		`"Update to %@" : {`, `"value" : "Aktualizovat na %@"`, `"comment" : "{version}: a PHP version"`,
-		`"%lld sites" : {`, `"value" : "%lld webů"`, `"many" : {`, `"value" : "%lld site"`,
-		`"Settings" : {`, `"value" : "Ajustes"`,
-		`"Update noun" : {`, `"value" : "Update"`,
-		`"PHP" : {` + "\n" + `      "shouldTranslate" : false`,
+		`"php.update_to %@" : {`, `"value" : "Aktualizovat na %@"`, `"value" : "Update to %@"`, `"comment" : "{version}: a PHP version"`,
+		`"sites.count %lld" : {`, `"value" : "%lld webů"`, `"many" : {`, `"value" : "%lld site"`,
+		`"settings.title" : {`, `"value" : "Ajustes"`,
+		`"common.php" : {`, `"value" : "PHP"`,
 	} {
 		if !strings.Contains(xcstrings, want) {
 			t.Errorf("Localizable.xcstrings lacks %s:\n%s", want, xcstrings)
@@ -83,45 +111,82 @@ func TestGeneratesEveryAppsFiles(t *testing.T) {
 	if strings.Contains(xcstrings, "Configuración") || strings.Contains(xcstrings, "not installed") {
 		t.Error("Localizable.xcstrings has another app's text")
 	}
+	if languages := read(t, root, "macos/Sources/FlockUI/Languages.swift"); !strings.Contains(languages, `("cs", "Čeština"),`) {
+		t.Errorf("Languages.swift:\n%s", languages)
+	}
 
-	kit := read(t, root, "windows/Flock.Kit/Strings.cs.resx")
-	for _, want := range []string{`<data name="Sites_one"`, `<value>{0} web</value>`, `<data name="Sites_few"`, `<value>{0} webů</value>`} {
-		if !strings.Contains(kit, want) {
-			t.Errorf("Flock.Kit/Strings.cs.resx lacks %s", want)
+	czech := read(t, root, "windows/Flock.Kit/Strings.cs.resx")
+	for _, want := range []string{`<data name="Sites_Count_one"`, `<value>{0} web</value>`, `<data name="Sites_Count_few"`, `<value>Aktualizovat na {0}</value>`} {
+		if !strings.Contains(czech, want) {
+			t.Errorf("Strings.cs.resx lacks %s", want)
 		}
 	}
-	tray := read(t, root, "windows/Flock.Tray/Strings.resx")
-	if !strings.Contains(tray, "<value>Update to {0}</value>") || !strings.Contains(tray, "<comment>{0}: a PHP version</comment>") {
-		t.Errorf("Flock.Tray/Strings.resx:\n%s", tray)
+	english := read(t, root, "windows/Flock.Kit/Strings.resx")
+	if !strings.Contains(english, "<value>Update to {0}</value>") || !strings.Contains(english, "<comment>{0}: a PHP version</comment>") || strings.Contains(english, "_few") {
+		t.Errorf("Strings.resx:\n%s", english)
 	}
-	if es := read(t, root, "windows/Flock.Tray/Strings.es.resx"); !strings.Contains(es, "<value>Configuración</value>") {
-		t.Errorf("Flock.Tray/Strings.es.resx:\n%s", es)
+	if es := read(t, root, "windows/Flock.Kit/Strings.es.resx"); !strings.Contains(es, "<value>Configuración</value>") {
+		t.Errorf("Strings.es.resx:\n%s", es)
 	}
-	if english := read(t, root, "windows/Flock.Kit/Strings.resx"); strings.Contains(english, "_few") {
-		t.Error("English has a Czech plural form")
+	if cs := read(t, root, "windows/Flock.Kit/Languages.g.cs"); !strings.Contains(cs, `"cs" => new[] { "one", "few", "other" }[Index((n==1) ? 0 : (n>=2 && n<=4) ? 1 : 2)],`) {
+		t.Errorf("Languages.g.cs:\n%s", cs)
 	}
-	if iss := read(t, root, "windows/installer/Strings.iss"); !strings.Contains(iss, "cs.UpdateNotInstalled=Aktualizace nebyla nainstalována: %1\n") {
-		t.Errorf("Strings.iss:\n%s", iss)
+	iss := read(t, root, "windows/installer/Strings.iss")
+	for _, want := range []string{`Name: "cs"; MessagesFile: "compiler:Languages\Czech.isl"`, "cs.Installer_NotInstalled=Aktualizace nebyla nainstalována: %1\n"} {
+		if !strings.Contains(iss, want) {
+			t.Errorf("Strings.iss lacks %s:\n%s", want, iss)
+		}
 	}
 
 	po := read(t, root, "linux/po/cs.po")
 	for _, want := range []string{
-		`"Plural-Forms: nplurals=3; plural=(n==1) ? 0 : (n>=2 && n<=4) ? 1 : 2;\n"`,
-		"msgid \"{n} site\"\nmsgid_plural \"{n} sites\"\nmsgstr[0] \"{n} web\"\nmsgstr[1] \"{n} weby\"\nmsgstr[2] \"{n} webů\"\n",
-		"msgctxt \"noun\"\nmsgid \"Update\"\nmsgstr \"Aktualizace\"\n",
-		"#. {version}: a PHP version\nmsgid \"Update to {version}\"\n",
+		`"Plural-Forms: nplurals=3; plural=(n==1) ? 0 : (n>=2 && n<=4) ? 1 : 2;\n"`, `"X-Language-Name: Čeština\n"`,
+		"msgid \"sites.count\"\nmsgid_plural \"sites.count\"\nmsgstr[0] \"{n} web\"\nmsgstr[1] \"{n} weby\"\nmsgstr[2] \"{n} webů\"\n",
+		"msgid \"settings.title\"\nmsgstr \"Nastavení\"\n",
 	} {
 		if !strings.Contains(po, want) {
 			t.Errorf("cs.po lacks %q:\n%s", want, po)
 		}
 	}
-	if strings.Contains(po, "PHP\"") || strings.Contains(po, "not installed") {
+	if strings.Contains(po, "common.php") || strings.Contains(po, "installer.") {
 		t.Error("cs.po has another app's text")
+	}
+	if en := read(t, root, "linux/po/en.po"); !strings.Contains(en, "msgid \"php.update_to\"\nmsgstr \"Update to {version}\"\n") {
+		t.Errorf("en.po:\n%s", en)
+	}
+}
+
+func TestPartialLanguagesFallBackToEnglish(t *testing.T) {
+	// German has one of four texts: below the threshold, the apps don't offer it.
+	root := repository(t, sample(map[string]string{"lang/de/app.json": `{"settings.title": "Einstellungen"}`}))
+	if err := run(root, false); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(root, "linux", "po", "de.po")); !os.IsNotExist(err) {
+		t.Error("a language below the threshold has a po file")
+	}
+	if strings.Contains(read(t, root, "macos/Sources/FlockUI/Languages.swift"), `"de"`) {
+		t.Error("a language below the threshold is offered")
+	}
+
+	// Czech without a text: the apps show the English.
+	root = repository(t, sample(map[string]string{"lang/cs/app.json": strings.Replace(sampleCS, `  "settings.title": "Nastavení",`+"\n", "", 1)}))
+	if err := run(root, false); err != nil {
+		t.Fatal(err)
+	}
+	if po := read(t, root, "linux/po/cs.po"); !strings.Contains(po, "msgid \"settings.title\"\nmsgstr \"Settings\"\n") {
+		t.Errorf("cs.po lacks the English fallback:\n%s", po)
+	}
+	if xcstrings := read(t, root, "macos/Resources/Localizable.xcstrings"); strings.Count(xcstrings, `"value" : "Settings"`) != 2 {
+		t.Errorf("Localizable.xcstrings should have the English for en and cs:\n%s", xcstrings)
+	}
+	if strings.Contains(read(t, root, "windows/Flock.Kit/Strings.cs.resx"), "Settings_Title") {
+		t.Error("Strings.cs.resx has a text Czech lacks; .NET falls back to Strings.resx by itself")
 	}
 }
 
 func TestCheckFindsStaleFiles(t *testing.T) {
-	root := catalogs(t, sampleEN, sampleCS, sampleES)
+	root := repository(t, sample(nil))
 	if err := run(root, true); err == nil || !strings.Contains(err.Error(), "linux/po/cs.po") {
 		t.Fatalf("got %v, want the files that aren't generated yet", err)
 	}
@@ -129,71 +194,101 @@ func TestCheckFindsStaleFiles(t *testing.T) {
 		t.Fatal(err)
 	}
 	// A catalog out of its canonical order is stale too.
-	if err := os.WriteFile(filepath.Join(root, "i18n", "cs.json"), []byte(strings.ReplaceAll(sampleCS, "\n  ", " ")), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(root, "lang", "cs", "app.json"), []byte(strings.ReplaceAll(sampleCS, "\n  ", " ")), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if err := run(root, true); err == nil || !strings.Contains(err.Error(), "i18n/cs.json") {
-		t.Fatalf("got %v, want i18n/cs.json", err)
+	if err := run(root, true); err == nil || !strings.Contains(err.Error(), "lang/cs/app.json") {
+		t.Fatalf("got %v, want lang/cs/app.json", err)
+	}
+	// So is a language's file it no longer has.
+	if err := run(root, false); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "linux", "po", "de.po"), nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := run(root, true); err == nil || !strings.Contains(err.Error(), "linux/po/de.po (no longer generated)") {
+		t.Fatalf("got %v, want linux/po/de.po", err)
 	}
 }
 
 func TestReportsProblems(t *testing.T) {
 	for _, test := range []struct {
-		name, en, cs, es, want string
+		name  string
+		files map[string]string
+		want  string
 	}{
 		{
-			name: "missing translation",
-			en:   `{"Open": {"macos": true}}`, cs: `{}`, es: `{"Open": "Abrir"}`,
-			want: `"Open": no Czech translation`,
+			name:  "a key no app uses",
+			files: map[string]string{"lang/en/app.json": strings.Replace(sampleEN, "{", "{\n  \"sites.unused\": \"Unused\",", 1)},
+			want:  `"sites.unused": no app uses it`,
 		},
 		{
-			name: "lost placeholder",
-			en:   `{"Open {name}": {"linux": true}}`, cs: `{"Open {name}": "Otevřít"}`, es: `{"Open {name}": "Abrir {name}"}`,
-			want: `has other placeholders than the English`,
+			name:  "a key the code uses but lang lacks",
+			files: map[string]string{"linux/src/main.rs": sampleRust + `tr!("sites.missing");`},
+			want:  `linux/src/main.rs uses "sites.missing", which lang/en/app.json lacks`,
 		},
 		{
-			name: "missing plural form",
-			en:   `{"{n} sites": {"one": "{n} site", "linux": true}}`,
-			cs:   `{"{n} sites": {"one": "{n} web", "other": "{n} webů"}}`,
-			es:   `{"{n} sites": {"one": "{n} sitio", "other": "{n} sitios"}}`,
-			want: `no "few" form`,
+			name:  "a Windows name that's no key",
+			files: map[string]string{"windows/Flock.Tray/Pane.cs": sampleCSharp + `Strings.Sites_Missing`},
+			want:  "uses Sites_Missing, which no key of lang/en/app.json is",
 		},
 		{
-			name: "app without its translation",
-			en:   `{"Settings": {"macos": true, "linux": true}}`,
-			cs:   `{"Settings": "Nastavení"}`,
-			es:   `{"Settings": {"macos": "Ajustes"}}`,
-			want: `no Spanish translation for linux`,
+			name: "a key in no area",
+			files: map[string]string{
+				"lang/en/app.json":  strings.Replace(sampleEN, "{", "{\n  \"nowhere.title\": \"Title\",", 1),
+				"linux/src/main.rs": sampleRust + `tr!("nowhere.title");`,
+			},
+			want: `"nowhere" isn't an area`,
 		},
 		{
-			name: "translation of an unknown text",
-			en:   `{"Open": {"macos": true}}`, cs: `{"Open": "Otevřít", "Close": "Zavřít"}`, es: `{"Open": "Abrir"}`,
-			want: `cs.json "Close": not in en.json`,
+			name: "a key that isn't snake_case",
+			files: map[string]string{
+				"lang/en/app.json":  strings.Replace(sampleEN, "{", "{\n  \"sites.CopyLink\": \"Copy\",", 1),
+				"linux/src/main.rs": sampleRust + `tr!("sites.CopyLink");`,
+			},
+			want: "a key is lowercase words in snake_case",
 		},
 		{
-			name: "unused",
-			en:   `{"Open": {}}`, cs: `{"Open": "Otevřít"}`, es: `{"Open": "Abrir"}`,
-			want: `no app uses it`,
+			name:  "a lost placeholder",
+			files: map[string]string{"lang/cs/app.json": strings.Replace(sampleCS, "Aktualizovat na {version}", "Aktualizovat", 1)},
+			want:  `"Aktualizovat" has other placeholders than the English`,
 		},
 		{
-			name: "same Windows key twice",
-			en:   `{"Open": {"windows": "Tray.Open"}, "Open it": {"windows": "Tray.open"}}`,
-			cs:   `{"Open": "Otevřít", "Open it": "Otevřít ho"}`, es: `{"Open": "Abrir", "Open it": "Abrirlo"}`,
-			want: `Windows key "Tray.open" is also "Open"'s`,
+			name:  "a missing plural form",
+			files: map[string]string{"lang/cs/app.json": strings.Replace(sampleCS, `"few": "{n} weby", `, "", 1)},
+			want:  `no "few" form`,
 		},
 		{
-			name: "duplicate key",
-			en:   `{"Open": {"macos": true}, "Open": {"linux": true}}`, cs: `{}`, es: `{}`,
-			want: `"Open" is there twice`,
+			name:  "a translation of a deleted key",
+			files: map[string]string{"lang/cs/app.json": strings.Replace(sampleCS, "{", "{\n  \"sites.gone\": \"Pryč\",", 1)},
+			want:  `cs/app.json "sites.gone": not in en/app.json`,
 		},
 		{
-			name: "stray brace",
-			en:   `{"Use {{ and }}": {"linux": true}}`, cs: `{"Use {{ and }}": "x"}`, es: `{"Use {{ and }}": "x"}`,
-			want: `a brace that isn't a {placeholder}`,
+			name:  "a language tools/i18n doesn't know",
+			files: map[string]string{"lang/xx/app.json": `{}`},
+			want:  "lang/xx: tools/i18n doesn't know this language yet",
+		},
+		{
+			name:  "an app's translation the app doesn't use",
+			files: map[string]string{"lang/es/app.json": strings.Replace(sampleES, `"Actualizar a {version}"`, `{"default": "Actualizar a {version}", "linux": "Actualizar a {version}"}`, 1)},
+			want:  "",
+		},
+		{
+			name:  "a translated untranslatable text",
+			files: map[string]string{"lang/cs/app.json": strings.Replace(sampleCS, "{", "{\n  \"common.php\": \"PHP\",", 1)},
+			want:  "it isn't translated, but has translations",
 		},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			err := run(catalogs(t, test.en, test.cs, test.es), true)
+			root := repository(t, sample(test.files))
+			err := run(root, false)
+			if test.want == "" {
+				if err != nil {
+					t.Fatal(err)
+				}
+				return
+			}
 			if err == nil || !strings.Contains(err.Error(), test.want) {
 				t.Fatalf("got %v, want %q", err, test.want)
 			}
@@ -201,73 +296,60 @@ func TestReportsProblems(t *testing.T) {
 	}
 }
 
-func TestMacFormat(t *testing.T) {
-	e := &Entry{ID: "x", Text: "{name} {version} stops and {name} {next} starts.", MacOS: &MacOSUse{Derived: true}}
-	f, err := newMacFormat(e)
-	if err != nil {
+func TestStatusMissingAndChanged(t *testing.T) {
+	root := repository(t, sample(map[string]string{"lang/de/app.json": `{"settings.title": "Einstellungen"}`}))
+	var out bytes.Buffer
+	if err := printStatus(root, &out); err != nil {
 		t.Fatal(err)
 	}
-	if key := macKey(e); key != "%@ %@ stops and %@ %@ starts." {
-		t.Errorf("key %q", key)
-	}
-	// A repeated name is one argument per place, in order.
-	if got := f.render("{name} {version} končí, {name} {next} začíná."); got != "%1$@ %2$@ končí, %3$@ %4$@ začíná." {
-		t.Errorf("got %q", got)
-	}
-
-	e = &Entry{ID: "y", Text: "Downloading… {0}%", MacOS: &MacOSUse{Key: "Downloading… %lld%%"}}
-	if f, err = newMacFormat(e); err != nil {
-		t.Fatal(err)
-	}
-	if got := f.render("Stahuje se… {0} %"); got != "Stahuje se… %lld %%" {
-		t.Errorf("got %q", got)
-	}
-	if got := f.sequential(e.Text); got != macKey(e) {
-		t.Errorf("sequential %q", got)
-	}
-
-	e = &Entry{ID: "z", Text: "Downloads PHP {version} ({size} MB)", MacOS: &MacOSUse{Key: "Downloads PHP %@ (%lld MB)"}}
-	if f, err = newMacFormat(e); err != nil {
-		t.Fatal(err)
-	}
-	if got := f.render("({size} MB) PHP {version}"); got != "(%2$lld MB) PHP %1$@" {
-		t.Errorf("got %q", got)
-	}
-
-	e = &Entry{ID: "w", Text: "{a} and {b}", MacOS: &MacOSUse{Key: "%@ only"}}
-	if _, err := newMacFormat(e); err == nil {
-		t.Error("a key with fewer arguments than the text should fail")
-	}
-}
-
-func TestWindowsArgs(t *testing.T) {
-	for _, test := range []struct {
-		entry Entry
-		want  []string
-	}{
-		{Entry{Text: "{site} uses {version}"}, []string{"site", "version"}},
-		{Entry{Text: "{1} of {0}"}, []string{"0", "1"}},
-		{Entry{Text: "{0} then drops {2}"}, []string{"0", "", "2"}},
-		{Entry{Text: "{n} sites in {folder}", One: "One site in {folder}"}, []string{"n", "folder"}},
-		{Entry{Text: "{b} {a}", Windows: &WindowsUse{Args: []string{"a", "b"}}}, []string{"a", "b"}},
-	} {
-		if test.entry.Windows == nil {
-			test.entry.Windows = &WindowsUse{}
-		}
-		if got := windowsArgs(&test.entry); !slices.Equal(got, test.want) {
-			t.Errorf("%q: got %q, want %q", test.entry.Text, got, test.want)
+	for _, want := range []string{"cs       Czech                   100%  4 of 4 texts", "de       German                   25%  1 of 4 texts (the apps offer it from 70%)"} {
+		if !strings.Contains(out.String(), want) {
+			t.Errorf("status lacks %q:\n%s", want, out.String())
 		}
 	}
 
-	e := &Entry{Text: "{size} bytes of data", Windows: &WindowsUse{Formats: map[string]string{"size": "N0"}}}
-	if got := windowsFormat(e, false)("{size} bajtů dat"); got != "{0:N0} bajtů dat" {
-		t.Errorf("got %q", got)
+	out.Reset()
+	if err := printMissing(root, "de", &out); err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"php.update_to\n    Update to {version}\n    note:  {version}: a PHP version\n", "sites.count\n    one:   {n} site\n    other: {n} sites\n", "German lacks 3 texts."} {
+		if !strings.Contains(out.String(), want) {
+			t.Errorf("missing lacks %q:\n%s", want, out.String())
+		}
+	}
+	if strings.Contains(out.String(), "common.php") || strings.Contains(out.String(), "settings.title") {
+		t.Errorf("missing lists a text German has or that isn't translated:\n%s", out.String())
+	}
+
+	old := filepath.Join(root, "old.json")
+	if err := os.WriteFile(old, []byte(strings.Replace(sampleEN, "Update to {version}", "Upgrade to {version}", 1)), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	out.Reset()
+	if err := printChanged(root, old, &out); err != nil {
+		t.Fatal(err)
+	}
+	if want := "php.update_to\n    was: Upgrade to {version}\n    now: Update to {version}\n"; out.String() != want {
+		t.Errorf("changed = %q, want %q", out.String(), want)
 	}
 }
 
-// The repository's catalogs are valid and the apps' files are what they generate.
-func TestRepositoryIsUpToDate(t *testing.T) {
-	if err := run(filepath.Join("..", ".."), true); err != nil {
-		t.Fatal(err)
+func TestResourceNames(t *testing.T) {
+	for key, want := range map[string]string{"sites.share.copy_link": "Sites_Share_CopyLink", "php.update_to": "Php_UpdateTo", "common.n0": "Common_N0"} {
+		if got := resourceName(key); got != want {
+			t.Errorf("resourceName(%q) = %q, want %q", key, got, want)
+		}
+	}
+}
+
+func TestPluralExpressionsHaveTheirForms(t *testing.T) {
+	for _, language := range append(knownLanguages, english) {
+		forms := strings.TrimSpace(strings.Split(strings.TrimPrefix(language.PluralForms, "nplurals="), ";")[0])
+		if forms != string(rune('0'+len(language.Forms))) {
+			t.Errorf("%s: nplurals=%s for the forms %v", language.Code, forms, language.Forms)
+		}
+		if language.Native == "" || language.Name == "" {
+			t.Errorf("%s has no name", language.Code)
+		}
 	}
 }

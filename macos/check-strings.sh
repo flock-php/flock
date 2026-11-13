@@ -1,9 +1,8 @@
 #!/usr/bin/env bash
-# Checks that every text the app's code marks for translation (Text("…"), String(localized: "…"),
-# …) is in Resources/Localizable.xcstrings: the compiler lists them (-emit-localized-strings).
-# LocalizationTests checks that the catalog's texts are translated. The catalog is generated from
-# i18n/: add a new text there with its Czech and Spanish translations (i18n/README.md), run
-# go run ./tools/i18n, then run this again.
+# Checks that every key the app's code uses for a text (Text("sites.title"), String(localized: "…"),
+# …) is in Resources/Localizable.xcstrings, with the arguments it passes: the compiler lists them
+# (-emit-localized-strings). The catalog is generated from lang/ by tools/i18n: add a new text to
+# lang/en/app.json (lang/README.md), run make i18n, then run this again.
 set -euo pipefail
 
 cd "$(dirname "$0")"

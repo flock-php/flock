@@ -4,12 +4,12 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:l="using:Flock.Tray">
     <StackPanel Spacing="12">
-        <TextBox x:Name="BranchBox" Header="{l:Loc Key=NewWorktree_Branch}" PlaceholderText="{l:Loc Key=NewWorktree_BranchPlaceholder}" TextChanged="BranchChanged" />
+        <TextBox x:Name="BranchBox" Header="{l:Loc Key=Worktrees_New_Branch}" PlaceholderText="{l:Loc Key=Worktrees_New_BranchPlaceholder}" TextChanged="BranchChanged" />
         <!-- Disabled until the branches are loaded. -->
-        <ComboBox x:Name="FromBox" Header="{l:Loc Key=NewWorktree_StartFrom}" MinWidth="260" IsEnabled="False" />
+        <ComboBox x:Name="FromBox" Header="{l:Loc Key=Worktrees_New_StartFrom}" MinWidth="260" IsEnabled="False" />
         <StackPanel Spacing="4">
-            <ComboBox x:Name="DatabaseBox" Header="{l:Loc Key=NewWorktree_Database}" MinWidth="200" />
-            <TextBlock Text="{l:Loc Key=NewWorktree_DatabaseNote}"
+            <ComboBox x:Name="DatabaseBox" Header="{l:Loc Key=Worktrees_New_Database}" MinWidth="200" />
+            <TextBlock Text="{l:Loc Key=Worktrees_New_DatabaseNote}"
                        Style="{StaticResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorTertiaryBrush}" TextWrapping="Wrap" />
         </StackPanel>
         <TextBlock x:Name="ExplanationText" Style="{StaticResource CaptionTextBlockStyle}"

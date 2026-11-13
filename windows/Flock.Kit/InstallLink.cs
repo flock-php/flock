@@ -116,7 +116,7 @@ public sealed record InstallLink(string Service, string? Line = null)
             : catalog.Versions.FirstOrDefault(v => v.Minor == Line);
         if (release is null || (!release.IsInstalled && release.Latest.Length == 0))
         {
-            return InstallLinkResolution.UnknownVersion("PHP", Line ?? "", Strings.InstallLink_NoBuild);
+            return InstallLinkResolution.UnknownVersion("PHP", Line ?? "", Strings.Links_Install_NoBuild);
         }
         var name = $"PHP {release.Minor}";
         if (release.IsInstalled)
@@ -128,7 +128,7 @@ public sealed record InstallLink(string Service, string? Line = null)
             return InstallLinkResolution.Installing(name, "PHP");
         }
         return InstallLinkResolution.Install(new InstallLinkTarget(Php, "PHP", release.Minor, release.Minor, release.Latest),
-            Strings.InstallLink_PurposePhp);
+            Strings.Links_Install_PurposePhp);
     }
 
     /// <summary>
@@ -147,7 +147,7 @@ public sealed record InstallLink(string Service, string? Line = null)
             : catalog.Versions.FirstOrDefault(v => v.Major == Line);
         if (release is null || (!release.IsInstalled && release.Latest.Length == 0))
         {
-            return InstallLinkResolution.UnknownVersion("Node.js", Line ?? "", Strings.InstallLink_NoBuild);
+            return InstallLinkResolution.UnknownVersion("Node.js", Line ?? "", Strings.Links_Install_NoBuild);
         }
         var name = $"Node.js {release.Major}";
         if (release.IsInstalled)
@@ -159,7 +159,7 @@ public sealed record InstallLink(string Service, string? Line = null)
             return InstallLinkResolution.Installing(name, "Node");
         }
         return InstallLinkResolution.Install(new InstallLinkTarget(Node, "Node.js", release.Major, release.Major, release.Latest),
-            Strings.InstallLink_PurposeNode);
+            Strings.Links_Install_PurposeNode);
     }
 
     /// <summary>Versions compare by their numbers: "8.10" is newer than "8.9".</summary>
@@ -179,25 +179,25 @@ public sealed record InstallLinkResolution(string Title, string Message, Install
 {
     /// <param name="purpose">What it is for once installed; a service that runs for the sites when null.</param>
     public static InstallLinkResolution Install(InstallLinkTarget target, string? purpose = null) => new(
-        Localization.Format(Strings.InstallLink_InstallTitle, target.Name, target.Label),
-        Localization.Format(Strings.InstallLink_InstallMessage, target.Name, target.Version.Length > 0 ? target.Version : target.Label,
-            purpose ?? Strings.InstallLink_PurposeService),
+        Localization.Format(Strings.Links_Install_InstallTitle, target.Name, target.Label),
+        Localization.Format(Strings.Links_Install_InstallMessage, target.Name, target.Version.Length > 0 ? target.Version : target.Label,
+            purpose ?? Strings.Links_Install_PurposeService),
         target);
 
     /// <param name="pane">The Settings pane that lists it; Services when null.</param>
     public static InstallLinkResolution AlreadyInstalled(string name, string? pane = null) =>
-        new(Localization.Format(Strings.InstallLink_AlreadyInstalledTitle, name), Localization.Format(Strings.InstallLink_AlreadyInstalledMessage, pane ?? Strings.Pane_Services));
+        new(Localization.Format(Strings.Links_Install_AlreadyInstalledTitle, name), Localization.Format(Strings.Links_Install_AlreadyInstalledMessage, pane ?? Strings.Settings_Pane_Services));
 
     public static InstallLinkResolution Installing(string name, string pane) =>
-        new(Localization.Format(Strings.InstallLink_InstallingTitle, name), Localization.Format(Strings.InstallLink_InstallingMessage, pane));
+        new(Localization.Format(Strings.Links_Install_InstallingTitle, name), Localization.Format(Strings.Links_Install_InstallingMessage, pane));
 
     public static InstallLinkResolution Unavailable(string name, string reason) =>
-        new(Localization.Format(Strings.InstallLink_UnavailableTitle, name), reason.Length > 0 ? reason : Strings.InstallLink_UnavailableMessage);
+        new(Localization.Format(Strings.Links_Install_UnavailableTitle, name), reason.Length > 0 ? reason : Strings.Links_Install_UnavailableMessage);
 
     public static InstallLinkResolution Unknown(string name) =>
-        new(Localization.Format(Strings.InstallLink_UnknownTitle, name), Strings.InstallLink_NewerFlock);
+        new(Localization.Format(Strings.Links_Install_UnknownTitle, name), Strings.Links_Install_NewerFlock);
 
     /// <param name="message">Why; that the link may be meant for a newer Flock when null.</param>
     public static InstallLinkResolution UnknownVersion(string name, string line, string? message = null) =>
-        new(Localization.Format(Strings.InstallLink_UnknownTitle, $"{name} {line}".TrimEnd()), message ?? Strings.InstallLink_NewerFlock);
+        new(Localization.Format(Strings.Links_Install_UnknownTitle, $"{name} {line}".TrimEnd()), message ?? Strings.Links_Install_NewerFlock);
 }

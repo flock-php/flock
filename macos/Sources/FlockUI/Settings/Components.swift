@@ -66,7 +66,7 @@ struct CodeBlock: View {
                     Image(systemName: "doc.on.doc")
                 }
                 .buttonStyle(.borderless)
-                .help("Copy")
+                .help("common.copy")
                 .padding(8)
             }
         }
@@ -101,7 +101,7 @@ struct SettingsError: View {
                 Text(message).font(.callout).textSelection(.enabled)
                     .fixedSize(horizontal: false, vertical: true)
                 Spacer()
-                Button("Dismiss", action: dismiss).buttonStyle(.borderless)
+                Button("sites.share.dismiss", action: dismiss).buttonStyle(.borderless)
             }
             .padding(10)
             .background(.orange.opacity(0.12), in: RoundedRectangle(cornerRadius: 8))

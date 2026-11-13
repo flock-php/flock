@@ -226,10 +226,10 @@ public sealed partial class SiteRowViewModel : ObservableObject
     /// <summary>A worktree is indented under its site.</summary>
     public Thickness ListMargin => new(Snapshot.IsWorktree ? 20 : 0, 0, 0, 0);
     public bool IsSettingUp => Snapshot.Worktree is { IsBusy: true };
-    public string SetupStep => Snapshot.Worktree is { Step.Length: > 0 } setup ? setup.Step : Strings.Worktree_SettingUp;
+    public string SetupStep => Snapshot.Worktree is { Step.Length: > 0 } setup ? setup.Step : Strings.Worktrees_SettingUp;
     public bool HasOwnDatabase => Snapshot.Worktree is { HasOwnDatabase: true };
-    public string DatabaseLabel => Snapshot.Worktree is { DbMode.Length: > 0 } setup ? setup.DbMode : Strings.Worktree_OwnDatabase;
-    public string DatabaseTooltip => Localization.Format(Strings.Worktree_OwnDatabaseTooltip, Snapshot.Worktree?.Database);
+    public string DatabaseLabel => Snapshot.Worktree is { DbMode.Length: > 0 } setup ? setup.DbMode : Strings.Worktrees_OwnDatabase;
+    public string DatabaseTooltip => Localization.Format(Strings.Worktrees_OwnDatabaseTooltip, Snapshot.Worktree?.Database);
 
     public Action SetDraftSecured(bool value)
     {

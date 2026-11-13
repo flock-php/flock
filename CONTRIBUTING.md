@@ -37,7 +37,10 @@ next release. A pull request that adds or changes a feature should update its do
 
 ## Translations
 
-The apps are in English, Czech and Spanish, from one set of catalogs in [`i18n/`](i18n): a text the
-apps share has one translation. A pull request that adds or changes a text in an app adds it there
-with its Czech and Spanish translations and runs `make i18n`, which generates each app's files;
-[`i18n/README.md`](i18n/README.md) describes the format.
+The apps' texts live in [`lang/`](lang), a folder per language. A pull request that only adds or
+fixes translations needs no issue, like the docs: edit `lang/<code>/app.json`, or copy
+`lang/en/app.json` to start a new language, run `make i18n` and open a pull request.
+
+A pull request that adds or changes a text in an app needs only the English, in `lang/en/app.json`
+under a key; translations are welcome but not required. Changing a text's meaning needs a new
+key. [`lang/README.md`](lang/README.md) describes the format and the rules for keys.

@@ -13,7 +13,7 @@ internal sealed partial class MailWindow : FlockWindow
     private MailDetailView? detailView;
     private bool rendering;
 
-    public MailWindow(MailViewModel viewModel) : base(Strings.Pane_Mail, 1000, 660)
+    public MailWindow(MailViewModel viewModel) : base(Strings.Settings_Pane_Mail, 1000, 660)
     {
         this.viewModel = viewModel;
         InitializeComponent();

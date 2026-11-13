@@ -117,7 +117,7 @@ internal sealed partial class GeneralPane : UserControl, ISettingsPane
             Title = $"Flock {update.Version}",
             Content = notes,
             PrimaryButtonText = Localization.Format(Strings.General_UpdateTo, update.Version),
-            SecondaryButtonText = update.NotesUrl is null ? "" : Strings.General_ViewOnGitHub,
+            SecondaryButtonText = update.NotesUrl is null ? "" : Strings.General_ViewOnGithub,
             CloseButtonText = Strings.Common_Close,
             DefaultButton = ContentDialogButton.Primary,
             XamlRoot = XamlRoot

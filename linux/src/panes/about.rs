@@ -18,17 +18,17 @@ impl AboutPane {
     pub fn new(model: Rc<AppModel>) -> Self {
         let daemon = gtk::Label::new(None);
         let versions = gtk::Box::builder().orientation(gtk::Orientation::Vertical).spacing(4).build();
-        versions.append(&gtk::Label::new(Some(&tr!("App {version}", version = crate::VERSION))));
+        versions.append(&gtk::Label::new(Some(&tr!("about.app_version", version = crate::VERSION))));
         versions.append(&daemon);
 
         let links = gtk::Box::builder().spacing(8).halign(gtk::Align::Center).build();
-        let data = gtk::Button::with_label(tr!("Data Folder"));
+        let data = gtk::Button::with_label(tr!("about.data_folder_title_case"));
         data.connect_clicked(|button| ui::open_file(Some(button.upcast_ref()), paths::root()));
         links.append(&data);
         for (label, url) in [
-            (tr!("Flock Docs"), "https://flockphp.com/docs"),
+            (tr!("about.flock_docs"), "https://flockphp.com/docs"),
             ("Discord", "https://discord.flockphp.com"),
-            (tr!("License"), "https://github.com/flock-php/flock/blob/main/LICENSE"),
+            (tr!("about.license"), "https://github.com/flock-php/flock/blob/main/LICENSE"),
         ] {
             links.append(&link_button(label, url));
         }
@@ -36,14 +36,14 @@ impl AboutPane {
         let support = gtk::Box::builder().orientation(gtk::Orientation::Vertical).spacing(8).build();
         support.append(
             &gtk::Label::builder()
-                .label(tr!("Flock is free and open source, forever. Sponsoring helps keep it maintained."))
+                .label(tr!("about.support_description"))
                 .wrap(true)
                 .css_classes(["dim-label"])
                 .build(),
         );
         let support_links = gtk::Box::builder().spacing(8).halign(gtk::Align::Center).build();
         for (label, url) in
-            [(tr!("Star on GitHub"), "https://github.com/flock-php/flock"), (tr!("Sponsor"), "https://github.com/sponsors/flock-php")]
+            [(tr!("about.star_on_github"), "https://github.com/flock-php/flock"), (tr!("about.sponsor"), "https://github.com/sponsors/flock-php")]
         {
             support_links.append(&link_button(label, url));
         }
@@ -53,11 +53,11 @@ impl AboutPane {
         column.append(&versions);
         column.append(&links);
         column.append(&support);
-        let issue = link_button(tr!("Found a bug? Report an issue"), "");
+        let issue = link_button(tr!("about.found_a_bug_report_an"), "");
         issue.add_css_class("flat");
         column.append(&issue);
         let uninstall = gtk::Button::builder()
-            .label(tr!("Uninstall Flock…"))
+            .label(tr!("about.uninstall_flock_ellipsis"))
             .halign(gtk::Align::Center)
             .css_classes(["destructive-action"])
             .margin_top(12)
@@ -68,14 +68,14 @@ impl AboutPane {
         column.append(&uninstall);
         column.append(
             &gtk::Label::builder()
-                .label(tr!("Stops Flock and removes it from this computer. Your sites, databases and settings are kept."))
+                .label(tr!("about.stops_flock_and_removes_it_from"))
                 .wrap(true)
                 .css_classes(["caption", "dim-label"])
                 .build(),
         );
         column.append(
             &gtk::Label::builder()
-                .label(tr!("Copyright © Guava s.r.o. Licensed under the AGPL-3.0."))
+                .label(tr!("about.license_description"))
                 .css_classes(["caption", "dim-label"])
                 .build(),
         );
@@ -83,7 +83,7 @@ impl AboutPane {
         let page = adw::StatusPage::builder()
             .icon_name("network-server-symbolic")
             .title("Flock")
-            .description(tr!("A native local development environment for Laravel."))
+            .description(tr!("about.tagline"))
             .child(&column)
             .build();
         issue.connect_clicked(move |button| open_uri(button, &issue_url(model.status().map(|s| s.version))));
@@ -97,8 +97,8 @@ impl Pane for AboutPane {
     }
 
     fn update(&self, data: &Data) {
-        let daemon = data.status.as_ref().map_or(tr!("not running").to_owned(), |s| s.version.clone());
-        self.daemon.set_label(&tr!("Daemon {version}", version = daemon));
+        let daemon = data.status.as_ref().map_or(tr!("about.daemon_not_running").to_owned(), |s| s.version.clone());
+        self.daemon.set_label(&tr!("about.daemon_version", version = daemon));
     }
 }
 

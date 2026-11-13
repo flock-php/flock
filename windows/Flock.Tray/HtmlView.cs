@@ -142,7 +142,7 @@ internal sealed class HtmlView : Grid
         {
             if (!IsReleased())
             {
-                shellError.Message = Strings.Html_NoWebView;
+                shellError.Message = Strings.App_NoWebView;
                 shellError.IsOpen = true;
                 App.Log(error);
             }
@@ -209,7 +209,7 @@ internal sealed class HtmlView : Grid
         {
             if (!IsReleased())
             {
-                await ShowHtmlErrorAsync(Strings.Html_CannotShowMessage);
+                await ShowHtmlErrorAsync(Strings.App_CannotShowMessage);
                 App.Log(error);
             }
         }
@@ -295,7 +295,7 @@ internal sealed class HtmlView : Grid
     {
         if (!IsReleased())
         {
-            shellError.Message = Strings.Html_CouldNotOpenLink;
+            shellError.Message = Strings.App_CouldNotOpenLink;
             shellError.IsOpen = true;
         }
     }

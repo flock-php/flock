@@ -5,40 +5,39 @@ using System.Xml.Linq;
 namespace Flock.Kit.Tests;
 
 /// <summary>
-/// The translations of Flock.Kit and of the tray app (Flock.Tray), read from their .resx files, so that a
-/// missing or broken translation fails on any OS — the tray's own tests run on Windows only.
+/// The app's texts in Flock.Kit's .resx files, generated from lang/ (tools/i18n), so that a broken
+/// translation or a name the code uses but the files lack fails on any OS — the tray's own tests run on
+/// Windows only. A language may lack texts: those fall back to English (Strings.resx).
 /// </summary>
 public partial class ResourcesTests
 {
-    public static TheoryData<string> Projects => ["Flock.Kit", "Flock.Tray"];
+    public static TheoryData<string> Translations => [.. Localization.Languages.Where(language => language != "en")];
 
     [Theory]
-    [MemberData(nameof(Projects))]
-    public void EveryStringIsTranslated(string project)
+    [MemberData(nameof(Translations))]
+    public void TranslationsHaveKnownNamesOnly(string language)
     {
-        var english = Read(project, "");
-        foreach (var language in new[] { "cs", "es" })
-        {
-            var translated = Read(project, "." + language);
-            Assert.Empty(english.Keys.Where(key => !translated.ContainsKey(key) && !key.EndsWith("_few", StringComparison.Ordinal))
-                .Select(key => $"{language} misses {key}"));
-            Assert.Empty(translated.Keys.Where(key => !english.ContainsKey(key) && !(language == "cs" && IsFewOf(key, english)))
-                .Select(key => $"{language} has unknown {key}"));
-            Assert.Empty(translated.Where(pair => pair.Value.Trim().Length == 0).Select(pair => $"{language} {pair.Key} is empty"));
-        }
+        var english = Read("");
+        var translated = Read("." + language);
+        Assert.Empty(translated.Keys.Where(key => !english.ContainsKey(key) && !english.ContainsKey(Stem(key) + "_other"))
+            .Select(key => $"{language} has unknown {key}"));
+        Assert.Empty(translated.Where(pair => pair.Value.Trim().Length == 0).Select(pair => $"{language} {pair.Key} is empty"));
     }
 
-    [Theory]
-    [MemberData(nameof(Projects))]
-    public void TranslationsKeepThePlaceholders(string project)
+    [Fact]
+    public void TranslationsKeepThePlaceholders()
     {
-        var english = Read(project, "");
-        foreach (var language in new[] { "", ".cs", ".es" })
+        var english = Read("");
+        foreach (var language in Localization.Languages.Select(language => language == "en" ? "" : "." + language))
         {
-            foreach (var (key, value) in Read(project, language))
+            foreach (var (key, value) in Read(language))
             {
-                var source = english.GetValueOrDefault(key) ?? english[key[..^"_few".Length] + "_other"];
-                Assert.True(Placeholders(source).SetEquals(Placeholders(value)), $"{project}{language} {key}: \"{value}\" has other placeholders than \"{source}\"");
+                var source = english.GetValueOrDefault(key) ?? english[Stem(key) + "_other"];
+                var found = Placeholders(value);
+                // A singular may leave the count out: "Show its worktree".
+                var withoutCount = Placeholders(source).Where(name => name != "0").ToHashSet();
+                Assert.True(Placeholders(source).SetEquals(found) || key.EndsWith("_one", StringComparison.Ordinal) && withoutCount.SetEquals(found),
+                    $"Strings{language} {key}: \"{value}\" has other placeholders than \"{source}\"");
                 if (value.Contains('{'))
                 {
                     // Throws for a broken format string.
@@ -48,21 +47,15 @@ public partial class ResourcesTests
         }
     }
 
-    [Theory]
-    [MemberData(nameof(Projects))]
-    public void PluralsHaveTheirForms(string project)
+    [Fact]
+    public void PluralsHaveTheirForms()
     {
-        var english = Read(project, "");
-        var czech = Read(project, ".cs");
-        var spanish = Read(project, ".es");
+        var english = Read("");
         foreach (var other in english.Keys.Where(key => key.EndsWith("_other", StringComparison.Ordinal)))
         {
-            var stem = other[..^"_other".Length];
-            Assert.True(english.ContainsKey(stem + "_one"), $"{stem}_one is missing");
-            Assert.True(czech.ContainsKey(stem + "_few"), $"cs {stem}_few is missing");
-            Assert.False(english.ContainsKey(stem + "_few") || spanish.ContainsKey(stem + "_few"), $"{stem}_few is Czech only");
+            Assert.True(english.ContainsKey(Stem(other) + "_one"), $"{Stem(other)}_one is missing");
         }
-        foreach (var file in Sources(project, "*.cs"))
+        foreach (var file in Sources("*.cs"))
         {
             foreach (Match match in PluralCall().Matches(File.ReadAllText(file)))
             {
@@ -72,19 +65,18 @@ public partial class ResourcesTests
         }
     }
 
-    [Theory]
-    [MemberData(nameof(Projects))]
-    public void KeysDifferInMoreThanCase(string project)
+    [Fact]
+    public void KeysDifferInMoreThanCase()
     {
         // A .resx can't hold two names that differ only in case.
-        Assert.Empty(Read(project, "").Keys.GroupBy(key => key, StringComparer.OrdinalIgnoreCase).Where(group => group.Count() > 1).Select(group => group.Key));
+        Assert.Empty(Read("").Keys.GroupBy(key => key, StringComparer.OrdinalIgnoreCase).Where(group => group.Count() > 1).Select(group => group.Key));
     }
 
     [Fact]
     public void XamlUsesExistingStringsOnly()
     {
-        var english = Read("Flock.Tray", "");
-        foreach (var file in Sources("Flock.Tray", "*.xaml"))
+        var english = Read("");
+        foreach (var file in Sources("*.xaml"))
         {
             var xaml = File.ReadAllText(file);
             Assert.Empty(LocKey().Matches(xaml).Select(match => match.Groups[1].Value).Where(key => !english.ContainsKey(key))
@@ -97,7 +89,7 @@ public partial class ResourcesTests
     {
         // Product names and technical values stay as they are.
         string[] kept = ["Flock", "Discord", "PHP", "Node", "PHP-CGI", "FrankenPHP", "Xdebug", "HTML", "9003", "127.0.0.1", "debug, develop"];
-        foreach (var file in Sources("Flock.Tray", "*.xaml"))
+        foreach (var file in Sources("*.xaml"))
         {
             var texts = XDocument.Load(file).Descendants().SelectMany(element => element.Attributes())
                 .Where(attribute => TextAttributes.Contains(attribute.Name.LocalName) && attribute.Value.Length > 0 && !attribute.Value.StartsWith('{'))
@@ -115,18 +107,19 @@ public partial class ResourcesTests
     private static readonly HashSet<string> TextAttributes =
         ["Text", "Content", "Header", "Title", "Label", "Description", "PlaceholderText", "ToolTipService.ToolTip", "AutomationProperties.Name", "BusyText"];
 
-    private static bool IsFewOf(string key, Dictionary<string, string> english) =>
-        key.EndsWith("_few", StringComparison.Ordinal) && english.ContainsKey(key[..^"_few".Length] + "_other");
+    /// <summary>A plural form's name without its category: Dumps_Count of Dumps_Count_few.</summary>
+    private static string Stem(string key) => key[..key.LastIndexOf('_')];
 
     private static HashSet<string> Placeholders(string value) =>
         Placeholder().Matches(value.Replace("{{", "").Replace("}}", "")).Select(match => match.Groups[1].Value).ToHashSet();
 
-    private static Dictionary<string, string> Read(string project, string language) =>
-        XDocument.Load(Path.Combine(Root, project, $"Strings{language}.resx")).Root!.Elements("data")
+    private static Dictionary<string, string> Read(string language) =>
+        XDocument.Load(Path.Combine(Root, "Flock.Kit", $"Strings{language}.resx")).Root!.Elements("data")
             .ToDictionary(data => (string)data.Attribute("name")!, data => (string?)data.Element("value") ?? "");
 
-    private static IEnumerable<string> Sources(string project, string pattern) =>
-        Directory.EnumerateFiles(Path.Combine(Root, project), pattern, SearchOption.AllDirectories)
+    /// <summary>The code of the projects that use the strings.</summary>
+    private static IEnumerable<string> Sources(string pattern) =>
+        new[] { "Flock.Kit", "Flock.Tray" }.SelectMany(project => Directory.EnumerateFiles(Path.Combine(Root, project), pattern, SearchOption.AllDirectories))
             .Where(file => !file.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}", StringComparison.Ordinal)
                            && !file.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}", StringComparison.Ordinal));
 
@@ -137,12 +130,12 @@ public partial class ResourcesTests
     {
         for (var directory = new DirectoryInfo(AppContext.BaseDirectory); directory is not null; directory = directory.Parent)
         {
-            if (File.Exists(Path.Combine(directory.FullName, "Flock.Tray", "Strings.resx")))
+            if (File.Exists(Path.Combine(directory.FullName, "Flock.Kit", "Strings.resx")))
             {
                 return directory.FullName;
             }
         }
-        throw new DirectoryNotFoundException("windows\\Flock.Tray\\Strings.resx not found above " + AppContext.BaseDirectory);
+        throw new DirectoryNotFoundException("windows\\Flock.Kit\\Strings.resx not found above " + AppContext.BaseDirectory);
     }
 
     [GeneratedRegex(@"\{(\d+)(?:[,:][^}]*)?\}")]

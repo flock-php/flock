@@ -53,7 +53,7 @@ internal static class JobLogDialog
         }
         void ApplyOnUi()
         {
-            text.Text = viewModel.Error is { } error ? Localization.Format(Strings.JobLog_CouldNotLoad, error) : viewModel.DisplayText;
+            text.Text = viewModel.Error is { } error ? Localization.Format(Strings.Worktrees_Job_CouldNotLoad, error) : viewModel.DisplayText;
             dialog.IsPrimaryButtonEnabled = viewModel.CanCopy;
             if (viewModel.State is JobLogState.Loaded)
             {

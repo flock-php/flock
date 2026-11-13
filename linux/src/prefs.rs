@@ -22,7 +22,7 @@ pub struct Prefs {
 
 /// Editors the Dumps window can open files in: id, name and URL scheme ("" for none).
 pub const EDITORS: [(&str, &str); 5] =
-    [("phpstorm", "PhpStorm"), ("vscode", "VS Code"), ("cursor", "Cursor"), ("zed", "Zed"), ("none", tr_noop!("Don't link"))];
+    [("phpstorm", "PhpStorm"), ("vscode", "VS Code"), ("cursor", "Cursor"), ("zed", "Zed"), ("none", tr_noop!("settings.editor.none"))];
 
 pub fn dir() -> PathBuf {
     std::env::var_os("XDG_CONFIG_HOME")

@@ -30,7 +30,7 @@ jobs:
             -   name: Test
                 run: swift test --package-path macos
 
-            # Every text in the code is in Localizable.xcstrings, which tools/i18n generates from i18n/.
+            # Every key in the code is in Localizable.xcstrings, which tools/i18n generates from lang/.
             -   name: Translations
                 run: macos/check-strings.sh
 

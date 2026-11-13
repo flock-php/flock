@@ -15,7 +15,7 @@ internal sealed partial class MailPane : UserControl, ISettingsPane
         DataContext = viewModel;
     }
 
-    public string Title => Strings.Pane_Mail;
+    public string Title => Strings.Settings_Pane_Mail;
     public string Subtitle => Strings.Mail_Subtitle;
     public UIElement Root => this;
     public bool ScrollsItself => false;

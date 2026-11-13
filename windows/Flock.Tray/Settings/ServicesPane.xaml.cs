@@ -32,7 +32,7 @@ internal sealed partial class ServicesPane : UserControl, ISettingsPane
     private SettingsWindow Window { get; }
     private RuntimeService Model { get; }
 
-    public string Title => Strings.Pane_Services;
+    public string Title => Strings.Settings_Pane_Services;
     public string Subtitle => Strings.Services_Subtitle;
     public UIElement Root => this;
     public bool ScrollsItself => true;
@@ -138,7 +138,7 @@ internal sealed partial class ServicesPane : UserControl, ISettingsPane
             }
             if (service.Stoppable)
             {
-                actions.Children.Add(Ui.Button(service.Running ? Strings.Share_Stop : Strings.Services_Start, () => _ = ToggleServiceAsync(service)));
+                actions.Children.Add(Ui.Button(service.Running ? Strings.Sites_Share_Stop : Strings.Services_Start, () => _ = ToggleServiceAsync(service)));
             }
             panel.Children.Add(actions);
         }
@@ -194,7 +194,7 @@ internal sealed partial class ServicesPane : UserControl, ISettingsPane
 
     private async Task ToggleServiceAsync(Service service)
     {
-        if (service.Running && !await Window.Confirm(Localization.Format(Strings.Services_StopQuestion, service.Name), Strings.Services_StopDetails, Strings.Share_Stop, true))
+        if (service.Running && !await Window.Confirm(Localization.Format(Strings.Services_StopQuestion, service.Name), Strings.Services_StopDetails, Strings.Sites_Share_Stop, true))
         {
             return;
         }

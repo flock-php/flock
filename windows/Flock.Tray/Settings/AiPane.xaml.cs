@@ -16,7 +16,7 @@ internal sealed partial class AiPane : UserControl, ISettingsPane
         DataContext = viewModel;
     }
 
-    public string Title => Strings.Pane_Ai;
+    public string Title => Strings.Settings_Pane_Ai;
     public string Subtitle
         => Strings.Ai_Subtitle;
     public UIElement Root => this;

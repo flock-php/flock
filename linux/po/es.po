@@ -1,2165 +1,2028 @@
-# Spanish translations of the Flock Linux app (linux/src), keyed by the English
-# text. Generated from i18n/ by tools/i18n: edit i18n/*.json, then run go run ./tools/i18n.
-# src/i18n.rs builds this file into the app; its tests fail when a text of the app is missing.
+# Spanish texts of the Flock Linux app (linux/src), by key.
+# Generated from lang/ by tools/i18n: edit lang/*/app.json, then run make i18n.
 msgid ""
 msgstr ""
 "Project-Id-Version: flock-app\n"
 "Language: es\n"
+"X-Language-Name: Español\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=2; plural=(n != 1);\n"
 
-msgid " (npm {version} available)"
-msgstr " (npm {version} disponible)"
-
-msgid " · worker mode"
-msgstr " · modo worker"
-
-msgid " — Flock's PHP {version} doesn't include it"
-msgstr " — el PHP {version} de Flock no la incluye"
-
-msgid "%e %b"
-msgstr "%e/%-m"
-
-msgid "%e %b %Y, %H:%M:%S"
-msgstr "%e/%-m/%Y, %H:%M:%S"
-
-msgid "(empty)"
-msgstr "(vacío)"
-
-msgid "(no subject)"
-msgstr "(sin asunto)"
-
-msgid "(no text part)"
-msgstr "(sin parte de texto)"
-
-msgid "*.test sites with trusted HTTPS"
-msgstr "Sitios *.test con HTTPS de confianza"
-
-msgid "*.{tld} doesn't resolve: {problem}. Linux has no hosts-file fallback, so sites don't open until it does; `flock install` sets it up again."
-msgstr "*.{tld} no se resuelve: {problem}. Linux no tiene el archivo hosts como respaldo, así que los sitios no abren hasta que se resuelva; `flock install` lo vuelve a configurar."
-
-#. {pinned}: the version, {other}: the file it wins over
-msgid ".flockrc's Node {pinned} wins over {other}."
-msgstr "El Node {pinned} de .flockrc tiene prioridad sobre {other}."
-
-#. What a proxy's upstream can be
-msgid "3000, host:port or URL. A port means 127.0.0.1."
-msgstr "3000, host:puerto o URL. Un puerto solo significa 127.0.0.1."
-
-msgid "A copy of the site's"
-msgstr "Una copia de la del sitio"
-
-msgid "A database of its own gets the branch's migrations run on it."
-msgstr "En una base de datos propia se ejecutan las migraciones de la rama."
-
-#. {name}: the name, {version}: the version, {purpose}: what it is for
-msgid "A link asked Flock to install {name} {version}. {purpose}"
-msgstr "Un enlace pidió a Flock instalar {name} {version}. {purpose}"
-
-#. {domain}: the site's domain
-msgid "A link asked Flock to secure {domain}. It gets a certificate this computer already trusts."
-msgstr "Un enlace pidió a Flock proteger {domain}. Recibirá un certificado en el que este equipo ya confía."
-
-msgid "A native local development environment for Laravel."
-msgstr "Un entorno de desarrollo local nativo para Laravel."
-
-msgid "A new build is available"
-msgstr "Hay una nueva compilación disponible"
-
-msgid "A new, empty one"
-msgstr "Una nueva y vacía"
-
-msgid "A port between 1024 and 65535 that no other program uses."
-msgstr "Un puerto entre 1024 y 65535 que no use ningún otro programa."
-
-msgid "A port means 127.0.0.1; give a host and port (localhost:5173) or a URL (https://127.0.0.1:8443) for anything else."
-msgstr "Un puerto solo significa 127.0.0.1; para cualquier otra cosa, indica un host y un puerto (localhost:5173) o una URL (https://127.0.0.1:8443)."
-
-msgid "A version picked here applies on this machine only. To set it for everyone working on the project, pin it: PHP goes into .flockrc, Node.js into .nvmrc."
-msgstr "La versión que elijas aquí solo se aplica en este equipo. Para definirla para todos los que trabajan en el proyecto, fíjala: PHP va a .flockrc y Node.js a .nvmrc."
-
-msgid "AI"
-msgstr "IA"
-
-msgid "AI clients"
-msgstr "Clientes de IA"
-
-msgid "About"
-msgstr "Acerca de"
-
-msgid "Active"
-msgstr "Activa"
-
-msgid "Add"
-msgstr "Añadir"
-
-msgid "Add Commands…"
-msgstr "Añadir comandos…"
-
-msgid "Add Domain…"
-msgstr "Añadir dominio…"
-
-msgid "Add Flock to its guidelines…"
-msgstr "Añadir Flock a sus directrices…"
-
-#. {site}: the site
-msgid "Add Flock to {site}'s Boost guidelines?"
-msgstr "¿Añadir Flock a las directrices de Boost de {site}?"
-
-#. Title of the folder picker
-msgid "Add Project Folders"
-msgstr "Añadir carpetas de proyectos"
-
-msgid "Add Proxy…"
-msgstr "Añadir proxy…"
-
-msgid "Add Site"
-msgstr "Añadir sitio"
-
-msgid "Add Site…"
-msgstr "Añadir sitio…"
-
-#. {site}: the site
-msgid "Add a domain to {site}"
-msgstr "Añadir un dominio a {site}"
-
-msgid "Add a proxy"
-msgstr "Añadir un proxy"
-
-msgid "Add a single site here, or add a project folder in General."
-msgstr "Añade aquí un sitio suelto o añade una carpeta de proyectos en General."
-
-msgid "Add the site in Settings → Sites first."
-msgstr "Primero añade el sitio en Configuración → Sitios."
-
-msgid "Add these lines to your project's .env. MAIL_USERNAME picks the inbox, so every project gets its own."
-msgstr "Añade estas líneas al .env de tu proyecto. MAIL_USERNAME elige la bandeja, así cada proyecto tiene la suya."
-
-msgid "Add this to the client's MCP settings."
-msgstr "Añade esto a la configuración MCP del cliente."
-
-msgid "Add to composer.json"
-msgstr "Añadir a composer.json"
-
-msgid "Added once, Flock works in every project. Restart the client, or reload its MCP servers, after adding Flock."
-msgstr "Una vez añadido, Flock funciona en todos los proyectos. Después de añadir Flock, reinicia el cliente o vuelve a cargar sus servidores MCP."
-
-msgid "Adding…"
-msgstr "Añadiendo…"
-
-msgid "After installing one, run CREATE EXTENSION in each database that uses it."
-msgstr "Después de instalar una, ejecuta CREATE EXTENSION en cada base de datos que la use."
-
-msgid "All"
-msgstr "Todos"
-
-msgid "All levels"
-msgstr "Todos los niveles"
-
-msgid "Also delete my sites' settings and databases"
+msgid "about.also_delete_data"
 msgstr "Eliminar también los ajustes de mis sitios y las bases de datos"
 
-msgid "Also install the extensions of PostgreSQL {version}?"
-msgstr "¿Instalar también las extensiones de PostgreSQL {version}?"
-
-msgid "Anyone with the link can open the site unless you list email addresses — Cloudflare then emails them a code. The link stops working after 8 hours or when you stop sharing."
-msgstr "Cualquiera con el enlace puede abrir el sitio, salvo que indiques direcciones de correo: en ese caso Cloudflare les envía un código por correo. El enlace deja de funcionar a las 8 horas o cuando dejes de compartir."
-
-msgid "App {version}"
+msgid "about.app_version"
 msgstr "App {version}"
 
-msgid "As soon as Flock can download it."
-msgid_plural "As soon as Flock can download them."
-msgstr[0] "En cuanto Flock pueda descargarlo."
-msgstr[1] "En cuanto Flock pueda descargarlos."
-
-msgid "Automatic"
-msgstr "Automática"
-
-msgid "Automatic (none found)"
-msgstr "Automática (no se encontró ninguna)"
-
-#. {root}: the folder found
-msgid "Automatic ({root})"
-msgstr "Automática ({root})"
-
-msgid "Availability"
-msgstr "Disponibilidad"
-
-msgid "Available"
-msgstr "Disponible"
-
-msgid "Back"
-msgstr "Atrás"
-
-msgid "Beta versions"
-msgstr "Versiones beta"
-
-msgid "Branch"
-msgstr "Rama"
-
-msgid "Building assets…"
-msgstr "Compilando los recursos…"
-
-#. A service category from the daemon ("Cache & Queue")
-msgid "Cache & Queue"
-msgstr "Caché y colas"
-
-#. {tld}: the TLD
-msgid "Caddy serves every site over HTTPS (https://app.{tld}) with certificates from Flock's local certificate authority, which `flock install` trusts."
-msgstr "Caddy sirve cada sitio por HTTPS (https://app.{tld}) con certificados de la autoridad de certificación local de Flock, en la que `flock install` hace confiar al sistema."
-
-msgid "Cancel"
-msgstr "Cancelar"
-
-msgid "Capture"
-msgstr "Capturar"
-
-msgid "Capture Dumps"
-msgstr "Capturar dumps"
-
-msgid "Capture dumps, queries, logs, views and jobs"
-msgstr "Capturar dumps, consultas, registros, vistas y trabajos"
-
-msgid "Capture is off — turn it on with the record button to collect dumps, queries, logs, views and jobs here."
-msgstr "La captura está desactivada: actívala con el botón de grabar para reunir aquí dumps, consultas, registros, vistas y trabajos."
-
-msgid "Capture options and editor"
-msgstr "Opciones de captura y editor"
-
-msgid "Captured"
-msgstr "Capturados"
-
-msgid "Catch Your App's Mail"
-msgstr "Captura el correo de tu app"
-
-msgid "Caught emails"
-msgstr "Correos capturados"
-
-msgid "Cc"
-msgstr "CC"
-
-msgid "Change"
-msgstr "Cambiar"
-
-msgid "Change Port"
-msgstr "Cambiar puerto"
-
-msgid "Change its PHP and Node.js versions, HTTPS and document root on the site."
-msgstr "Cambia sus versiones de PHP y Node.js, HTTPS y la raíz de documentos en el sitio."
-
-#. {proxy}: the proxy
-msgid "Change the upstream of {proxy}"
-msgstr "Cambiar el destino de {proxy}"
-
-msgid "Change…"
-msgstr "Cambiar…"
-
-msgid "Check Again"
-msgstr "Volver a comprobar"
-
-msgid "Check for Updates…"
-msgstr "Buscar actualizaciones…"
-
-msgid "Check now"
-msgstr "Comprobar ahora"
-
-msgid "Checked just now"
-msgstr "Comprobado ahora mismo"
-
-msgid "Checked {n} day ago"
-msgid_plural "Checked {n} days ago"
-msgstr[0] "Comprobado hace {n} día"
-msgstr[1] "Comprobado hace {n} días"
-
-msgid "Checked an hour ago"
-msgid_plural "Checked {n} hours ago"
-msgstr[0] "Comprobado hace una hora"
-msgstr[1] "Comprobado hace {n} horas"
-
-msgid "Checked a minute ago"
-msgid_plural "Checked {n} minutes ago"
-msgstr[0] "Comprobado hace un minuto"
-msgstr[1] "Comprobado hace {n} minutos"
-
-msgid "Checking Flock's ports…"
-msgstr "Comprobando los puertos de Flock…"
-
-msgid "Checking…"
-msgstr "Comprobando…"
-
-msgid "Choose"
-msgstr "Elegir"
-
-#. The title of a folder picker
-msgid "Choose Folder"
-msgstr "Elegir carpeta"
-
-msgid "Choose Folder…"
-msgstr "Elegir carpeta…"
-
-msgid "Choose the folder with the app's index.php in {site}"
-msgstr "Elige la carpeta con el index.php de la app en {site}"
-
-#. {root}: the configured folder
-msgid "Choose the folder with the app's index.php, or create {root}."
-msgstr "Elige la carpeta con el index.php de la app o crea {root}."
-
-#. Opens a folder picker
-msgid "Choose…"
-msgstr "Elegir…"
-
-msgid "Classic"
-msgstr "Clásico"
-
-msgid "Clear"
-msgstr "Borrar"
-
-msgid "Clear everything captured?"
-msgstr "¿Borrar todo lo capturado?"
-
-#. {site}: the site
-msgid "Clear the log of {site}?"
-msgstr "¿Borrar el registro de {site}?"
-
-msgid "Clear the site's log"
-msgstr "Borrar el registro del sitio"
-
-msgid "Client port"
-msgstr "Puerto del cliente"
-
-msgid "Close"
-msgstr "Cerrar"
-
-#. The command a dev server runs, e.g. npm run dev
-msgid "Command"
-msgstr "Comando"
-
-#. Heading: the commands that start and stop a proxy's server
-msgid "Commands"
-msgstr "Comandos"
-
-#. The commands that start and stop a proxy's server
-msgid "Commands (optional)"
-msgstr "Comandos (opcional)"
-
-#. {proxy}: the proxy's name
-msgid "Commands of {proxy}"
-msgstr "Comandos de {proxy}"
-
-msgid "Connect your IDE"
-msgstr "Conecta tu IDE"
-
-msgid "Connection"
-msgstr "Conexión"
-
-msgid "Copy"
-msgstr "Copiar"
-
-msgid "Copyright © Guava s.r.o. Licensed under the AGPL-3.0."
-msgstr "Copyright © Guava s.r.o. Con licencia AGPL-3.0."
-
-#. A service category from the daemon
-msgid "Core"
-msgstr "Básicos"
-
-msgid "Could Not Load Message"
-msgstr "No se pudo cargar el mensaje"
-
-msgid "Could Not Load the Raw Message"
-msgstr "No se pudo cargar el mensaje original"
-
-#. {error}: the error
-msgid "Could not change the startup setting: {error}"
-msgstr "No se pudo cambiar el ajuste de inicio: {error}"
-
-msgid "Could not change the startup setting: {error}."
-msgstr "No se pudo cambiar el ajuste de inicio: {error}."
-
-msgid "Could not open {program}: {error}"
-msgstr "No se pudo abrir {program}: {error}"
-
-#. {error}: why
-msgid "Could not relaunch Flock: {error}"
-msgstr "No se pudo volver a abrir Flock: {error}"
-
-msgid "Couldn't check for new releases: {error}"
-msgstr "No se pudieron buscar nuevas versiones: {error}"
-
-#. {error}: the error
-msgid "Couldn't check for updates: {error}"
-msgstr "No se pudieron buscar actualizaciones: {error}"
-
-#. {name}: the worktree
-msgid "Couldn't remove {name}"
-msgstr "No se pudo quitar {name}"
-
-msgid "Create"
-msgstr "Crear"
-
-msgid "Create one here, with git or with your agent app."
-msgstr "Crea uno aquí, con git o con tu app de agentes."
-
-msgid "Daemon"
-msgstr "Demonio"
-
-msgid "Daemon {version}"
-msgstr "Demonio {version}"
-
-msgid "Data"
-msgstr "Datos"
-
-msgid "Data Folder"
-msgstr "Carpeta de datos"
-
-msgid "Database"
-msgstr "Base de datos"
-
-#. The Services list's heading for database services (MySQL, PostgreSQL…).
-msgctxt "category"
-msgid "Database"
-msgstr "Bases de datos"
-
-msgid "Databases, caches, search and the tools around your sites. Everything listens on 127.0.0.1 only."
-msgstr "Bases de datos, cachés, búsqueda y las herramientas en torno a tus sitios. Todo escucha solo en 127.0.0.1."
-
-msgid "Date"
-msgstr "Fecha"
-
-msgid "Debug mode is on: visitors see stack traces"
-msgstr "El modo de depuración está activado: los visitantes ven las trazas de pila"
-
-msgid "Debugger"
-msgstr "Depurador"
-
-#. A service category from the daemon
-msgid "Debugging"
-msgstr "Depuración"
-
-msgid "Debugging now"
-msgstr "Depurando ahora"
-
-msgid "Default"
-msgstr "Predeterminada"
-
-msgid "Default ({tool} {version})"
-msgstr "Predeterminada ({tool} {version})"
-
-msgid "Delete All"
-msgstr "Eliminar todo"
-
-msgid "Delete all caught mail?"
-msgstr "¿Eliminar todo el correo capturado?"
-
-msgid "Deletes the Laravel log files in storage/logs of {site}. This can't be undone."
-msgstr "Elimina los archivos de registro de Laravel en storage/logs de {site}. No se puede deshacer."
-
-msgid "Details"
-msgstr "Detalles"
-
-msgid "Detect PhpStorm breakpoints"
-msgstr "Detectar puntos de interrupción de PhpStorm"
-
-msgid "Detect Xdebug requests"
-msgstr "Detectar solicitudes de Xdebug"
-
-#. Heading: a Node.js site's dev server
-msgid "Dev server"
-msgstr "Servidor de desarrollo"
-
-msgid "Dismiss"
-msgstr "Descartar"
-
-msgid "Document root"
-msgstr "Raíz de documentos"
-
-msgid "Domain"
-msgstr "Dominio"
-
-#. The editor choice that opens no editor
-msgid "Don't link"
-msgstr "No enlazar"
-
-msgid "Done"
-msgstr "Listo"
-
-#. {version}: PHP version
-msgid "Downloading FrankenPHP for PHP {version}…"
-msgstr "Descargando FrankenPHP para PHP {version}…"
-
-#. {version}: the version
-msgid "Downloading Node.js {version}…"
-msgstr "Descargando Node.js {version}…"
-
-msgid "Downloading {name}…"
-msgstr "Descargando {name}…"
-
-msgid "Downloading…"
-msgstr "Descargando…"
-
-msgid "Downloading… {percent}%"
-msgstr "Descargando… {percent} %"
-
-msgid "Downloads Node.js {new}, then removes {old}. Global packages stay."
-msgstr "Descarga Node.js {new} y después quita {old}. Los paquetes globales se conservan."
-
-msgid "Downloads PHP {version} ({size} MB)"
-msgstr "Descarga PHP {version} ({size} MB)"
-
-#. {database}: the database
-msgid "Drop {database}?"
-msgstr "¿Eliminar {database}?"
-
-msgid "Dumps"
-msgstr "Dumps"
-
-msgid "Each git worktree of {site} is served at <branch>.{domain}, with its own dependencies and .env."
-msgstr "Cada worktree de git de {site} se sirve en <branch>.{domain}, con sus propias dependencias y .env."
-
-#. {time}: the time
-msgid "Ends at {time}"
-msgstr "Termina a las {time}"
-
-msgid "Environment Variables"
-msgstr "Variables de entorno"
-
-msgid "Error and above"
-msgstr "Error y superiores"
-
-msgid "Every captured dump, query, log, view and job is deleted, from all requests and commands."
-msgstr "Se eliminan todos los dumps, consultas, registros, vistas y trabajos capturados de todas las solicitudes y comandos."
-
-#. {tld}: the TLD ("test")
-msgid "Every folder inside a project folder is served as <folder>.{tld} — the same as `flock park`."
-msgstr "Cada carpeta dentro de una carpeta de proyectos se sirve como <carpeta>.{tld}, igual que con `flock park`."
-
-msgid "Every installed version runs its own PHP-FPM pool. Sites use the default unless pinned to a version."
-msgstr "Cada versión instalada ejecuta su propio pool de PHP-FPM. Los sitios usan la predeterminada salvo que tengan una versión fijada."
-
-msgid "Every name, any subdomain included, is resolved by Flock's DNS server through systemd-resolved."
-msgstr "Cada nombre, incluido cualquier subdominio, lo resuelve el servidor DNS de Flock a través de systemd-resolved."
-
-#. {domain}: the domain
-msgid "Every request passes to the upstream with its Host header, WebSocket upgrades (hot reload) included. Flock doesn't start the server, so start it as usual, or give it commands below. Until it answers, {domain} shows a page saying so."
-msgstr "Cada solicitud pasa al destino con su encabezado Host, incluidas las conexiones WebSocket (recarga en caliente). Flock no inicia el servidor, así que inícialo como siempre o dale comandos abajo. Hasta que responda, {domain} muestra una página que lo indica."
-
-#. {domain}: the domain
-msgid "Every request passes to the upstream with its Host header, WebSocket upgrades (hot reload) included. Until the server answers, {domain} shows a page saying so."
-msgstr "Cada solicitud pasa al destino con su encabezado Host, incluidas las conexiones WebSocket (recarga en caliente). Hasta que el servidor responda, {domain} muestra una página que lo indica."
-
-msgid "Every service Flock offers: MySQL, Redis, Meilisearch and more"
-msgstr "Todos los servicios que ofrece Flock: MySQL, Redis, Meilisearch y más"
-
-msgid "Every subdomain up to {n} level below the site already works. Add a full name like {site}-2.{tld} for an alias, or a subdomain (tenant1, a.b) so it is listed here and also resolves on Windows machines without wildcard DNS."
-msgid_plural "Every subdomain up to {n} levels below the site already works. Add a full name like {site}-2.{tld} for an alias, or a subdomain (tenant1, a.b) so it is listed here and also resolves on Windows machines without wildcard DNS."
-msgstr[0] "Cualquier subdominio hasta {n} nivel por debajo del sitio ya funciona. Añade un nombre completo como {site}-2.{tld} para un alias, o un subdominio (tenant1, a.b) para que aparezca aquí y también se resuelva en equipos Windows sin DNS comodín."
-msgstr[1] "Cualquier subdominio hasta {n} niveles por debajo del sitio ya funciona. Añade un nombre completo como {site}-2.{tld} para un alias, o un subdominio (tenant1, a.b) para que aparezca aquí y también se resuelva en equipos Windows sin DNS comodín."
-
-msgid "Experimental channel: packages that aren’t released yet are offered. `flock channel stable` switches back."
-msgstr "Canal experimental: se ofrecen paquetes que aún no se han publicado. `flock channel stable` vuelve al canal estable."
-
-msgid "Extensions folder"
-msgstr "Carpeta de extensiones"
-
-msgid "Extensions of PostgreSQL {version}: PostGIS, pgRouting, pgvector, TimescaleDB and your own"
-msgstr "Extensiones de PostgreSQL {version}: PostGIS, pgRouting, pgvector, TimescaleDB y las tuyas"
-
-msgid "Extra domains: subdomains and aliases"
-msgstr "Dominios adicionales: subdominios y alias"
-
-#. The state of a proxy's server
-msgid "Failed"
-msgstr "Falló"
-
-#. {problem}: why it failed (from the daemon)
-msgid "Failed: {problem}"
-msgstr "Falló: {problem}"
-
-msgid "Flock Docs"
-msgstr "Documentación de Flock"
-
-msgid "Flock Is Not Running"
-msgstr "Flock no está en ejecución"
-
-#. {status}: the HTTP status code
-msgid "Flock answered with HTTP {status}"
-msgstr "Flock respondió con HTTP {status}"
-
-msgid "Flock can't run it on this platform."
-msgstr "Flock no puede ejecutarlo en esta plataforma."
-
-msgid "Flock can't run this service here."
-msgstr "Flock no puede ejecutar este servicio aquí."
-
-msgid "Flock catches every email your apps send — nothing leaves your computer."
-msgstr "Flock captura cada correo que envían tus apps: nada sale de tu equipo."
-
-msgid "Flock copies {site}'s database and runs the branch's migrations on it."
-msgstr "Flock copia la base de datos de {site} y ejecuta en ella las migraciones de la rama."
-
-msgid "Flock creates an empty database and runs the migrations."
-msgstr "Flock crea una base de datos vacía y ejecuta las migraciones."
-
-#. {site}: the site
-msgid "Flock creates the worktree next to {site} on a new branch with a name of its own, sets it up and serves it at its own address."
-msgstr "Flock crea el worktree junto a {site} en una rama nueva con nombre propio, lo prepara y lo sirve en su propia dirección."
-
-#. {branch}: the branch, {site}: the site, {address}: the address
-msgid "Flock creates the worktree next to {site} on the new branch {branch}, sets it up and serves it at {address}."
-msgstr "Flock crea el worktree junto a {site} en la rama nueva {branch}, lo prepara y lo sirve en {address}."
-
-#. {name}: the service, with the version when the link names one
-msgid "Flock doesn't offer {name}"
-msgstr "Flock no ofrece {name}"
-
-msgid "Flock doesn't offer {name} {version}"
-msgstr "Flock no ofrece {name} {version}"
-
-#. {site}: the site
-msgid "Flock has no site called {site}"
-msgstr "Flock no tiene ningún sitio llamado {site}"
-
-msgid "Flock hasn't set this worktree up"
-msgstr "Flock no ha preparado este worktree"
-
-msgid "Flock is added"
-msgstr "Flock está añadido"
-
-msgid "Flock is free and open source, forever. Sponsoring helps keep it maintained."
-msgstr "Flock es gratuito y de código abierto, para siempre. Patrocinarlo ayuda a mantenerlo."
-
-#. Keep the Markdown link: [label](url)
-msgid "Flock is free and open source. If you like it, [a star on GitHub](https://github.com/flock-php/flock) helps others find it."
-msgstr "Flock es gratuito y de código abierto. Si te gusta, [una estrella en GitHub](https://github.com/flock-php/flock) ayuda a que otros lo encuentren."
-
-msgid "Flock is not installed for this user ({path} is missing) — run `flk install` once."
-msgstr "Flock no está instalado para este usuario (falta {path}): ejecuta `flk install` una vez."
-
-msgid "Flock is not running"
-msgstr "Flock no está en ejecución"
-
-msgid "Flock is ready"
-msgstr "Flock está listo"
-
-msgid "Flock isn't installed: install the flockphp package first."
-msgstr "Flock no está instalado: primero instala el paquete flockphp."
-
-msgid "Flock makes it the default for your sites and terminal."
-msgid_plural "Flock makes them the default for your sites and terminal."
-msgstr[0] "Flock lo convierte en el predeterminado de tus sitios y tu terminal."
-msgstr[1] "Flock los convierte en los predeterminados de tus sitios y tu terminal."
-
-msgid "Flock needs these ports and *.{tld} for itself, but other programs use them. Running both would leave neither working."
-msgstr "Flock necesita estos puertos y *.{tld} para sí, pero otros programas los usan. Si se ejecutaran ambos, ninguno funcionaría."
-
-#. {path}: the folder, {database}: the database
-msgid "Flock runs its before_delete hook and deletes {path} and its database {database}."
-msgstr "Flock ejecuta su hook before_delete y elimina {path} y su base de datos {database}."
-
-#. {path}: the folder
-msgid "Flock runs its before_delete hook and deletes {path}."
-msgstr "Flock ejecuta su hook before_delete y elimina {path}."
-
-msgid "Flock runs the project's dev script when the site is visited, and stops it after 30 minutes without visits."
-msgstr "Flock ejecuta el script dev del proyecto cuando se visita el sitio y lo detiene tras 30 minutos sin visitas."
-
-msgid "Flock runs your Laravel sites, PHP, mail and databases on this computer. Setting it up takes a moment:"
-msgstr "Flock ejecuta tus sitios Laravel, PHP, el correo y las bases de datos en este equipo. Configurarlo lleva un momento:"
-
-msgid "Flock stops and is removed from your PATH, together with its PHP and Node.js versions, certificates, logs and caches. Linux asks for your password to remove the *.test DNS setup and Flock's trusted certificate.\n\nYour sites' settings and databases stay in {folder}, so reinstalling picks up where you left off — unless you also delete them."
-msgstr "Flock se detiene y se quita de tu PATH, junto con sus versiones de PHP y Node.js, certificados, registros y cachés. Linux te pide la contraseña para quitar la configuración DNS de *.test y el certificado de confianza de Flock.\n\nLos ajustes y las bases de datos de tus sitios se quedan en {folder}, así que al reinstalar seguirás donde lo dejaste, a menos que también los elimines."
-
-msgid "Flock stops serving {domain}. The project in {path} is not touched."
-msgstr "Flock deja de servir {domain}. El proyecto en {path} no se toca."
-
-#. {domain}: the domain, {upstream}: the upstream
-msgid "Flock stops serving {domain}. The server at {upstream} keeps running."
-msgstr "Flock deja de servir {domain}. El servidor en {upstream} sigue en ejecución."
-
-msgid "Flock uses the new language after it restarts."
-msgstr "Flock usará el nuevo idioma cuando se reinicie."
-
-msgid "Flock was uninstalled. Remove the app with your package manager (sudo apt remove flockphp, or sudo dnf remove flockphp). Open a new terminal: Flock is no longer on its PATH."
-msgstr "Flock se desinstaló. Quita la app con tu gestor de paquetes (sudo apt remove flockphp o sudo dnf remove flockphp). Abre una terminal nueva: Flock ya no está en su PATH."
-
-msgid "Flock won't open at login"
-msgstr "Flock no se abrirá al iniciar sesión"
-
-msgid "Flock's DNS server isn't running"
-msgstr "El servidor DNS de Flock no está en ejecución"
-
-msgid "Flock's guideline in the project's Boost guidelines is outdated."
-msgstr "La directriz de Flock en las directrices de Boost del proyecto está desactualizada."
-
-msgid "Flock's versions come first on your PATH. Open a new terminal after setup."
-msgstr "Las versiones de Flock van primero en tu PATH. Abre una terminal nueva después de la configuración."
-
-msgid "Folder"
-msgstr "Carpeta"
-
-msgid "Found a bug? Report an issue"
-msgstr "¿Encontraste un error? Infórmalo"
-
-msgid "FrankenPHP needs PHP 8.2 or newer. Requests that ask for Xdebug still go to PHP-FPM."
-msgstr "FrankenPHP necesita PHP 8.2 o posterior. Las solicitudes que piden Xdebug siguen yendo a PHP-FPM."
-
-msgid "FrankenPHP needs PHP 8.2 or newer. Requests that ask for Xdebug still go to PHP-FPM. For worker mode, install Laravel Octane in the project (composer require laravel/octane)."
-msgstr "FrankenPHP necesita PHP 8.2 o posterior. Las solicitudes que piden Xdebug siguen yendo a PHP-FPM. Para el modo worker, instala Laravel Octane en el proyecto (composer require laravel/octane)."
-
-msgid "From"
-msgstr "De"
-
-msgid "General"
-msgstr "General"
-
-msgid "Get new versions of Flock, PHP and services earlier, including pre-releases. They may not work yet."
-msgstr "Recibe antes las nuevas versiones de Flock, PHP y los servicios, incluidas las preliminares. Puede que aún no funcionen."
-
-msgid "Give Flock the commands that start and stop the server, so you can start it here."
-msgstr "Dale a Flock los comandos que inician y detienen el servidor para poder iniciarlo aquí."
-
-msgid "Give {worktree} a copy of the database?"
-msgstr "¿Dar a {worktree} una copia de la base de datos?"
-
-msgid "Give {worktree} a fresh database?"
-msgstr "¿Dar a {worktree} una base de datos nueva?"
-
-msgid "Headers"
-msgstr "Encabezados"
-
-msgid "Hide"
-msgstr "Ocultar"
-
-msgid "Host"
-msgstr "Host"
-
-msgid "In a Laravel project, run `flock link`: the site is then at http://<folder>.test. `flock secure` adds HTTPS."
-msgstr "En un proyecto de Laravel, ejecuta `flock link`: el sitio estará en http://<carpeta>.test. `flock secure` añade HTTPS."
-
-msgid "Inbox"
-msgstr "Bandeja"
-
-msgid "Info and above"
-msgstr "Info y superiores"
-
-msgid "Install"
-msgstr "Instalar"
-
-msgid "Install failed"
-msgstr "La instalación falló"
-
-msgid "Install with Extensions"
-msgstr "Instalar con extensiones"
-
-#. {name}: the name, {version}: the version line
-msgid "Install {name} {version}?"
-msgstr "¿Instalar {name} {version}?"
-
-msgid "Installed"
-msgstr "Instalado"
-
-msgid "Installed versions stay side by side. One runs at a time; each keeps its own data, and updates within a version keep it."
-msgstr "Las versiones instaladas conviven. Solo se ejecuta una a la vez; cada una tiene sus propios datos, y las actualizaciones dentro de una versión los conservan."
-
-msgid "Installed versions stay side by side. One runs at a time; each keeps its own databases, and updates within a version keep them."
-msgstr "Las versiones instaladas conviven. Solo se ejecuta una a la vez; cada una tiene sus propias bases de datos, y las actualizaciones dentro de una versión las conservan."
-
-msgid "Installing PostgreSQL {version}…"
-msgstr "Instalando PostgreSQL {version}…"
-
-#. {names}: what is installed
-msgid "Installing {names}…"
-msgstr "Instalando {names}…"
-
-#. {name}: the service and version
-msgid "Installing {name} failed"
-msgstr "No se pudo instalar {name}"
-
-msgid "Installing {name}…"
-msgstr "Instalando {name}…"
-
-msgid "Installing…"
-msgstr "Instalando…"
-
-msgid "It holds no data."
-msgstr "No contiene datos."
-
-msgid "It runs on 127.0.0.1 for your sites."
-msgstr "Se ejecuta en 127.0.0.1 para tus sitios."
-
-#. {domain}: the site's domain
-msgid "It's served at https://{domain}."
-msgstr "Se sirve en https://{domain}."
-
-msgid "Its database {database} is dropped."
-msgstr "Se elimina su base de datos {database}."
-
-#. {version}: the major
-msgid "Its global npm packages are removed too. Projects and sites that use Node {version} fall back to the default version until you install it again."
-msgstr "También se quitan sus paquetes globales de npm. Los proyectos y sitios que usan Node {version} vuelven a la versión predeterminada hasta que lo instales de nuevo."
-
-#. {database}: the database
-msgid "Its own database: {database}"
-msgstr "Base de datos propia: {database}"
-
-#. {version}: the version
-msgid "Its php.ini is removed too. Sites pinned to PHP {version} stop working until you pick another version."
-msgstr "También se quita su php.ini. Los sitios fijados a PHP {version} dejan de funcionar hasta que elijas otra versión."
-
-msgid "Jobs"
-msgstr "Trabajos"
-
-msgid "Keep its data to pick up where you left off when you install it again."
-msgstr "Conserva sus datos para seguir donde lo dejaste cuando lo vuelvas a instalar."
-
-msgid "Language"
-msgstr "Idioma"
-
-msgid "Laravel log"
-msgstr "Registro de Laravel"
-
-msgid "Latest request only"
-msgstr "Solo la última solicitud"
-
-msgid "Let AI agents like Claude Code and Cursor work with Flock: your sites' URLs and PHP versions, logs, dumps and mail, and installing versions and services."
-msgstr "Deja que agentes de IA como Claude Code y Cursor trabajen con Flock: las URL y versiones de PHP de tus sitios, registros, dumps y correo, y la instalación de versiones y servicios."
-
-msgid "License"
-msgstr "Licencia"
-
-msgid "License: {license}"
-msgstr "Licencia: {license}"
-
-msgid "Link a project"
-msgstr "Vincula un proyecto"
-
-msgid "Linux asks for your password in a moment."
-msgstr "Linux te pedirá la contraseña en un momento."
-
-msgid "Linux asks for your password once: to start the background service, resolve *.test through Flock and trust Flock's certificate in the system and your browsers."
-msgstr "Linux te pide la contraseña una vez: para iniciar el servicio en segundo plano, resolver *.test a través de Flock y confiar en el certificado de Flock en el sistema y en tus navegadores."
-
-msgid "Loading Node.js versions…"
-msgstr "Cargando las versiones de Node.js…"
-
-msgid "Loading PHP versions…"
-msgstr "Cargando las versiones de PHP…"
-
-msgid "Loading…"
-msgstr "Cargando…"
-
-msgid "Log"
-msgstr "Registro"
-
-msgid "Logs"
-msgstr "Registros"
-
-msgid "MAIL_USERNAME picks the inbox, so every project gets its own."
-msgstr "MAIL_USERNAME elige la bandeja de entrada, así que cada proyecto tiene la suya."
-
-#. A service category from the daemon
-msgid "Mail"
-msgstr "Correo"
-
-msgid "Make Default"
-msgstr "Usar como predeterminada"
-
-msgid "Making Node {version} the default…"
-msgstr "Estableciendo Node {version} como predeterminado…"
-
-msgid "Manage Sites…"
-msgstr "Administrar sitios…"
-
-msgid "Message"
-msgstr "Mensaje"
-
-msgid "Mode"
-msgstr "Modo"
-
-msgid "More"
-msgstr "Más"
-
-msgid "More Services ({count})…"
-msgstr "Más servicios ({count})…"
-
-msgid "Name"
-msgstr "Nombre"
-
-msgid "Needs attention"
-msgstr "Requiere atención"
-
-msgid "Needs attention · {version}"
-msgstr "Requiere atención · {version}"
-
-msgid "Network"
-msgstr "Red"
-
-#. {site}: the site
-msgid "New Worktree of {site}"
-msgstr "Nuevo worktree de {site}"
-
-msgid "New Worktree…"
-msgstr "Nuevo worktree…"
-
-msgid "New versions come from the AUR package {package}: update it with your AUR helper, e.g. `yay -Syu`."
-msgstr "Las versiones nuevas llegan desde el paquete de AUR {package}: actualízalo con tu asistente de AUR, p. ej. `yay -Syu`."
-
-msgid "New versions come with your system's updates. `flock update` installs one right away."
-msgstr "Las versiones nuevas llegan con las actualizaciones del sistema. `flock update` instala una al momento."
-
-msgid "Next steps"
-msgstr "Próximos pasos"
-
-msgid "No HTML Part"
-msgstr "Sin parte HTML"
-
-msgid "No Log Entries"
-msgstr "No hay entradas en el registro"
-
-msgid "No Mail"
-msgstr "No hay correo"
-
-msgid "No Message Selected"
-msgstr "Ningún mensaje seleccionado"
-
-msgid "No Node.js versions to show yet."
-msgstr "Aún no hay versiones de Node.js que mostrar."
-
-msgid "No Results"
-msgstr "Sin resultados"
-
-msgid "No entry matches the search or level."
-msgstr "Ninguna entrada coincide con la búsqueda o el nivel."
-
-msgid "No install log yet."
-msgstr "Aún no hay registro de instalación."
-
-msgid "No longer updated for PostgreSQL {version}"
-msgstr "Ya no se actualiza para PostgreSQL {version}"
-
-msgid "No project folders"
-msgstr "No hay carpetas de proyectos"
-
-msgid "No public/, www/, web/ or webroot/ with an index.php was found, so Flock shows a page instead of the site. Choose the folder with the app's index.php."
-msgstr "No se encontró public/, www/, web/ ni webroot/ con un index.php, así que Flock muestra una página en lugar del sitio. Elige la carpeta con el index.php de la app."
-
-msgid "No sites"
-msgstr "No hay sitios"
-
-msgid "No sites yet"
-msgstr "Aún no hay sitios"
-
-msgid "No worktrees"
-msgstr "No hay worktrees"
-
-msgid "Node {version} is isolated here; the project pins {pinned} in {file}."
-msgstr "Node {version} está aislado aquí; el proyecto fija {pinned} en {file}."
-
-msgid "None (detached HEAD)"
-msgstr "Ninguna (HEAD separado)"
-
-msgid "Not available"
-msgstr "No disponible"
-
-msgid "Not available for PostgreSQL {version}"
-msgstr "No disponible para PostgreSQL {version}"
-
-msgid "Not available on Linux"
-msgstr "No disponible en Linux"
-
-msgid "Not checked yet"
-msgstr "Aún no se ha comprobado"
-
-msgid "Not in this build"
-msgstr "No incluido en esta compilación"
-
-msgid "Not installed"
-msgstr "No instalado"
-
-msgid "Not installed · downloads by itself when a site uses it"
-msgstr "No instalado · se descarga solo cuando un sitio lo usa"
-
-msgid "Not installed · its data is kept · {version}"
-msgstr "No instalado · sus datos se conservan · {version}"
-
-msgid "Not installed · {size} of databases kept"
-msgstr "No instalado · se conservan {size} de bases de datos"
-
-msgid "Not installed · {version}"
-msgstr "No instalado · {version}"
-
-msgid "Not offered"
-msgstr "No se ofrece"
-
-#. {hint}: where (from the daemon)
-msgid "Not required, but used: {hint}"
-msgstr "No es obligatoria, pero se usa: {hint}"
-
-msgid "Not running"
-msgstr "No está en ejecución"
-
-msgid "Not set up"
-msgstr "Sin configurar"
-
-msgid "Nothing Captured Yet"
-msgstr "Aún no se ha capturado nada"
-
-msgid "Nothing Matches"
-msgstr "No hay coincidencias"
-
-#. {upstream}: the upstream
-msgid "Nothing answers at {upstream} yet."
-msgstr "Aún no responde nada en {upstream}."
-
-msgid "OK"
-msgstr "Aceptar"
-
-msgid "Official Node.js builds, the newest release of each major. A project that pins a version in .nvmrc gets that major offered when you run node, npm or npx there. Global packages (npm install -g) belong to a Node line and survive its updates; those of the default version are on your PATH."
-msgstr "Compilaciones oficiales de Node.js, la versión más reciente de cada versión principal. A un proyecto que fija una versión en .nvmrc se le ofrece esa versión principal cuando ejecutas node, npm o npx en él. Los paquetes globales (npm install -g) pertenecen a una línea de Node y sobreviven a sus actualizaciones; los de la versión predeterminada están en tu PATH."
-
-#. Under the Stop command's field
-msgid "Only for a server that runs in the background, like docker compose up -d."
-msgstr "Solo para un servidor que se ejecuta en segundo plano, como docker compose up -d."
-
-#. {emails}: email addresses
-msgid "Only for: {emails}"
-msgstr "Solo para: {emails}"
-
-msgid "Only these people (optional)"
-msgstr "Solo estas personas (opcional)"
-
-msgid "Open"
-msgstr "Abrir"
-
-msgid "Open Dumps"
-msgstr "Abrir dumps"
-
-msgid "Open Flock"
-msgstr "Abrir Flock"
-
-msgid "Open Flock at login"
-msgstr "Abrir Flock al iniciar sesión"
-
-msgid "Open Flock when I log in"
-msgstr "Abrir Flock al iniciar sesión"
-
-msgid "Open Log"
-msgstr "Abrir registro"
-
-msgid "Open Mail"
-msgstr "Abrir Correo"
-
-msgid "Open Settings"
-msgstr "Abrir Configuración"
-
-msgid "Open a new terminal"
-msgstr "Abre una terminal nueva"
-
-msgid "Open files in"
-msgstr "Abrir archivos en"
-
-msgid "Open in Browser"
-msgstr "Abrir en el navegador"
-
-msgid "Open in the browser"
-msgstr "Abrir en el navegador"
-
-msgid "Open php.ini"
-msgstr "Abrir php.ini"
-
-msgid "Open sources in"
-msgstr "Abrir el código fuente en"
-
-msgid "Open the folder"
-msgstr "Abrir la carpeta"
-
-msgid "Open the project folder"
-msgstr "Abrir la carpeta del proyecto"
-
-#. {site}: a URL or domain
-msgid "Open {site}"
-msgstr "Abrir {site}"
-
-msgid "Opens {name}"
-msgstr "Abre {name}"
-
-msgid "Other clients"
-msgstr "Otros clientes"
-
-#. Heading above a server's output (its log)
-msgid "Output"
-msgstr "Salida"
-
-msgid "PHP extensions"
-msgstr "Extensiones de PHP"
-
-#. {site}: the site
-msgid "PHP extensions of {site}"
-msgstr "Extensiones de PHP de {site}"
-
-msgid "PHP {versions} only captures dumps — its build has no agent extension yet, so queries, logs, views and jobs are missing there."
-msgid_plural "PHP {versions} only capture dumps — their builds have no agent extension yet, so queries, logs, views and jobs are missing there."
-msgstr[0] "PHP {versions} solo captura dumps: su compilación aún no tiene la extensión del agente, así que ahí faltan consultas, registros, vistas y trabajos."
-msgstr[1] "PHP {versions} solo capturan dumps: sus compilaciones aún no tienen la extensión del agente, así que ahí faltan consultas, registros, vistas y trabajos."
-
-msgid "PHP {versions} only captures dumps: its build has no agent extension yet."
-msgid_plural "PHP {versions} only capture dumps: their builds have no agent extension yet."
-msgstr[0] "PHP {versions} solo captura dumps: su compilación aún no tiene la extensión del agente."
-msgstr[1] "PHP {versions} solo capturan dumps: sus compilaciones aún no tienen la extensión del agente."
-
-msgid "PHP {version} install log"
-msgstr "Registro de instalación de PHP {version}"
-
-msgid "PHP {version} is isolated here; the project pins {pinned} in {file}."
-msgstr "PHP {version} está aislado aquí; el proyecto fija {pinned} en {file}."
-
-msgid "PHP {version} isn’t released yet — it may not work. Offered on the beta channel."
-msgstr "PHP {version} aún no se ha publicado y puede que no funcione. Se ofrece en el canal beta."
-
-#. {version}: PHP version
-msgid "PHP {version} · Laravel app"
-msgstr "PHP {version} · app de Laravel"
-
-msgid "PHP-FPM serves the site meanwhile."
-msgstr "Mientras tanto, PHP-FPM sirve el sitio."
-
-msgid "PHP-FPM serves the site until it's ready."
-msgstr "PHP-FPM sirve el sitio hasta que esté listo."
-
-msgid "Pick a Log"
-msgstr "Elige un registro"
-
-msgid "Pin"
-msgstr "Fijar"
-
-#. {root}: the folder
-msgid "Pin Document Root ({root}) to Project…"
-msgstr "Fijar la raíz de documentos ({root}) en el proyecto…"
-
-#. {version}: major version
-msgid "Pin Node {version} to Project…"
-msgstr "Fijar Node {version} en el proyecto…"
-
-#. {version}: version, {site}: the site
-msgid "Pin Node {version} to {site}?"
-msgstr "¿Fijar Node {version} en {site}?"
-
-#. {version}: version
-msgid "Pin PHP {version} to Project…"
-msgstr "Fijar PHP {version} en el proyecto…"
-
-#. {version}: version, {site}: the site
-msgid "Pin PHP {version} to {site}?"
-msgstr "¿Fijar PHP {version} en {site}?"
-
-#. {root}: the folder, {site}: the site
-msgid "Pin the document root {root} to {site}?"
-msgstr "¿Fijar la raíz de documentos {root} en {site}?"
-
-msgid "Pin versions and the document root to the project"
-msgstr "Fijar las versiones y la raíz de documentos en el proyecto"
-
-msgid "Port"
-msgstr "Puerto"
-
-#. {port}: the port
-msgid "Port {port}"
-msgstr "Puerto {port}"
-
-msgid "Port, host:port or URL"
-msgstr "Puerto, host:puerto o URL"
-
-msgid "PostgreSQL Only"
-msgstr "Solo PostgreSQL"
-
-msgid "PostgreSQL {version} Extensions"
-msgstr "Extensiones de PostgreSQL {version}"
-
-msgid "PostgreSQL {version} restarts to load it"
-msgstr "PostgreSQL {version} se reinicia para cargarla"
-
-msgid "PostgreSQL {version} starts with a new, empty set of databases."
-msgstr "PostgreSQL {version} empieza con un conjunto nuevo y vacío de bases de datos."
-
-msgid "PostgreSQL {version} stops and Flock switches to PostgreSQL {next} with its own databases."
-msgstr "PostgreSQL {version} se detiene y Flock cambia a PostgreSQL {next} con sus propias bases de datos."
-
-msgid "PostgreSQL {version} stops, and your sites can't use PostgreSQL until you install a version again."
-msgstr "PostgreSQL {version} se detiene y tus sitios no podrán usar PostgreSQL hasta que vuelvas a instalar una versión."
-
-msgid "PostgreSQL {version} stops; its databases stay but aren't available until you switch back. {then}"
-msgstr "PostgreSQL {version} se detiene; sus bases de datos se conservan, pero no están disponibles hasta que vuelvas a cambiar. {then}"
-
-msgid "PostgreSQL {version} uses its own databases."
-msgstr "PostgreSQL {version} usa sus propias bases de datos."
-
-msgid "Pre-release"
-msgstr "Preliminar"
-
-msgid "Process"
-msgstr "Proceso"
-
-msgid "Project default"
-msgstr "Predeterminada del proyecto"
-
-msgid "Project folder"
-msgstr "Carpeta del proyecto"
-
-msgid "Project folders"
-msgstr "Carpetas de proyectos"
-
-msgid "Projects that use it get node, npm and npx as soon as it's installed."
-msgstr "Los proyectos que lo usan obtienen node, npm y npx en cuanto se instale."
-
-msgid "Proxies"
-msgstr "Proxies"
-
-msgid "Proxy"
-msgstr "Proxy"
-
-msgid "Put a library in lib/ and its .control and .sql files in extension/. Flock keeps them across updates of PostgreSQL {version}."
-msgstr "Pon la biblioteca en lib/ y sus archivos .control y .sql en extension/. Flock los conserva en las actualizaciones de PostgreSQL {version}."
-
-msgid "QR code of {url}"
-msgstr "Código QR de {url}"
-
-msgid "Queries"
-msgstr "Consultas"
-
-msgid "Quit Flock"
-msgstr "Salir de Flock"
-
-#. {app}: the program to quit
-msgid "Quit {app}"
-msgstr "Cierra {app}"
-
-msgid "Raw"
-msgstr "Original"
-
-msgid "Ready"
-msgstr "Listo"
-
-#. {url}: the URL
-msgid "Ready at {url}"
-msgstr "Listo en {url}"
-
-msgid "Rebuild Assets"
-msgstr "Recompilar los recursos"
-
-msgid "Rebuilding…"
-msgstr "Recompilando…"
-
-msgid "Refresh"
-msgstr "Actualizar"
-
-#. {version}: the version
-msgid "Reinstall {version}"
-msgstr "Reinstalar {version}"
-
-#. Restarts only the app, the daemon keeps running
-msgid "Relaunch Flock"
-msgstr "Volver a abrir Flock"
-
-msgid "Reload the log every 2 seconds"
-msgstr "Recargar el registro cada 2 segundos"
-
-msgid "Remove"
-msgstr "Quitar"
-
-msgid "Remove Anyway"
-msgstr "Quitar de todos modos"
-
-msgid "Remove Commands"
-msgstr "Quitar comandos"
-
-msgid "Remove proxy"
-msgstr "Quitar proxy"
-
-msgid "Remove site"
-msgstr "Quitar sitio"
-
-msgid "Remove worktree"
-msgstr "Quitar worktree"
-
-#. {domain}: what is removed
-msgid "Remove {domain}"
-msgstr "Quitar {domain}"
-
-#. {name}: the folder
-msgid "Remove {name} from project folders?"
-msgstr "¿Quitar {name} de las carpetas de proyectos?"
-
-#. {name}: what is removed
-msgid "Remove {name}?"
-msgstr "¿Quitar {name}?"
-
-msgid "Removes root= from .flockrc in {path}. Flock then finds the document root itself. This changes files in your project."
-msgstr "Quita root= de .flockrc en {path}. Flock buscará entonces la raíz de documentos por sí mismo. Esto cambia archivos de tu proyecto."
-
-msgid "Removes the Node.js version from .flockrc and deletes .nvmrc / .node-version in {path}. The site then uses Flock's default Node.js. This changes files in your project."
-msgstr "Quita la versión de Node.js de .flockrc y elimina .nvmrc / .node-version en {path}. Después, el sitio usa el Node.js predeterminado de Flock. Esto cambia archivos de tu proyecto."
-
-msgid "Removes the PHP version from {file}. The site then uses Flock's default PHP. This changes files in your project."
-msgstr "Quita la versión de PHP de {file}. Después, el sitio usa el PHP predeterminado de Flock. Esto cambia archivos de tu proyecto."
-
-msgid "Removes the PostgreSQL {version} server."
-msgstr "Quita el servidor PostgreSQL {version}."
-
-msgid "Requests"
-msgstr "Solicitudes"
-
-msgid "Require"
-msgstr "Requerir"
-
-msgid "Require ext-{name} in composer.json?"
-msgstr "¿Requerir ext-{name} en composer.json?"
-
-#. {packages}: packages
-msgid "Required by {packages}"
-msgstr "Requerida por {packages}"
-
-msgid "Requiring an extension in composer.json makes composer install refuse a server without it, instead of the app failing there."
-msgstr "Requerir una extensión en composer.json hace que composer install rechace un servidor que no la tenga, en lugar de que la app falle allí."
-
-msgid "Restart"
-msgstr "Reiniciar"
-
-msgid "Restart Daemon"
-msgstr "Reiniciar el demonio"
-
-#. Restarts the daemon and its services
-msgid "Restart Flock"
-msgstr "Reiniciar Flock"
-
-msgid "Restart FrankenPHP, e.g. so Octane's workers load changed code"
-msgstr "Reiniciar FrankenPHP, p. ej. para que los workers de Octane carguen el código modificado"
-
-msgid "Restarting…"
-msgstr "Reiniciando…"
-
-msgid "Retry"
-msgstr "Reintentar"
-
-msgid "Run Setup Again"
-msgstr "Volver a preparar"
-
-msgid "Running"
-msgstr "En ejecución"
-
-#. {version}: FrankenPHP version, {php}: PHP version
-msgid "Running FrankenPHP {version} with PHP {php}"
-msgstr "Ejecutando FrankenPHP {version} con PHP {php}"
-
-#. {port}: the port
-msgid "Running on port {port}"
-msgstr "En ejecución en el puerto {port}"
-
-msgid "Running · {version}"
-msgstr "En ejecución · {version}"
-
-#. {name}: the extension, {path}: the project folder
-msgid "Runs composer require ext-{name}:* in {path}, which changes composer.json and composer.lock. Commit them with the project."
-msgstr "Ejecuta composer require ext-{name}:* en {path}, lo que cambia composer.json y composer.lock. Haz commit de ambos con el proyecto."
-
-msgid "Runs in the background"
-msgstr "Se ejecuta en segundo plano"
-
-msgid "Runs npm run build again, so visitors see your latest changes when they reload"
-msgstr "Vuelve a ejecutar npm run build para que los visitantes vean tus últimos cambios al recargar"
-
-msgid "Runs on"
-msgstr "Se ejecuta en"
-
-msgid "SMTP server"
-msgstr "Servidor SMTP"
-
-msgid "Save"
-msgstr "Guardar"
-
-msgid "Save…"
-msgstr "Guardar…"
-
-#. A service category from the daemon
-msgid "Search"
-msgstr "Búsqueda"
-
-msgid "Search dumps, queries, logs"
-msgstr "Buscar en dumps, consultas y registros"
-
-msgid "Search logs"
-msgstr "Buscar en los registros"
-
-msgid "Secure"
-msgstr "Proteger"
-
-msgid "Send dump() and dd() output, queries, logs, views and jobs to Flock instead of the page or terminal — no changes to your projects."
-msgstr "Envía la salida de dump() y dd(), las consultas, los registros, las vistas y los trabajos a Flock en lugar de a la página o la terminal, sin cambiar tus proyectos."
-
-#. {tld}: the TLD
-msgid "Serve a server of its own, e.g. a dashboard, an object store, a Docker container or a Go or Python app, at a .{tld} domain"
-msgstr "Servir un servidor propio, p. ej. un panel, un almacén de objetos, un contenedor de Docker o una app de Go o Python, en un dominio .{tld}"
-
-#. {site}: the site
-msgid "Serve {site} over HTTPS?"
-msgstr "¿Servir {site} por HTTPS?"
-
-msgid "Served over HTTPS"
-msgstr "Servido por HTTPS"
-
-msgid "Server"
-msgstr "Servidor"
-
-msgid "Service log"
-msgstr "Registro del servicio"
-
-#. The Settings pane
-msgid "Services"
-msgstr "Servicios"
-
-msgid "Set Up"
-msgstr "Preparar"
-
-msgid "Set Up Flock"
-msgstr "Configurar Flock"
-
-msgid "Set Up Flock…"
-msgstr "Configurar Flock…"
-
-msgid "Set a breakpoint in PhpStorm and listen for debug connections, use the Xdebug browser extension, or add ?XDEBUG_TRIGGER=1 to the URL. On the command line, run `flock debug artisan …`."
-msgstr "Pon un punto de interrupción en PhpStorm y escucha las conexiones de depuración, usa la extensión de Xdebug para el navegador o añade ?XDEBUG_TRIGGER=1 a la URL. En la línea de comandos, ejecuta `flock debug artisan …`."
-
-#. {worktree}: the worktree
-msgid "Setting Up {worktree}"
-msgstr "Preparando {worktree}"
-
-msgid "Setting it up copies dependencies and .env, installs and runs the project's hooks."
-msgstr "Prepararlo copia las dependencias y el .env, las instala y ejecuta los hooks del proyecto."
-
-msgid "Setting up Flock…"
-msgstr "Configurando Flock…"
-
-#. {worktree}: the worktree's branch
-msgid "Setting up {worktree} failed"
-msgstr "No se pudo preparar {worktree}"
-
-msgid "Setting up…"
-msgstr "Preparando…"
-
-#. {pane}: the Settings pane
-msgid "Settings → {pane} shows how far it is."
-msgstr "Configuración → {pane} muestra el progreso."
-
-msgid "Settings…"
-msgstr "Configuración…"
-
-msgid "Setup"
-msgstr "Preparación"
-
-msgid "Setup didn't finish"
-msgstr "La configuración no terminó"
-
-msgid "Setup failed"
-msgstr "La preparación falló"
-
-#. {error}: why
-msgid "Setup failed: {error}"
-msgstr "La preparación falló: {error}"
-
-msgid "Share"
-msgstr "Compartir"
-
-#. {site}: the site
-msgid "Share {site}"
-msgstr "Compartir {site}"
-
-msgid "Shared"
-msgstr "Compartido"
-
-msgid "Share…"
-msgstr "Compartir…"
-
-msgid "Sharing failed."
-msgstr "No se pudo compartir."
-
-msgid "Show Last Install Log"
-msgstr "Mostrar el registro de la última instalación"
-
-msgid "Show Last Log"
-msgstr "Mostrar el último registro"
-
-msgid "Show Log"
-msgstr "Mostrar registro"
-
-msgid "Show dump() in the page too"
-msgstr "Mostrar dump() también en la página"
-
-msgid "Show dump() output in the page too"
-msgstr "Mostrar la salida de dump() también en la página"
-
-msgid "Show error details to visitors"
-msgstr "Mostrar los detalles de los errores a los visitantes"
-
-msgid "Show only entries of this level and above (site logs)"
-msgstr "Mostrar solo las entradas de este nivel y superiores (registros de sitios)"
-
-msgid "Show the site at a temporary public address to preview work in progress, never for production. Visitors don't get debug pages, dumps or the dev tools."
-msgstr "Muestra el sitio en una dirección pública temporal para previsualizar el trabajo en curso, nunca para producción. Los visitantes no ven páginas de depuración, dumps ni las herramientas de desarrollo."
-
-msgid "Shows the Flock icon in the tray when you log in. The daemon itself always starts with your computer."
-msgstr "Muestra el icono de Flock en la bandeja al iniciar sesión. El demonio siempre se inicia con el equipo."
-
-msgid "Site"
-msgstr "Sitio"
-
-msgid "Sites"
-msgstr "Sitios"
-
-msgid "Sites don't open while the web server is down. Its log may tell why; `flock restart` starts it again."
-msgstr "Los sitios no se abren mientras el servidor web está caído. Su registro puede indicar por qué; `flock restart` lo vuelve a iniciar."
-
-msgid "Sites that run on FrankenPHP with this version are served by PHP-FPM until it has downloaded again by itself."
-msgstr "PHP-FPM sirve los sitios que usan FrankenPHP con esta versión hasta que FrankenPHP se vuelva a descargar por sí solo."
-
-msgid "Sites that use it are served as soon as it's installed."
-msgstr "Los sitios que lo usan se sirven en cuanto se instale."
-
-#. {http}: the HTTP port, {https}: the HTTPS port
-msgid "Sites use ports {http} (HTTP) and {https} (HTTPS), set in config.json, so their addresses include the port."
-msgstr "Los sitios usan los puertos {http} (HTTP) y {https} (HTTPS), definidos en config.json, así que sus direcciones incluyen el puerto."
-
-msgid "Sites you added one by one, plus every folder inside your project folders."
-msgstr "Los sitios que añadiste uno a uno, más cada carpeta dentro de tus carpetas de proyectos."
-
-#. A dev server's state
-msgid "Sleeping · starts on the next visit"
-msgstr "En reposo · se inicia en la próxima visita"
-
-msgid "Software Updater"
-msgstr "Actualizador de software"
-
-msgid "Something went wrong. The output below says what; you can try again."
-msgstr "Algo salió mal. La salida de abajo indica qué; puedes volver a intentarlo."
-
-msgid "Sources"
-msgstr "Código fuente"
-
-msgid "Sponsor"
-msgstr "Patrocinar"
-
-msgid "Star on GitHub"
-msgstr "Dar una estrella en GitHub"
-
-msgid "Start"
-msgstr "Iniciar"
-
-msgid "Start Flock"
-msgstr "Iniciar Flock"
-
-msgid "Start a session"
-msgstr "Inicia una sesión"
-
-msgid "Start from"
-msgstr "Partir de"
-
-msgid "Start the daemon to change its settings."
-msgstr "Inicia el demonio para cambiar su configuración."
-
-msgid "Starting the tunnel…"
-msgstr "Iniciando el túnel…"
-
-msgid "Starting…"
-msgstr "Iniciando…"
-
-msgid "Startup"
-msgstr "Inicio"
-
-msgid "Status"
-msgstr "Estado"
-
-msgid "Step through requests and commands with Xdebug."
-msgstr "Depura paso a paso solicitudes y comandos con Xdebug."
-
-msgid "Stop"
-msgstr "Detener"
-
-msgid "Stop Sharing"
-msgstr "Dejar de compartir"
-
-msgid "Stop other web servers first"
-msgstr "Detén primero otros servidores web"
-
-#. {service}: the service
-msgid "Stop {service}?"
-msgstr "¿Detener {service}?"
-
-msgid "Stopped"
-msgstr "Detenido"
-
-#. {problem}: why it stopped (from the daemon)
-msgid "Stopped: {problem}"
-msgstr "Detenido: {problem}"
-
-#. A server's state
-msgid "Stopping…"
-msgstr "Deteniendo…"
-
-msgid "Stops Flock and removes it from this computer. Your sites, databases and settings are kept."
-msgstr "Detiene Flock y lo quita de este equipo. Tus sitios, bases de datos y ajustes se conservan."
-
-#. A service category from the daemon
-msgid "Storage"
-msgstr "Almacenamiento"
-
-#. {problem}: why wildcard DNS does not work (from the daemon)
-msgid "Subdomains only work when you add them here: {problem}."
-msgstr "Los subdominios solo funcionan si los añades aquí: {problem}."
-
-msgid "Switch"
-msgstr "Cambiar"
-
-msgid "Switch to PostgreSQL {version}?"
-msgstr "¿Cambiar a PostgreSQL {version}?"
-
-msgid "Switch to {name} {version}?"
-msgstr "¿Cambiar a {name} {version}?"
-
-msgid "Switching to PostgreSQL {version}…"
-msgstr "Cambiando a PostgreSQL {version}…"
-
-#. {worktree}: the worktree
-msgid "Switching {worktree}'s Database"
-msgstr "Cambiando la base de datos de {worktree}"
-
-msgid "Switch…"
-msgstr "Cambiar…"
-
-msgid "System default"
-msgstr "Predeterminado del sistema"
-
-msgid "Terminals that were already open still have the old PATH."
-msgstr "Las terminales que ya estaban abiertas siguen con el PATH anterior."
-
-msgid "Text"
-msgstr "Texto"
-
-msgid "The Flock daemon runs your sites, PHP and services in the background."
-msgstr "El demonio de Flock ejecuta tus sitios, PHP y servicios en segundo plano."
-
-msgid "The Flock daemon serves your sites and services, and starts with your computer."
-msgstr "El demonio de Flock sirve tus sitios y servicios, y se inicia con el equipo."
-
-msgid "The branch pins it in {file}"
-msgstr "La rama lo fija en {file}"
-
-#. {branch}: the branch
-msgid "The branch {branch} stays."
-msgstr "La rama {branch} se conserva."
-
-msgid "The current commit"
-msgstr "El commit actual"
-
-msgid "The document root is the folder Flock serves the site from. One picked here applies on this machine only; pin it to write it into .flockrc for everyone."
-msgstr "La raíz de documentos es la carpeta desde la que Flock sirve el sitio. La que elijas aquí solo se aplica en este equipo; fíjala para escribirla en .flockrc para todos."
-
-msgid "The download failed."
-msgstr "La descarga falló."
-
-msgid "The link may be meant for a newer Flock. Update Flock, then try again."
-msgstr "Puede que el enlace sea para una versión más reciente de Flock. Actualiza Flock y vuelve a intentarlo."
-
-msgid "The password prompt was cancelled, so the DNS setup and the certificate are still in place."
-msgstr "Se canceló la solicitud de contraseña, así que la configuración DNS y el certificado siguen en su sitio."
-
-msgid "The password prompt was cancelled. Flock runs, but *.test sites won't resolve and HTTPS isn't trusted until you allow it."
-msgstr "Se canceló la solicitud de contraseña. Flock se ejecuta, pero los sitios *.test no se resolverán y HTTPS no será de confianza hasta que lo permitas."
-
-msgid "The project pins {tool} {version} in {file}."
-msgstr "El proyecto fija {tool} {version} en {file}."
-
-msgid "The project requires no PHP extensions."
-msgstr "El proyecto no requiere extensiones de PHP."
-
-msgid "The project uses Laravel Boost. Adding Flock to its guidelines tells AI agents that Flock serves the app and picks its PHP version."
-msgstr "El proyecto usa Laravel Boost. Añadir Flock a sus directrices indica a los agentes de IA que Flock sirve la app y elige su versión de PHP."
-
-msgid "The setup failed."
-msgstr "La preparación falló."
-
-msgid "The setup goes on; Flock tells you if it fails"
-msgstr "La preparación continúa; Flock te avisa si falla"
-
-#. {tool}: PHP or Node
-msgid "The site follows Flock's default {tool} version."
-msgstr "El sitio sigue la versión predeterminada de {tool} de Flock."
-
-msgid "The site's"
-msgstr "La del sitio"
-
-msgid "The sites in {path} are no longer served. The folder and its projects are not touched."
-msgstr "Los sitios de {path} dejan de servirse. La carpeta y sus proyectos no se tocan."
-
-msgid "There's no build of it for this computer, or the link is meant for a newer Flock."
-msgstr "No hay ninguna compilación para este equipo, o el enlace es para una versión más reciente de Flock."
-
-msgid "They're the defaults for your sites and terminal."
-msgstr "Son los predeterminados para tus sitios y tu terminal."
-
-msgid "This Flock daemon doesn't know this service. Update Flock, then try again."
-msgstr "Este demonio de Flock no conoce este servicio. Actualiza Flock y vuelve a intentarlo."
-
-msgid "To"
-msgstr "Para"
-
-msgid "Try Again"
-msgstr "Reintentar"
-
-msgid "Turn it off to see dumps in the page again."
-msgstr "Desactívalo para volver a ver los dumps en la página."
-
-msgid "Turns the app's debug mode on for this share, so visitors see stack traces. Only for people you trust."
-msgstr "Activa el modo de depuración de la app para este enlace compartido, así que los visitantes ven las trazas de pila. Solo para personas de confianza."
-
-#. A site's type: PHP or Node.js
-msgid "Type"
-msgstr "Tipo"
-
-msgid "URL"
-msgstr "URL"
-
-msgid "Uninstall"
-msgstr "Desinstalar"
-
-msgid "Uninstall Flock"
-msgstr "Desinstalar Flock"
-
-msgid "Uninstall Flock?"
-msgstr "¿Desinstalar Flock?"
-
-msgid "Uninstall Flock…"
-msgstr "Desinstalar Flock…"
-
-#. {version}: the PHP version
-msgid "Uninstall FrankenPHP for PHP {version}?"
-msgstr "¿Desinstalar FrankenPHP para PHP {version}?"
-
-msgid "Uninstall Node {version}?"
-msgstr "¿Desinstalar Node {version}?"
-
-msgid "Uninstall PHP {version}?"
-msgstr "¿Desinstalar PHP {version}?"
-
-msgid "Uninstall PostgreSQL {version}?"
-msgstr "¿Desinstalar PostgreSQL {version}?"
-
-msgid "Uninstall and Delete Data"
-msgstr "Desinstalar y eliminar datos"
-
-msgid "Uninstall and Delete Databases ({size})"
-msgstr "Desinstalar y eliminar las bases de datos ({size})"
-
-msgid "Uninstall {name}"
-msgstr "Desinstalar {name}"
-
-msgid "Uninstall {name} {version}?"
-msgstr "¿Desinstalar {name} {version}?"
-
-msgid "Uninstall, Keep Data"
-msgstr "Desinstalar y conservar datos"
-
-msgid "Uninstall, Keep Databases"
-msgstr "Desinstalar y conservar las bases de datos"
-
-msgid "Uninstalling Flock…"
-msgstr "Desinstalando Flock…"
-
-msgid "Uninstalling PostgreSQL {version}…"
-msgstr "Desinstalando PostgreSQL {version}…"
-
-msgid "Uninstalling didn't finish. The output below says what; you can try again."
-msgstr "La desinstalación no terminó. La salida de abajo dice qué; puedes volver a intentarlo."
-
-msgid "Uninstalling…"
-msgstr "Desinstalando…"
-
-msgid "Uninstall…"
-msgstr "Desinstalar…"
-
-msgid "Unpin"
-msgstr "Dejar de fijar"
-
-msgid "Unpin Document Root (.flockrc)…"
-msgstr "Dejar de fijar la raíz de documentos (.flockrc)…"
-
-#. {file}: the file
-msgid "Unpin Node ({file})…"
-msgstr "Dejar de fijar Node ({file})…"
-
-#. {site}: the site
-msgid "Unpin Node from {site}?"
-msgstr "¿Dejar de fijar Node en {site}?"
-
-#. {file}: the file
-msgid "Unpin PHP ({file})…"
-msgstr "Dejar de fijar PHP ({file})…"
-
-#. {site}: the site
-msgid "Unpin PHP from {site}?"
-msgstr "¿Dejar de fijar PHP en {site}?"
-
-#. {site}: the site
-msgid "Unpin the document root from {site}?"
-msgstr "¿Dejar de fijar la raíz de documentos en {site}?"
-
-msgid "Up to date"
-msgstr "Actualizado"
-
-msgid "Update"
-msgstr "Actualizar"
-
-#. {site}: the site
-msgid "Update Flock's guideline in {site}?"
-msgstr "¿Actualizar la directriz de Flock en {site}?"
-
-msgctxt "noun"
-msgid "Update"
-msgstr "Actualización"
-
-msgid "Update available"
-msgstr "Actualización disponible"
-
-msgid "Update it…"
-msgstr "Actualizarla…"
-
-msgid "Update npm"
-msgstr "Actualizar npm"
-
-msgid "Update to PHP {version}"
-msgstr "Actualizar a PHP {version}"
-
-#. {version}: the version
-msgid "Update to {version}"
-msgstr "Actualizar a {version}"
-
-msgid "Updates"
-msgstr "Actualizaciones"
-
-msgid "Updates keep your data."
-msgstr "Las actualizaciones conservan tus datos."
-
-msgid "Updating PostgreSQL {version}…"
-msgstr "Actualizando PostgreSQL {version}…"
-
-msgid "Updating npm to {version}…"
-msgstr "Actualizando npm a {version}…"
-
-msgid "Updating…"
-msgstr "Actualizando…"
-
-#. Where a proxy passes requests to
-msgid "Upstream"
-msgstr "Destino"
-
-msgid "Use .flockrc"
-msgstr "Usar .flockrc"
-
-msgid "Use .flockrc ({root})"
-msgstr "Usar .flockrc ({root})"
-
-#. {file}: a file (.flockrc)
-msgid "Use {file}"
-msgstr "Usar {file}"
-
-msgid "Use {file} ({tool} {version})"
-msgstr "Usar {file} ({tool} {version})"
-
-msgid "Use {site}'s database?"
-msgstr "¿Usar la base de datos de {site}?"
-
-msgid "Uses {site}'s settings"
-msgstr "Usa la configuración de {site}"
-
-msgid "Version"
-msgstr "Versión"
-
-msgid "Versions"
-msgstr "Versiones"
-
-msgid "Views"
-msgstr "Vistas"
-
-msgid "Waiting to install {names}"
-msgstr "Esperando para instalar {names}"
-
-msgid "Waiting…"
-msgstr "Esperando…"
-
-msgid "Warning and above"
-msgstr "Warning y superiores"
-
-msgid "Welcome to Flock"
-msgstr "Te damos la bienvenida a Flock"
-
-msgid "While capturing"
-msgstr "Durante la captura"
-
-msgid "Wildcard subdomains don't work here ({problem}), so add each subdomain you use (tenant1, a.b). A full name adds an alias."
-msgstr "Los subdominios comodín no funcionan aquí ({problem}), así que añade cada subdominio que uses (tenant1, a.b). Un nombre completo añade un alias."
-
-#. {reason}: why (from the manifest)
-msgid "Withdrawn: {reason}"
-msgstr "Retirada: {reason}"
-
-#. {reason}: why (from the manifest)
-msgid "Withdrawn: {reason} — update to replace it"
-msgstr "Retirada: {reason}. Actualiza para sustituirla"
-
-msgid "Worktree"
-msgstr "Worktree"
-
-msgid "Worktrees"
-msgstr "Worktrees"
-
-msgid "Writes .ai/guidelines/flock.md in {path} and runs php artisan boost:update, so AI agents know Flock serves the app and picks its PHP version. Commit it with the rest of .ai/guidelines. This changes files in your project."
-msgstr "Escribe .ai/guidelines/flock.md en {path} y ejecuta php artisan boost:update para que los agentes de IA sepan que Flock sirve la app y elige su versión de PHP. Haz commit junto con el resto de .ai/guidelines. Esto cambia archivos de tu proyecto."
-
-msgid "Writes php={version} to .flockrc in {path}. Commit it, and everyone using Flock on this project gets PHP {version}. This changes a file in your project."
-msgstr "Escribe php={version} en .flockrc en {path}. Haz commit y todos los que usen Flock en este proyecto tendrán PHP {version}. Esto cambia un archivo de tu proyecto."
-
-msgid "Writes root={value} to .flockrc in {path}. Commit it, and everyone using Flock on this project serves it from {root}. This changes a file in your project."
-msgstr "Escribe root={value} en .flockrc en {path}. Haz commit y todos los que usen Flock en este proyecto lo servirán desde {root}. Esto cambia un archivo de tu proyecto."
-
-msgid "Writes {version} to {file} in {path}. Commit it, and Flock, nvm and other Node tools use Node {version} for this project. This changes a file in your project."
-msgstr "Escribe {version} en {file} en {path}. Haz commit y Flock, nvm y otras herramientas de Node usarán Node {version} para este proyecto. Esto cambia un archivo de tu proyecto."
-
-msgid "Xdebug loads only for requests that ask for it, so everything else stays fast. While a project has breakpoints in PhpStorm, every request to its site is debugged."
-msgstr "Xdebug solo se carga en las solicitudes que lo piden, así que todo lo demás sigue siendo rápido. Mientras un proyecto tenga puntos de interrupción en PhpStorm, se depura cada solicitud a su sitio."
-
-#. {pane}: the Settings pane
-msgid "You'll find it in Settings → {pane}."
-msgstr "Lo encontrarás en Configuración → {pane}."
-
-msgid "Your own extensions"
-msgstr "Tus propias extensiones"
-
-msgid "Your sites can't use {service} until you start it again; it stays stopped after restarts."
-msgstr "Tus sitios no podrán usar {service} hasta que lo vuelvas a iniciar; seguirá detenido tras los reinicios."
-
-msgid "Yours"
-msgstr "Tuya"
-
-msgid "a name like brave-otter"
-msgstr "un nombre como brave-otter"
-
-msgid "context"
-msgstr "contexto"
-
-msgctxt "database"
-msgid "copy"
-msgstr "copia"
-
-msgid "dd() always shows in the page too, as it ends the request."
-msgstr "dd() siempre se muestra también en la página, porque termina la solicitud."
-
-msgid "down"
-msgstr "caído"
-
-msgid "dump() and dd() output, queries, logs, views and jobs from your sites and artisan commands appear here."
-msgstr "Aquí aparecen la salida de dump() y dd(), las consultas, los registros, las vistas y los trabajos de tus sitios y comandos de artisan."
-
-#. {tld}: the TLD. The name of a new proxy and its domain
-msgid "e.g. my-app → my-app.{tld}"
-msgstr "p. ej. my-app → my-app.{tld}"
-
-msgctxt "database"
-msgid "fresh"
-msgstr "nueva"
-
-msgid "just now"
-msgstr "ahora mismo"
-
-msgid "node, npm and npx follow the project's .nvmrc / .node-version, then the site's version, then the default."
-msgstr "node, npm y npx siguen el .nvmrc / .node-version del proyecto, después la versión del sitio y, por último, la predeterminada."
-
-msgid "not running"
+msgid "about.daemon_not_running"
 msgstr "no está en ejecución"
 
-msgid "own database"
-msgstr "base de datos propia"
+msgid "about.daemon_version"
+msgstr "Demonio {version}"
 
-msgid "php, composer and node in your terminal"
-msgstr "php, composer y node en tu terminal"
+msgid "about.data_folder_title_case"
+msgstr "Carpeta de datos"
 
-#. {pid}: the process id
-msgid "pid {pid}"
-msgstr "PID {pid}"
+msgid "about.flock_docs"
+msgstr "Documentación de Flock"
 
-#. {port}: the port, {service}: what Flock needs it for ("HTTP")
-msgid "port {port} ({service})"
+msgid "about.found_a_bug_report_an"
+msgstr "¿Encontraste un error? Infórmalo"
+
+msgid "about.license"
+msgstr "Licencia"
+
+msgid "about.license_description"
+msgstr "Copyright © Guava s.r.o. Con licencia AGPL-3.0."
+
+msgid "about.password_prompt_was_cancelled_so"
+msgstr "Se canceló la solicitud de contraseña, así que la configuración DNS y el certificado siguen en su sitio."
+
+msgid "about.sponsor"
+msgstr "Patrocinar"
+
+msgid "about.star_on_github"
+msgstr "Dar una estrella en GitHub"
+
+msgid "about.stops_flock_and_removes_it_from"
+msgstr "Detiene Flock y lo quita de este equipo. Tus sitios, bases de datos y ajustes se conservan."
+
+msgid "about.support_description"
+msgstr "Flock es gratuito y de código abierto, para siempre. Patrocinarlo ayuda a mantenerlo."
+
+msgid "about.tagline"
+msgstr "Un entorno de desarrollo local nativo para Laravel."
+
+msgid "about.uninstall_flock"
+msgstr "Desinstalar Flock"
+
+msgid "about.uninstall_flock_ellipsis"
+msgstr "Desinstalar Flock…"
+
+msgid "about.uninstall_question"
+msgstr "¿Desinstalar Flock?"
+
+msgid "about.uninstalling_flock"
+msgstr "Desinstalando Flock…"
+
+msgid "ai.add_to_settings"
+msgstr "Añade esto a la configuración MCP del cliente."
+
+msgid "ai.added_once"
+msgstr "Una vez añadido, Flock funciona en todos los proyectos. Después de añadir Flock, reinicia el cliente o vuelve a cargar sus servidores MCP."
+
+msgid "ai.clients"
+msgstr "Clientes de IA"
+
+msgid "ai.flock_added"
+msgstr "Flock está añadido"
+
+msgid "ai.other_clients"
+msgstr "Otros clientes"
+
+msgid "ai.subtitle"
+msgstr "Deja que agentes de IA como Claude Code y Cursor trabajen con Flock: las URL y versiones de PHP de tus sitios, registros, dumps y correo, y la instalación de versiones y servicios."
+
+msgid "app.conflict.port"
 msgstr "el puerto {port} ({service})"
 
-msgid "queue {name}"
-msgstr "cola {name}"
+msgid "app.conflict.quit"
+msgstr "Cierra {app}"
 
-#. Instead of the error, when there is none
-msgid "see its log"
-msgstr "consulta su registro"
+msgid "app.copy_database"
+msgstr "copia"
 
-msgid "see the log"
-msgstr "consulta el registro"
+msgid "app.could_not_relaunch"
+msgstr "No se pudo volver a abrir Flock: {error}"
 
-msgctxt "database"
-msgid "shared"
-msgstr "compartida"
+msgid "app.flock_is_not_installed_for_this"
+msgstr "Flock no está instalado para este usuario (falta {path}): ejecuta `flk install` una vez."
 
-msgid "storage/logs of {site} is empty."
-msgstr "storage/logs de {site} está vacío."
+msgid "app.flock_isnt_installed_install_the"
+msgstr "Flock no está instalado: primero instala el paquete flockphp."
 
-msgid "systemd-resolved sends every name under .{tld} here (set up by `flock install`), so any subdomain of a site works (tenant1.app.{tld}, a.b.app.{tld}) without adding it."
-msgstr "systemd-resolved envía aquí cada nombre bajo .{tld} (configurado por `flock install`), así que cualquier subdominio de un sitio funciona (tenant1.app.{tld}, a.b.app.{tld}) sin añadirlo."
+msgid "app.fresh_database"
+msgstr "nueva"
 
-msgid "tenant1, a.b or {site}-2.{tld}"
-msgstr "tenant1, a.b o {site}-2.{tld}"
+msgid "app.http_status"
+msgstr "Flock respondió con HTTP {status}"
 
-msgid "the DNS server isn't running"
-msgstr "el servidor DNS no está en ejecución"
-
-msgid "unexpected answer from Flock: {error}"
-msgstr "respuesta inesperada de Flock: {error}"
-
-#. {branch}: the branch, {site}: the site, {address}: the address
-msgid "{branch} exists, so the worktree checks it out. Flock creates it next to {site}, sets it up and serves it at {address}."
-msgstr "{branch} ya existe, así que el worktree la usa. Flock lo crea junto a {site}, lo prepara y lo sirve en {address}."
-
-#. {domain}: the domain
-msgid "{domain} (alias)"
-msgstr "{domain} (alias)"
-
-msgid "{domain} is no longer served by {site}."
-msgstr "{site} deja de servir {domain}."
-
-msgid "{error}Try again in Settings → {pane}."
-msgstr "{error}Vuelve a intentarlo en Configuración → {pane}."
-
-msgid "{extensions} for PostgreSQL {version}, where they're available for it. You can change this later under Extensions…."
-msgstr "{extensions} para PostgreSQL {version}, donde estén disponibles. Puedes cambiarlo más tarde en Extensiones…."
-
-#. The last two items of a list
-msgid "{first} and {second}"
-msgstr "{first} y {second}"
-
-#. {folder}: the chosen folder, {project}: the project
-msgid "{folder} isn't in {project}. The document root must be a folder in the project."
-msgstr "{folder} no está en {project}. La raíz de documentos debe ser una carpeta del proyecto."
-
-msgid "{names} are installed"
-msgstr "{names} están instalados"
-
-#. {name}: the branch
-msgid "{name} (current)"
-msgstr "{name} (actual)"
-
-#. {name}: the branch
-msgid "{name} (default)"
-msgstr "{name} (predeterminada)"
-
-msgid "{name} couldn't be installed"
-msgstr "No se pudo instalar {name}"
-
-#. {name}: the service
-msgid "{name} install log"
-msgstr "Registro de instalación de {name}"
-
-#. {name}: the name and version ("PHP 8.4")
-msgid "{name} is already being installed"
-msgstr "{name} ya se está instalando"
-
-#. {name}: the name and version ("PHP 8.4")
-msgid "{name} is already installed"
-msgstr "{name} ya está instalado"
-
-#. {name}: the service
-msgid "{name} isn't available on this computer"
-msgstr "{name} no está disponible en este equipo"
-
-msgid "{name} {version} starts with empty data."
-msgstr "{name} {version} empieza sin datos."
-
-msgid "{name} {version} stops and {name} {next} becomes the active version."
-msgstr "{name} {version} se detiene y {name} {next} pasa a ser la versión activa."
-
-msgid "{name} {version} stops; its data stays but isn't used until you switch back. {then}"
-msgstr "{name} {version} se detiene; sus datos se conservan, pero no se usan hasta que vuelvas a cambiar. {then}"
-
-msgid "{name} {version} stops; your sites can't use {name} until you install a version again."
-msgstr "{name} {version} se detiene; tus sitios no podrán usar {name} hasta que vuelvas a instalar una versión."
-
-msgid "{name} {version} uses its own data."
-msgstr "{name} {version} usa sus propios datos."
-
-msgid "{n} dump"
-msgid_plural "{n} dumps"
-msgstr[0] "{n} dump"
-msgstr[1] "{n} dumps"
-
-msgid "{n} entry"
-msgid_plural "{n} entries"
-msgstr[0] "{n} entrada"
-msgstr[1] "{n} entradas"
-
-msgid "{n} event"
-msgid_plural "{n} events"
+msgid "app.n_events"
+msgid_plural "app.n_events"
 msgstr[0] "{n} evento"
 msgstr[1] "{n} eventos"
 
-msgid "an hour ago"
-msgid_plural "{n} hours ago"
+msgid "app.needs_attention_version"
+msgstr "Requiere atención · {version}"
+
+msgid "app.not_running"
+msgstr "Flock no está en ejecución"
+
+msgid "app.program_uses_ports"
+msgstr "{program} usa {ports}."
+
+msgid "app.running_version"
+msgstr "En ejecución · {version}"
+
+msgid "app.shared_database"
+msgstr "compartida"
+
+msgid "app.unexpected_answer_from_flock_error"
+msgstr "respuesta inesperada de Flock: {error}"
+
+msgid "common.add"
+msgstr "Añadir"
+
+msgid "common.cancel"
+msgstr "Cancelar"
+
+msgid "common.choose"
+msgstr "Elegir…"
+
+msgid "common.close"
+msgstr "Cerrar"
+
+msgid "common.copy"
+msgstr "Copiar"
+
+msgid "common.done"
+msgstr "Listo"
+
+msgid "common.downloading"
+msgstr "Descargando…"
+
+msgid "common.e_b"
+msgstr "%e/%-m"
+
+msgid "common.e_b_y_h_m"
+msgstr "%e/%-m/%Y, %H:%M:%S"
+
+msgid "common.empty_parenthesized"
+msgstr "(vacío)"
+
+msgid "common.hide"
+msgstr "Ocultar"
+
+msgid "common.install"
+msgstr "Instalar"
+
+msgid "common.installed"
+msgstr "Instalado"
+
+msgid "common.installing"
+msgstr "Instalando…"
+
+msgid "common.list.and"
+msgstr "{first} y {second}"
+
+msgid "common.loading"
+msgstr "Cargando…"
+
+msgid "common.n_hours_ago"
+msgid_plural "common.n_hours_ago"
 msgstr[0] "hace una hora"
 msgstr[1] "hace {n} horas"
 
-msgid "a minute ago"
-msgid_plural "{n} minutes ago"
+msgid "common.n_minutes_ago"
+msgid_plural "common.n_minutes_ago"
 msgstr[0] "hace un minuto"
 msgstr[1] "hace {n} minutos"
 
-msgid "{n} worktree"
-msgid_plural "{n} worktrees"
+msgid "common.not_installed"
+msgstr "No instalado"
+
+msgid "common.ok"
+msgstr "Aceptar"
+
+msgid "common.open"
+msgstr "Abrir"
+
+msgid "common.open_in_browser"
+msgstr "Abrir en el navegador"
+
+msgid "common.open_target"
+msgstr "Abrir {site}"
+
+msgid "common.remove"
+msgstr "Quitar"
+
+msgid "common.remove_question"
+msgstr "¿Quitar {name}?"
+
+msgid "common.remove_target"
+msgstr "Quitar {domain}"
+
+msgid "common.retry"
+msgstr "Reintentar"
+
+msgid "common.save"
+msgstr "Guardar"
+
+msgid "common.time.just_now"
+msgstr "ahora mismo"
+
+msgid "common.uninstall"
+msgstr "Desinstalar"
+
+msgid "common.uninstall_ellipsis"
+msgstr "Desinstalar…"
+
+msgid "common.uninstalling"
+msgstr "Desinstalando…"
+
+msgid "common.update"
+msgstr "Actualizar"
+
+msgid "common.updating"
+msgstr "Actualizando…"
+
+msgid "debugger.availability"
+msgstr "Disponibilidad"
+
+msgid "debugger.available"
+msgstr "Disponible"
+
+msgid "debugger.client_port"
+msgstr "Puerto del cliente"
+
+msgid "debugger.connect_ide"
+msgstr "Conecta tu IDE"
+
+msgid "debugger.debugging_now"
+msgstr "Depurando ahora"
+
+msgid "debugger.detect_breakpoints"
+msgstr "Detectar puntos de interrupción de PhpStorm"
+
+msgid "debugger.detect_requests"
+msgstr "Detectar solicitudes de Xdebug"
+
+msgid "debugger.mode"
+msgstr "Modo"
+
+msgid "debugger.not_in_build"
+msgstr "No incluido en esta compilación"
+
+msgid "debugger.start_session"
+msgstr "Inicia una sesión"
+
+msgid "debugger.start_session_description"
+msgstr "Pon un punto de interrupción en PhpStorm y escucha las conexiones de depuración, usa la extensión de Xdebug para el navegador o añade ?XDEBUG_TRIGGER=1 a la URL. En la línea de comandos, ejecuta `flock debug artisan …`."
+
+msgid "debugger.subtitle"
+msgstr "Depura paso a paso solicitudes y comandos con Xdebug."
+
+msgid "debugger.xdebug_loads_only_for_requests"
+msgstr "Xdebug solo se carga en las solicitudes que lo piden, así que todo lo demás sigue siendo rápido. Mientras un proyecto tenga puntos de interrupción en PhpStorm, se depura cada solicitud a su sitio."
+
+msgid "dumps.capture_description"
+msgstr "Desactívalo para volver a ver los dumps en la página."
+
+msgid "dumps.capture_dumps"
+msgstr "Capturar dumps"
+
+msgid "dumps.capture_dumps_queries_logs_views"
+msgstr "Capturar dumps, consultas, registros, vistas y trabajos"
+
+msgid "dumps.capture_is_off_turn_it_on"
+msgstr "La captura está desactivada: actívala con el botón de grabar para reunir aquí dumps, consultas, registros, vistas y trabajos."
+
+msgid "dumps.capture_options_and_editor"
+msgstr "Opciones de captura y editor"
+
+msgid "dumps.capture_short"
+msgstr "Capturar"
+
+msgid "dumps.captured"
+msgstr "Capturados"
+
+msgid "dumps.clear_everything_captured"
+msgstr "¿Borrar todo lo capturado?"
+
+msgid "dumps.dd_always_shows_in_the"
+msgstr "dd() siempre se muestra también en la página, porque termina la solicitud."
+
+msgid "dumps.empty_capturing"
+msgstr "Aquí aparecen la salida de dump() y dd(), las consultas, los registros, las vistas y los trabajos de tus sitios y comandos de artisan."
+
+msgid "dumps.event_kind.jobs"
+msgstr "Trabajos"
+
+msgid "dumps.event_kind.logs"
+msgstr "Registros"
+
+msgid "dumps.event_kind.queries"
+msgstr "Consultas"
+
+msgid "dumps.event_kind.requests"
+msgstr "Solicitudes"
+
+msgid "dumps.event_kind.views"
+msgstr "Vistas"
+
+msgid "dumps.every_captured_dump_query_log"
+msgstr "Se eliminan todos los dumps, consultas, registros, vistas y trabajos capturados de todas las solicitudes y comandos."
+
+msgid "dumps.latest_request_only"
+msgstr "Solo la última solicitud"
+
+msgid "dumps.n_dumps"
+msgid_plural "dumps.n_dumps"
+msgstr[0] "{n} dump"
+msgstr[1] "{n} dumps"
+
+msgid "dumps.n_entries"
+msgid_plural "dumps.n_entries"
+msgstr[0] "{n} entrada"
+msgstr[1] "{n} entradas"
+
+msgid "dumps.nothing_captured_yet"
+msgstr "Aún no se ha capturado nada"
+
+msgid "dumps.nothing_matches"
+msgstr "No hay coincidencias"
+
+msgid "dumps.open"
+msgstr "Abrir dumps"
+
+msgid "dumps.open_files_in"
+msgstr "Abrir archivos en"
+
+msgid "dumps.open_sources_in_sentence_case"
+msgstr "Abrir el código fuente en"
+
+msgid "dumps.php_versions_only_capture_dumps"
+msgid_plural "dumps.php_versions_only_capture_dumps"
+msgstr[0] "PHP {versions} solo captura dumps: su compilación aún no tiene la extensión del agente, así que ahí faltan consultas, registros, vistas y trabajos."
+msgstr[1] "PHP {versions} solo capturan dumps: sus compilaciones aún no tienen la extensión del agente, así que ahí faltan consultas, registros, vistas y trabajos."
+
+msgid "dumps.php_versions_only_capture_dumps_their"
+msgid_plural "dumps.php_versions_only_capture_dumps_their"
+msgstr[0] "PHP {versions} solo captura dumps: su compilación aún no tiene la extensión del agente."
+msgstr[1] "PHP {versions} solo capturan dumps: sus compilaciones aún no tienen la extensión del agente."
+
+msgid "dumps.search_dumps_queries_logs"
+msgstr "Buscar en dumps, consultas y registros"
+
+msgid "dumps.send_dump_and_dd_output"
+msgstr "Envía la salida de dump() y dd(), las consultas, los registros, las vistas y los trabajos a Flock en lugar de a la página o la terminal, sin cambiar tus proyectos."
+
+msgid "dumps.show_dump_in_the_page"
+msgstr "Mostrar dump() también en la página"
+
+msgid "dumps.show_dump_output_in_the"
+msgstr "Mostrar la salida de dump() también en la página"
+
+msgid "dumps.sources"
+msgstr "Código fuente"
+
+msgid "dumps.timeline.context"
+msgstr "contexto"
+
+msgid "dumps.timeline.queue_name"
+msgstr "cola {name}"
+
+msgid "dumps.while_capturing"
+msgstr "Durante la captura"
+
+msgid "general.add_project_folders_title"
+msgstr "Añadir carpetas de proyectos"
+
+msgid "general.beta"
+msgstr "Versiones beta"
+
+msgid "general.beta_description"
+msgstr "Recibe antes las nuevas versiones de Flock, PHP y los servicios, incluidas las preliminares. Puede que aún no funcionen."
+
+msgid "general.check_for_updates_linux"
+msgstr "Buscar actualizaciones…"
+
+msgid "general.could_not_change_startup"
+msgstr "No se pudo cambiar el ajuste de inicio: {error}"
+
+msgid "general.could_not_open_program_error"
+msgstr "No se pudo abrir {program}: {error}"
+
+msgid "general.daemon"
+msgstr "Demonio"
+
+msgid "general.data"
+msgstr "Datos"
+
+msgid "general.domain"
+msgstr "Dominio"
+
+msgid "general.every_name_any_subdomain_included_is"
+msgstr "Cada nombre, incluido cualquier subdominio, lo resuelve el servidor DNS de Flock a través de systemd-resolved."
+
+msgid "general.experimental_channel_packages_that_arent"
+msgstr "Canal experimental: se ofrecen paquetes que aún no se han publicado. `flock channel stable` vuelve al canal estable."
+
+msgid "general.flocks_dns_server_isnt_running"
+msgstr "El servidor DNS de Flock no está en ejecución"
+
+msgid "general.folder"
+msgstr "Carpeta"
+
+msgid "general.language"
+msgstr "Idioma"
+
+msgid "general.language_restart_note"
+msgstr "Flock usará el nuevo idioma cuando se reinicie."
+
+msgid "general.language_system"
+msgstr "Predeterminado del sistema"
+
+msgid "general.network"
+msgstr "Red"
+
+msgid "general.new_versions_come_from_the"
+msgstr "Las versiones nuevas llegan desde el paquete de AUR {package}: actualízalo con tu asistente de AUR, p. ej. `yay -Syu`."
+
+msgid "general.new_versions_come_with_your"
+msgstr "Las versiones nuevas llegan con las actualizaciones del sistema. `flock update` instala una al momento."
+
+msgid "general.no_project_folders"
+msgstr "No hay carpetas de proyectos"
+
+msgid "general.opens_name"
+msgstr "Abre {name}"
+
+msgid "general.pid"
+msgstr "PID {pid}"
+
+msgid "general.ports"
+msgstr "Los sitios usan los puertos {http} (HTTP) y {https} (HTTPS), definidos en config.json, así que sus direcciones incluyen el puerto."
+
+msgid "general.process"
+msgstr "Proceso"
+
+msgid "general.project_folders"
+msgstr "Carpetas de proyectos"
+
+msgid "general.project_folders_description"
+msgstr "Cada carpeta dentro de una carpeta de proyectos se sirve como <carpeta>.{tld}, igual que con `flock park`."
+
+msgid "general.relaunch_flock"
+msgstr "Volver a abrir Flock"
+
+msgid "general.remove_project_folder_question"
+msgstr "¿Quitar {name} de las carpetas de proyectos?"
+
+msgid "general.restart_daemon"
+msgstr "Reiniciar el demonio"
+
+msgid "general.restarting"
+msgstr "Reiniciando…"
+
+msgid "general.shows_the_flock_icon_in"
+msgstr "Muestra el icono de Flock en la bandeja al iniciar sesión. El demonio siempre se inicia con el equipo."
+
+msgid "general.sites_in_path_are_no"
+msgstr "Los sitios de {path} dejan de servirse. La carpeta y sus proyectos no se tocan."
+
+msgid "general.software_updater"
+msgstr "Actualizador de software"
+
+msgid "general.startup"
+msgstr "Inicio"
+
+msgid "general.status"
+msgstr "Estado"
+
+msgid "general.subtitle"
+msgstr "El demonio de Flock ejecuta tus sitios, PHP y servicios en segundo plano."
+
+msgid "general.title"
+msgstr "General"
+
+msgid "general.tld_doesnt_resolve_problem_linux"
+msgstr "*.{tld} no se resuelve: {problem}. Linux no tiene el archivo hosts como respaldo, así que los sitios no abren hasta que se resuelva; `flock install` lo vuelve a configurar."
+
+msgid "general.update_to"
+msgstr "Actualizar a {version}"
+
+msgid "general.updates"
+msgstr "Actualizaciones"
+
+msgid "general.version"
+msgstr "Versión"
+
+msgid "links.install.already_installed_message"
+msgstr "Lo encontrarás en Configuración → {pane}."
+
+msgid "links.install.already_installed_title"
+msgstr "{name} ya está instalado"
+
+msgid "links.install.flock_doesnt_offer_name_version"
+msgstr "Flock no ofrece {name} {version}"
+
+msgid "links.install.install_message"
+msgstr "Un enlace pidió a Flock instalar {name} {version}. {purpose}"
+
+msgid "links.install.install_title"
+msgstr "¿Instalar {name} {version}?"
+
+msgid "links.install.installing_message"
+msgstr "Configuración → {pane} muestra el progreso."
+
+msgid "links.install.installing_title"
+msgstr "{name} ya se está instalando"
+
+msgid "links.install.newer_flock"
+msgstr "Puede que el enlace sea para una versión más reciente de Flock. Actualiza Flock y vuelve a intentarlo."
+
+msgid "links.install.no_build"
+msgstr "No hay ninguna compilación para este equipo, o el enlace es para una versión más reciente de Flock."
+
+msgid "links.install.purpose_node"
+msgstr "Los proyectos que lo usan obtienen node, npm y npx en cuanto se instale."
+
+msgid "links.install.purpose_php"
+msgstr "Los sitios que lo usan se sirven en cuanto se instale."
+
+msgid "links.install.purpose_service"
+msgstr "Se ejecuta en 127.0.0.1 para tus sitios."
+
+msgid "links.install.unavailable_message"
+msgstr "Flock no puede ejecutarlo en esta plataforma."
+
+msgid "links.install.unavailable_title"
+msgstr "{name} no está disponible en este equipo"
+
+msgid "links.install.unknown_title"
+msgstr "Flock no ofrece {name}"
+
+msgid "links.secure.already_secured_message"
+msgstr "Se sirve en https://{domain}."
+
+msgid "links.secure.already_secured_title"
+msgstr "{site} ya está protegido"
+
+msgid "links.secure.secure_message"
+msgstr "Un enlace pidió a Flock proteger {domain}. Recibirá un certificado en el que este equipo ya confía."
+
+msgid "links.secure.secure_title"
+msgstr "¿Servir {site} por HTTPS?"
+
+msgid "links.secure.unknown_message"
+msgstr "Primero añade el sitio en Configuración → Sitios."
+
+msgid "links.secure.unknown_title"
+msgstr "Flock no tiene ningún sitio llamado {site}"
+
+msgid "logs.all_levels"
+msgstr "Todos los niveles"
+
+msgid "logs.clear"
+msgstr "Borrar"
+
+msgid "logs.clear_question"
+msgstr "¿Borrar el registro de {site}?"
+
+msgid "logs.clear_the_sites_log"
+msgstr "Borrar el registro del sitio"
+
+msgid "logs.deletes_the_laravel_log_files"
+msgstr "Elimina los archivos de registro de Laravel en storage/logs de {site}. No se puede deshacer."
+
+msgid "logs.details"
+msgstr "Detalles"
+
+msgid "logs.error_and_above"
+msgstr "Error y superiores"
+
+msgid "logs.info_and_above"
+msgstr "Info y superiores"
+
+msgid "logs.laravel_log"
+msgstr "Registro de Laravel"
+
+msgid "logs.no_entry_matches_the_search"
+msgstr "Ninguna entrada coincide con la búsqueda o el nivel."
+
+msgid "logs.no_log_entries"
+msgstr "No hay entradas en el registro"
+
+msgid "logs.no_results"
+msgstr "Sin resultados"
+
+msgid "logs.pick_a_log"
+msgstr "Elige un registro"
+
+msgid "logs.reload_the_log_every_2"
+msgstr "Recargar el registro cada 2 segundos"
+
+msgid "logs.search_logs"
+msgstr "Buscar en los registros"
+
+msgid "logs.service_log"
+msgstr "Registro del servicio"
+
+msgid "logs.show_only_entries_of_this"
+msgstr "Mostrar solo las entradas de este nivel y superiores (registros de sitios)"
+
+msgid "logs.storage_logs_of_site_is"
+msgstr "storage/logs de {site} está vacío."
+
+msgid "logs.warning_and_above"
+msgstr "Warning y superiores"
+
+msgid "mail.add_these_lines_to_your"
+msgstr "Añade estas líneas al .env de tu proyecto. MAIL_USERNAME elige la bandeja, así cada proyecto tiene la suya."
+
+msgid "mail.catch_your_apps_mail"
+msgstr "Captura el correo de tu app"
+
+msgid "mail.caught"
+msgstr "Correos capturados"
+
+msgid "mail.could_not_load_message"
+msgstr "No se pudo cargar el mensaje"
+
+msgid "mail.could_not_load_the_raw"
+msgstr "No se pudo cargar el mensaje original"
+
+msgid "mail.delete_all"
+msgstr "Eliminar todo"
+
+msgid "mail.delete_all_question"
+msgstr "¿Eliminar todo el correo capturado?"
+
+msgid "mail.detail.cc"
+msgstr "CC"
+
+msgid "mail.detail.date"
+msgstr "Fecha"
+
+msgid "mail.detail.from"
+msgstr "De"
+
+msgid "mail.detail.headers"
+msgstr "Encabezados"
+
+msgid "mail.detail.inbox"
+msgstr "Bandeja"
+
+msgid "mail.detail.raw"
+msgstr "Original"
+
+msgid "mail.detail.text"
+msgstr "Texto"
+
+msgid "mail.detail.to"
+msgstr "Para"
+
+msgid "mail.environment_variables_title_case"
+msgstr "Variables de entorno"
+
+msgid "mail.flock_catches_every_email_your_apps"
+msgstr "Flock captura cada correo que envían tus apps: nada sale de tu equipo."
+
+msgid "mail.host"
+msgstr "Host"
+
+msgid "mail.message"
+msgstr "Mensaje"
+
+msgid "mail.no_html_part_title_case"
+msgstr "Sin parte HTML"
+
+msgid "mail.no_mail_title_case"
+msgstr "No hay correo"
+
+msgid "mail.no_message_selected_title_case"
+msgstr "Ningún mensaje seleccionado"
+
+msgid "mail.no_subject"
+msgstr "(sin asunto)"
+
+msgid "mail.no_text_part"
+msgstr "(sin parte de texto)"
+
+msgid "mail.open"
+msgstr "Abrir Correo"
+
+msgid "mail.port"
+msgstr "Puerto"
+
+msgid "mail.refresh"
+msgstr "Actualizar"
+
+msgid "mail.save_attachment"
+msgstr "Guardar…"
+
+msgid "mail.smtp_server"
+msgstr "Servidor SMTP"
+
+msgid "mail.username_inbox"
+msgstr "MAIL_USERNAME elige la bandeja de entrada, así que cada proyecto tiene la suya."
+
+msgid "menu.down"
+msgstr "caído"
+
+msgid "menu.dumps"
+msgstr "Dumps"
+
+msgid "menu.manage_sites"
+msgstr "Administrar sitios…"
+
+msgid "menu.no_sites_yet"
+msgstr "Aún no hay sitios"
+
+msgid "menu.open_flock"
+msgstr "Abrir Flock"
+
+msgid "menu.quit_flock"
+msgstr "Salir de Flock"
+
+msgid "menu.restart"
+msgstr "Reiniciar"
+
+msgid "menu.restart_flock"
+msgstr "Reiniciar Flock"
+
+msgid "menu.set_up_flock"
+msgstr "Configurar Flock…"
+
+msgid "menu.settings"
+msgstr "Configuración…"
+
+msgid "menu.start_flock"
+msgstr "Iniciar Flock"
+
+msgid "menu.status.needs_attention"
+msgstr "Requiere atención"
+
+msgid "menu.status.not_set_up"
+msgstr "Sin configurar"
+
+msgid "node.downloads_node_js_new_then"
+msgstr "Descarga Node.js {new} y después quita {old}. Los paquetes globales se conservan."
+
+msgid "node.loading_node_js_versions"
+msgstr "Cargando las versiones de Node.js…"
+
+msgid "node.make_default"
+msgstr "Usar como predeterminada"
+
+msgid "node.making_node_version_the_default"
+msgstr "Estableciendo Node {version} como predeterminado…"
+
+msgid "node.no_versions"
+msgstr "Aún no hay versiones de Node.js que mostrar."
+
+msgid "node.npm_version_available"
+msgstr " (npm {version} disponible)"
+
+msgid "node.official_node_js_builds_the"
+msgstr "Compilaciones oficiales de Node.js, la versión más reciente de cada versión principal. A un proyecto que fija una versión en .nvmrc se le ofrece esa versión principal cuando ejecutas node, npm o npx en él. Los paquetes globales (npm install -g) pertenecen a una línea de Node y sobreviven a sus actualizaciones; los de la versión predeterminada están en tu PATH."
+
+msgid "node.subtitle"
+msgstr "node, npm y npx siguen el .nvmrc / .node-version del proyecto, después la versión del sitio y, por último, la predeterminada."
+
+msgid "node.uninstall_details"
+msgstr "También se quitan sus paquetes globales de npm. Los proyectos y sitios que usan Node {version} vuelven a la versión predeterminada hasta que lo instales de nuevo."
+
+msgid "node.uninstall_node_version"
+msgstr "¿Desinstalar Node {version}?"
+
+msgid "node.update_npm"
+msgstr "Actualizar npm"
+
+msgid "node.updating_npm_to_version"
+msgstr "Actualizando npm a {version}…"
+
+msgid "php.downloading_percent"
+msgstr "Descargando… {percent} %"
+
+msgid "php.downloads_php_version_size_mb"
+msgstr "Descarga PHP {version} ({size} MB)"
+
+msgid "php.every_installed_version_runs_its"
+msgstr "Cada versión instalada ejecuta su propio pool de PHP-FPM. Los sitios usan la predeterminada salvo que tengan una versión fijada."
+
+msgid "php.loading_php_versions"
+msgstr "Cargando las versiones de PHP…"
+
+msgid "php.no_install_log_yet"
+msgstr "Aún no hay registro de instalación."
+
+msgid "php.open_ini"
+msgstr "Abrir php.ini"
+
+msgid "php.php_version_install_log"
+msgstr "Registro de instalación de PHP {version}"
+
+msgid "php.php_version_isnt_released_yet"
+msgstr "PHP {version} aún no se ha publicado y puede que no funcione. Se ofrece en el canal beta."
+
+msgid "php.sites_that_run_on_frankenphp"
+msgstr "PHP-FPM sirve los sitios que usan FrankenPHP con esta versión hasta que FrankenPHP se vuelva a descargar por sí solo."
+
+msgid "php.uninstall_details"
+msgstr "También se quita su php.ini. Los sitios fijados a PHP {version} dejan de funcionar hasta que elijas otra versión."
+
+msgid "php.uninstall_franken_question"
+msgstr "¿Desinstalar FrankenPHP para PHP {version}?"
+
+msgid "php.uninstall_php_version"
+msgstr "¿Desinstalar PHP {version}?"
+
+msgid "php.update_to_php_version"
+msgstr "Actualizar a PHP {version}"
+
+msgid "services.active"
+msgstr "Activa"
+
+msgid "services.all"
+msgstr "Todos"
+
+msgid "services.catalog.downloading_name"
+msgstr "Descargando {name}…"
+
+msgid "services.catalog.name_version_starts_with_empty"
+msgstr "{name} {version} empieza sin datos."
+
+msgid "services.catalog.name_version_stops_and_name"
+msgstr "{name} {version} se detiene y {name} {next} pasa a ser la versión activa."
+
+msgid "services.catalog.name_version_stops_your_sites"
+msgstr "{name} {version} se detiene; tus sitios no podrán usar {name} hasta que vuelvas a instalar una versión."
+
+msgid "services.catalog.name_version_uses_its_own"
+msgstr "{name} {version} usa sus propios datos."
+
+msgid "services.catalog.not_available"
+msgstr "No disponible"
+
+msgid "services.catalog.switch_to_name_version"
+msgstr "¿Cambiar a {name} {version}?"
+
+msgid "services.catalog.uninstall_and_delete_data"
+msgstr "Desinstalar y eliminar datos"
+
+msgid "services.catalog.uninstall_keep_data"
+msgstr "Desinstalar y conservar datos"
+
+msgid "services.catalog.uninstall_name_version"
+msgstr "¿Desinstalar {name} {version}?"
+
+msgid "services.category.cache_queue"
+msgstr "Caché y colas"
+
+msgid "services.category.core"
+msgstr "Básicos"
+
+msgid "services.category.database"
+msgstr "Bases de datos"
+
+msgid "services.category.debugging"
+msgstr "Depuración"
+
+msgid "services.category.mail"
+msgstr "Correo"
+
+msgid "services.category.search"
+msgstr "Búsqueda"
+
+msgid "services.category.storage"
+msgstr "Almacenamiento"
+
+msgid "services.change_port"
+msgstr "Cambiar puerto"
+
+msgid "services.connection"
+msgstr "Conexión"
+
+msgid "services.dns_server_isnt_running"
+msgstr "el servidor DNS no está en ejecución"
+
+msgid "services.every_service_flock_offers_mysql"
+msgstr "Todos los servicios que ofrece Flock: MySQL, Redis, Meilisearch y más"
+
+msgid "services.extensions_folder"
+msgstr "Carpeta de extensiones"
+
+msgid "services.flock_cant_run_this_service"
+msgstr "Flock no puede ejecutar este servicio aquí."
+
+msgid "services.install_failed"
+msgstr "La instalación falló"
+
+msgid "services.install_log"
+msgstr "Registro de instalación de {name}"
+
+msgid "services.installing_failed"
+msgstr "No se pudo instalar {name}"
+
+msgid "services.installing_name"
+msgstr "Instalando {name}…"
+
+msgid "services.keep_its_data_to_pick"
+msgstr "Conserva sus datos para seguir donde lo dejaste cuando lo vuelvas a instalar."
+
+msgid "services.log"
+msgstr "Registro"
+
+msgid "services.more"
+msgstr "Más"
+
+msgid "services.more_services_count"
+msgstr "Más servicios ({count})…"
+
+msgid "services.name_version_stops_its_data"
+msgstr "{name} {version} se detiene; sus datos se conservan, pero no se usan hasta que vuelvas a cambiar. {then}"
+
+msgid "services.no_data"
+msgstr "No contiene datos."
+
+msgid "services.not_available_on_linux"
+msgstr "No disponible en Linux"
+
+msgid "services.not_installed_its_data_is"
+msgstr "No instalado · sus datos se conservan · {version}"
+
+msgid "services.not_installed_size_of_databases"
+msgstr "No instalado · se conservan {size} de bases de datos"
+
+msgid "services.not_installed_version"
+msgstr "No instalado · {version}"
+
+msgid "services.not_offered"
+msgstr "No se ofrece"
+
+msgid "services.old_to_new_available"
+msgstr "{old} → {new} disponible"
+
+msgid "services.port_between_1024_and_65535"
+msgstr "Un puerto entre 1024 y 65535 que no use ningún otro programa."
+
+msgid "services.port_number"
+msgstr "Puerto {port}"
+
+msgid "services.port_set_by_flock_install"
+msgstr "{port} · definido por `flock install`"
+
+msgid "services.postgres.after_installing_one_run_create"
+msgstr "Después de instalar una, ejecuta CREATE EXTENSION en cada base de datos que la use."
+
+msgid "services.postgres.also_install_the_extensions_of"
+msgstr "¿Instalar también las extensiones de PostgreSQL {version}?"
+
+msgid "services.postgres.couldnt_check_for_new_releases"
+msgstr "No se pudieron buscar nuevas versiones: {error}"
+
+msgid "services.postgres.extensions_for_postgresql_version_where"
+msgstr "{extensions} para PostgreSQL {version}, donde estén disponibles. Puedes cambiarlo más tarde en Extensiones…."
+
+msgid "services.postgres.extensions_of_postgresql_version_postgis"
+msgstr "Extensiones de PostgreSQL {version}: PostGIS, pgRouting, pgvector, TimescaleDB y las tuyas"
+
+msgid "services.postgres.install_with_extensions"
+msgstr "Instalar con extensiones"
+
+msgid "services.postgres.installing_postgresql_version"
+msgstr "Instalando PostgreSQL {version}…"
+
+msgid "services.postgres.license_license"
+msgstr "Licencia: {license}"
+
+msgid "services.postgres.no_longer_updated_for_postgresql"
+msgstr "Ya no se actualiza para PostgreSQL {version}"
+
+msgid "services.postgres.not_available_for_postgresql_version"
+msgstr "No disponible para PostgreSQL {version}"
+
+msgid "services.postgres.postgresql_only"
+msgstr "Solo PostgreSQL"
+
+msgid "services.postgres.postgresql_version_extensions"
+msgstr "Extensiones de PostgreSQL {version}"
+
+msgid "services.postgres.postgresql_version_restarts_to_load"
+msgstr "PostgreSQL {version} se reinicia para cargarla"
+
+msgid "services.postgres.postgresql_version_starts_with_a"
+msgstr "PostgreSQL {version} empieza con un conjunto nuevo y vacío de bases de datos."
+
+msgid "services.postgres.postgresql_version_stops_and_flock"
+msgstr "PostgreSQL {version} se detiene y Flock cambia a PostgreSQL {next} con sus propias bases de datos."
+
+msgid "services.postgres.postgresql_version_stops_and_your"
+msgstr "PostgreSQL {version} se detiene y tus sitios no podrán usar PostgreSQL hasta que vuelvas a instalar una versión."
+
+msgid "services.postgres.postgresql_version_uses_its_own"
+msgstr "PostgreSQL {version} usa sus propias bases de datos."
+
+msgid "services.postgres.removes_the_postgresql_version_server"
+msgstr "Quita el servidor PostgreSQL {version}."
+
+msgid "services.postgres.side_by_side"
+msgstr "Las versiones instaladas conviven. Solo se ejecuta una a la vez; cada una tiene sus propias bases de datos, y las actualizaciones dentro de una versión las conservan."
+
+msgid "services.postgres.stopped"
+msgstr "Detenido"
+
+msgid "services.postgres.switch_to_postgresql_version"
+msgstr "¿Cambiar a PostgreSQL {version}?"
+
+msgid "services.postgres.switching_to_postgresql_version"
+msgstr "Cambiando a PostgreSQL {version}…"
+
+msgid "services.postgres.uninstall_name"
+msgstr "Desinstalar {name}"
+
+msgid "services.postgres.uninstall_postgresql_version"
+msgstr "¿Desinstalar PostgreSQL {version}?"
+
+msgid "services.postgres.uninstalling_postgresql_version"
+msgstr "Desinstalando PostgreSQL {version}…"
+
+msgid "services.postgres.updating_postgresql_version"
+msgstr "Actualizando PostgreSQL {version}…"
+
+msgid "services.postgres.waiting"
+msgstr "Esperando…"
+
+msgid "services.postgres.yours"
+msgstr "Tuya"
+
+msgid "services.postgresql_version_stops_its_databases"
+msgstr "PostgreSQL {version} se detiene; sus bases de datos se conservan, pero no están disponibles hasta que vuelvas a cambiar. {then}"
+
+msgid "services.put_a_library_in_lib"
+msgstr "Pon la biblioteca en lib/ y sus archivos .control y .sql en extension/. Flock los conserva en las actualizaciones de PostgreSQL {version}."
+
+msgid "services.reinstall"
+msgstr "Reinstalar {version}"
+
+msgid "services.service_port"
+msgstr "Puerto de {service}"
+
+msgid "services.show_last_log"
+msgstr "Mostrar el último registro"
+
+msgid "services.side_by_side"
+msgstr "Las versiones instaladas conviven. Solo se ejecuta una a la vez; cada una tiene sus propios datos, y las actualizaciones dentro de una versión los conservan."
+
+msgid "services.start"
+msgstr "Iniciar"
+
+msgid "services.stop_question"
+msgstr "¿Detener {service}?"
+
+msgid "services.subtitle"
+msgstr "Bases de datos, cachés, búsqueda y las herramientas en torno a tus sitios. Todo escucha solo en 127.0.0.1."
+
+msgid "services.switch_ellipsis"
+msgstr "Cambiar…"
+
+msgid "services.systemd_resolved_sends_every_name"
+msgstr "systemd-resolved envía aquí cada nombre bajo .{tld} (configurado por `flock install`), así que cualquier subdominio de un sitio funciona (tenant1.app.{tld}, a.b.app.{tld}) sin añadirlo."
+
+msgid "services.this_flock_daemon_doesnt_know"
+msgstr "Este demonio de Flock no conoce este servicio. Actualiza Flock y vuelve a intentarlo."
+
+msgid "services.uninstall_and_delete_databases_size"
+msgstr "Desinstalar y eliminar las bases de datos ({size})"
+
+msgid "services.uninstall_keep_databases"
+msgstr "Desinstalar y conservar las bases de datos"
+
+msgid "services.update_noun"
+msgstr "Actualización"
+
+msgid "services.updates_keep_data"
+msgstr "Las actualizaciones conservan tus datos."
+
+msgid "services.web_down"
+msgstr "Los sitios no se abren mientras el servidor web está caído. Su registro puede indicar por qué; `flock restart` lo vuelve a iniciar."
+
+msgid "services.web_running"
+msgstr "Caddy sirve cada sitio por HTTPS (https://app.{tld}) con certificados de la autoridad de certificación local de Flock, en la que `flock install` hace confiar al sistema."
+
+msgid "services.withdrawn"
+msgstr "Retirada: {reason}"
+
+msgid "services.withdrawn_update"
+msgstr "Retirada: {reason}. Actualiza para sustituirla"
+
+msgid "services.your_own_extensions"
+msgstr "Tus propias extensiones"
+
+msgid "services.your_sites_cant_use_service"
+msgstr "Tus sitios no podrán usar {service} hasta que lo vuelvas a iniciar; seguirá detenido tras los reinicios."
+
+msgid "settings.editor.none"
+msgstr "No enlazar"
+
+msgid "settings.flock_is_not_running"
+msgstr "Flock no está en ejecución"
+
+msgid "settings.pane.about"
+msgstr "Acerca de"
+
+msgid "settings.pane.ai"
+msgstr "IA"
+
+msgid "settings.pane.debugger"
+msgstr "Depurador"
+
+msgid "settings.pane.services"
+msgstr "Servicios"
+
+msgid "settings.pane.sites"
+msgstr "Sitios"
+
+msgid "settings.start_daemon_to_change"
+msgstr "Inicia el demonio para cambiar su configuración."
+
+msgid "setup.as_soon_as_flock_can"
+msgid_plural "setup.as_soon_as_flock_can"
+msgstr[0] "En cuanto Flock pueda descargarlo."
+msgstr[1] "En cuanto Flock pueda descargarlos."
+
+msgid "setup.back"
+msgstr "Atrás"
+
+msgid "setup.background"
+msgstr "Se ejecuta en segundo plano"
+
+msgid "setup.check_again_title_case"
+msgstr "Volver a comprobar"
+
+msgid "setup.checking_ports"
+msgstr "Comprobando los puertos de Flock…"
+
+msgid "setup.could_not_change_the_startup"
+msgstr "No se pudo cambiar el ajuste de inicio: {error}."
+
+msgid "setup.did_not_finish"
+msgstr "La configuración no terminó"
+
+msgid "setup.error_try_again_in_settings"
+msgstr "{error}Vuelve a intentarlo en Configuración → {pane}."
+
+msgid "setup.failed"
+msgstr "Algo salió mal. La salida de abajo indica qué; puedes volver a intentarlo."
+
+msgid "setup.flock_daemon_serves_your_sites_and"
+msgstr "El demonio de Flock sirve tus sitios y servicios, y se inicia con el equipo."
+
+msgid "setup.flock_makes_them_the_default"
+msgid_plural "setup.flock_makes_them_the_default"
+msgstr[0] "Flock lo convierte en el predeterminado de tus sitios y tu terminal."
+msgstr[1] "Flock los convierte en los predeterminados de tus sitios y tu terminal."
+
+msgid "setup.flock_needs_these_ports_and"
+msgstr "Flock necesita estos puertos y *.{tld} para sí, pero otros programas los usan. Si se ejecutaran ambos, ninguno funcionaría."
+
+msgid "setup.flock_runs_your_laravel_sites_php"
+msgstr "Flock ejecuta tus sitios Laravel, PHP, el correo y las bases de datos en este equipo. Configurarlo lleva un momento:"
+
+msgid "setup.flock_stops_and_is_removed"
+msgstr "Flock se detiene y se quita de tu PATH, junto con sus versiones de PHP y Node.js, certificados, registros y cachés. Linux te pide la contraseña para quitar la configuración DNS de *.test y el certificado de confianza de Flock.\n\nLos ajustes y las bases de datos de tus sitios se quedan en {folder}, así que al reinstalar seguirás donde lo dejaste, a menos que también los elimines."
+
+msgid "setup.flock_was_uninstalled_remove_the"
+msgstr "Flock se desinstaló. Quita la app con tu gestor de paquetes (sudo apt remove flockphp o sudo dnf remove flockphp). Abre una terminal nueva: Flock ya no está en su PATH."
+
+msgid "setup.flock_wont_open_at_login"
+msgstr "Flock no se abrirá al iniciar sesión"
+
+msgid "setup.installing"
+msgstr "Instalando {names}…"
+
+msgid "setup.link_project"
+msgstr "Vincula un proyecto"
+
+msgid "setup.link_project_description"
+msgstr "En un proyecto de Laravel, ejecuta `flock link`: el sitio estará en http://<carpeta>.test. `flock secure` añade HTTPS."
+
+msgid "setup.linux_asks_for_your_password"
+msgstr "Linux te pedirá la contraseña en un momento."
+
+msgid "setup.linux_asks_for_your_password_once"
+msgstr "Linux te pide la contraseña una vez: para iniciar el servicio en segundo plano, resolver *.test a través de Flock y confiar en el certificado de Flock en el sistema y en tus navegadores."
+
+msgid "setup.name_couldnt_be_installed"
+msgstr "No se pudo instalar {name}"
+
+msgid "setup.names_are_installed"
+msgstr "{names} están instalados"
+
+msgid "setup.new_terminal"
+msgstr "Abre una terminal nueva"
+
+msgid "setup.new_terminal_description"
+msgstr "Las terminales que ya estaban abiertas siguen con el PATH anterior."
+
+msgid "setup.next_steps"
+msgstr "Próximos pasos"
+
+msgid "setup.open_flock_at_login"
+msgstr "Abrir Flock al iniciar sesión"
+
+msgid "setup.open_flock_when_i_log"
+msgstr "Abrir Flock al iniciar sesión"
+
+msgid "setup.open_settings"
+msgstr "Abrir Configuración"
+
+msgid "setup.password_prompt_was_cancelled_flock"
+msgstr "Se canceló la solicitud de contraseña. Flock se ejecuta, pero los sitios *.test no se resolverán y HTTPS no será de confianza hasta que lo permitas."
+
+msgid "setup.problem_settings_to_general_has"
+msgstr "{problem} También está en Configuración → General."
+
+msgid "setup.ready"
+msgstr "Flock está listo"
+
+msgid "setup.setting_up"
+msgstr "Configurando Flock…"
+
+msgid "setup.star"
+msgstr "Flock es gratuito y de código abierto. Si te gusta, [una estrella en GitHub](https://github.com/flock-php/flock) ayuda a que otros lo encuentren."
+
+msgid "setup.stop_other_web_servers_first"
+msgstr "Detén primero otros servidores web"
+
+msgid "setup.terminal_description"
+msgstr "Las versiones de Flock van primero en tu PATH. Abre una terminal nueva después de la configuración."
+
+msgid "setup.terminal_title"
+msgstr "php, composer y node en tu terminal"
+
+msgid "setup.theyre_the_defaults_for_your"
+msgstr "Son los predeterminados para tus sitios y tu terminal."
+
+msgid "setup.trusted_https_title"
+msgstr "Sitios *.test con HTTPS de confianza"
+
+msgid "setup.try_again"
+msgstr "Reintentar"
+
+msgid "setup.uninstalling_didnt_finish_the_output"
+msgstr "La desinstalación no terminó. La salida de abajo dice qué; puedes volver a intentarlo."
+
+msgid "setup.waiting_to_install_names"
+msgstr "Esperando para instalar {names}"
+
+msgid "setup.welcome"
+msgstr "Te damos la bienvenida a Flock"
+
+msgid "setup.window_title"
+msgstr "Configurar Flock"
+
+msgid "sites.add_domain"
+msgstr "Añadir dominio…"
+
+msgid "sites.add_domain_title"
+msgstr "Añadir un dominio a {site}"
+
+msgid "sites.add_proxy"
+msgstr "Añadir proxy…"
+
+msgid "sites.add_proxy_title"
+msgstr "Añadir un proxy"
+
+msgid "sites.add_site"
+msgstr "Añadir sitio…"
+
+msgid "sites.add_site_linux"
+msgstr "Añadir sitio"
+
+msgid "sites.add_to_composer_json"
+msgstr "Añadir a composer.json"
+
+msgid "sites.adding"
+msgstr "Añadiendo…"
+
+msgid "sites.alias"
+msgstr "{domain} (alias)"
+
+msgid "sites.boost_add"
+msgstr "Añadir Flock a sus directrices…"
+
+msgid "sites.boost_add_question"
+msgstr "¿Añadir Flock a las directrices de Boost de {site}?"
+
+msgid "sites.boost_missing"
+msgstr "El proyecto usa Laravel Boost. Añadir Flock a sus directrices indica a los agentes de IA que Flock sirve la app y elige su versión de PHP."
+
+msgid "sites.boost_outdated"
+msgstr "La directriz de Flock en las directrices de Boost del proyecto está desactualizada."
+
+msgid "sites.boost_update"
+msgstr "Actualizarla…"
+
+msgid "sites.boost_update_question"
+msgstr "¿Actualizar la directriz de Flock en {site}?"
+
+msgid "sites.branch_pins_it_in_file"
+msgstr "La rama lo fija en {file}"
+
+msgid "sites.change"
+msgstr "Cambiar…"
+
+msgid "sites.change_action"
+msgstr "Cambiar"
+
+msgid "sites.change_its_php_and_node"
+msgstr "Cambia sus versiones de PHP y Node.js, HTTPS y la raíz de documentos en el sitio."
+
+msgid "sites.change_upstream_details"
+msgstr "Un puerto solo significa 127.0.0.1; para cualquier otra cosa, indica un host y un puerto (localhost:5173) o una URL (https://127.0.0.1:8443)."
+
+msgid "sites.change_upstream_title"
+msgstr "Cambiar el destino de {proxy}"
+
+msgid "sites.choose_folder"
+msgstr "Elegir carpeta…"
+
+msgid "sites.choose_folder_in_project_details"
+msgstr "{folder} no está en {project}. La raíz de documentos debe ser una carpeta del proyecto."
+
+msgid "sites.choose_folder_linux"
+msgstr "Elegir carpeta"
+
+msgid "sites.choose_the_folder_with_the_apps"
+msgstr "Elige la carpeta con el index.php de la app en {site}"
+
+msgid "sites.classic"
+msgstr "Clásico"
+
+msgid "sites.command"
+msgstr "Comando"
+
+msgid "sites.create_one_here_with_git"
+msgstr "Crea uno aquí, con git o con tu app de agentes."
+
+msgid "sites.database_of_its_own_gets"
+msgstr "En una base de datos propia se ejecutan las migraciones de la rama."
+
+msgid "sites.default"
+msgstr "Predeterminada"
+
+msgid "sites.default_tool_version"
+msgstr "Predeterminada ({tool} {version})"
+
+msgid "sites.dev_server"
+msgstr "Servidor de desarrollo"
+
+msgid "sites.document_root"
+msgstr "Raíz de documentos"
+
+msgid "sites.document_root_is_the_folder"
+msgstr "La raíz de documentos es la carpeta desde la que Flock sirve el sitio. La que elijas aquí solo se aplica en este equipo; fíjala para escribirla en .flockrc para todos."
+
+msgid "sites.domain_is_no_longer_served"
+msgstr "{site} deja de servir {domain}."
+
+msgid "sites.downloading_frankenphp"
+msgstr "Descargando FrankenPHP para PHP {version}…"
+
+msgid "sites.e_g_my_app_to"
+msgstr "p. ej. my-app → my-app.{tld}"
+
+msgid "sites.each_git_worktree_of_site"
+msgstr "Cada worktree de git de {site} se sirve en <branch>.{domain}, con sus propias dependencias y .env."
+
+msgid "sites.every_request_passes_to_the"
+msgstr "Cada solicitud pasa al destino con su encabezado Host, incluidas las conexiones WebSocket (recarga en caliente). Hasta que el servidor responda, {domain} muestra una página que lo indica."
+
+msgid "sites.every_subdomain_up_to_n"
+msgid_plural "sites.every_subdomain_up_to_n"
+msgstr[0] "Cualquier subdominio hasta {n} nivel por debajo del sitio ya funciona. Añade un nombre completo como {site}-2.{tld} para un alias, o un subdominio (tenant1, a.b) para que aparezca aquí y también se resuelva en equipos Windows sin DNS comodín."
+msgstr[1] "Cualquier subdominio hasta {n} niveles por debajo del sitio ya funciona. Añade un nombre completo como {site}-2.{tld} para un alias, o un subdominio (tenant1, a.b) para que aparezca aquí y también se resuelva en equipos Windows sin DNS comodín."
+
+msgid "sites.extension_required_by"
+msgstr "Requerida por {packages}"
+
+msgid "sites.extension_used"
+msgstr "No es obligatoria, pero se usa: {hint}"
+
+msgid "sites.extensions_footnote"
+msgstr "Requerir una extensión en composer.json hace que composer install rechace un servidor que no la tenga, en lugar de que la app falle allí."
+
+msgid "sites.extensions_laravel"
+msgstr "PHP {version} · app de Laravel"
+
+msgid "sites.extensions_none"
+msgstr "El proyecto no requiere extensiones de PHP."
+
+msgid "sites.extensions_title"
+msgstr "Extensiones de PHP de {site}"
+
+msgid "sites.extra_domains_subdomains_and_aliases"
+msgstr "Dominios adicionales: subdominios y alias"
+
+msgid "sites.flock_copies_site_s_database"
+msgstr "Flock copia la base de datos de {site} y ejecuta en ella las migraciones de la rama."
+
+msgid "sites.flock_hasnt_set_this_worktree"
+msgstr "Flock no ha preparado este worktree"
+
+msgid "sites.flock_runs_the_projects_dev"
+msgstr "Flock ejecuta el script dev del proyecto cuando se visita el sitio y lo detiene tras 30 minutos sin visitas."
+
+msgid "sites.flock_stops_serving_domain_the"
+msgstr "Flock deja de servir {domain}. El proyecto en {path} no se toca."
+
+msgid "sites.flocks_php_version_doesnt_include"
+msgstr " — el PHP {version} de Flock no la incluye"
+
+msgid "sites.frankenphp_needs_php_8_2"
+msgstr "FrankenPHP necesita PHP 8.2 o posterior. Las solicitudes que piden Xdebug siguen yendo a PHP-FPM."
+
+msgid "sites.frankenphp_needs_php_8_2_or"
+msgstr "FrankenPHP necesita PHP 8.2 o posterior. Las solicitudes que piden Xdebug siguen yendo a PHP-FPM. Para el modo worker, instala Laravel Octane en el proyecto (composer require laravel/octane)."
+
+msgid "sites.frankenphp_running"
+msgstr "Ejecutando FrankenPHP {version} con PHP {php}"
+
+msgid "sites.give_flock_the_commands_that"
+msgstr "Dale a Flock los comandos que inician y detienen el servidor para poder iniciarlo aquí."
+
+msgid "sites.give_worktree_a_copy_of"
+msgstr "¿Dar a {worktree} una copia de la base de datos?"
+
+msgid "sites.give_worktree_a_fresh_database"
+msgstr "¿Dar a {worktree} una base de datos nueva?"
+
+msgid "sites.n3000_host_port_or_url"
+msgstr "3000, host:puerto o URL. Un puerto solo significa 127.0.0.1."
+
+msgid "sites.n_worktrees"
+msgid_plural "sites.n_worktrees"
 msgstr[0] "{n} worktree"
 msgstr[1] "{n} worktrees"
 
-msgid "{old} → {new} available"
-msgstr "{old} → {new} disponible"
+msgid "sites.no_public_www_web_or"
+msgstr "No se encontró public/, www/, web/ ni webroot/ con un index.php, así que Flock muestra una página en lugar del sitio. Elige la carpeta con el index.php de la app."
 
-msgid "{percent}%"
+msgid "sites.no_sites"
+msgstr "No hay sitios"
+
+msgid "sites.no_sites_description"
+msgstr "Añade aquí un sitio suelto o añade una carpeta de proyectos en General."
+
+msgid "sites.no_worktrees"
+msgstr "No hay worktrees"
+
+msgid "sites.node_version_is_isolated_here"
+msgstr "Node {version} está aislado aquí; el proyecto fija {pinned} en {file}."
+
+msgid "sites.node_wins"
+msgstr "El Node {pinned} de .flockrc tiene prioridad sobre {other}."
+
+msgid "sites.nothing_answers_yet"
+msgstr "Aún no responde nada en {upstream}."
+
+msgid "sites.open_in_the_browser"
+msgstr "Abrir en el navegador"
+
+msgid "sites.open_log"
+msgstr "Abrir registro"
+
+msgid "sites.open_the_folder"
+msgstr "Abrir la carpeta"
+
+msgid "sites.open_the_project_folder"
+msgstr "Abrir la carpeta del proyecto"
+
+msgid "sites.output"
+msgstr "Salida"
+
+msgid "sites.percent"
 msgstr "{percent} %"
 
-msgid "{port} · set by `flock install`"
-msgstr "{port} · definido por `flock install`"
+msgid "sites.php_extensions"
+msgstr "Extensiones de PHP"
 
-msgid "{problem} Settings → General has it too."
-msgstr "{problem} También está en Configuración → General."
+msgid "sites.php_fpm_serves_the_site"
+msgstr "Mientras tanto, PHP-FPM sirve el sitio."
 
-msgid "{program} uses {ports}."
-msgstr "{program} usa {ports}."
+msgid "sites.php_fpm_serves_the_site_until"
+msgstr "PHP-FPM sirve el sitio hasta que esté listo."
 
-#. {root}: the folder
-msgid "{root} has no index.php or index.html, so Flock shows a page instead of the site until it does."
+msgid "sites.php_version_is_isolated_here"
+msgstr "PHP {version} está aislado aquí; el proyecto fija {pinned} en {file}."
+
+msgid "sites.pin"
+msgstr "Fijar"
+
+msgid "sites.pin_menu_tooltip"
+msgstr "Fijar las versiones y la raíz de documentos en el proyecto"
+
+msgid "sites.pin_node_item"
+msgstr "Fijar Node {version} en el proyecto…"
+
+msgid "sites.pin_node_question"
+msgstr "¿Fijar Node {version} en {site}?"
+
+msgid "sites.pin_php_item"
+msgstr "Fijar PHP {version} en el proyecto…"
+
+msgid "sites.pin_php_question"
+msgstr "¿Fijar PHP {version} en {site}?"
+
+msgid "sites.pin_root_item"
+msgstr "Fijar la raíz de documentos ({root}) en el proyecto…"
+
+msgid "sites.pin_root_question"
+msgstr "¿Fijar la raíz de documentos {root} en {site}?"
+
+msgid "sites.project_folder_badge"
+msgstr "Carpeta del proyecto"
+
+msgid "sites.project_pins_tool_version_in"
+msgstr "El proyecto fija {tool} {version} en {file}."
+
+msgid "sites.proxies"
+msgstr "Proxies"
+
+msgid "sites.proxy"
+msgstr "Proxy"
+
+msgid "sites.proxy.add_commands"
+msgstr "Añadir comandos…"
+
+msgid "sites.proxy.commands"
+msgstr "Comandos"
+
+msgid "sites.proxy.commands_optional"
+msgstr "Comandos (opcional)"
+
+msgid "sites.proxy.commands_title"
+msgstr "Comandos de {proxy}"
+
+msgid "sites.proxy.not_running"
+msgstr "No está en ejecución"
+
+msgid "sites.proxy.remove_commands"
+msgstr "Quitar comandos"
+
+msgid "sites.proxy.running"
+msgstr "En ejecución"
+
+msgid "sites.proxy.stop_command_hint"
+msgstr "Solo para un servidor que se ejecuta en segundo plano, como docker compose up -d."
+
+msgid "sites.proxy_footnote_no_commands"
+msgstr "Cada solicitud pasa al destino con su encabezado Host, incluidas las conexiones WebSocket (recarga en caliente). Flock no inicia el servidor, así que inícialo como siempre o dale comandos abajo. Hasta que responda, {domain} muestra una página que lo indica."
+
+msgid "sites.proxy_name"
+msgstr "Nombre"
+
+msgid "sites.qr_code_of_url"
+msgstr "Código QR de {url}"
+
+msgid "sites.rebuild_assets"
+msgstr "Recompilar los recursos"
+
+msgid "sites.remove_proxy"
+msgstr "Quitar proxy"
+
+msgid "sites.remove_proxy_details"
+msgstr "Flock deja de servir {domain}. El servidor en {upstream} sigue en ejecución."
+
+msgid "sites.remove_site"
+msgstr "Quitar sitio"
+
+msgid "sites.removes_root_from_flockrc_in"
+msgstr "Quita root= de .flockrc en {path}. Flock buscará entonces la raíz de documentos por sí mismo. Esto cambia archivos de tu proyecto."
+
+msgid "sites.removes_the_node_js_version"
+msgstr "Quita la versión de Node.js de .flockrc y elimina .nvmrc / .node-version en {path}. Después, el sitio usa el Node.js predeterminado de Flock. Esto cambia archivos de tu proyecto."
+
+msgid "sites.removes_the_php_version_from"
+msgstr "Quita la versión de PHP de {file}. Después, el sitio usa el PHP predeterminado de Flock. Esto cambia archivos de tu proyecto."
+
+msgid "sites.require"
+msgstr "Requerir"
+
+msgid "sites.require_ext_name_in_composer"
+msgstr "¿Requerir ext-{name} en composer.json?"
+
+msgid "sites.require_tooltip"
+msgstr "Ejecuta composer require ext-{name}:* en {path}, lo que cambia composer.json y composer.lock. Haz commit de ambos con el proyecto."
+
+msgid "sites.restart_frankenphp_tooltip"
+msgstr "Reiniciar FrankenPHP, p. ej. para que los workers de Octane carguen el código modificado"
+
+msgid "sites.root_automatic"
+msgstr "Automática"
+
+msgid "sites.root_automatic_found"
+msgstr "Automática ({root})"
+
+msgid "sites.root_automatic_none"
+msgstr "Automática (no se encontró ninguna)"
+
+msgid "sites.root_missing"
+msgstr "Elige la carpeta con el index.php de la app o crea {root}."
+
+msgid "sites.root_no_index"
 msgstr "{root} no tiene index.php ni index.html, así que Flock muestra una página en lugar del sitio hasta que los tenga."
 
-#. {root}: the folder set here, {pinned}: the project's
-msgid "{root} is set here; the project sets {pinned} in .flockrc."
+msgid "sites.root_shadowed"
 msgstr "{root} está definido aquí; el proyecto define {pinned} en .flockrc."
 
-msgid "{service} Port"
-msgstr "Puerto de {service}"
+msgid "sites.runs_npm_run_build_again"
+msgstr "Vuelve a ejecutar npm run build para que los visitantes vean tus últimos cambios al recargar"
 
-#. {site}: the site
-msgid "{site} is already secured"
-msgstr "{site} ya está protegido"
+msgid "sites.runs_on"
+msgstr "Se ejecuta en"
 
-msgid "{tool} {version} is set for this site on this machine (isolated)."
+msgid "sites.secure"
+msgstr "Proteger"
+
+msgid "sites.serve_a_server_of_its"
+msgstr "Servir un servidor propio, p. ej. un panel, un almacén de objetos, un contenedor de Docker o una app de Go o Python, en un dominio .{tld}"
+
+msgid "sites.served_over_https"
+msgstr "Servido por HTTPS"
+
+msgid "sites.server"
+msgstr "Servidor"
+
+msgid "sites.server.choose"
+msgstr "Elegir"
+
+msgid "sites.server.failed"
+msgstr "Falló"
+
+msgid "sites.server.failed_because"
+msgstr "Falló: {problem}"
+
+msgid "sites.server.running_on_port"
+msgstr "En ejecución en el puerto {port}"
+
+msgid "sites.server.sleeping"
+msgstr "En reposo · se inicia en la próxima visita"
+
+msgid "sites.server.stopped_because"
+msgstr "Detenido: {problem}"
+
+msgid "sites.server.stopping"
+msgstr "Deteniendo…"
+
+msgid "sites.setting_it_up_copies_dependencies"
+msgstr "Prepararlo copia las dependencias y el .env, las instala y ejecuta los hooks del proyecto."
+
+msgid "sites.share.allow_explanation"
+msgstr "Cualquiera con el enlace puede abrir el sitio, salvo que indiques direcciones de correo: en ese caso Cloudflare les envía un código por correo. El enlace deja de funcionar a las 8 horas o cuando dejes de compartir."
+
+msgid "sites.share.allow_header"
+msgstr "Solo estas personas (opcional)"
+
+msgid "sites.share.building"
+msgstr "Compilando los recursos…"
+
+msgid "sites.share.debug_on"
+msgstr "El modo de depuración está activado: los visitantes ven las trazas de pila"
+
+msgid "sites.share.dismiss"
+msgstr "Descartar"
+
+msgid "sites.share.ends_at"
+msgstr "Termina a las {time}"
+
+msgid "sites.share.explanation"
+msgstr "Muestra el sitio en una dirección pública temporal para previsualizar el trabajo en curso, nunca para producción. Los visitantes no ven páginas de depuración, dumps ni las herramientas de desarrollo."
+
+msgid "sites.share.only_for"
+msgstr "Solo para: {emails}"
+
+msgid "sites.share.rebuilding"
+msgstr "Recompilando…"
+
+msgid "sites.share.share"
+msgstr "Compartir"
+
+msgid "sites.share.share_ellipsis"
+msgstr "Compartir…"
+
+msgid "sites.share.show_errors"
+msgstr "Mostrar los detalles de los errores a los visitantes"
+
+msgid "sites.share.show_errors_explanation"
+msgstr "Activa el modo de depuración de la app para este enlace compartido, así que los visitantes ven las trazas de pila. Solo para personas de confianza."
+
+msgid "sites.share.starting"
+msgstr "Iniciando el túnel…"
+
+msgid "sites.share.stop"
+msgstr "Detener"
+
+msgid "sites.share.title"
+msgstr "Compartir {site}"
+
+msgid "sites.shared"
+msgstr "Compartido"
+
+msgid "sites.sharing_failed"
+msgstr "No se pudo compartir."
+
+msgid "sites.show_log"
+msgstr "Mostrar registro"
+
+msgid "sites.site"
+msgstr "Sitio"
+
+msgid "sites.stop_sharing"
+msgstr "Dejar de compartir"
+
+msgid "sites.subdomains_only_here"
+msgstr "Los subdominios solo funcionan si los añades aquí: {problem}."
+
+msgid "sites.subtitle"
+msgstr "Los sitios que añadiste uno a uno, más cada carpeta dentro de tus carpetas de proyectos."
+
+msgid "sites.tenant1_a_b_or_site"
+msgstr "tenant1, a.b o {site}-2.{tld}"
+
+msgid "sites.tool_version_is_set_for"
 msgstr "{tool} {version} está definido para este sitio en este equipo (aislado)."
 
-msgid "{worktree} then uses {site}'s database."
+msgid "sites.type"
+msgstr "Tipo"
+
+msgid "sites.unpin"
+msgstr "Dejar de fijar"
+
+msgid "sites.unpin_node_item"
+msgstr "Dejar de fijar Node ({file})…"
+
+msgid "sites.unpin_node_question"
+msgstr "¿Dejar de fijar Node en {site}?"
+
+msgid "sites.unpin_php_item"
+msgstr "Dejar de fijar PHP ({file})…"
+
+msgid "sites.unpin_php_question"
+msgstr "¿Dejar de fijar PHP en {site}?"
+
+msgid "sites.unpin_root_item"
+msgstr "Dejar de fijar la raíz de documentos (.flockrc)…"
+
+msgid "sites.unpin_root_question"
+msgstr "¿Dejar de fijar la raíz de documentos en {site}?"
+
+msgid "sites.upstream"
+msgstr "Destino"
+
+msgid "sites.upstream_placeholder"
+msgstr "Puerto, host:puerto o URL"
+
+msgid "sites.url"
+msgstr "URL"
+
+msgid "sites.use_file"
+msgstr "Usar {file}"
+
+msgid "sites.use_file_tool_version"
+msgstr "Usar {file} ({tool} {version})"
+
+msgid "sites.use_flockrc"
+msgstr "Usar .flockrc"
+
+msgid "sites.use_flockrc_root"
+msgstr "Usar .flockrc ({root})"
+
+msgid "sites.uses_site_s_settings"
+msgstr "Usa la configuración de {site}"
+
+msgid "sites.version_default"
+msgstr "El sitio sigue la versión predeterminada de {tool} de Flock."
+
+msgid "sites.version_picked_here_applies_on_this_machine"
+msgstr "La versión que elijas aquí solo se aplica en este equipo. Para definirla para todos los que trabajan en el proyecto, fíjala: PHP va a .flockrc y Node.js a .nvmrc."
+
+msgid "sites.wildcard_subdomains_dont_work_here"
+msgstr "Los subdominios comodín no funcionan aquí ({problem}), así que añade cada subdominio que uses (tenant1, a.b). Un nombre completo añade un alias."
+
+msgid "sites.worker_mode"
+msgstr " · modo worker"
+
+msgid "sites.worktree_then_uses_site_s"
 msgstr "{worktree} usará entonces la base de datos de {site}."
+
+msgid "sites.writes_ai_guidelines_flock_md"
+msgstr "Escribe .ai/guidelines/flock.md en {path} y ejecuta php artisan boost:update para que los agentes de IA sepan que Flock sirve la app y elige su versión de PHP. Haz commit junto con el resto de .ai/guidelines. Esto cambia archivos de tu proyecto."
+
+msgid "sites.writes_php_version_to_flockrc"
+msgstr "Escribe php={version} en .flockrc en {path}. Haz commit y todos los que usen Flock en este proyecto tendrán PHP {version}. Esto cambia un archivo de tu proyecto."
+
+msgid "sites.writes_root_value_to_flockrc"
+msgstr "Escribe root={value} en .flockrc en {path}. Haz commit y todos los que usen Flock en este proyecto lo servirán desde {root}. Esto cambia un archivo de tu proyecto."
+
+msgid "sites.writes_version_to_file_in"
+msgstr "Escribe {version} en {file} en {path}. Haz commit y Flock, nvm y otras herramientas de Node usarán Node {version} para este proyecto. Esto cambia un archivo de tu proyecto."
+
+msgid "versions.check_now"
+msgstr "Comprobar ahora"
+
+msgid "versions.checked_just_now"
+msgstr "Comprobado ahora mismo"
+
+msgid "versions.checked_n_days_ago"
+msgid_plural "versions.checked_n_days_ago"
+msgstr[0] "Comprobado hace {n} día"
+msgstr[1] "Comprobado hace {n} días"
+
+msgid "versions.checked_n_hours_ago"
+msgid_plural "versions.checked_n_hours_ago"
+msgstr[0] "Comprobado hace una hora"
+msgstr[1] "Comprobado hace {n} horas"
+
+msgid "versions.checked_n_minutes_ago"
+msgid_plural "versions.checked_n_minutes_ago"
+msgstr[0] "Comprobado hace un minuto"
+msgstr[1] "Comprobado hace {n} minutos"
+
+msgid "versions.checking"
+msgstr "Comprobando…"
+
+msgid "versions.could_not_check_updates"
+msgstr "No se pudieron buscar actualizaciones: {error}"
+
+msgid "versions.download_failed"
+msgstr "La descarga falló."
+
+msgid "versions.downloading_node"
+msgstr "Descargando Node.js {version}…"
+
+msgid "versions.franken_not_installed"
+msgstr "No instalado · se descarga solo cuando un sitio lo usa"
+
+msgid "versions.new_build"
+msgstr "Hay una nueva compilación disponible"
+
+msgid "versions.not_checked"
+msgstr "Aún no se ha comprobado"
+
+msgid "versions.prerelease"
+msgstr "Preliminar"
+
+msgid "versions.show_last_install_log"
+msgstr "Mostrar el registro de la última instalación"
+
+msgid "versions.up_to_date"
+msgstr "Actualizado"
+
+msgid "versions.update_available"
+msgstr "Actualización disponible"
+
+msgid "versions.versions"
+msgstr "Versiones"
+
+msgid "worktrees.branch_stays"
+msgstr "La rama {branch} se conserva."
+
+msgid "worktrees.could_not_remove"
+msgstr "No se pudo quitar {name}"
+
+msgid "worktrees.create"
+msgstr "Crear"
+
+msgid "worktrees.database_copy"
+msgstr "Una copia de la del sitio"
+
+msgid "worktrees.database_fresh"
+msgstr "Una nueva y vacía"
+
+msgid "worktrees.database_shared"
+msgstr "La del sitio"
+
+msgid "worktrees.detached_head"
+msgstr "Ninguna (HEAD separado)"
+
+msgid "worktrees.drop_question"
+msgstr "¿Eliminar {database}?"
+
+msgid "worktrees.give_fresh_details"
+msgstr "Flock crea una base de datos vacía y ejecuta las migraciones."
+
+msgid "worktrees.its_database_database_is_dropped"
+msgstr "Se elimina su base de datos {database}."
+
+msgid "worktrees.job.ready"
+msgstr "Listo"
+
+msgid "worktrees.job.ready_at"
+msgstr "Listo en {url}"
+
+msgid "worktrees.job.see_log"
+msgstr "consulta el registro"
+
+msgid "worktrees.job.setup_failed"
+msgstr "La preparación falló: {error}"
+
+msgid "worktrees.job.starting"
+msgstr "Iniciando…"
+
+msgid "worktrees.new"
+msgstr "Nuevo worktree…"
+
+msgid "worktrees.new.branch"
+msgstr "Rama"
+
+msgid "worktrees.new.branch_placeholder"
+msgstr "un nombre como brave-otter"
+
+msgid "worktrees.new.current_branch"
+msgstr "{name} (actual)"
+
+msgid "worktrees.new.current_commit"
+msgstr "El commit actual"
+
+msgid "worktrees.new.database"
+msgstr "Base de datos"
+
+msgid "worktrees.new.default_branch"
+msgstr "{name} (predeterminada)"
+
+msgid "worktrees.new.explain_existing"
+msgstr "{branch} ya existe, así que el worktree la usa. Flock lo crea junto a {site}, lo prepara y lo sirve en {address}."
+
+msgid "worktrees.new.explain_new"
+msgstr "Flock crea el worktree junto a {site} en la rama nueva {branch}, lo prepara y lo sirve en {address}."
+
+msgid "worktrees.new.explain_unnamed"
+msgstr "Flock crea el worktree junto a {site} en una rama nueva con nombre propio, lo prepara y lo sirve en su propia dirección."
+
+msgid "worktrees.new.start_from"
+msgstr "Partir de"
+
+msgid "worktrees.new_title"
+msgstr "Nuevo worktree de {site}"
+
+msgid "worktrees.own_database"
+msgstr "base de datos propia"
+
+msgid "worktrees.own_database_tooltip"
+msgstr "Base de datos propia: {database}"
+
+msgid "worktrees.project_default"
+msgstr "Predeterminada del proyecto"
+
+msgid "worktrees.remove"
+msgstr "Quitar worktree"
+
+msgid "worktrees.remove_anyway"
+msgstr "Quitar de todos modos"
+
+msgid "worktrees.remove_details"
+msgstr "Flock ejecuta su hook before_delete y elimina {path}."
+
+msgid "worktrees.remove_details_database"
+msgstr "Flock ejecuta su hook before_delete y elimina {path} y su base de datos {database}."
+
+msgid "worktrees.run_again"
+msgstr "Volver a preparar"
+
+msgid "worktrees.see_log"
+msgstr "consulta su registro"
+
+msgid "worktrees.set_up_action"
+msgstr "Preparar"
+
+msgid "worktrees.setting_up"
+msgstr "Preparando…"
+
+msgid "worktrees.setting_up_title"
+msgstr "Preparando {worktree}"
+
+msgid "worktrees.setup"
+msgstr "Preparación"
+
+msgid "worktrees.setup_failed"
+msgstr "La preparación falló"
+
+msgid "worktrees.setup_failed_sentence"
+msgstr "La preparación falló."
+
+msgid "worktrees.setup_failed_title"
+msgstr "No se pudo preparar {worktree}"
+
+msgid "worktrees.setup_goes_on_flock_tells"
+msgstr "La preparación continúa; Flock te avisa si falla"
+
+msgid "worktrees.switch"
+msgstr "Cambiar"
+
+msgid "worktrees.switching_database"
+msgstr "Cambiando la base de datos de {worktree}"
+
+msgid "worktrees.use_site_s_database"
+msgstr "¿Usar la base de datos de {site}?"
+
+msgid "worktrees.worktree"
+msgstr "Worktree"
+
+msgid "worktrees.worktrees"
+msgstr "Worktrees"

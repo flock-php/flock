@@ -8,10 +8,10 @@ public enum LogLevelFilter: String, CaseIterable, Identifiable, Sendable {
 
     public var title: String {
         switch self {
-        case .all: String(localized: "All")
-        case .error: String(localized: "Error and above")
-        case .warning: String(localized: "Warning and above")
-        case .info: String(localized: "Info and above")
+        case .all: String(localized: "services.all")
+        case .error: String(localized: "logs.error_and_above")
+        case .warning: String(localized: "logs.warning_and_above")
+        case .info: String(localized: "logs.info_and_above")
         }
     }
 

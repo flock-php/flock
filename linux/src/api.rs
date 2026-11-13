@@ -19,9 +19,9 @@ pub enum Error {
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            Error::NotRunning => f.write_str(tr!("Flock is not running")),
+            Error::NotRunning => f.write_str(tr!("app.not_running")),
             Error::Server { status, message } if message.is_empty() => {
-                f.write_str(&tr!("Flock answered with HTTP {status}", status = status))
+                f.write_str(&tr!("app.http_status", status = status))
             }
             Error::Server { message, .. } => write!(f, "{message}"),
         }
@@ -513,7 +513,7 @@ impl Client {
     ) -> Result<T, Error> {
         let bytes = self.send(method, path, body, timeout)?;
         serde_json::from_slice(&bytes)
-            .map_err(|e| Error::Server { status: 200, message: tr!("unexpected answer from Flock: {error}", error = e) })
+            .map_err(|e| Error::Server { status: 200, message: tr!("app.unexpected_answer_from_flock_error", error = e) })
     }
 
     /// A plain-text answer, such as an install log.
@@ -698,11 +698,11 @@ impl Status {
 
 /// The kinds of events Flock captures besides dumps, in the order the apps list them.
 pub const EVENT_KINDS: [(&str, &str); 5] = [
-    ("query", tr_noop!("Queries")),
-    ("log", tr_noop!("Logs")),
-    ("view", tr_noop!("Views")),
-    ("job", tr_noop!("Jobs")),
-    ("request", tr_noop!("Requests")),
+    ("query", tr_noop!("dumps.event_kind.queries")),
+    ("log", tr_noop!("dumps.event_kind.logs")),
+    ("view", tr_noop!("dumps.event_kind.views")),
+    ("job", tr_noop!("dumps.event_kind.jobs")),
+    ("request", tr_noop!("dumps.event_kind.requests")),
 ];
 
 /// GET /v1/config (api.ConfigView): config.json plus the installed versions.
@@ -761,9 +761,9 @@ impl Job {
     /// "Downloading… 42%", "Downloading…" (size unknown) or "Installing…".
     pub fn text(&self) -> String {
         match self.phase.as_str() {
-            "installing" => tr!("Installing…").to_owned(),
-            _ if (0.0..=1.0).contains(&self.progress) => tr!("Downloading… {percent}%", percent = (self.progress * 100.0).round()),
-            _ => tr!("Downloading…").to_owned(),
+            "installing" => tr!("common.installing").to_owned(),
+            _ if (0.0..=1.0).contains(&self.progress) => tr!("php.downloading_percent", percent = (self.progress * 100.0).round()),
+            _ => tr!("common.downloading").to_owned(),
         }
     }
 }
@@ -1295,11 +1295,11 @@ impl SiteNodeServer {
     /// "Sleeping · starts on the next visit", "Starting…", "Running on port 22080" or "Stopped: …".
     pub fn text(&self) -> String {
         match self.state.as_str() {
-            "sleeping" => tr!("Sleeping · starts on the next visit").to_owned(),
-            "starting" => tr!("Starting…").to_owned(),
-            "running" => tr!("Running on port {port}", port = self.port),
-            _ if self.problem.is_empty() => tr!("Stopped").to_owned(),
-            _ => tr!("Stopped: {problem}", problem = self.problem),
+            "sleeping" => tr!("sites.server.sleeping").to_owned(),
+            "starting" => tr!("worktrees.job.starting").to_owned(),
+            "running" => tr!("sites.server.running_on_port", port = self.port),
+            _ if self.problem.is_empty() => tr!("services.postgres.stopped").to_owned(),
+            _ => tr!("sites.server.stopped_because", problem = self.problem),
         }
     }
 
@@ -1333,12 +1333,12 @@ impl ProxyCommand {
     /// "Stopped", "Starting…", "Running", "Stopping…" or "Failed: …".
     pub fn text(&self) -> String {
         match self.state.as_str() {
-            "starting" => tr!("Starting…").to_owned(),
-            "running" => tr!("Running").to_owned(),
-            "stopping" => tr!("Stopping…").to_owned(),
-            "failed" if self.problem.is_empty() => tr!("Failed").to_owned(),
-            "failed" => tr!("Failed: {problem}", problem = self.problem),
-            _ => tr!("Stopped").to_owned(),
+            "starting" => tr!("worktrees.job.starting").to_owned(),
+            "running" => tr!("sites.proxy.running").to_owned(),
+            "stopping" => tr!("sites.server.stopping").to_owned(),
+            "failed" if self.problem.is_empty() => tr!("sites.server.failed").to_owned(),
+            "failed" => tr!("sites.server.failed_because", problem = self.problem),
+            _ => tr!("services.postgres.stopped").to_owned(),
         }
     }
 
@@ -1387,9 +1387,9 @@ impl ProxyStatus {
     /// What answers at the upstream: "Node.js 22.23.4", "Running" or "Not running".
     pub fn server_text(&self) -> String {
         match (&self.server, self.running) {
-            (_, false) => tr!("Not running").to_owned(),
+            (_, false) => tr!("sites.proxy.not_running").to_owned(),
             (Some(server), true) if !server.is_empty() => server.clone(),
-            _ => tr!("Running").to_owned(),
+            _ => tr!("sites.proxy.running").to_owned(),
         }
     }
 }
@@ -1425,10 +1425,10 @@ impl WorktreeStatus {
     /// project's default; a mode this app doesn't know as the daemon says it.
     pub fn database_label(&self) -> &str {
         match self.db_mode.as_str() {
-            "" => tr!("own database"),
-            "shared" => trc!("database", "shared"),
-            "copy" => trc!("database", "copy"),
-            "fresh" => trc!("database", "fresh"),
+            "" => tr!("worktrees.own_database"),
+            "shared" => tr!("app.shared_database"),
+            "copy" => tr!("app.copy_database"),
+            "fresh" => tr!("app.fresh_database"),
             other => other,
         }
     }
@@ -1436,16 +1436,16 @@ impl WorktreeStatus {
     /// "Waiting…", "composer install…", "Ready" or "Setup failed".
     pub fn text(&self) -> String {
         match self.state.as_str() {
-            "queued" => tr!("Waiting…").to_owned(),
+            "queued" => tr!("services.postgres.waiting").to_owned(),
             "running" => self.step_text(),
-            "failed" => tr!("Setup failed").to_owned(),
-            _ => tr!("Ready").to_owned(),
+            "failed" => tr!("worktrees.setup_failed").to_owned(),
+            _ => tr!("worktrees.job.ready").to_owned(),
         }
     }
 
     /// What a running setup does: "Composer install…", or "Setting up…" between steps.
     pub fn step_text(&self) -> String {
-        if self.step.is_empty() { tr!("Setting up…").to_owned() } else { format!("{}…", capitalized(&self.step)) }
+        if self.step.is_empty() { tr!("worktrees.setting_up").to_owned() } else { format!("{}…", capitalized(&self.step)) }
     }
 }
 
@@ -1485,7 +1485,7 @@ impl Branches {
     pub fn choices(&self) -> Vec<(String, String)> {
         let mut choices = Vec::new();
         if self.current.is_empty() {
-            choices.push((String::new(), tr!("The current commit").to_owned()));
+            choices.push((String::new(), tr!("worktrees.new.current_commit").to_owned()));
         }
         let mut names: Vec<&String> = Vec::new();
         for name in [&self.current, &self.default].into_iter().chain(self.local.iter().flatten()) {
@@ -1495,9 +1495,9 @@ impl Branches {
         }
         for name in names {
             let label = if *name == self.current {
-                tr!("{name} (current)", name = name)
+                tr!("worktrees.new.current_branch", name = name)
             } else if *name == self.default {
-                tr!("{name} (default)", name = name)
+                tr!("worktrees.new.default_branch", name = name)
             } else {
                 name.clone()
             };

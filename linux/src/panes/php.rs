@@ -43,7 +43,7 @@ impl PhpPane {
     pub fn new(model: Rc<AppModel>, banner: adw::Banner) -> Self {
         Self(Rc::new(Inner {
             view: PaneView::new(tr!(
-                "Every installed version runs its own PHP-FPM pool. Sites use the default unless pinned to a version."
+                "php.every_installed_version_runs_its"
             )),
             model,
             banner,
@@ -120,7 +120,7 @@ impl Inner {
         let Some(resolution) = link.resolve_php(self.versions.borrow().as_ref()) else { return };
         self.model.set_link(None);
         let this = self.clone();
-        ask_link(&self.view.scrolled, resolution, tr!("Install"), move |target| {
+        ask_link(&self.view.scrolled, resolution, tr!("common.install"), move |target| {
             let minor = target.line.clone();
             this.run_php(&target.line, move |c| c.install_php(&minor));
         });
@@ -138,7 +138,7 @@ impl Inner {
 
         let Some(versions) = versions else {
             let loading = group("", "");
-            loading.add(&adw::ActionRow::builder().title(tr!("Loading PHP versions…")).build());
+            loading.add(&adw::ActionRow::builder().title(tr!("php.loading_php_versions")).build());
             self.view.set_groups(&[loading.upcast()]);
             return;
         };
@@ -162,7 +162,7 @@ impl Inner {
         let line = gtk::Box::builder().spacing(6).build();
         line.append(&gtk::Label::builder().label(checked_text(checked_at)).css_classes(["caption", "dim-label"]).build());
         let this = self.clone();
-        let check = busy_button(tr!("Check now"), tr!("Checking…"), self.checking.get(), move || {
+        let check = busy_button(tr!("versions.check_now"), tr!("versions.checking"), self.checking.get(), move || {
             this.checking.set(true);
             this.render();
             let this = this.clone();
@@ -244,12 +244,12 @@ impl Inner {
         row.add_prefix(&icon);
         row.add_suffix(&gtk::Label::builder().label(&version).css_classes(["dim-label", "numeric"]).build());
         if release.default {
-            row.add_suffix(&badge(tr!("Default"), "accent"));
+            row.add_suffix(&badge(tr!("sites.default"), "accent"));
         }
         if release.prerelease {
-            let pre = badge(tr!("Pre-release"), "warning");
+            let pre = badge(tr!("versions.prerelease"), "warning");
             pre.set_tooltip_text(Some(&tr!(
-                "PHP {version} isn’t released yet — it may not work. Offered on the beta channel.",
+                "php.php_version_isnt_released_yet",
                 version = release.latest
             )));
             row.add_suffix(&pre);
@@ -258,10 +258,10 @@ impl Inner {
             row.add_suffix(&badge("Xdebug", "error"));
         }
         let idle = match release.status.as_str() {
-            "installed" => tr!("Up to date"),
-            "update" if release.latest == release.installed => tr!("A new build is available"),
-            "update" => tr!("Update available"),
-            "available" => tr!("Not installed"),
+            "installed" => tr!("versions.up_to_date"),
+            "update" if release.latest == release.installed => tr!("versions.new_build"),
+            "update" => tr!("versions.update_available"),
+            "available" => tr!("common.not_installed"),
             _ => "",
         };
         detail(&row, release.job.as_ref(), &release.yanked, release.update, idle);
@@ -273,7 +273,7 @@ impl Inner {
         let actions = gtk::Box::builder().spacing(6).sensitive(!busy).build();
         let minor = release.minor.clone();
         let size = if release.size > 0 {
-            tr!("Downloads PHP {version} ({size} MB)", version = release.latest, size = release.size / 1_000_000)
+            tr!("php.downloads_php_version_size_mb", version = release.latest, size = release.size / 1_000_000)
         } else {
             String::new()
         };
@@ -284,9 +284,9 @@ impl Inner {
         };
         match release.job.as_ref() {
             Some(job) if job.running() => {
-                actions.append(&button(tr!("Show Log"), false, log.clone()));
+                actions.append(&button(tr!("sites.show_log"), false, log.clone()));
                 let m = minor.clone();
-                actions.append(&button(tr!("Cancel"), false, move || {
+                actions.append(&button(tr!("common.cancel"), false, move || {
                     this.run_php(&m, {
                         let m = m.clone();
                         move |c| c.cancel_php(&m)
@@ -294,16 +294,16 @@ impl Inner {
                 }));
             }
             Some(job) if job.failed() => {
-                actions.append(&button(tr!("Show Log"), false, log.clone()));
+                actions.append(&button(tr!("sites.show_log"), false, log.clone()));
                 let (t, m) = (this.clone(), minor.clone());
-                actions.append(&button(tr!("Retry"), false, move || {
+                actions.append(&button(tr!("common.retry"), false, move || {
                     t.run_php(&m, {
                         let m = m.clone();
                         move |c| c.install_php(&m)
                     })
                 }));
                 let m = minor.clone();
-                actions.append(&button(tr!("Dismiss"), false, move || {
+                actions.append(&button(tr!("sites.share.dismiss"), false, move || {
                     this.run_php(&m, {
                         let m = m.clone();
                         move |c| c.dismiss_php(&m)
@@ -313,9 +313,9 @@ impl Inner {
             _ if installed => {
                 if release.update {
                     let label = if release.latest == release.installed {
-                        tr!("Update").to_owned()
+                        tr!("common.update").to_owned()
                     } else {
-                        tr!("Update to {version}", version = release.latest)
+                        tr!("general.update_to", version = release.latest)
                     };
                     let (t, m) = (this.clone(), minor.clone());
                     let update = button(&label, true, move || {
@@ -333,32 +333,32 @@ impl Inner {
                     let (t, m) = (this.clone(), minor.clone());
                     let make_default = move || t.make_default(&m);
                     if release.update {
-                        items.push((tr!("Make Default").to_owned(), true, false, Box::new(make_default)));
+                        items.push((tr!("node.make_default").to_owned(), true, false, Box::new(make_default)));
                     } else {
-                        actions.append(&button(tr!("Make Default"), false, make_default));
+                        actions.append(&button(tr!("node.make_default"), false, make_default));
                     }
                 }
                 let ini = self.inis.borrow().iter().find(|(v, _)| *v == minor).map(|(_, ini)| ini.clone()).unwrap_or_default();
                 if !ini.is_empty() {
                     let r = row.clone();
-                    items.push((tr!("Open php.ini").to_owned(), true, false, Box::new(move || open_file(&r, &ini))));
+                    items.push((tr!("php.open_ini").to_owned(), true, false, Box::new(move || open_file(&r, &ini))));
                 }
-                items.push((tr!("Show Last Install Log").to_owned(), true, false, Box::new(log.clone())));
+                items.push((tr!("versions.show_last_install_log").to_owned(), true, false, Box::new(log.clone())));
                 let (t, m, r) = (this.clone(), minor.clone(), row.clone());
                 items.push((
-                    tr!("Uninstall…").to_owned(),
+                    tr!("common.uninstall_ellipsis").to_owned(),
                     !release.default,
                     true,
                     Box::new(move || {
                         let (t, m) = (t.clone(), m.clone());
                         confirm(
                             &r,
-                            &tr!("Uninstall PHP {version}?", version = m),
+                            &tr!("php.uninstall_php_version", version = m),
                             &tr!(
-                                "Its php.ini is removed too. Sites pinned to PHP {version} stop working until you pick another version.",
+                                "php.uninstall_details",
                                 version = m
                             ),
-                            tr!("Uninstall"),
+                            tr!("common.uninstall"),
                             move || {
                                 let m2 = m.clone();
                                 t.run_php(&m, move |c| c.uninstall_php(&m2));
@@ -370,7 +370,7 @@ impl Inner {
             }
             _ => {
                 let m = minor.clone();
-                let install = button(tr!("Install"), false, move || {
+                let install = button(tr!("common.install"), false, move || {
                     this.run_php(&m, {
                         let m = m.clone();
                         move |c| c.install_php(&m)
@@ -404,7 +404,7 @@ impl Inner {
                 .as_ref()
                 .is_some_and(|v| v.versions.iter().flatten().any(|r| r.minor == m2 && r.job.as_ref().is_some_and(|j| j.running())))
         };
-        show_log(&self.view.scrolled, &tr!("PHP {version} install log", version = minor), move || Client.php_log(&m), running);
+        show_log(&self.view.scrolled, &tr!("php.php_version_install_log", version = minor), move || Client.php_log(&m), running);
     }
 
     fn frankenphp_row(self: &Rc<Self>, build: &FrankenPhpBuild) -> adw::ActionRow {
@@ -416,10 +416,10 @@ impl Inner {
         }
         row.add_prefix(&icon);
         if build.prerelease {
-            row.add_suffix(&badge(tr!("Pre-release"), "warning"));
+            row.add_suffix(&badge(tr!("versions.prerelease"), "warning"));
         }
         let idle = match (installed, build.php_version.is_empty()) {
-            (false, _) => tr!("Not installed · downloads by itself when a site uses it").to_owned(),
+            (false, _) => tr!("versions.franken_not_installed").to_owned(),
             (true, true) => format!("FrankenPHP {}", build.installed),
             (true, false) => format!("FrankenPHP {} (PHP {})", build.installed, build.php_version),
         };
@@ -439,35 +439,35 @@ impl Inner {
             })
         };
         match build.job.as_ref() {
-            Some(job) if job.running() => actions.append(&run(tr!("Cancel"), false, Client::cancel_frankenphp)),
+            Some(job) if job.running() => actions.append(&run(tr!("common.cancel"), false, Client::cancel_frankenphp)),
             Some(job) if job.failed() => {
-                actions.append(&run(tr!("Retry"), false, Client::install_frankenphp));
-                actions.append(&run(tr!("Dismiss"), false, Client::dismiss_frankenphp));
+                actions.append(&run(tr!("common.retry"), false, Client::install_frankenphp));
+                actions.append(&run(tr!("sites.share.dismiss"), false, Client::dismiss_frankenphp));
             }
             _ => {
                 // Installing ahead makes switching a site to FrankenPHP immediate (else PHP-FPM serves it meanwhile).
                 if !installed && !build.latest.is_empty() {
-                    actions.append(&run(tr!("Install"), false, Client::install_frankenphp));
+                    actions.append(&run(tr!("common.install"), false, Client::install_frankenphp));
                 }
                 if build.update {
                     let label = if build.latest == build.php_version {
-                        tr!("Update").to_owned()
+                        tr!("common.update").to_owned()
                     } else {
-                        tr!("Update to PHP {version}", version = build.latest)
+                        tr!("php.update_to_php_version", version = build.latest)
                     };
                     actions.append(&run(&label, true, Client::install_frankenphp));
                 }
                 if installed {
                     let (this, m, r) = (self.clone(), minor.clone(), row.clone());
-                    let uninstall = button(tr!("Uninstall…"), false, move || {
+                    let uninstall = button(tr!("common.uninstall_ellipsis"), false, move || {
                         let (t, m) = (this.clone(), m.clone());
                         confirm(
                             &r,
-                            &tr!("Uninstall FrankenPHP for PHP {version}?", version = m),
+                            &tr!("php.uninstall_franken_question", version = m),
                             tr!(
-                                "Sites that run on FrankenPHP with this version are served by PHP-FPM until it has downloaded again by itself."
+                                "php.sites_that_run_on_frankenphp"
                             ),
-                            tr!("Uninstall"),
+                            tr!("common.uninstall"),
                             move || {
                                 let m2 = m.clone();
                                 t.run_frankenphp(&m, move |c| c.uninstall_frankenphp(&m2));

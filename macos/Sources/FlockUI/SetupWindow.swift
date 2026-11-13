@@ -54,15 +54,15 @@ struct SetupWindow: View {
         VStack(alignment: .leading, spacing: 0) {
             switch stage {
             case .intro:
-                header(Text("Welcome to Flock"), Text("Flock runs your Laravel sites, PHP, mail and databases on this Mac. Setting it up takes a moment:"))
+                header(Text("setup.welcome"), Text("setup.flock_runs_your_laravel_sites"))
                 Form {
                     Section {
-                        item(Text("Runs in the background"), Text("The Flock daemon serves your sites and services, and starts whenever you log in."), symbol: "server.rack")
-                        item(Text("php, composer and node in your terminal"), Text("Flock's versions come first on your PATH. Open a new terminal after setup."), symbol: "terminal")
-                        item(Text("*.test sites with trusted HTTPS"), Text("macOS asks for your password twice: once to resolve *.test through Flock (/etc/resolver), once to trust Flock's certificate."), symbol: "lock.fill")
+                        item(Text("setup.background"), Text("setup.flock_daemon_serves_your_sites"), symbol: "server.rack")
+                        item(Text("setup.terminal_title"), Text("setup.terminal_description"), symbol: "terminal")
+                        item(Text("setup.trusted_https_title"), Text("setup.macos_asks_for_your_password_twice"), symbol: "lock.fill")
                     }
                     Section {
-                        Toggle("Open Flock’s menu bar app at login", isOn: Binding(get: { launchAtLogin }, set: { launchAtLogin = $0 }))
+                        Toggle("general.open_flocks_menu_bar_app", isOn: Binding(get: { launchAtLogin }, set: { launchAtLogin = $0 }))
                             .toggleStyle(.checkbox)
                     }
                     // Settings → General has it too, but only once Flock is set up.
@@ -74,18 +74,18 @@ struct SetupWindow: View {
                 .scrollContentBackground(.hidden)
                 .scrollDisabled(true)
                 buttons {
-                    Button("Not now") { dismissWindow(id: WindowID.setup) }
+                    Button("setup.not_now") { dismissWindow(id: WindowID.setup) }
                         .keyboardShortcut(.cancelAction)
-                    Button("Set Up Flock") { Task { await run() } }
+                    Button("setup.window_title") { Task { await run() } }
                         .keyboardShortcut(.defaultAction)
                 }
 
             case .checking:
-                header(Text("Checking Flock's ports…"), nil)
+                header(Text("setup.checking_ports"), nil)
                 ProgressView().progressViewStyle(.linear).padding(.horizontal, 32).padding(.bottom, 28)
 
             case .conflicts:
-                header(Text("Quit other local environments first"), Text("Flock needs these ports and *.\(model.status?.dns.tld ?? "test") for itself, but other programs use them. Running both would leave neither working."))
+                header(Text("setup.quit_others"), Text("setup.flock_needs_these_ports_and \(model.status?.dns.tld ?? "test")"))
                 Form {
                     Section {
                         ForEach(conflicts) { app in
@@ -97,28 +97,28 @@ struct SetupWindow: View {
                 .scrollContentBackground(.hidden)
                 .scrollDisabled(true)
                 buttons {
-                    Button("Not now") { dismissWindow(id: WindowID.setup) }
+                    Button("setup.not_now") { dismissWindow(id: WindowID.setup) }
                         .keyboardShortcut(.cancelAction)
-                    Button("Check Again") { Task { await run() } }
+                    Button("setup.check_again_title_case") { Task { await run() } }
                         .keyboardShortcut(.defaultAction)
                 }
 
             case .running:
-                header(Text("Setting up Flock…"), Text("macOS asks for your password in a moment, and then once more."))
+                header(Text("setup.setting_up"), Text("setup.macos_asks_for_your_password"))
                 ProgressView().progressViewStyle(.linear).padding(.horizontal, 32).padding(.bottom, 12)
                 log
 
             case .done:
-                header(Text("Flock is ready"), nil)
+                header(Text("setup.ready"), nil)
                 Form {
-                    Section("Next steps") {
+                    Section("setup.next_steps") {
                         if let loginProblem {
-                            item(Text("Open Flock at login"), Text(loginProblem), symbol: "exclamationmark.triangle")
+                            item(Text("setup.open_flock_at_login"), Text(loginProblem), symbol: "exclamationmark.triangle")
                         }
                         runtimes
-                        item(Text("Open a new terminal"), Text("Terminals that were already open still have the old PATH."), symbol: "terminal")
-                        item(Text("Link a project"), Text("In a Laravel project, run `flock link`: the site is then at http://<folder>.test. `flock secure` adds HTTPS."), symbol: "globe")
-                        item(Text("PHP and Node.js"),Text("Flock installs the newest PHP and Node.js LTS as the defaults. Settings → PHP and Node install other versions."), symbol: "chevron.left.forwardslash.chevron.right")
+                        item(Text("setup.new_terminal"), Text("setup.new_terminal_description"), symbol: "terminal")
+                        item(Text("setup.link_project"), Text("setup.link_project_description"), symbol: "globe")
+                        item(Text("setup.php_and_node"),Text("setup.php_and_node_description"), symbol: "chevron.left.forwardslash.chevron.right")
                     }
                 }
                 .formStyle(.grouped)
@@ -130,30 +130,30 @@ struct SetupWindow: View {
                         seenDefaults = new
                     }
                 }
-                Text("Flock is free and open source. If you like it, [a star on GitHub](https://github.com/flock-php/flock) helps others find it.")
+                Text("setup.star")
                     .font(.callout)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
                     .padding(.horizontal, 32)
                 buttons {
-                    Button("Open Settings") {
+                    Button("setup.open_settings") {
                         dismissWindow(id: WindowID.setup)
                         showSettingsPane()
                         openWindow.activating(WindowID.settings)
                     }
-                    Button("Done") { dismissWindow(id: WindowID.setup) }
+                    Button("common.done") { dismissWindow(id: WindowID.setup) }
                         .keyboardShortcut(.defaultAction)
                 }
 
             case .failed:
-                header(Text("Setup didn't finish"), declined
-                    ? Text("The password prompt was cancelled. Flock runs, but *.test sites won't resolve and HTTPS isn't trusted until you allow it.")
-                    : Text("Something went wrong. The output below says what; you can try again."))
+                header(Text("setup.did_not_finish"), declined
+                    ? Text("setup.password_prompt_was_cancelled_flock")
+                    : Text("setup.failed"))
                 log
                 buttons {
-                    Button("Close") { dismissWindow(id: WindowID.setup) }
+                    Button("common.close") { dismissWindow(id: WindowID.setup) }
                         .keyboardShortcut(.cancelAction)
-                    Button("Try Again") { Task { await run() } }
+                    Button("setup.try_again") { Task { await run() } }
                         .keyboardShortcut(.defaultAction)
                 }
             }
@@ -221,29 +221,29 @@ struct SetupWindow: View {
             let all = [Runtime(name: "PHP", pane: .php, install: defaults.php), Runtime(name: "Node.js", pane: .node, install: defaults.node)]
             let pending = all.filter { $0.install.isPending }
             ForEach(all.filter { $0.install.state == .failed }, id: \.name) { runtime in
-                item(Text("\(runtime.label) couldn't be installed"),
+                item(Text("setup.name_couldnt_be_installed \(runtime.label)"),
                      runtime.install.error.isEmpty
-                         ? Text("Try again in Settings → \(runtime.pane.title).")
-                         : Text("\(runtime.install.error). Try again in Settings → \(runtime.pane.title)."),
+                         ? Text("setup.try_again_in_settings_to \(runtime.pane.title)")
+                         : Text("setup.try_again_in_settings_to_macos \(runtime.install.error) \(runtime.pane.title)"),
                      symbol: "exclamationmark.triangle.fill", color: .orange)
             }
             // One install or both (PHP and Node.js): the sentences differ in more than a word.
             let names = Self.names(pending)
             if pending.contains(where: { $0.install.state == .installing }) {
-                row(Text("Installing \(names)…"), pending.count > 1
-                    ? Text("Flock makes them the default for your sites and terminal.")
-                    : Text("Flock makes it the default for your sites and terminal.")) {
+                row(Text("setup.installing \(names)"), pending.count > 1
+                    ? Text("setup.flock_makes_them_the_default_macos")
+                    : Text("setup.flock_makes_it_the_default")) {
                     ProgressView().controlSize(.small)
                 }
             } else if !pending.isEmpty {
-                row(Text("Waiting to install \(names)"), pending.count > 1
-                    ? Text("\(names) are installed as soon as Flock can download them.")
-                    : Text("\(names) is installed as soon as Flock can download it.")) {
+                row(Text("setup.waiting_to_install_names \(names)"), pending.count > 1
+                    ? Text("setup.installed_when_downloadable_both \(names)")
+                    : Text("setup.installed_when_downloadable \(names)")) {
                     ProgressView().controlSize(.small)
                 }
             }
             if all.allSatisfy({ $0.install.state == .done }) {
-                item(Text("\(Self.names(all)) are installed"), Text("They're the defaults for your sites and terminal."), symbol: "checkmark.circle.fill", color: .green)
+                item(Text("setup.names_are_installed \(Self.names(all))"), Text("setup.theyre_the_defaults_for_your"), symbol: "checkmark.circle.fill", color: .green)
             }
         }
     }

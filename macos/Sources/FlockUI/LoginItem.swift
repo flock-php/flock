@@ -15,10 +15,10 @@ enum LoginItem {
                 try SMAppService.mainApp.unregister()
             }
         } catch {
-            return String(localized: "Could not change the login item: \(error.localizedDescription)")
+            return String(localized: "general.could_not_change_the_login \(error.localizedDescription)")
         }
         return SMAppService.mainApp.status == .requiresApproval
-            ? String(localized: "Allow Flock in System Settings → General → Login Items.")
+            ? String(localized: "general.allow_flock_in_system_settings")
             : nil
     }
 }

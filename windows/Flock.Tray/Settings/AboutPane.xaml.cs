@@ -23,7 +23,7 @@ internal sealed partial class AboutPane : UserControl, ISettingsPane
         AppVersion.Text = version.Split('+')[0];
     }
 
-    public string Title => Strings.Pane_About;
+    public string Title => Strings.Settings_Pane_About;
     public string Subtitle => Strings.About_Tagline;
     public UIElement Root => this;
     public bool ScrollsItself => false;

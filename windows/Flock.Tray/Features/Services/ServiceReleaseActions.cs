@@ -156,7 +156,7 @@ public sealed class ServiceReleaseActions(PostgresService postgres, CatalogServi
         var versions = postgres.Current;
         if (!postgres.HasSnapshot || versions is null)
         {
-            return Loading(null, Strings.Releases_LoadingPostgres);
+            return Loading(null, Strings.Services_Releases_LoadingPostgres);
         }
         if (postgres.IsRunning || versions.AnyBusy)
         {
@@ -173,12 +173,12 @@ public sealed class ServiceReleaseActions(PostgresService postgres, CatalogServi
         var updates = ResolveRow("postgres").Lines.Where(line => line.HasUpdate).Select(line => line.Target).ToList();
         if (updates.Count == 1)
         {
-            return new ServiceReleaseAction(ServiceReleaseActionKind.Update, Strings.Releases_InstallUpdate, true,
+            return new ServiceReleaseAction(ServiceReleaseActionKind.Update, Strings.Services_Releases_InstallUpdate, true,
                 versions.CheckedAt, versions.CheckError, updates, null);
         }
         if (updates.Count > 1)
         {
-            return new ServiceReleaseAction(ServiceReleaseActionKind.UpdateAll, Localization.Format(Strings.Releases_InstallAllUpdates, updates.Count), true,
+            return new ServiceReleaseAction(ServiceReleaseActionKind.UpdateAll, Localization.Format(Strings.Services_Releases_InstallAllUpdates, updates.Count), true,
                 versions.CheckedAt, versions.CheckError, updates, null);
         }
         return Check(versions.CheckedAt, versions.CheckError);
@@ -189,12 +189,12 @@ public sealed class ServiceReleaseActions(PostgresService postgres, CatalogServi
         var snapshot = catalog.Current;
         if (!catalog.HasSnapshot || snapshot is null)
         {
-            return Loading(null, Strings.Releases_LoadingServices);
+            return Loading(null, Strings.Services_Releases_LoadingServices);
         }
         var entry = snapshot[serviceId];
         if (entry is null || !entry.Available)
         {
-            return new ServiceReleaseAction(ServiceReleaseActionKind.Unavailable, Strings.Releases_Unavailable, false,
+            return new ServiceReleaseAction(ServiceReleaseActionKind.Unavailable, Strings.Services_Releases_Unavailable, false,
                 snapshot.CheckedAt, snapshot.CheckError, [], null);
         }
         if (catalog.IsRunning(serviceId) || catalog.IsChecking || entry.Job?.IsRunning == true)
@@ -216,12 +216,12 @@ public sealed class ServiceReleaseActions(PostgresService postgres, CatalogServi
             .ToList();
         if (updates.Count == 1)
         {
-            return new ServiceReleaseAction(ServiceReleaseActionKind.Update, Strings.Releases_InstallUpdate, true,
+            return new ServiceReleaseAction(ServiceReleaseActionKind.Update, Strings.Services_Releases_InstallUpdate, true,
                 snapshot.CheckedAt, snapshot.CheckError, updates, null);
         }
         if (updates.Count > 1)
         {
-            return new ServiceReleaseAction(ServiceReleaseActionKind.UpdateAll, Localization.Format(Strings.Releases_InstallAllUpdates, updates.Count), true,
+            return new ServiceReleaseAction(ServiceReleaseActionKind.UpdateAll, Localization.Format(Strings.Services_Releases_InstallAllUpdates, updates.Count), true,
                 snapshot.CheckedAt, snapshot.CheckError, updates, null);
         }
         return Check(snapshot.CheckedAt, snapshot.CheckError);
@@ -272,21 +272,21 @@ public sealed class ServiceReleaseActions(PostgresService postgres, CatalogServi
         var facts = new List<string> { major.IsInstalled ? major.Installed : Strings.Common_NotInstalled };
         if (major.Update)
         {
-            facts.Add(major.Latest == major.Installed ? Strings.Releases_NewBuildAvailable : Localization.Format(Strings.Releases_Available, major.Latest));
+            facts.Add(major.Latest == major.Installed ? Strings.Services_Releases_NewBuildAvailable : Localization.Format(Strings.Services_Releases_Available, major.Latest));
         }
         if (major.Yanked.Length > 0)
         {
-            facts.Add(Localization.Format(Strings.Releases_Withdrawn, major.Yanked));
+            facts.Add(Localization.Format(Strings.Services_Releases_Withdrawn, major.Yanked));
         }
         if (major.Prerelease)
         {
-            facts.Add(Localization.Format(Strings.Releases_Prerelease, major.Latest));
+            facts.Add(Localization.Format(Strings.Services_Releases_Prerelease, major.Latest));
         }
         if (major.HasData)
         {
             facts.Add(major.IsInstalled
-                ? Localization.Plural(Strings.ResourceManager, "Releases_BytesOfData", major.DataSize)
-                : Localization.Plural(Strings.ResourceManager, "Releases_DatabasesKept", major.DataSize));
+                ? Localization.Plural(Strings.ResourceManager, "Services_Releases_BytesOfData", major.DataSize)
+                : Localization.Plural(Strings.ResourceManager, "Services_Releases_DatabasesKept", major.DataSize));
         }
         return new ServiceReleaseLine(target, major.IsInstalled, major.Active, major.Update, string.Join(" · ", facts),
             major.IsBusy ? major.BusyText : null, primary, more);
@@ -328,19 +328,19 @@ public sealed class ServiceReleaseActions(PostgresService postgres, CatalogServi
         var facts = new List<string> { line.Installed ? line.Version : Strings.Common_NotInstalled };
         if (!line.Installed && line.Latest.Length > 0)
         {
-            facts.Add(Localization.Format(Strings.Releases_Available, line.Latest));
+            facts.Add(Localization.Format(Strings.Services_Releases_Available, line.Latest));
         }
         if (line.Update)
         {
-            facts.Add(line.Latest == line.Version ? Strings.Releases_NewBuildAvailable : Localization.Format(Strings.Releases_Available, line.Latest));
+            facts.Add(line.Latest == line.Version ? Strings.Services_Releases_NewBuildAvailable : Localization.Format(Strings.Services_Releases_Available, line.Latest));
         }
         else if (line.Installed)
         {
-            facts.Add(Strings.Releases_UpToDate);
+            facts.Add(Strings.Services_Releases_UpToDate);
         }
         if (line.HasData)
         {
-            facts.Add(line.Installed ? Strings.Releases_HasData : Strings.Releases_DataKept);
+            facts.Add(line.Installed ? Strings.Services_Releases_HasData : Strings.Services_Releases_DataKept);
         }
         return new ServiceReleaseLine(target, line.Installed, line.Active, line.Update, string.Join(" · ", facts), null, primary, more);
     }

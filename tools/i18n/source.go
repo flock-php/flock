@@ -3,20 +3,22 @@ package main
 import (
 	"bytes"
 	"encoding/json"
-	"slices"
 	"sort"
 	"strings"
 )
 
-// The catalogs in their canonical form: texts sorted by ID, fields in a fixed order, two-space
-// indent. A text can be added anywhere; the next run puts it in its place.
-func formatCatalogs(c *Catalog) ([]file, error) {
+// The catalogs in their canonical form: texts sorted by key, fields in a fixed order, one text
+// per line. A text can be added anywhere; the next run puts it in its place.
+func formatCatalogs(c *Catalog) []file {
 	var en strings.Builder
 	en.WriteString("{")
 	for i, e := range c.Entries {
+		en.WriteString(separator(i) + "  " + quoteJSON(e.Key) + ": ")
 		var fields []string
-		if e.One != "" {
-			fields = append(fields, `"one": `+quoteJSON(e.One))
+		if e.Plural() {
+			fields = append(fields, `"one": `+quoteJSON(e.One), `"other": `+quoteJSON(e.Text))
+		} else {
+			fields = append(fields, `"text": `+quoteJSON(e.Text))
 		}
 		if e.Note != "" {
 			fields = append(fields, `"note": `+quoteJSON(e.Note))
@@ -24,24 +26,15 @@ func formatCatalogs(c *Catalog) ([]file, error) {
 		if e.NoTranslate {
 			fields = append(fields, `"translate": false`)
 		}
-		if m := e.MacOS; m != nil {
-			if m.Derived {
-				fields = append(fields, `"macos": true`)
-			} else {
-				fields = append(fields, `"macos": `+quoteJSON(m.Key))
-			}
+		if len(fields) == 1 && !e.Plural() {
+			en.WriteString(quoteJSON(e.Text))
+		} else {
+			en.WriteString("{" + strings.Join(fields, ", ") + "}")
 		}
-		if w := e.Windows; w != nil {
-			fields = append(fields, `"windows": `+windowsJSON(w))
-		}
-		if e.Linux {
-			fields = append(fields, `"linux": true`)
-		}
-		en.WriteString(separator(i) + "  " + quoteJSON(e.ID) + ": {" + strings.Join(fields, ", ") + "}")
 	}
 	en.WriteString("\n}\n")
-	files := []file{{path: "i18n/en.json", content: []byte(en.String())}}
-	for _, language := range languages {
+	files := []file{{path: "lang/en/app.json", content: []byte(en.String())}}
+	for _, language := range c.Languages {
 		var b strings.Builder
 		b.WriteString("{")
 		i := 0
@@ -50,13 +43,13 @@ func formatCatalogs(c *Catalog) ([]file, error) {
 			if t == nil {
 				continue
 			}
-			b.WriteString(separator(i) + "  " + quoteJSON(e.ID) + ": " + translationJSON(t))
+			b.WriteString(separator(i) + "  " + quoteJSON(e.Key) + ": " + translationJSON(t))
 			i++
 		}
 		b.WriteString("\n}\n")
-		files = append(files, file{path: "i18n/" + language.Code + ".json", content: []byte(b.String())})
+		files = append(files, file{path: "lang/" + language.Code + "/app.json", content: []byte(b.String())})
 	}
-	return files, nil
+	return files
 }
 
 func separator(i int) string {
@@ -64,35 +57,6 @@ func separator(i int) string {
 		return "\n"
 	}
 	return ",\n"
-}
-
-func windowsJSON(w *WindowsUse) string {
-	if w.Args == nil && len(w.Formats) == 0 {
-		if len(w.Keys) == 1 {
-			return quoteJSON(w.Keys[0])
-		}
-		return stringsJSON(w.Keys)
-	}
-	fields := []string{`"keys": ` + stringsJSON(w.Keys)}
-	if w.Args != nil {
-		fields = append(fields, `"args": `+stringsJSON(w.Args))
-	}
-	if len(w.Formats) > 0 {
-		var formats []string
-		for _, name := range sortedKeys(w.Formats) {
-			formats = append(formats, quoteJSON(name)+": "+quoteJSON(w.Formats[name]))
-		}
-		fields = append(fields, `"formats": {`+strings.Join(formats, ", ")+"}")
-	}
-	return "{" + strings.Join(fields, ", ") + "}"
-}
-
-func stringsJSON(values []string) string {
-	quoted := make([]string, len(values))
-	for i, value := range values {
-		quoted[i] = quoteJSON(value)
-	}
-	return "[" + strings.Join(quoted, ", ") + "]"
 }
 
 func translationJSON(t *Translation) string {
@@ -139,5 +103,5 @@ func sortedKeys[V any](m map[string]V) []string {
 		keys = append(keys, key)
 	}
 	sort.Strings(keys)
-	return slices.Clip(keys)
+	return keys
 }

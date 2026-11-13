@@ -249,7 +249,7 @@ fn event_html(e: &Event, editor: &str) -> String {
             if let Some(context) = e.context.as_ref().filter(|c| c.as_object().is_some_and(|o| !o.is_empty())) {
                 details = format!(
                     "<details><summary>{}</summary><pre class=\"json\">{}</pre></details>",
-                    escape(tr!("context")),
+                    escape(tr!("dumps.timeline.context")),
                     escape(&serde_json::to_string_pretty(context).unwrap_or_default())
                 );
             }
@@ -267,7 +267,7 @@ fn event_html(e: &Event, editor: &str) -> String {
             main =
                 format!("<span class=\"name\">{}</span><span class=\"state {}\">{}</span>", escape(&e.job), escape(&state), escape(&state));
             if !e.queue.is_empty() {
-                meta.push(escape(&tr!("queue {name}", name = e.queue)));
+                meta.push(escape(&tr!("dumps.timeline.queue_name", name = e.queue)));
             }
             if !e.connection.is_empty() {
                 meta.push(escape(&e.connection));

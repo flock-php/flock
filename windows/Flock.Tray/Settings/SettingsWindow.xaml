@@ -25,12 +25,12 @@
             OpenPaneLength="220"
             SelectionChanged="NavigationSelectionChanged">
             <NavigationView.MenuItems>
-                <NavigationViewItem Content="{l:Loc Key=Pane_General}" Tag="General">
+                <NavigationViewItem Content="{l:Loc Key=Settings_Pane_General}" Tag="General">
                     <NavigationViewItem.Icon>
                         <FontIcon Glyph="&#xE713;" FontFamily="{StaticResource SymbolsFont}" />
                     </NavigationViewItem.Icon>
                 </NavigationViewItem>
-                <NavigationViewItem Content="{l:Loc Key=Pane_Sites}" Tag="Sites">
+                <NavigationViewItem Content="{l:Loc Key=Settings_Pane_Sites}" Tag="Sites">
                     <NavigationViewItem.Icon>
                         <FontIcon Glyph="&#xE774;" FontFamily="{StaticResource SymbolsFont}" />
                     </NavigationViewItem.Icon>
@@ -45,32 +45,32 @@
                         <FontIcon Glyph="&#xE756;" FontFamily="{StaticResource SymbolsFont}" />
                     </NavigationViewItem.Icon>
                 </NavigationViewItem>
-                <NavigationViewItem Content="{l:Loc Key=Pane_Services}" Tag="Services">
+                <NavigationViewItem Content="{l:Loc Key=Settings_Pane_Services}" Tag="Services">
                     <NavigationViewItem.Icon>
                         <FontIcon Glyph="&#xE968;" FontFamily="{StaticResource SymbolsFont}" />
                     </NavigationViewItem.Icon>
                 </NavigationViewItem>
-                <NavigationViewItem Content="{l:Loc Key=Pane_Mail}" Tag="Mail">
+                <NavigationViewItem Content="{l:Loc Key=Settings_Pane_Mail}" Tag="Mail">
                     <NavigationViewItem.Icon>
                         <FontIcon Glyph="&#xE715;" FontFamily="{StaticResource SymbolsFont}" />
                     </NavigationViewItem.Icon>
                 </NavigationViewItem>
-                <NavigationViewItem Content="{l:Loc Key=Pane_Dumps}" Tag="Dumps">
+                <NavigationViewItem Content="{l:Loc Key=Settings_Pane_Dumps}" Tag="Dumps">
                     <NavigationViewItem.Icon>
                         <FontIcon Glyph="&#xE896;" FontFamily="{StaticResource SymbolsFont}" />
                     </NavigationViewItem.Icon>
                 </NavigationViewItem>
-                <NavigationViewItem Content="{l:Loc Key=Pane_Debugger}" Tag="Debugger">
+                <NavigationViewItem Content="{l:Loc Key=Settings_Pane_Debugger}" Tag="Debugger">
                     <NavigationViewItem.Icon>
                         <FontIcon Glyph="&#xEBE8;" FontFamily="{StaticResource SymbolsFont}" />
                     </NavigationViewItem.Icon>
                 </NavigationViewItem>
-                <NavigationViewItem Content="{l:Loc Key=Pane_Ai}" Tag="Ai">
+                <NavigationViewItem Content="{l:Loc Key=Settings_Pane_Ai}" Tag="Ai">
                     <NavigationViewItem.Icon>
                         <FontIcon Glyph="&#xE99A;" FontFamily="{StaticResource SymbolsFont}" />
                     </NavigationViewItem.Icon>
                 </NavigationViewItem>
-                <NavigationViewItem Content="{l:Loc Key=Pane_About}" Tag="About">
+                <NavigationViewItem Content="{l:Loc Key=Settings_Pane_About}" Tag="About">
                     <NavigationViewItem.Icon>
                         <FontIcon Glyph="&#xE946;" FontFamily="{StaticResource SymbolsFont}" />
                     </NavigationViewItem.Icon>

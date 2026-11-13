@@ -15,7 +15,7 @@ internal sealed partial class DebuggerPane : UserControl, ISettingsPane
         DataContext = viewModel;
     }
 
-    public string Title => Strings.Pane_Debugger;
+    public string Title => Strings.Settings_Pane_Debugger;
     public string Subtitle => Strings.Debugger_Subtitle;
     public UIElement Root => this;
     public bool ScrollsItself => false;

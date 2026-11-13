@@ -16,7 +16,7 @@ pub struct MailPane {
 impl MailPane {
     pub fn new() -> Self {
         Self {
-            view: PaneView::new(tr!("Flock catches every email your apps send — nothing leaves your computer.")),
+            view: PaneView::new(tr!("mail.flock_catches_every_email_your_apps")),
             shown: RefCell::default(),
         }
     }
@@ -36,22 +36,22 @@ impl Pane for MailPane {
         let running = mail.is_some_and(|m| m.running);
         let port = data.config.as_ref().map(|c| c.ports.smtp).filter(|p| *p != 0).or(mail.map(|m| m.port)).unwrap_or_default();
 
-        let server = group(tr!("SMTP server"), "");
-        server.add(&info_row(tr!("Host"), "127.0.0.1"));
-        server.add(&info_row(tr!("Port"), &port.to_string()));
-        let state = adw::ActionRow::builder().title(tr!("Status")).build();
+        let server = group(tr!("mail.smtp_server"), "");
+        server.add(&info_row(tr!("mail.host"), "127.0.0.1"));
+        server.add(&info_row(tr!("mail.port"), &port.to_string()));
+        let state = adw::ActionRow::builder().title(tr!("general.status")).build();
         let value = gtk::Box::builder().spacing(6).build();
         value.append(&status_dot(running));
-        value.append(&gtk::Label::new(Some(if running { tr!("Running") } else { tr!("Stopped") })));
+        value.append(&gtk::Label::new(Some(if running { tr!("sites.proxy.running") } else { tr!("services.postgres.stopped") })));
         state.add_suffix(&value);
         server.add(&state);
 
-        let env = group(tr!("Environment Variables"), tr!("MAIL_USERNAME picks the inbox, so every project gets its own."));
+        let env = group(tr!("mail.environment_variables_title_case"), tr!("mail.username_inbox"));
         env.add(&code_block(mail.map_or("", |m| m.env.as_str())));
 
         let caught = group("", "");
         let count = data.status.as_ref().map_or(0, |s| s.mail_count);
-        caught.add(&open_row(tr!("Caught emails"), &count.to_string(), tr!("Open Mail"), "app.mail"));
+        caught.add(&open_row(tr!("mail.caught"), &count.to_string(), tr!("mail.open"), "app.mail"));
 
         self.view.set_groups(&[server.upcast(), env.upcast(), caught.upcast()]);
     }

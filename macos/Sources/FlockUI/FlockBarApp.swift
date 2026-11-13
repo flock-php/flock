@@ -27,28 +27,28 @@ public struct FlockBarApp: App {
         }
         .menuBarExtraStyle(.window)
 
-        Window("Mail", id: WindowID.mail) {
+        Window("services.category.mail", id: WindowID.mail) {
             MailWindow()
                 .environment(model)
                 .environment(\.locale, AppLanguage.locale)
         }
         .defaultSize(width: 980, height: 640)
 
-        Window("Dumps", id: WindowID.dumps) {
+        Window("menu.dumps", id: WindowID.dumps) {
             DumpsWindow()
                 .environment(model)
                 .environment(\.locale, AppLanguage.locale)
         }
         .defaultSize(width: 900, height: 600)
 
-        Window("Logs", id: WindowID.logs) {
+        Window("dumps.event_kind.logs", id: WindowID.logs) {
             LogsWindow()
                 .environment(model)
                 .environment(\.locale, AppLanguage.locale)
         }
         .defaultSize(width: 980, height: 640)
 
-        Window("Flock Settings", id: WindowID.settings) {
+        Window("settings.window_title", id: WindowID.settings) {
             SettingsWindow()
                 .environment(model)
                 .environment(\.locale, AppLanguage.locale)
@@ -57,7 +57,7 @@ public struct FlockBarApp: App {
         .windowStyle(.hiddenTitleBar)
         .windowResizability(.contentMinSize)
 
-        Window("Set Up Flock", id: WindowID.setup) {
+        Window("setup.window_title", id: WindowID.setup) {
             SetupWindow()
                 .environment(model)
                 .environment(\.locale, AppLanguage.locale)

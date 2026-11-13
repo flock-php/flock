@@ -2,56 +2,47 @@ package main
 
 import (
 	"fmt"
-	"regexp"
 	"strconv"
 	"strings"
 )
 
-// Format specifiers of a macOS key, in argument order: Swift's interpolations.
-var macSpecifier = regexp.MustCompile(`%(?:(\d+)\$)?(lld|ld|d|@)`)
+// The macOS app writes a text as its key with an interpolation per placeholder, in the English
+// text's order: Text("php.update_to \(version)"). Swift makes that the catalog key
+// "php.update_to %@": %lld for a plural's count (an Int), %@ for everything else (a String).
+type macFormat struct {
+	types []string         // each argument's specifier: "@", "lld"
+	args  map[string][]int // a placeholder's arguments, 1-based
+}
+
+func newMacFormat(e *Entry) *macFormat {
+	f := &macFormat{args: map[string][]int{}}
+	count := ""
+	if e.Plural() {
+		count = e.count()
+	}
+	for i, name := range placeholders(e.Text) {
+		kind := "@"
+		if name == count {
+			kind = "lld"
+		}
+		f.types = append(f.types, kind)
+		f.args[name] = append(f.args[name], i+1)
+	}
+	return f
+}
 
 // The entry's key in Localizable.xcstrings.
 func macKey(e *Entry) string {
-	if !e.MacOS.Derived {
-		return e.MacOS.Key
+	key := e.Key
+	for _, kind := range newMacFormat(e).types {
+		key += " %" + kind
 	}
-	key := e.Text
-	if placeholder.MatchString(key) {
-		key = strings.ReplaceAll(key, "%", "%%")
-	}
-	return placeholder.ReplaceAllString(key, "%@")
-}
-
-// macFormat turns texts with {name} placeholders into format strings of the entry's key: each
-// placeholder becomes the specifier of its argument, the arguments in the order the key's text has
-// them. A name the text has twice ("{name} … {name}") is two arguments; a translation's first
-// {name} is the first of them, and so on.
-type macFormat struct {
-	types []string         // each argument's specifier: "@", "lld"
-	args  map[string][]int // a name's arguments, 1-based
-}
-
-func newMacFormat(e *Entry) (*macFormat, error) {
-	key := macKey(e)
-	f := &macFormat{args: map[string][]int{}}
-	for i, match := range macSpecifier.FindAllStringSubmatch(key, -1) {
-		if match[1] != "" && match[1] != strconv.Itoa(i+1) {
-			return nil, fmt.Errorf("%q: macOS key %q has its arguments out of order", e.ID, key)
-		}
-		f.types = append(f.types, match[2])
-	}
-	names := placeholders(e.Text)
-	if len(names) != len(f.types) {
-		return nil, fmt.Errorf("%q: macOS key %q has %d arguments, the text %d placeholders", e.ID, key, len(f.types), len(names))
-	}
-	for i, name := range names {
-		f.args[name] = append(f.args[name], i+1)
-	}
-	return f, nil
+	return key
 }
 
 // The text as a format string. Several arguments are numbered ("%2$@"), so a translation can
-// reorder them or, in a singular, leave the count out.
+// reorder them or, in a singular, leave the count out. A name the text has twice ("{name} …
+// {name}") is two arguments; a translation's first {name} is the first of them, and so on.
 func (f *macFormat) render(text string) string {
 	if len(f.types) == 0 {
 		return text
@@ -71,61 +62,25 @@ func (f *macFormat) render(text string) string {
 	})
 }
 
-// The text as Swift writes its key: the specifiers unnumbered, in the text's order.
-func (f *macFormat) sequential(text string) string {
-	if len(f.types) == 0 {
-		return text
-	}
-	i := 0
-	return placeholder.ReplaceAllStringFunc(strings.ReplaceAll(text, "%", "%%"), func(string) string {
-		i++
-		return "%" + f.types[min(i, len(f.types))-1]
-	})
-}
-
 func stringUnit(value string) map[string]any {
 	return map[string]any{"stringUnit": map[string]any{"state": "translated", "value": value}}
 }
 
-func generateMacOS(c *Catalog) (file, error) {
+// macos/Resources/Localizable.xcstrings: the texts the macOS app uses, in every language it
+// offers. A text a language lacks is there in English, as macOS doesn't fall back by itself.
+func generateMacOS(c *Catalog) file {
 	strs := map[string]any{}
-	for _, e := range c.Entries {
-		if e.MacOS == nil {
-			continue
-		}
-		key := macKey(e)
-		if e.NoTranslate {
-			strs[key] = map[string]any{"shouldTranslate": false}
-			continue
-		}
-		f, err := newMacFormat(e)
-		if err != nil {
-			return file{}, err
-		}
+	for _, e := range c.usedBy(MacOS) {
+		f := newMacFormat(e)
 		localizations := map[string]any{}
-		if e.Plural() {
-			localizations["en"] = map[string]any{"variations": map[string]any{"plural": map[string]any{
-				"one": stringUnit(f.render(e.One)), "other": stringUnit(f.render(e.Text)),
-			}}}
-		} else if f.sequential(e.Text) != key {
-			// The key isn't the English text: "Database category".
-			localizations["en"] = stringUnit(f.render(e.Text))
-		}
-		for _, language := range languages {
-			text := e.Translations[language.Code].For(MacOS)
+		for _, language := range c.shipped() {
 			if !e.Plural() {
-				localizations[language.Code] = stringUnit(f.render(text.Plain))
+				localizations[language.Code] = stringUnit(f.render(e.plain(language, MacOS)))
 				continue
 			}
 			plural := map[string]any{}
-			for form, value := range text.Forms {
-				plural[form] = stringUnit(f.render(value))
-			}
-			// macOS asks for every form the language has, Czech "many" too.
-			for _, form := range language.Optional {
-				if _, ok := plural[form]; !ok {
-					plural[form] = stringUnit(f.render(text.Forms["other"]))
-				}
+			for _, form := range append(append([]string{}, language.Forms...), language.Extra...) {
+				plural[form] = stringUnit(f.render(e.form(language, MacOS, form)))
 			}
 			localizations[language.Code] = map[string]any{"variations": map[string]any{"plural": plural}}
 		}
@@ -133,10 +88,23 @@ func generateMacOS(c *Catalog) (file, error) {
 		if e.Note != "" {
 			entry["comment"] = e.Note
 		}
-		strs[key] = entry
+		strs[macKey(e)] = entry
 	}
 	content := xcodeJSON(map[string]any{"sourceLanguage": "en", "strings": strs, "version": "1.0"})
-	return file{path: "macos/Resources/Localizable.xcstrings", content: content}, nil
+	return file{path: "macos/Resources/Localizable.xcstrings", content: content}
+}
+
+// macos/Sources/FlockUI/Languages.swift: the languages the Language picker offers.
+func macLanguages(c *Catalog) file {
+	var b strings.Builder
+	b.WriteString("// " + generatedNote + "\n\n")
+	b.WriteString("/// The languages the app is translated to, English first: code and name in that language.\n")
+	b.WriteString("let appLanguages: [(code: String, name: String)] = [\n")
+	for _, language := range c.shipped() {
+		fmt.Fprintf(&b, "    (%s, %s),\n", quoteJSON(language.Code), quoteJSON(language.Native))
+	}
+	b.WriteString("]\n")
+	return file{path: "macos/Sources/FlockUI/Languages.swift", content: []byte(b.String())}
 }
 
 // JSON the way Xcode writes a string catalog: keys sorted, " : " between key and value.

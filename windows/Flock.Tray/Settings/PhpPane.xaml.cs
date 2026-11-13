@@ -161,7 +161,7 @@ internal sealed partial class PhpPane : UserControl, ISettingsPane
             else if (row.HasFailedJob)
             {
                 menu.Items.Add(Item(Strings.Versions_ShowLog, () => ShowPhpLog(row)));
-                menu.Items.Add(Item(Strings.Share_Dismiss, () => _ = row.DismissCommand.ExecuteAsync(null)));
+                menu.Items.Add(Item(Strings.Sites_Share_Dismiss, () => _ = row.DismissCommand.ExecuteAsync(null)));
             }
             else if (row.HasJob)
             {
@@ -226,7 +226,7 @@ internal sealed partial class PhpPane : UserControl, ISettingsPane
             else if (row.HasFailedJob)
             {
                 menu.Items.Add(Item(Strings.Versions_ShowLog, () => ShowFrankenLog(row)));
-                menu.Items.Add(Item(Strings.Share_Dismiss, () => _ = row.DismissCommand.ExecuteAsync(null)));
+                menu.Items.Add(Item(Strings.Sites_Share_Dismiss, () => _ = row.DismissCommand.ExecuteAsync(null)));
             }
             else
             {

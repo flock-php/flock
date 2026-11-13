@@ -8,14 +8,11 @@ import (
 	"strings"
 )
 
-// The placeholder at each of String.Format's argument indices: Args when given, else every
-// placeholder in the order the texts first have it (the singular first), a plural's count {n}
-// first (Plural passes it as {0}). Texts whose placeholders are all numbers ({0}, {1}) use those
-// as the indices.
+// The placeholder at each of String.Format's argument indices: every placeholder in the order
+// the texts first have it (the singular first), a plural's count {n} first (Plural passes it as
+// {0}). Texts whose placeholders are all numbers ({0}, {1}) use those as the indices. The code
+// passes the arguments in this order.
 func windowsArgs(e *Entry) []string {
-	if e.Windows.Args != nil {
-		return e.Windows.Args
-	}
 	seen := append(placeholders(e.One), placeholders(e.Text)...)
 	numbered := len(seen) > 0
 	highest := -1
@@ -58,13 +55,9 @@ func windowsFormat(e *Entry, installer bool) func(string) string {
 	}
 	return func(text string) string {
 		return placeholder.ReplaceAllStringFunc(text, func(match string) string {
-			name := match[1 : len(match)-1]
-			i := index[name]
+			i := index[match[1:len(match)-1]]
 			if installer {
 				return "%" + strconv.Itoa(i+1)
-			}
-			if format := e.Windows.Formats[name]; format != "" {
-				return fmt.Sprintf("{%d:%s}", i, format)
 			}
 			return "{" + strconv.Itoa(i) + "}"
 		})
@@ -75,65 +68,58 @@ type resxString struct {
 	name, value, comment string
 }
 
-func generateWindows(c *Catalog) ([]file, error) {
-	// Project -> language ("" for English) -> strings.
-	resx := map[string]map[string][]resxString{"Kit": {}, "Tray": {}}
-	var installer []string
-	for _, e := range c.Entries {
-		if e.Windows == nil {
+const generatedNote = "Generated from lang/ by tools/i18n: edit lang/*/app.json, then run make i18n."
+
+// windows/Flock.Kit/Strings*.resx with the app's texts (Strings.cs.resx builds into the cs\
+// satellite assembly, and so on; a text a language lacks falls back to Strings.resx),
+// Languages.g.cs with the languages and their plural rules, and windows/installer/Strings.iss
+// with setup's languages and messages.
+func generateWindows(c *Catalog) []file {
+	shipped := c.shipped()
+	resx := map[string][]resxString{}
+	var installer []*Entry
+	for _, e := range c.usedBy(Windows) {
+		if strings.HasPrefix(e.Key, "installer.") {
+			installer = append(installer, e)
 			continue
 		}
 		format := windowsFormat(e, false)
-		for _, key := range e.Windows.Keys {
-			project, name, _ := strings.Cut(key, ".")
-			if project == "Setup" {
-				installer = append(installer, installerMessages(e, name)...)
+		name := resourceName(e.Key)
+		for _, language := range shipped {
+			code := language.Code
+			if code == "en" {
+				code = ""
+			}
+			comment := ""
+			if code == "" {
+				comment = format(e.Note)
+			}
+			if language.Code != "en" && e.text(language, Windows) == nil {
 				continue
 			}
-			add := func(language, name, value, comment string) {
-				resx[project][language] = append(resx[project][language], resxString{name, format(value), format(comment)})
-			}
 			if !e.Plural() {
-				add("", name, e.Text, e.Note)
-			} else {
-				add("", name+"_one", e.One, e.Note)
-				add("", name+"_other", e.Text, e.Note)
+				resx[code] = append(resx[code], resxString{name, format(e.plain(language, Windows)), comment})
+				continue
 			}
-			for _, language := range languages {
-				text := e.translation(language.Code, Windows)
-				if !e.Plural() {
-					add(language.Code, name, text.Plain, "")
-					continue
-				}
-				for _, form := range language.Forms {
-					add(language.Code, name+"_"+form, text.Forms[form], "")
-				}
+			for _, form := range language.Forms {
+				resx[code] = append(resx[code], resxString{name + "_" + form, format(e.form(language, Windows, form)), comment})
 			}
 		}
 	}
 	var files []file
-	for _, project := range []string{"Kit", "Tray"} {
-		for _, language := range append([]string{""}, codes()...) {
-			path := fmt.Sprintf("windows/Flock.%s/Strings.resx", project)
-			if language != "" {
-				path = fmt.Sprintf("windows/Flock.%s/Strings.%s.resx", project, language)
-			}
-			files = append(files, file{path: path, content: resxFile(resx[project][language])})
+	for _, language := range shipped {
+		path := "windows/Flock.Kit/Strings.resx"
+		code := ""
+		if language.Code != "en" {
+			code = language.Code
+			path = "windows/Flock.Kit/Strings." + language.Code + ".resx"
 		}
+		files = append(files, file{path: path, content: resxFile(resx[code])})
 	}
-	files = append(files, file{path: "windows/installer/Strings.iss", content: []byte(installerFile(installer))})
-	return files, nil
+	files = append(files, file{path: "windows/Flock.Kit/Languages.g.cs", content: []byte(languagesCS(shipped))})
+	files = append(files, file{path: "windows/installer/Strings.iss", content: []byte(installerFile(shipped, installer))})
+	return files
 }
-
-func codes() []string {
-	var codes []string
-	for _, language := range languages {
-		codes = append(codes, language.Code)
-	}
-	return codes
-}
-
-const generatedNote = "Generated from i18n/ by tools/i18n: edit i18n/*.json, then run go run ./tools/i18n."
 
 func resxFile(strs []resxString) []byte {
 	sort.Slice(strs, func(i, j int) bool { return strs[i].name < strs[j].name })
@@ -157,23 +143,75 @@ func escapeXML(s string) string {
 	return strings.NewReplacer("&", "&amp;", "<", "&lt;", ">", "&gt;").Replace(s)
 }
 
-// An installer message in every language: en.Name=…, cs.Name=…
-func installerMessages(e *Entry, name string) []string {
-	format := windowsFormat(e, true)
-	var lines []string
-	if e.Note != "" {
-		lines = append(lines, "; "+format(e.Note))
-	}
-	lines = append(lines, "en."+name+"="+format(e.Text))
-	for _, language := range languages {
-		lines = append(lines, language.Code+"."+name+"="+format(e.translation(language.Code, Windows).Plain))
-	}
-	return lines
+// The plural expression of gettext's Plural-Forms, which is C# too for a long n.
+func pluralExpression(language Language) string {
+	_, expression, _ := strings.Cut(language.PluralForms, "plural=")
+	return strings.TrimSuffix(strings.TrimSpace(expression), ";")
 }
 
-func installerFile(lines []string) string {
-	return "; " + generatedNote + "\n; Flock.iss includes it; %1 is a message's first argument.\n\n[CustomMessages]\n" +
-		strings.Join(lines, "\n") + "\n"
+func languagesCS(shipped []Language) string {
+	var b strings.Builder
+	b.WriteString("// <auto-generated/>\n// " + generatedNote + "\nnamespace Flock.Kit;\n\npublic static partial class Localization\n{\n")
+	b.WriteString("    /// <summary>The languages the app is translated to, English first (the fallback).</summary>\n")
+	var codes, names []string
+	for _, language := range shipped {
+		codes = append(codes, fmt.Sprintf("%q", language.Code))
+		names = append(names, fmt.Sprintf("[%q] = %q", language.Code, language.Native))
+	}
+	b.WriteString("    public static IReadOnlyList<string> Languages { get; } = [" + strings.Join(codes, ", ") + "];\n\n")
+	b.WriteString("    /// <summary>Each language's name in that language, for the language picker.</summary>\n")
+	b.WriteString("    public static IReadOnlyDictionary<string, string> LanguageNames { get; } = new Dictionary<string, string>\n    {\n")
+	for _, name := range names {
+		b.WriteString("        " + name + ",\n")
+	}
+	b.WriteString("    };\n\n")
+	b.WriteString("    /// <summary>The CLDR plural category of a whole number in a language: gettext's Plural-Forms.</summary>\n")
+	b.WriteString("    private static string PluralCategory(string language, long n) => language switch\n    {\n")
+	for _, language := range shipped {
+		if language.Code == "en" {
+			continue
+		}
+		var forms []string
+		for _, form := range language.Forms {
+			forms = append(forms, fmt.Sprintf("%q", form))
+		}
+		fmt.Fprintf(&b, "        %q => new[] { %s }[Index(%s)],\n", language.Code, strings.Join(forms, ", "), pluralExpression(language))
+	}
+	b.WriteString("        _ => n == 1 ? \"one\" : \"other\",\n    };\n\n")
+	b.WriteString("    // gettext's expression is an index, or a comparison where a language has two forms.\n")
+	b.WriteString("    private static int Index(int index) => index;\n\n    private static int Index(bool second) => second ? 1 : 0;\n}\n")
+	return b.String()
+}
+
+// The installer's languages and messages: en.Name=…, cs.Name=…; the English where a language
+// lacks one.
+func installerFile(shipped []Language, entries []*Entry) string {
+	var b strings.Builder
+	b.WriteString("; " + generatedNote + "\n; Flock.iss includes it; %1 is a message's first argument.\n\n[Languages]\n")
+	var languages []Language
+	for _, language := range shipped {
+		if language.Inno == "" {
+			continue
+		}
+		languages = append(languages, language)
+		file := "compiler:Languages\\" + language.Inno
+		if language.Code == "en" {
+			file = "compiler:" + language.Inno
+		}
+		b.WriteString(`Name: "` + language.Code + `"; MessagesFile: "` + file + `"` + "\n")
+	}
+	b.WriteString("\n[CustomMessages]\n")
+	for _, e := range entries {
+		format := windowsFormat(e, true)
+		name := resourceName(e.Key)
+		if e.Note != "" {
+			b.WriteString("; " + format(e.Note) + "\n")
+		}
+		for _, language := range languages {
+			b.WriteString(language.Code + "." + name + "=" + format(e.plain(language, Windows)) + "\n")
+		}
+	}
+	return b.String()
 }
 
 // The standard .resx schema and headers, as Visual Studio writes them.

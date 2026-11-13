@@ -45,7 +45,7 @@ public sealed partial class GeneralViewModel : ObservableObject, IDisposable
     public bool IsRestarting => isRestarting();
     public Visibility StatusVisibility => Status is null ? Visibility.Collapsed : Visibility.Visible;
     // Shown without the daemon too: General also holds the app's own settings (its language).
-    public string StatusText => Status is null ? Strings.Status_NotRunning : Status.IsDegraded ? Strings.Status_NeedsAttention : Strings.Status_Running;
+    public string StatusText => Status is null ? Strings.Menu_Status_NotRunning : Status.IsDegraded ? Strings.Menu_Status_NeedsAttention : Strings.Menu_Status_Running;
     public Brush StatusBrush => Status is null ? Ui.Brush("ControlStrongFillColorDisabledBrush") : Status.IsDegraded ? Ui.Caution : Ui.Success;
     public string VersionText => Status?.Version ?? "";
     public string ProcessText => Status is { } status ? Localization.Format(Strings.General_Pid, status.Pid) : "";

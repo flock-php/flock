@@ -137,14 +137,15 @@ Logs: `%AppData%\Flock\log\` (daemon.log, web.log, php8.x-cgi.log, php8.x-instal
 
 ## Translations
 
-The tray app is in English, Czech and Spanish. Its text is in `Flock.Tray/Strings.resx` (English) with
-`Strings.cs.resx` and `Strings.es.resx`, and Flock.Kit's in `Flock.Kit/Strings.resx` and its siblings; the
-installer's in `installer/Strings.iss`. All of them are generated from the catalogs the three apps share: add or
-change a text in [`i18n/`](../i18n/README.md), then run `go run ./tools/i18n` from the repository root. Code uses
-the `Strings` class the build generates from `Strings.resx` (into `obj\`, no Designer file is committed),
-XAML uses `{l:Loc Key=…}` (`xmlns:l="using:Flock.Tray"`), counts use `Localization.Plural` with `_one`/`_other`
-keys (plus `_few` in Czech: 2–4). `ResourcesTests` in Flock.Kit.Tests fails for a missing translation, a changed
-placeholder, an unknown key in XAML or untranslated text in XAML.
+The app's and the installer's texts come from [`lang/`](../lang/README.md), which the three apps share: add or
+change a text there, then run `make i18n` (`go run ./tools/i18n`) from the repository root. It writes
+`Flock.Kit/Strings.resx` with a `Strings.<language>.resx` per language (a text a language lacks falls back to
+English), `Flock.Kit/Languages.g.cs` with the languages and their plural rules, and `installer/Strings.iss`. Code
+uses the public `Strings` class the build generates from `Strings.resx` (into `obj\`, no Designer file is
+committed): `Strings.Sites_Title` for the key `sites.title`. XAML uses `{l:Loc Key=Sites_Title}`
+(`xmlns:l="using:Flock.Tray"`), counts use `Localization.Plural` with the `_one`/`_other`/... forms.
+`ResourcesTests` in Flock.Kit.Tests fails for a broken translation, a changed placeholder, an unknown key in XAML
+or untranslated text in XAML.
 
 Settings → General → Language picks the language (Windows' preferred languages by default); it applies after
 Relaunch Flock, which starts a new instance (`--relaunch=<pid>`, waiting for the old one to exit). The installer speaks

@@ -190,7 +190,7 @@ internal sealed partial class ServicesPane
             ServiceRowCommandKind.Cancel => Ui.Button(Strings.Common_Cancel, () => _ = RunCatalogAsync(entry.Id, () => Model.ReleaseActions.RunAsync(target, command))),
             ServiceRowCommandKind.Retry => Ui.Button(Strings.Setup_TryAgain, () => _ = RunCatalogAsync(entry.Id, () => Model.ReleaseActions.RunAsync(target, command)),
                 true, Ui.GlyphRefresh),
-            ServiceRowCommandKind.Dismiss => Ui.Button(Strings.Share_Dismiss, () => _ = RunCatalogAsync(entry.Id, () => Model.ReleaseActions.RunAsync(target, command))),
+            ServiceRowCommandKind.Dismiss => Ui.Button(Strings.Sites_Share_Dismiss, () => _ = RunCatalogAsync(entry.Id, () => Model.ReleaseActions.RunAsync(target, command))),
             _ => throw new ArgumentOutOfRangeException(nameof(command), command, null)
         };
     }
@@ -199,7 +199,7 @@ internal sealed partial class ServicesPane
     {
         var own = Localization.Format(target.HasData ? Strings.Services_UsesOwnData : Strings.Services_StartsEmpty, $"{entry.Name} {target.Label}");
         if (!entry.IsInstalled || await Window.Confirm(Localization.Format(Strings.Services_SwitchQuestion, $"{entry.Name} {target.Label}"),
-                Localization.Format(Strings.Services_SwitchDetails, $"{entry.Name} {entry.Line}") + " " + own, Strings.Worktree_Switch))
+                Localization.Format(Strings.Services_SwitchDetails, $"{entry.Name} {entry.Line}") + " " + own, Strings.Worktrees_Switch))
         {
             await RunCatalogAsync(entry.Id, () => Model.ReleaseActions.RunAsync(releaseTarget, ServiceRowCommandKind.Activate));
         }

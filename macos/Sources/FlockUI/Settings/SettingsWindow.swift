@@ -9,16 +9,16 @@ enum SettingsPane: String, CaseIterable, Identifiable {
 
     var title: String {
         switch self {
-        case .general: String(localized: "General")
-        case .sites: String(localized: "Sites")
+        case .general: String(localized: "general.title")
+        case .sites: String(localized: "settings.pane.sites")
         case .php: "PHP"
         case .node: "Node"
-        case .services: String(localized: "Services")
-        case .mail: String(localized: "Mail")
-        case .dumps: String(localized: "Dumps")
-        case .debugger: String(localized: "Debugger")
-        case .ai: String(localized: "AI")
-        case .about: String(localized: "About")
+        case .services: String(localized: "settings.pane.services")
+        case .mail: String(localized: "services.category.mail")
+        case .dumps: String(localized: "menu.dumps")
+        case .debugger: String(localized: "settings.pane.debugger")
+        case .ai: String(localized: "settings.pane.ai")
+        case .about: String(localized: "settings.pane.about")
         }
     }
 
@@ -113,19 +113,19 @@ struct SettingsWindow: View {
         if model.status == nil, pane != .about, pane != .general || model.needsSetup {
             if model.needsSetup {
                 ContentUnavailableView {
-                    Label { Text("Flock isn't set up yet") } icon: { LogoMark(size: 44) }
+                    Label { Text("settings.flock_isnt_set_up_yet") } icon: { LogoMark(size: 44) }
                 } description: {
-                    Text("Set Flock up to run your sites and change its settings.")
+                    Text("settings.set_flock_up_to_run")
                 } actions: {
-                    Button("Set Up Flock…") { openWindow.activating(WindowID.setup) }
+                    Button("menu.set_up_flock") { openWindow.activating(WindowID.setup) }
                 }
             } else {
                 ContentUnavailableView {
-                    Label { Text("Flock is not running") } icon: { LogoMark(size: 44) }
+                    Label { Text("app.not_running") } icon: { LogoMark(size: 44) }
                 } description: {
-                    Text(model.error ?? String(localized: "Start the daemon to change its settings."))
+                    Text(model.error ?? String(localized: "settings.start_daemon_to_change"))
                 } actions: {
-                    Button("Start Flock") { Task { await model.restart() } }
+                    Button("menu.start_flock") { Task { await model.restart() } }
                         .disabled(model.isRestarting)
                 }
             }

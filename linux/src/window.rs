@@ -17,16 +17,16 @@ use crate::setup::SetupView;
 
 /// The panes in sidebar order: id, title, icon.
 const PANES: [(&str, &str, &str); 10] = [
-    ("general", tr_noop!("General"), "emblem-system-symbolic"),
-    ("sites", tr_noop!("Sites"), "dev.flock.Flock-sites-symbolic"),
+    ("general", tr_noop!("general.title"), "emblem-system-symbolic"),
+    ("sites", tr_noop!("settings.pane.sites"), "dev.flock.Flock-sites-symbolic"),
     ("php", "PHP", "utilities-terminal-symbolic"),
     ("node", "Node", "package-x-generic-symbolic"),
-    ("services", tr_noop!("Services"), "network-server-symbolic"),
-    ("mail", tr_noop!("Mail"), "mail-unread-symbolic"),
-    ("dumps", tr_noop!("Dumps"), "applications-science-symbolic"),
-    ("debugger", tr_noop!("Debugger"), "applications-engineering-symbolic"),
-    ("ai", tr_noop!("AI"), "starred-symbolic"),
-    ("about", tr_noop!("About"), "help-about-symbolic"),
+    ("services", tr_noop!("settings.pane.services"), "network-server-symbolic"),
+    ("mail", tr_noop!("services.category.mail"), "mail-unread-symbolic"),
+    ("dumps", tr_noop!("menu.dumps"), "applications-science-symbolic"),
+    ("debugger", tr_noop!("settings.pane.debugger"), "applications-engineering-symbolic"),
+    ("ai", tr_noop!("settings.pane.ai"), "starred-symbolic"),
+    ("about", tr_noop!("settings.pane.about"), "help-about-symbolic"),
 ];
 
 pub struct MainWindow {
@@ -66,12 +66,12 @@ impl MainWindow {
         let title = adw::WindowTitle::new("Flock", "");
         let menu = gio::Menu::new();
         let windows = gio::Menu::new();
-        windows.append(Some(tr!("Mail")), Some("app.mail"));
-        windows.append(Some(tr!("Dumps")), Some("app.dumps"));
-        windows.append(Some(tr!("Logs")), Some("app.logs"));
+        windows.append(Some(tr!("services.category.mail")), Some("app.mail"));
+        windows.append(Some(tr!("menu.dumps")), Some("app.dumps"));
+        windows.append(Some(tr!("dumps.event_kind.logs")), Some("app.logs"));
         menu.append_section(None, &windows);
         let quit = gio::Menu::new();
-        quit.append(Some(tr!("Quit Flock")), Some("app.quit"));
+        quit.append(Some(tr!("menu.quit_flock")), Some("app.quit"));
         menu.append_section(None, &quit);
         let menu_button = gtk::MenuButton::builder().icon_name("open-menu-symbolic").menu_model(&menu).primary(true).build();
         let sidebar_header = adw::HeaderBar::builder().title_widget(&title).build();
@@ -81,7 +81,7 @@ impl MainWindow {
         sidebar_view.set_content(Some(&gtk::ScrolledWindow::builder().child(&sidebar).build()));
         let sidebar_page = adw::NavigationPage::new(&sidebar_view, "Flock");
 
-        let banner = adw::Banner::builder().button_label(tr!("Dismiss")).use_markup(false).build();
+        let banner = adw::Banner::builder().button_label(tr!("sites.share.dismiss")).use_markup(false).build();
         let services = panes::services::ServicesPane::new(model.clone(), banner.clone());
         let sites = panes::sites::SitesPane::new(model.clone(), banner.clone());
         let panes: Vec<(&'static str, Box<dyn Pane>)> = vec![
@@ -114,7 +114,7 @@ impl MainWindow {
         let content_view = adw::ToolbarView::new();
         content_view.add_top_bar(&adw::HeaderBar::new());
         content_view.set_content(Some(&body));
-        let content = adw::NavigationPage::new(&content_view, tr!("General"));
+        let content = adw::NavigationPage::new(&content_view, tr!("general.title"));
         let split = adw::NavigationSplitView::builder().sidebar(&sidebar_page).content(&content).build();
 
         let setup = SetupView::new(model.clone());
@@ -292,10 +292,10 @@ impl MainWindow {
         let status = self.model.status();
         let id = self.selected();
         if status.is_none() && id != "about" {
-            self.unavailable.set_title(tr!("Flock Is Not Running"));
+            self.unavailable.set_title(tr!("settings.flock_is_not_running"));
             self.unavailable
-                .set_description(Some(&self.model.error().unwrap_or_else(|| tr!("Start the daemon to change its settings.").to_owned())));
-            self.unavailable_button.set_label(tr!("Start Flock"));
+                .set_description(Some(&self.model.error().unwrap_or_else(|| tr!("settings.start_daemon_to_change").to_owned())));
+            self.unavailable_button.set_label(tr!("menu.start_flock"));
             self.unavailable_button.set_sensitive(!self.model.is_restarting());
             // Built again when the page shows, with the setting as it is now.
             if self.stack.visible_child_name().as_deref() != Some("unavailable") {

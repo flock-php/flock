@@ -23,7 +23,7 @@ internal sealed partial class DumpsPane : UserControl, ISettingsPane
         loaded = true;
     }
 
-    public string Title => Strings.Pane_Dumps;
+    public string Title => Strings.Settings_Pane_Dumps;
     public string Subtitle => Strings.Dumps_Subtitle;
     public UIElement Root => this;
     public bool ScrollsItself => false;

@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Runtime.InteropServices;
 using System.Runtime.InteropServices.WindowsRuntime;
 using Windows.ApplicationModel.DataTransfer;
@@ -24,22 +25,22 @@ internal sealed partial class SitesPane
 
     private StackPanel Share(Status.Site site)
     {
-        var section = Section(Strings.Share_Share);
+        var section = Section(Strings.Sites_Share_Share);
         var share = site.Share;
         if (share is null)
         {
-            section.Children.Add(Ui.Caption(Strings.Share_Explanation));
-            var start = Ui.Button(Strings.Share_ShareEllipsis, () => Start(site.Name, () => StartShare(site)));
+            section.Children.Add(Ui.Caption(Strings.Sites_Share_Explanation));
+            var start = Ui.Button(Strings.Sites_Share_ShareEllipsis, () => Start(site.Name, () => StartShare(site)));
             start.IsEnabled = site.Url is not null;
             section.Children.Add(start);
             return section;
         }
 
-        var stop = Ui.Button(share.IsRunning ? Strings.Share_StopSharing : share.IsFailed ? Strings.Share_Dismiss : Strings.Share_Stop, () => Start(site.Name, () => Model.Sites.StopShareAsync(site.Name)));
+        var stop = Ui.Button(share.IsRunning ? Strings.Sites_Share_StopSharing : share.IsFailed ? Strings.Sites_Share_Dismiss : Strings.Sites_Share_Stop, () => Start(site.Name, () => Model.Sites.StopShareAsync(site.Name)));
         switch (share.State)
         {
             case Status.ShareState.Building or Status.ShareState.Starting:
-                section.Children.Add(Ui.Caption(share.State == Status.ShareState.Building ? Strings.Share_Building : Strings.Share_Starting, wrap: false));
+                section.Children.Add(Ui.Caption(share.State == Status.ShareState.Building ? Strings.Sites_Share_Building : Strings.Sites_Share_Starting, wrap: false));
                 section.Children.Add(new ProgressBar { IsIndeterminate = true, HorizontalAlignment = HorizontalAlignment.Left, Width = 320 });
                 section.Children.Add(stop);
                 break;
@@ -55,15 +56,15 @@ internal sealed partial class SitesPane
                 }
                 if (share.ExpiresAt is { } expires)
                 {
-                    section.Children.Add(Ui.Caption(Localization.Format(Strings.Share_EndsAt, expires.ToLocalTime()), wrap: false));
+                    section.Children.Add(Ui.Caption(Localization.Format(Strings.Sites_Share_EndsAt, expires.ToLocalTime().ToString("t", CultureInfo.CurrentCulture)), wrap: false));
                 }
                 if (share.Allow.Count > 0)
                 {
-                    section.Children.Add(Ui.Caption(Localization.Format(Strings.Share_OnlyFor, string.Join(", ", share.Allow))));
+                    section.Children.Add(Ui.Caption(Localization.Format(Strings.Sites_Share_OnlyFor, string.Join(", ", share.Allow))));
                 }
                 if (share.Debug)
                 {
-                    section.Children.Add(Ui.Caption(Strings.Share_DebugOn));
+                    section.Children.Add(Ui.Caption(Strings.Sites_Share_DebugOn));
                 }
                 if (share.Warning is { } warning)
                 {
@@ -76,8 +77,8 @@ internal sealed partial class SitesPane
                 var buttons = Ui.Row(8);
                 if (share.CanRebuild)
                 {
-                    var rebuild = Ui.Button(share.Rebuilding ? Strings.Share_Rebuilding : Strings.Share_Rebuild, () => Start(site.Name, () => Model.Sites.RebuildShareAsync(site.Name)),
-                        tooltip: Strings.Share_RebuildTooltip);
+                    var rebuild = Ui.Button(share.Rebuilding ? Strings.Sites_Share_Rebuilding : Strings.Sites_Share_Rebuild, () => Start(site.Name, () => Model.Sites.RebuildShareAsync(site.Name)),
+                        tooltip: Strings.Sites_Share_RebuildTooltip);
                     rebuild.IsEnabled = !share.Rebuilding;
                     buttons.Children.Add(rebuild);
                 }
@@ -85,7 +86,7 @@ internal sealed partial class SitesPane
                 section.Children.Add(buttons);
                 break;
             default:
-                section.Children.Add(Warning(share.Error ?? Strings.Share_Stopped));
+                section.Children.Add(Warning(share.Error ?? Strings.Sites_Share_Stopped));
                 var allow = share.Allow.ToList();
                 var debug = share.Debug;
                 section.Children.Add(Ui.Row(8, Ui.Button(Strings.Common_TryAgain, () => Start(site.Name, () => Model.Sites.StartShareAsync(site.Name, allow, debug))), stop));
@@ -100,15 +101,15 @@ internal sealed partial class SitesPane
     /// </summary>
     private async Task StartShare(Status.Site site)
     {
-        var box = new TextBox { PlaceholderText = Strings.Share_AllowPlaceholder, Header = Strings.Share_AllowHeader };
-        var debug = new CheckBox { Content = Strings.Share_ShowErrors };
+        var box = new TextBox { PlaceholderText = Strings.Sites_Share_AllowPlaceholder, Header = Strings.Sites_Share_AllowHeader };
+        var debug = new CheckBox { Content = Strings.Sites_Share_ShowErrors };
         var dialog = new ContentDialog
         {
-            Title = Localization.Format(Strings.Share_Title, site.Name),
+            Title = Localization.Format(Strings.Sites_Share_Title, site.Name),
             Content = Ui.Column(12, box,
-                Ui.Caption(Strings.Share_AllowExplanation),
-                Ui.Column(2, debug, Ui.Caption(Strings.Share_ShowErrorsExplanation))),
-            PrimaryButtonText = Strings.Share_Share,
+                Ui.Caption(Strings.Sites_Share_AllowExplanation),
+                Ui.Column(2, debug, Ui.Caption(Strings.Sites_Share_ShowErrorsExplanation))),
+            PrimaryButtonText = Strings.Sites_Share_Share,
             CloseButtonText = Strings.Common_Cancel,
             DefaultButton = ContentDialogButton.Primary,
             XamlRoot = Window.XamlRoot
@@ -129,11 +130,11 @@ internal sealed partial class SitesPane
     private Image QrImage(string data, string site)
     {
         var image = new Image { Width = 160, Height = 160, Stretch = Stretch.Uniform, HorizontalAlignment = HorizontalAlignment.Left, CanDrag = true };
-        Ui.AutomationName(image, Strings.Share_QrName);
-        ToolTipService.SetToolTip(image, Strings.Share_QrTooltip);
-        var copy = new MenuFlyoutItem { Text = Strings.Share_CopyImage };
+        Ui.AutomationName(image, Strings.Sites_Share_QrName);
+        ToolTipService.SetToolTip(image, Strings.Sites_Share_QrTooltip);
+        var copy = new MenuFlyoutItem { Text = Strings.Sites_Share_CopyImage };
         copy.Click += (_, _) => _ = CopyQr(data);
-        var save = new MenuFlyoutItem { Text = Strings.Share_SaveImage };
+        var save = new MenuFlyoutItem { Text = Strings.Sites_Share_SaveImage };
         save.Click += (_, _) => _ = SaveQr(data, site);
         image.ContextFlyout = new MenuFlyout { Items = { copy, save } };
         image.DragStarting += async (_, e) =>
@@ -211,7 +212,7 @@ internal sealed partial class SitesPane
     private async Task SaveQr(string data, string site)
     {
         var picker = new FileSavePicker { SuggestedFileName = Path.GetFileNameWithoutExtension(QrFileName(site)) };
-        picker.FileTypeChoices.Add(Strings.Share_PngImage, [".png"]);
+        picker.FileTypeChoices.Add(Strings.Sites_Share_PngImage, [".png"]);
         InitializeWithWindow.Initialize(picker, Window.Hwnd);
         var file = await picker.PickSaveFileAsync();
         if (file is null)
@@ -224,7 +225,7 @@ internal sealed partial class SitesPane
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException or FormatException)
         {
-            await Ui.Inform(Window.Content.XamlRoot, Strings.Share_CouldNotSaveQr, e.Message);
+            await Ui.Inform(Window.Content.XamlRoot, Strings.Sites_Share_CouldNotSaveQr, e.Message);
         }
     }
 }

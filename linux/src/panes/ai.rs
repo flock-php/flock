@@ -27,7 +27,7 @@ struct Inner {
 impl AiPane {
     pub fn new(banner: adw::Banner) -> Self {
         let view = PaneView::new(tr!(
-            "Let AI agents like Claude Code and Cursor work with Flock: your sites' URLs and PHP versions, logs, dumps and mail, and installing versions and services."
+            "ai.subtitle"
         ));
         Self(Rc::new(Inner { view, banner, mcp: RefCell::default(), working: RefCell::default(), loaded: Cell::new(false) }))
     }
@@ -67,8 +67,8 @@ impl Inner {
     fn render(self: &Rc<Self>) {
         let mcp = self.mcp.borrow().clone();
         let clients = group(
-            tr!("AI clients"),
-            tr!("Added once, Flock works in every project. Restart the client, or reload its MCP servers, after adding Flock."),
+            tr!("ai.clients"),
+            tr!("ai.added_once"),
         );
         match &mcp {
             Some(mcp) => {
@@ -76,18 +76,18 @@ impl Inner {
                     clients.add(&self.client_row(client));
                 }
             }
-            None => clients.add(&adw::ActionRow::builder().title(tr!("Loading…")).build()),
+            None => clients.add(&adw::ActionRow::builder().title(tr!("common.loading")).build()),
         }
-        let other = group(tr!("Other clients"), tr!("Add this to the client's MCP settings."));
+        let other = group(tr!("ai.other_clients"), tr!("ai.add_to_settings"));
         other.add(&code_block(mcp.as_ref().map_or("", |m| m.snippet.as_str())));
         self.view.set_groups(&[clients.upcast(), other.upcast()]);
     }
 
     fn client_row(self: &Rc<Self>, client: &McpClient) -> adw::ActionRow {
         let caption = match client.state.as_str() {
-            "registered" => tr!("Flock is added"),
-            "available" => tr!("Installed"),
-            _ => tr!("Not installed"),
+            "registered" => tr!("ai.flock_added"),
+            "available" => tr!("common.installed"),
+            _ => tr!("common.not_installed"),
         };
         let mut subtitle = caption.to_owned();
         if !client.problem.is_empty() {
@@ -106,11 +106,11 @@ impl Inner {
         let id = client.id.clone();
         let this = self.clone();
         let action = match client.state.as_str() {
-            "registered" => Some(button(tr!("Remove"), false, move || {
+            "registered" => Some(button(tr!("common.remove"), false, move || {
                 let id2 = id.clone();
                 this.run(Some(id.clone()), move |c| c.unregister_mcp(&id2));
             })),
-            "available" => Some(button(tr!("Add"), false, move || {
+            "available" => Some(button(tr!("common.add"), false, move || {
                 let id2 = id.clone();
                 this.run(Some(id.clone()), move |c| c.register_mcp(&id2));
             })),

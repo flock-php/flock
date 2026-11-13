@@ -183,10 +183,10 @@ impl AppModel {
     /// "Running · v1.2", "Needs attention · v1.2", "Not running" or "Not set up".
     pub fn headline(&self) -> String {
         match (self.status.borrow().as_ref(), self.needs_setup()) {
-            (_, true) => tr!("Not set up").to_owned(),
-            (Some(s), _) if s.is_degraded() => tr!("Needs attention · {version}", version = display_version(&s.version)),
-            (Some(s), _) => tr!("Running · {version}", version = display_version(&s.version)),
-            (None, _) => tr!("Not running").to_owned(),
+            (_, true) => tr!("menu.status.not_set_up").to_owned(),
+            (Some(s), _) if s.is_degraded() => tr!("app.needs_attention_version", version = display_version(&s.version)),
+            (Some(s), _) => tr!("app.running_version", version = display_version(&s.version)),
+            (None, _) => tr!("sites.proxy.not_running").to_owned(),
         }
     }
 }
