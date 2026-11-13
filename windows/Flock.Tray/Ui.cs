@@ -34,6 +34,7 @@ internal static class Ui
     public const string GlyphAdd = "\uE710";
     public const string GlyphRemove = "\uE738";
     public const string GlyphCopy = "\uE8C8";
+    public const string GlyphEdit = "\uE70F";
     public const string GlyphLock = "\uE72E";
     public const string GlyphMore = "\uE712";
     public const string GlyphDownload = "\uE896";

@@ -427,8 +427,10 @@ internal sealed partial class SitesPane : UserControl, ISettingsPane
         var node = row?.Node ?? Major(site.Node ?? "");
         var panel = new StackPanel { Spacing = 20 };
 
-        // Header: name, address and folder, and the site's actions.
+        // Header: name, address and folder, and the site's actions. The name and the address carry
+        // their own pencils (macOS parity): click-to-rename lives right next to what it renames.
         var name = Ui.Row(8, Ui.Text(DisplayName(site), "SubtitleTextBlockStyle", wrap: false));
+        name.Children.Add(Ui.IconButton(Ui.GlyphEdit, "Rename the display name…", () => Start(site.Name, () => RenameTitleAsync(site))));
         if (site.Parked)
         {
             name.Children.Add(Ui.Badge("Project folder", Ui.Tone.Neutral));
@@ -438,7 +440,8 @@ internal sealed partial class SitesPane : UserControl, ISettingsPane
         {
             var link = Ui.Link(siteUrl, () => Model.Open(site));
             link.Padding = new Thickness(0);
-            heading.Children.Add(link);
+            var address = Ui.Row(0, link, Ui.IconButton(Ui.GlyphEdit, "Change the domain name…", () => Start(site.Name, () => RenameHostAsync(site))));
+            heading.Children.Add(address);
         }
         var path = Ui.Caption(site.Path, Ui.TertiaryText, false);
         ToolTipService.SetToolTip(path, site.Path);
@@ -641,7 +644,7 @@ internal sealed partial class SitesPane : UserControl, ISettingsPane
     /// <summary>A bundled CLI run's aggregated output, shown under the control that ran it (the SetupWindow's
     /// log box, compact): monospaced, selectable, horizontally scrollable.</summary>
     private static Border CliOutput(string output) =>
-        Ui.Card(new ScrollViewer { MaxHeight = 160, HorizontalScrollBarVisibility = ScrollBarVisibility.Auto, Content = Ui.MonoText(output, 12) }, new Thickness(12, 10));
+        Ui.Card(new ScrollViewer { MaxHeight = 160, HorizontalScrollBarVisibility = ScrollBarVisibility.Auto, Content = Ui.MonoText(output, 12) }, new Thickness(12, 10, 12, 10));
 
     /// <summary>A section of the details: a heading and its settings.</summary>
     private static StackPanel Section(string title, params UIElement[] rows)
@@ -1208,7 +1211,7 @@ internal sealed partial class SitesPane : UserControl, ISettingsPane
     {
         var running = Ui.Row(10, new ProgressRing { Width = 16, Height = 16 }, Ui.Caption($"Flock is making .{suffix} resolve…", wrap: false));
         var output = Ui.MonoText("", 12);
-        var box = Ui.Card(new ScrollViewer { MaxHeight = 160, HorizontalScrollBarVisibility = ScrollBarVisibility.Auto, Content = output }, new Thickness(12, 10));
+        var box = Ui.Card(new ScrollViewer { MaxHeight = 160, HorizontalScrollBarVisibility = ScrollBarVisibility.Auto, Content = output }, new Thickness(12, 10, 12, 10));
         var declined = Ui.Caption("", Ui.Caution);
         box.Visibility = Visibility.Collapsed;
         declined.Visibility = Visibility.Collapsed;
@@ -1320,17 +1323,9 @@ internal sealed partial class SitesPane : UserControl, ISettingsPane
         var nodeMajor = Major(site.Node ?? "");
         var nodeFile = site.NodePinnedHere ? Path.GetFileName(site.NodeFile) : ".nvmrc";
 
-        // Renames first: the display name through the API, the domain name through the bundled CLI. Worktrees
-        // never see this menu — the details route them to WorktreeDetail, which has no "…" button at all.
-        menu.Items.Add(Item("Rename…", () => Start(site.Name, () => RenameTitleAsync(site))));
-        if (site.Title.Length > 0)
-        {
-            menu.Items.Add(Item("Use the site name", () => Start(site.Name, () => Model.Sites.UpdateAsync(site.Name, new SiteChange(Title: "")))));
-        }
-        menu.Items.Add(Item("Change the domain name…", () => Start(site.Name, () => RenameHostAsync(site))));
-        menu.Items.Add(new MenuFlyoutSeparator());
-
-        // Pin and unpin items appear only when there is something to pin or unpin (the menu always has the rename items).
+        // Pin and unpin items appear only when there is something to pin or unpin. Renames live
+        // in the header (their pencils, macOS parity); worktrees never see this menu at all —
+        // the details route them to WorktreeDetail, which has no "…" button.
         if (site.Php.Length > 0 && !(site.PhpSource == Status.VersionSource.Project && site.PhpPinnedHere))
         {
             menu.Items.Add(Item($"Pin PHP {site.Php} to Project…", () => Start(site.Name, () => Pin(site, "php", site.Php,
@@ -1466,7 +1461,7 @@ internal sealed partial class SitesPane : UserControl, ISettingsPane
     {
         var running = Ui.Row(10, new ProgressRing { Width = 16, Height = 16 }, Ui.Caption("Flock is renaming the domain…", wrap: false));
         var output = Ui.MonoText("", 12);
-        var box = Ui.Card(new ScrollViewer { MaxHeight = 160, HorizontalScrollBarVisibility = ScrollBarVisibility.Auto, Content = output }, new Thickness(12, 10));
+        var box = Ui.Card(new ScrollViewer { MaxHeight = 160, HorizontalScrollBarVisibility = ScrollBarVisibility.Auto, Content = output }, new Thickness(12, 10, 12, 10));
         var declined = Ui.Caption("", Ui.Caution);
         box.Visibility = Visibility.Collapsed;
         declined.Visibility = Visibility.Collapsed;
