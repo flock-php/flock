@@ -354,7 +354,7 @@ impl Inner {
 
     /// A site's row, or a worktree's (by its branch), which opens its detail.
     fn site_row(self: &Rc<Self>, site: &SiteStatus) -> adw::ActionRow {
-        let title = if site.is_worktree() { site.worktree_label() } else { site.name.clone() };
+        let title = display_name(site);
         let row = adw::ActionRow::builder()
             .title(glib::markup_escape_text(&title))
             .subtitle(glib::markup_escape_text(&site.domain))
@@ -374,7 +374,7 @@ impl Inner {
     /// is remembered), and its arrow opens the site.
     fn expander(self: &Rc<Self>, site: &SiteStatus, worktrees: &[&SiteStatus]) -> adw::ExpanderRow {
         let row = adw::ExpanderRow::builder()
-            .title(glib::markup_escape_text(&site.name))
+            .title(glib::markup_escape_text(&display_name(site)))
             .subtitle(glib::markup_escape_text(&site.domain))
             .expanded(self.expanded.borrow().contains(&site.name))
             .build();
@@ -444,12 +444,34 @@ impl Inner {
         header.add(&back);
 
         let title = adw::ActionRow::builder()
-            .title(glib::markup_escape_text(&site.name))
+            .title(glib::markup_escape_text(&display_name(site)))
             .subtitle(glib::markup_escape_text(&format!("{}\n{}", site.url.as_deref().unwrap_or(&site.domain), site.path)))
             .subtitle_selectable(true)
             .build();
         if site.parked {
             title.add_suffix(&badge("Project folder", ""));
+        }
+        // The header's two pencils (macOS's click-to-edit name and the pencil beside the URL,
+        // Windows's header pencils): each sits next to the thing it edits — the display name, and
+        // the address the site is served at. A worktree never reaches this header (render_detail
+        // routes it to its own), and macOS shows the domain pencil only where a URL is served.
+        let pencil = |tooltip: &str| {
+            gtk::Button::builder()
+                .icon_name("document-edit-symbolic")
+                .tooltip_text(tooltip)
+                .valign(gtk::Align::Center)
+                .css_classes(["flat"])
+                .build()
+        };
+        let rename_title = pencil("Rename the display name…");
+        let (this, s) = (self.clone(), site.clone());
+        rename_title.connect_clicked(move |_| this.rename_title(&s));
+        title.add_suffix(&rename_title);
+        if site.url.is_some() {
+            let rename_host = pencil("Change the domain name…");
+            let (this, s) = (self.clone(), site.clone());
+            rename_host.connect_clicked(move |_| this.rename_host(&s));
+            title.add_suffix(&rename_host);
         }
         let actions = gtk::Box::builder().spacing(4).valign(gtk::Align::Center).build();
         let icon_button =
@@ -489,6 +511,120 @@ impl Inner {
             header.add(&adw::ActionRow::builder().title(glib::markup_escape_text(problem)).css_classes(["warning"]).build());
         }
         header
+    }
+
+    /// Renames the display name (macOS's SiteTitleField, Windows's RenameTitleAsync): the dialog
+    /// pre-fills the display name and the help line names the site an empty field falls back to.
+    /// The submit is a title-only PATCH — the wire carries nothing but `title` (api.rs's
+    /// skip_serializing_if pins it; encodes_a_site_change), and an empty one stores "" so the site
+    /// shows its folder name again. A refusal lands in the pane's banner the way every other
+    /// site edit's does; a success arrives with the Status the PATCH returns.
+    fn rename_title(self: &Rc<Self>, site: &SiteStatus) {
+        let entry = adw::EntryRow::builder().title("Display name").build();
+        entry.set_text(&site.title);
+        entry.set_activates_default(true);
+        let list = gtk::ListBox::builder().css_classes(["boxed-list"]).selection_mode(gtk::SelectionMode::None).build();
+        list.append(&entry);
+        // EntryRow gained a placeholder only in libadwaita 1.6, above Ubuntu 24.04's 1.5, so the
+        // name an empty field inherits is spoken in the help line instead (macOS's placeholder).
+        let dialog = adw::AlertDialog::new(
+            Some(&format!("Rename {}", display_name(site))),
+            Some(&format!("Shown in Flock. Leave empty to use the site name ({}).", site.name)),
+        );
+        dialog.set_extra_child(Some(&list));
+        dialog.add_responses(&[("cancel", "Cancel"), ("rename", "Rename")]);
+        dialog.set_response_appearance("rename", adw::ResponseAppearance::Suggested);
+        dialog.set_default_response(Some("rename"));
+        dialog.set_close_response("cancel");
+        let (this, name) = (self.clone(), site.name.clone());
+        dialog.choose(Some(&self.stack), gio::Cancellable::NONE, move |response| {
+            if response != "rename" {
+                return;
+            }
+            // Whatever stands, trimmed, goes: an empty field is the way back to the site name.
+            let typed = entry.text().trim().to_owned();
+            this.change(&name, SiteChange { title: Some(typed), ..Default::default() });
+        });
+    }
+
+    /// Changes the domain name — the label the site is served as under its suffix (macOS's
+    /// RenameHostSheet, Windows's RenameHostAsync). Nothing is validated here: the bundled CLI's
+    /// `flock site host` owns the label rules and retargets the site's and its worktrees' .env
+    /// files in one run, so its output — refusals included — is what the user reads. A site that
+    /// overrides the name today also gets the way back to the folder name.
+    fn rename_host(self: &Rc<Self>, site: &SiteStatus) {
+        let dns = self.status.borrow().as_ref().map(|s| s.dns.clone()).unwrap_or_default();
+        let global = if dns.tld.is_empty() { "test".to_owned() } else { dns.tld.clone() };
+        // What it serves under today; an old daemon names none, and then the global suffix stands.
+        let suffix = if site.tld.is_empty() { global } else { site.tld.clone() };
+        let entry = adw::EntryRow::builder().title("Domain name").build();
+        entry.set_text(if site.site_host.is_empty() { &site.name } else { &site.site_host });
+        entry.set_activates_default(true);
+        // The live preview stands right under the field and follows every keystroke — the shape
+        // the alias sheet's help label has in this file.
+        let lands = gtk::Label::builder().wrap(true).xalign(0.0).css_classes(["caption", "dim-label"]).build();
+        let stays = gtk::Label::builder()
+            .label(format!("The suffix stays .{suffix}; it is chosen on the site’s Domain row."))
+            .wrap(true)
+            .xalign(0.0)
+            .css_classes(["caption", "dim-label"])
+            .build();
+        let list = gtk::ListBox::builder().css_classes(["boxed-list"]).selection_mode(gtk::SelectionMode::None).build();
+        list.append(&entry);
+        let column = gtk::Box::builder().orientation(gtk::Orientation::Vertical).spacing(12).build();
+        column.append(&list);
+        column.append(&lands);
+        column.append(&stays);
+        let dialog = adw::AlertDialog::new(Some(&format!("Change the domain name of {}", display_name(site))), None);
+        dialog.set_extra_child(Some(&column));
+        if site.site_host.is_empty() {
+            dialog.add_responses(&[("cancel", "Cancel"), ("rename", "Rename")]);
+        } else {
+            // Going back to the folder name is offered only where an override stands today
+            // (macOS's and Windows's guard on site_host).
+            dialog.add_responses(&[("folder", "Use the folder name"), ("cancel", "Cancel"), ("rename", "Rename")]);
+        }
+        dialog.set_response_appearance("rename", adw::ResponseAppearance::Suggested);
+        dialog.set_default_response(Some("rename"));
+        dialog.set_close_response("cancel");
+        let update: Rc<dyn Fn()> = Rc::new({
+            let (entry, lands, dialog) = (entry.clone(), lands.clone(), dialog.clone());
+            move || {
+                let text = entry.text();
+                let typed = text.trim();
+                // Rename needs a label; whether it is a valid one is the CLI's call, not ours
+                // (macOS's canRename).
+                dialog.set_response_enabled("rename", !typed.is_empty());
+                lands.set_label(&format!("The site will be served at {}.{}", if typed.is_empty() { "name" } else { typed }, suffix));
+            }
+        });
+        entry.connect_changed({
+            let update = update.clone();
+            move |_| update()
+        });
+        update();
+        let (this, name) = (self.clone(), site.name.clone());
+        dialog.choose(Some(&self.stack), gio::Cancellable::NONE, move |response| {
+            // The raw typed label goes to argv as it stands: the CLI screens it (R1).
+            let args = match response.as_str() {
+                "folder" => vec!["site".to_owned(), "host".to_owned(), "--default".to_owned(), name.clone()],
+                "rename" => {
+                    let typed = entry.text().trim().to_owned();
+                    if typed.is_empty() {
+                        return;
+                    }
+                    vec!["site".to_owned(), "host".to_owned(), typed, name.clone()]
+                }
+                _ => return,
+            };
+            this.cli_run_sheet(
+                args,
+                "Renaming the domain…",
+                "Flock is renaming the domain…",
+                &format!("Renaming {name}’s domain didn’t finish"),
+                "You declined the password. Finish by running `flock site host` in a terminal.",
+            );
+        });
     }
 
     fn site_group(self: &Rc<Self>, site: &SiteStatus) -> adw::PreferencesGroup {
@@ -983,15 +1119,32 @@ impl Inner {
     /// ProvisionSheet, Windows's second ProvisionSuffixAsync dialog): the alias is in the config
     /// already, and the bundled CLI makes the suffix resolve with trusted certificates, the polkit
     /// prompt included — so the run and its password dialog belong to this sheet, not the pane.
-    /// Success closes the sheet by itself; a failure keeps it open with the CLI's own words, and a
-    /// declined prompt adds that the alias stands and `flock install` finishes it. However it
-    /// ended, the pane refreshes when the sheet closes (macOS's onDismiss).
+    /// The sheet itself is cli_run_sheet's, shared with the domain rename.
     fn chain_install(self: &Rc<Self>, site: &str, suffix: &str) {
-        let suffix = suffix.to_owned();
-        let site = site.to_owned();
+        self.cli_run_sheet(
+            vec!["install".to_owned()],
+            &format!("Provisioning .{suffix}…"),
+            &format!("Flock is making .{suffix} resolve…"),
+            &format!("Provisioning .{suffix} didn’t finish"),
+            &format!(
+                "You declined the password. The alias is added to {site}; finish by running `flock install` \
+                 in a terminal to make .{suffix} resolve."
+            ),
+        );
+    }
+
+    /// The pane's one shape for a bundled CLI run that owns the moment (macOS's ProvisionSheet,
+    /// Windows's run dialogs): a second sheet with a spinner and the CLI's last line while it runs,
+    /// the CLI's own words in an Output row when it ends short, the recovery note when the polkit
+    /// prompt was declined; success closes the sheet by itself, and however it ended the pane
+    /// refreshes when the sheet closes (macOS's onDismiss). Used by the alias chain and the domain
+    /// rename; the suffix switch keeps its inline variant because its controls stay on screen.
+    fn cli_run_sheet(self: &Rc<Self>, args: Vec<String>, title: &str, running_label: &str, failed_title: &str, declined_note: &str) {
+        // The run's callbacks outlive this call, so the sheet's words are owned from here on.
+        let (title, running_label, failed_title, declined_note) =
+            (title.to_owned(), running_label.to_owned(), failed_title.to_owned(), declined_note.to_owned());
         let spinner = gtk::Spinner::builder().spinning(true).valign(gtk::Align::Center).build();
-        let progress =
-            gtk::Label::builder().label(format!("Flock is making .{suffix} resolve…")).wrap(true).xalign(0.0).hexpand(true).build();
+        let progress = gtk::Label::builder().label(running_label).wrap(true).xalign(0.0).hexpand(true).build();
         let running = gtk::Box::builder().spacing(8).build();
         running.append(&spinner);
         running.append(&progress);
@@ -1003,31 +1156,27 @@ impl Inner {
         column.append(&running);
         column.append(&note);
         column.append(&output);
-        let dialog =
-            adw::Dialog::builder().title(format!("Provisioning .{suffix}…")).content_width(520).child(&dialog_view(&column)).build();
+        let dialog = adw::Dialog::builder().title(title).content_width(520).child(&dialog_view(&column)).build();
         dialog.connect_closed({
             let model = self.model.clone();
             move |_| model.refresh()
         });
         dialog.present(Some(&self.stack));
         installation::run_streaming(
-            vec!["install".to_owned()],
+            args,
             move |line| progress.set_label(line.trim()),
             move |out| {
                 spinner.set_spinning(false);
                 if out.ok {
-                    // Provisioned: the sheet closes itself, and the close refreshes the rows.
+                    // Done: the sheet closes itself, and the close refreshes the rows.
                     dialog.close();
                     return;
                 }
                 // Ended short: the sheet keeps the CLI's own words, as General's Domain card does.
-                dialog.set_title(&format!("Provisioning .{suffix} didn’t finish"));
+                dialog.set_title(&failed_title);
                 running.set_visible(false);
                 if installation::declined(&out) {
-                    note.set_label(&format!(
-                        "You declined the password. The alias is added to {site}; finish by running `flock install` \
-                         in a terminal to make .{suffix} resolve."
-                    ));
+                    note.set_label(&declined_note);
                     note.set_visible(true);
                 }
                 if !out.text.trim().is_empty() {
@@ -2376,6 +2525,20 @@ fn dialog_view(column: &gtk::Box) -> adw::ToolbarView {
     view
 }
 
+/// What Flock calls a site wherever the user reads its name (macOS's `title.isEmpty ? name :
+/// title`, Windows's DisplayName): a worktree is named by its branch or served label — the title
+/// and host belong to its parent site — and every other site shows the display name set on it,
+/// over the site name when it carries none (or an old daemon sent no title at all).
+fn display_name(site: &SiteStatus) -> String {
+    if site.is_worktree() {
+        site.worktree_label()
+    } else if site.title.is_empty() {
+        site.name.clone()
+    } else {
+        site.title.clone()
+    }
+}
+
 /// Whether the suffix an alias just settled on is new to this machine (Review Focus 3, macOS's
 /// `isNewSuffix`): never for Inherit (the site's suffix is provisioned by definition) nor for the
 /// global one (`dns.tld`) nor for a suffix something already serves under (`dns.suffixes`; a row
@@ -2441,5 +2604,24 @@ mod tests {
         // The legacy ledger contract (3c): rows with an empty tld stand for nothing served, so
         // they can't stop the chain.
         assert!(is_new_suffix(&dns("test", &[""]), "internal"));
+    }
+
+    #[test]
+    fn names_a_site_by_its_display_name_over_its_name() {
+        // The list and the header name the site the same way (macOS's SiteTitleField, Windows's
+        // DisplayName): the display name stands, the site name shows when it carries none — and
+        // the display name of a worktree is its branch, however its parent site is titled.
+        let titled = SiteStatus { name: "acme".into(), title: "ACME Blog".into(), ..Default::default() };
+        assert_eq!(display_name(&titled), "ACME Blog");
+        let plain = SiteStatus { name: "acme".into(), ..Default::default() };
+        assert_eq!(display_name(&plain), "acme");
+        let worktree = SiteStatus {
+            name: "feature-auth.acme".into(),
+            parent: "acme".into(),
+            branch: "feature/auth".into(),
+            title: "x".into(),
+            ..Default::default()
+        };
+        assert_eq!(display_name(&worktree), "feature/auth");
     }
 }
