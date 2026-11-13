@@ -18,7 +18,8 @@ if (-not $version) { $version = "dev" }
 dotnet test (Join-Path $PSScriptRoot "Flock.Kit.Tests")
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
-dotnet test (Join-Path $PSScriptRoot "Flock.Tray.Tests") -p:Platform=$platform
+# The RID is explicit: on Windows on ARM the SDK would infer win-arm64, which clashes with PlatformTarget x64.
+dotnet test (Join-Path $PSScriptRoot "Flock.Tray.Tests") -p:Platform=$platform -r "win-$Arch"
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
 dotnet publish (Join-Path $PSScriptRoot "Flock.Tray\Flock.Tray.csproj") -c Release -r "win-$Arch" -p:Platform=$platform `
