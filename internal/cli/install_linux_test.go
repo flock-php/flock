@@ -14,6 +14,7 @@ import (
 func TestShellProfileRoundTrip(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("ZDOTDIR", "")
 
 	bashrc := filepath.Join(home, ".bashrc")
 	before := "export EDITOR=vim\nalias ll='ls -l'\n"
@@ -67,10 +68,104 @@ func TestShellProfileRoundTrip(t *testing.T) {
 	}
 }
 
+// With $ZDOTDIR set, the PATH line goes to the .zshrc zsh reads there, and uninstalling takes it
+// out again.
+func TestShellProfileFollowsZDOTDIR(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	zdotdir := filepath.Join(home, "zsh")
+	if err := os.Mkdir(zdotdir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("ZDOTDIR", zdotdir)
+
+	before := "export EDITOR=vim\n"
+	zshrc := filepath.Join(zdotdir, ".zshrc")
+	bashrc := filepath.Join(home, ".bashrc")
+	for _, f := range []string{zshrc, bashrc} {
+		if err := os.WriteFile(f, []byte(before), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := addToShellPath("/f/bin"); err != nil {
+		t.Fatal(err)
+	}
+	for _, f := range []string{zshrc, bashrc} {
+		data, _ := os.ReadFile(f)
+		if strings.Count(string(data), profileMarker) != 1 || !strings.Contains(string(data), `if [ -d "/f/bin" ]; then export PATH="/f/bin":"$PATH"; fi`) {
+			t.Fatalf("%s after install:\n%s", f, data)
+		}
+	}
+	if _, err := os.Stat(filepath.Join(home, ".zshrc")); !os.IsNotExist(err) {
+		t.Fatalf("~/.zshrc: %v", err)
+	}
+
+	removed, err := removeFromShellProfiles()
+	if err != nil || !removed {
+		t.Fatalf("removed %v, err %v", removed, err)
+	}
+	for _, f := range []string{zshrc, bashrc} {
+		if data, _ := os.ReadFile(f); string(data) != before {
+			t.Fatalf("%s after uninstall:\n%q\nwant\n%q", f, data, before)
+		}
+	}
+}
+
+// A relative $ZDOTDIR is ignored, and the PATH line goes to ~/.zshrc.
+func TestShellProfileIgnoresRelativeZDOTDIR(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("ZDOTDIR", "zdot")
+
+	zshrc := filepath.Join(home, ".zshrc")
+	if err := os.WriteFile(zshrc, nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := addToShellPath("/f/bin"); err != nil {
+		t.Fatal(err)
+	}
+	if data, _ := os.ReadFile(zshrc); !strings.Contains(string(data), profileMarker) {
+		t.Fatalf("~/.zshrc after install:\n%s", data)
+	}
+}
+
+// Uninstalling with $ZDOTDIR set also cleans ~/.zshrc, where Flock wrote before it followed
+// ZDOTDIR.
+func TestShellProfileZDOTDIRRemovesLegacyLine(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("ZDOTDIR", "")
+
+	zshrc := filepath.Join(home, ".zshrc")
+	before := "export EDITOR=vim\n"
+	if err := os.WriteFile(zshrc, []byte(before), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := addToShellPath("/f/bin"); err != nil {
+		t.Fatal(err)
+	}
+	// The directory has to exist, or the profile falls back to ~/.zshrc and
+	// the legacy path is never looked at as such.
+	zdotdir := filepath.Join(home, "zsh")
+	if err := os.Mkdir(zdotdir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("ZDOTDIR", zdotdir)
+
+	removed, err := removeFromShellProfiles()
+	if err != nil || !removed {
+		t.Fatalf("removed %v, err %v", removed, err)
+	}
+	if data, _ := os.ReadFile(zshrc); string(data) != before {
+		t.Fatalf("~/.zshrc after uninstall:\n%q\nwant\n%q", data, before)
+	}
+}
+
 // The PATH line works in sh, and only while Flock's bin dir exists.
 func TestShellPathLine(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("ZDOTDIR", "") // an inherited one would point at the developer's real .zshrc
 	bin := filepath.Join(home, "it's here", "bin")
 	if err := addToShellPath(bin); err != nil {
 		t.Fatal(err)
