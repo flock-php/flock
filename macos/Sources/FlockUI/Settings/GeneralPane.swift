@@ -19,6 +19,7 @@ struct GeneralPane: View {
         get { confirmUnparkState.wrappedValue }
         nonmutating set { confirmUnparkState.wrappedValue = newValue }
     }
+    @AppStorage(PanelView.hideSitesKey) private var hideSitesInPanel = false
     private let launchAtLoginState = State<Bool>(initialValue: LoginItem.isEnabled)
     private var launchAtLogin: Bool {
         get { launchAtLoginState.wrappedValue }
@@ -84,6 +85,13 @@ struct GeneralPane: View {
                     Toggle("Open Flock’s menu bar app at login", isOn: Binding(get: { launchAtLogin }, set: { setLaunchAtLogin($0) }))
                     if let loginError {
                         Text(loginError).font(.caption).foregroundStyle(.orange)
+                    }
+                }
+
+                Section("Menu bar") {
+                    Toggle(isOn: $hideSitesInPanel) {
+                        Text("Hide sites in the menu bar panel")
+                        Text("Sites stay available in Settings → Sites.")
                     }
                 }
 
