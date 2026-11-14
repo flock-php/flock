@@ -3,7 +3,7 @@ name: Issue Triage
 
 on:
   issues:
-    types: [ opened ]
+    types: [ opened, assigned ]
 
 permissions:
   contents: read
@@ -22,7 +22,14 @@ jobs:
         with:
           go-version-file: go.mod
 
-      - name: Evaluate
-        run: go run ./tools/github issue
+      - name: Triage
+        if: github.event.action == 'opened'
+        run: go run ./tools/github issue triage
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+
+      - name: Assignment
+        if: github.event.action == 'assigned'
+        run: go run ./tools/github issue assignment
         env:
           GITHUB_TOKEN: ${{ github.token }}
