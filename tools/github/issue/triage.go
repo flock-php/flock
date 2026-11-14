@@ -13,8 +13,8 @@ import (
 type triageDecision uint8
 
 const (
-	triageNeedsTriage triageDecision = iota
-	triageBypass
+	triageBypass triageDecision = iota
+	triageNeedsTriage
 )
 
 func triageDecisionFor(item contribution.Issue, permission string) triageDecision {
@@ -26,36 +26,39 @@ func triageDecisionFor(item contribution.Issue, permission string) triageDecisio
 }
 
 func Triage(ctx context.Context, client *github.Client, owner, repository string, data []byte) error {
-	event, err := parseIssueEvent(data)
+	current, err := newState(client, owner, repository, data)
 	if err != nil {
-		return fmt.Errorf("parse issue event: %w", err)
+		return err
 	}
-	if event.action != "opened" || event.issue.Number == 0 {
-		return nil
+	if err := current.observeTriage(ctx); err != nil {
+		return err
 	}
-	for _, label := range issuePlatforms(event.issue.Body) {
-		if _, _, err := client.Issues.AddLabelsToIssue(ctx, owner, repository, event.issue.Number, []string{label}); err != nil {
-			return fmt.Errorf("add %q label to issue #%d: %w", label, event.issue.Number, err)
-		}
-	}
-	permission, _, err := client.Repositories.GetPermissionLevel(ctx, owner, repository, event.issue.User.Login)
-	if err != nil {
-		return fmt.Errorf("read permission for @%s: %w", event.issue.User.Login, err)
-	}
-	return applyTriageDecision(ctx, client, owner, repository, event.issue, triageDecisionFor(event.issue, permission.GetPermission()))
+	current.planTriage()
+	return current.apply(ctx)
 }
 
-func applyTriageDecision(ctx context.Context, client *github.Client, owner, repository string, item contribution.Issue, decision triageDecision) error {
-	switch decision {
-	case triageBypass:
+func (s *state) observeTriage(ctx context.Context) error {
+	if s.event.action != "opened" || s.event.issue.Number == 0 {
 		return nil
-	case triageNeedsTriage:
-		if _, _, err := client.Issues.AddLabelsToIssue(ctx, owner, repository, item.Number, []string{"needs triage"}); err != nil {
-			return fmt.Errorf("add %q label to issue #%d: %w", "needs triage", item.Number, err)
-		}
-		return nil
-	default:
-		return fmt.Errorf("unknown triage decision %d", decision)
+	}
+	permission, _, err := s.client.Repositories.GetPermissionLevel(ctx, s.owner, s.repository, s.event.issue.User.Login)
+	if err != nil {
+		return fmt.Errorf("read permission for @%s: %w", s.event.issue.User.Login, err)
+	}
+	s.observed.permission = permission.GetPermission()
+	return nil
+}
+
+func (s *state) planTriage() {
+	if s.event.action != "opened" || s.event.issue.Number == 0 {
+		return
+	}
+	for _, label := range issuePlatforms(s.event.issue.Body) {
+		s.changes = append(s.changes, labelChange{add: true, label: label})
+	}
+	s.decision.triage = triageDecisionFor(s.event.issue, s.observed.permission)
+	if s.decision.triage == triageNeedsTriage {
+		s.changes = append(s.changes, labelChange{add: true, label: "needs triage"})
 	}
 }
 
@@ -86,4 +89,18 @@ func issuePlatforms(body string) []string {
 		}
 	}
 	return nil
+}
+
+func applyTriageDecision(ctx context.Context, client *github.Client, owner, repository string, item contribution.Issue, chosen triageDecision) error {
+	current := &state{
+		client:     client,
+		owner:      owner,
+		repository: repository,
+		event:      issueEvent{issue: item},
+		decision:   decision{triage: chosen},
+	}
+	if chosen == triageNeedsTriage {
+		current.changes = []labelChange{{add: true, label: "needs triage"}}
+	}
+	return current.apply(ctx)
 }

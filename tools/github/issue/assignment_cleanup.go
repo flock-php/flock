@@ -10,39 +10,51 @@ import (
 )
 
 func Assignment(ctx context.Context, client *github.Client, owner, repository string, data []byte) error {
-	event, err := parseIssueEvent(data)
+	current, err := newState(client, owner, repository, data)
 	if err != nil {
-		return fmt.Errorf("parse issue event: %w", err)
+		return err
 	}
-	if event.action != "assigned" || event.issue.Number == 0 {
+	if err := current.observeAssignment(ctx); err != nil {
+		return err
+	}
+	current.planAssignment()
+	return current.apply(ctx)
+}
+
+func (s *state) observeAssignment(ctx context.Context) error {
+	if s.event.action != "assigned" || s.event.issue.Number == 0 {
 		return nil
 	}
-
-	item, _, err := client.Issues.Get(ctx, owner, repository, event.issue.Number)
+	item, _, err := s.client.Issues.Get(ctx, s.owner, s.repository, s.event.issue.Number)
 	if contribution.IsNotFound(err) {
 		return nil
 	}
 	if err != nil {
-		return fmt.Errorf("read assigned issue #%d: %w", event.issue.Number, err)
+		return fmt.Errorf("read assigned issue #%d: %w", s.event.issue.Number, err)
 	}
-	current := contribution.IssueFromGitHub(item)
-	if current == nil || len(current.Assignees) == 0 {
+	s.observed.issue = contribution.IssueFromGitHub(item)
+	if s.observed.issue == nil || len(s.observed.issue.Assignees) == 0 {
 		return nil
 	}
-
-	claims, err := findIssueClaims(ctx, client, owner, repository, event.issue.Number)
+	claims, err := findIssueClaims(ctx, s.client, s.owner, s.repository, s.event.issue.Number)
 	if err != nil {
-		return fmt.Errorf("read claim for issue #%d: %w", event.issue.Number, err)
+		return fmt.Errorf("read claim for issue #%d: %w", s.event.issue.Number, err)
 	}
-	if current.HasLabel(contribution.HelpWantedLabel) {
-		if err := removeLabel(ctx, client, owner, repository, event.issue.Number, contribution.HelpWantedLabel); err != nil {
-			return err
-		}
-	}
-	if current.HasLabel(contribution.ClaimedLabel) && len(claims) != 0 && !contribution.HasAssignedClaimAuthor(current, claims) {
-		return removeLabel(ctx, client, owner, repository, event.issue.Number, contribution.ClaimedLabel)
-	}
+	s.observed.claims = claims
 	return nil
+}
+
+func (s *state) planAssignment() {
+	item := s.observed.issue
+	if s.event.action != "assigned" || item == nil || len(item.Assignees) == 0 {
+		return
+	}
+	if item.HasLabel(contribution.HelpWantedLabel) {
+		s.changes = append(s.changes, labelChange{label: contribution.HelpWantedLabel})
+	}
+	if item.HasLabel(contribution.ClaimedLabel) && len(s.observed.claims) != 0 && !contribution.HasAssignedClaimAuthor(item, s.observed.claims) {
+		s.changes = append(s.changes, labelChange{label: contribution.ClaimedLabel})
+	}
 }
 
 func findIssueClaims(ctx context.Context, client *github.Client, owner, repository string, number int) ([]contribution.Claim, error) {
@@ -59,12 +71,4 @@ func findIssueClaims(ctx context.Context, client *github.Client, owner, reposito
 		}
 		options.Page = response.NextPage
 	}
-}
-
-func removeLabel(ctx context.Context, client *github.Client, owner, repository string, number int, label string) error {
-	if _, err := client.Issues.RemoveLabelForIssue(ctx, owner, repository, number, label); err != nil &&
-		!contribution.IsNotFound(err) {
-		return fmt.Errorf("remove %q label from issue #%d: %w", label, number, err)
-	}
-	return nil
 }

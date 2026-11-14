@@ -89,8 +89,8 @@ func TestRunCommentsBeforeCancellingAndReturnsNotAllowed(t *testing.T) {
 		t.Fatalf("Run() error = %v, want ErrNotAllowed", err)
 	}
 	assertRequestOrder(t, requests,
-		"POST /repos/flock-php/flock/issues/123/comments",
 		"GET /repos/flock-php/flock/actions/runs",
+		"POST /repos/flock-php/flock/issues/123/comments",
 		"POST /repos/flock-php/flock/actions/runs/8/cancel",
 	)
 }
@@ -147,6 +147,52 @@ func TestRunReturnsNonAcceptedCancellationError(t *testing.T) {
 	if errors.Is(err, ErrNotAllowed) {
 		t.Fatalf("Run() error = %v, want cancellation error before ErrNotAllowed", err)
 	}
+}
+
+func TestRunCancelsInProgressRunsOnLaterPages(t *testing.T) {
+	var requests []string
+	client := testClient(t, func(w http.ResponseWriter, r *http.Request) {
+		requests = append(requests, r.Method+" "+r.URL.Path+"?"+r.URL.RawQuery)
+		switch r.Method + " " + r.URL.Path {
+		case "POST /graphql":
+			_, _ = io.WriteString(w, `{"data":{"repository":{"pullRequest":{"mergeQueueEntry":{"enqueuer":{"login":"contributor"}}}}}}`)
+		case "GET /repos/flock-php/flock/collaborators/contributor/permission":
+			_, _ = io.WriteString(w, `{"permission":"write","role_name":"write"}`)
+		case "POST /repos/flock-php/flock/issues/123/comments":
+			_, _ = io.WriteString(w, `{"id":101}`)
+		case "GET /repos/flock-php/flock/actions/runs":
+			if r.URL.Query().Get("page") == "2" {
+				_, _ = io.WriteString(w, `{"total_count":3,"workflow_runs":[{"id":7,"status":"in_progress"},{"id":9,"status":"queued"},{"id":10,"status":"completed"}]}`)
+				return
+			}
+			w.Header().Set("Link", `<https://example.test/repos/flock-php/flock/actions/runs?page=2>; rel="next"`)
+			_, _ = io.WriteString(w, `{"total_count":3,"workflow_runs":[{"id":8,"status":"queued"}]}`)
+		case "POST /repos/flock-php/flock/actions/runs/8/cancel", "POST /repos/flock-php/flock/actions/runs/9/cancel":
+			_, _ = io.WriteString(w, `{}`)
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	})
+
+	err := Run(context.Background(), client, "flock-php", "flock", mergeEvent(), "7")
+	if !errors.Is(err, ErrNotAllowed) {
+		t.Fatalf("Run() error = %v, want ErrNotAllowed", err)
+	}
+	if !containsRequest(requests, "POST /repos/flock-php/flock/actions/runs/8/cancel") ||
+		!containsRequest(requests, "POST /repos/flock-php/flock/actions/runs/9/cancel") ||
+		containsRequest(requests, "POST /repos/flock-php/flock/actions/runs/7/cancel") ||
+		containsRequest(requests, "POST /repos/flock-php/flock/actions/runs/10/cancel") {
+		t.Fatalf("requests = %v, want cancels for runs 8 and 9 only", requests)
+	}
+}
+
+func containsRequest(requests []string, want string) bool {
+	for _, request := range requests {
+		if strings.HasPrefix(request, want) {
+			return true
+		}
+	}
+	return false
 }
 
 func TestRunPropagatesMergeOperationFailures(t *testing.T) {
