@@ -4,7 +4,10 @@ Flock's icons for Linux, installed into /usr/share/icons/hicolor by the packages
 - symbolic/apps/dev.flock.Flock{,-stopped,-warning}-symbolic.svg: the tray icon by state, the
   logomark of design/logo/flock-logomark-black.svg; stopped is dimmed, a warning adds the ember
   badge, as on Windows and macOS (design/icongen). GNOME recolors -symbolic icons for its top
-  bar, KDE through the ColorScheme-Text class.
+  bar, KDE through the ColorScheme-Text class. Each is one path with the logomark's cut-outs as
+  holes, traced from the logomark: a bar that recolors an icon through its alpha channel (the
+  Quickshell tray of Omarchy) draws an icon that uses an SVG mask as a solid square, and Qt
+  ignores clip paths, so neither can carry the cut-outs.
 - symbolic/apps/dev.flock.Flock-sites-symbolic.svg: the globe for sites (Sites pane, Logs,
   setup). Themes draw web-browser-symbolic as different things or not at all (GTK then shows its
   red missing-image icon), so the app ships its own.
