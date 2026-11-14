@@ -41,6 +41,18 @@ func (s *state) observeTriage(ctx context.Context) error {
 	if s.event.action != "opened" || s.event.issue.Number == 0 {
 		return nil
 	}
+	item, _, err := s.client.Issues.Get(ctx, s.owner, s.repository, s.event.issue.Number)
+	if contribution.IsNotFound(err) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("read issue #%d: %w", s.event.issue.Number, err)
+	}
+	current := contribution.IssueFromGitHub(item)
+	if current == nil {
+		return nil
+	}
+	s.event.issue = *current
 	permission, _, err := s.client.Repositories.GetPermissionLevel(ctx, s.owner, s.repository, s.event.issue.User.Login)
 	if err != nil {
 		return fmt.Errorf("read permission for @%s: %w", s.event.issue.User.Login, err)

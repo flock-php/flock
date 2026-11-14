@@ -21,6 +21,8 @@ func TestTriageAppliesPlatformLabelsBeforeNeedsTriage(t *testing.T) {
 	client := testClient(t, func(w http.ResponseWriter, r *http.Request) {
 		requests = append(requests, r.Method+" "+r.URL.Path)
 		switch r.Method + " " + r.URL.Path {
+		case "GET /repos/flock-php/flock/issues/73":
+			_, _ = io.WriteString(w, `{"number":73,"body":"### Platform\r\n\r\nmacOS, Linux","user":{"login":"contributor","type":"User"},"author_association":"CONTRIBUTOR"}`)
 		case "POST /repos/flock-php/flock/issues/73/labels":
 			var request []string
 			if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
@@ -50,6 +52,7 @@ func TestTriageAppliesPlatformLabelsBeforeNeedsTriage(t *testing.T) {
 		}
 	}
 	assertRequestOrder(t, requests,
+		"GET /repos/flock-php/flock/issues/73",
 		"GET /repos/flock-php/flock/collaborators/contributor/permission",
 		"POST /repos/flock-php/flock/issues/73/labels",
 	)
@@ -73,6 +76,8 @@ func TestTriageBypassesNeedsTriageForPermissionAndTrustedAuthors(t *testing.T) {
 			var permissionCalls int
 			client := testClient(t, func(w http.ResponseWriter, r *http.Request) {
 				switch r.Method + " " + r.URL.Path {
+				case "GET /repos/flock-php/flock/issues/73":
+					_, _ = io.WriteString(w, `{"number":73,"user":{"login":"contributor","type":"`+test.userType+`"},"author_association":"`+test.association+`"}`)
 				case "POST /repos/flock-php/flock/issues/73/labels":
 					var request []string
 					if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
@@ -241,6 +246,10 @@ func TestTriageStopsAfterPlatformLabelFailure(t *testing.T) {
 	var requests []string
 	client := testClient(t, func(w http.ResponseWriter, r *http.Request) {
 		requests = append(requests, r.Method+" "+r.URL.Path)
+		if r.Method == "GET" && r.URL.Path == "/repos/flock-php/flock/issues/73" {
+			_, _ = io.WriteString(w, `{"number":73,"body":"### Platform\n\nLinux","user":{"login":"contributor","type":"User"}}`)
+			return
+		}
 		if r.Method == "GET" {
 			_, _ = io.WriteString(w, `{"permission":"read"}`)
 			return
@@ -253,9 +262,10 @@ func TestTriageStopsAfterPlatformLabelFailure(t *testing.T) {
 	if err := Triage(context.Background(), client, "flock-php", "flock", event); err == nil {
 		t.Fatal("Triage returned nil after platform label failure")
 	}
-	if len(requests) != 2 || requests[0] != "GET /repos/flock-php/flock/collaborators/contributor/permission" ||
-		requests[1] != "POST /repos/flock-php/flock/issues/73/labels" {
-		t.Fatalf("requests = %v, want permission read then one label write", requests)
+	if len(requests) != 3 || requests[0] != "GET /repos/flock-php/flock/issues/73" ||
+		requests[1] != "GET /repos/flock-php/flock/collaborators/contributor/permission" ||
+		requests[2] != "POST /repos/flock-php/flock/issues/73/labels" {
+		t.Fatalf("requests = %v, want issue and permission reads then one label write", requests)
 	}
 }
 
