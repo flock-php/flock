@@ -227,20 +227,22 @@ func readLatestAssignment(ctx context.Context, client *github.Client, owner stri
 	options := &github.ListOptions{PerPage: 100}
 	var latest time.Time
 	assigner := ""
+	assigned := false
 	for {
 		events, response, err := client.Issues.ListIssueEvents(ctx, owner, reference.Repository, reference.Number, options)
 		if err != nil {
 			return "", false, fmt.Errorf("read latest assignment for issue %s: %w", reference, err)
 		}
 		for _, event := range events {
-			if event.GetEvent() == "assigned" && event.GetAssignee().GetLogin() == author &&
+			if (event.GetEvent() == "assigned" || event.GetEvent() == "unassigned") && event.GetAssignee().GetLogin() == author &&
 				(latest.IsZero() || event.GetCreatedAt().After(latest)) {
 				latest = event.GetCreatedAt().Time
 				assigner = event.GetAssigner().GetLogin()
+				assigned = event.GetEvent() == "assigned"
 			}
 		}
 		if response.NextPage == 0 {
-			return assigner, !latest.IsZero(), nil
+			return assigner, assigned, nil
 		}
 		options.Page = response.NextPage
 	}

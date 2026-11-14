@@ -67,10 +67,6 @@ func (s *state) collectReleaseDetails(ctx context.Context) error {
 	if err := s.loadLinks(ctx); err != nil {
 		return err
 	}
-	pullRequest := s.observed.pullRequest
-	if pullRequest.State == "open" && pullRequest.BaseRef == "main" && containsReference(s.observed.links, s.owner, s.observed.record.Issue) {
-		return nil
-	}
 	if err := s.loadIssue(ctx, s.observed.record.Issue); err != nil {
 		return err
 	}

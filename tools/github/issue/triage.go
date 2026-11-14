@@ -43,6 +43,7 @@ func (s *state) observeTriage(ctx context.Context) error {
 	}
 	item, _, err := s.client.Issues.Get(ctx, s.owner, s.repository, s.event.issue.Number)
 	if contribution.IsNotFound(err) {
+		s.event.issue = contribution.Issue{}
 		return nil
 	}
 	if err != nil {

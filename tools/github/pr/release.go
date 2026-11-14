@@ -31,7 +31,10 @@ func (s *state) planRelease() {
 		return
 	}
 	if pullRequest.State == "open" && pullRequest.BaseRef == "main" && containsReference(s.observed.links, s.owner, record.Issue) {
-		return
+		if !s.decision.made || s.decision.approved == nil ||
+			(s.decision.approved.Repository == record.Issue.Repository && s.decision.approved.Number == record.Issue.Number) {
+			return
+		}
 	}
 	snapshot := s.issue(record.Issue)
 	if snapshot == nil || snapshot.issue == nil {
@@ -64,6 +67,10 @@ func (s *state) planRelease() {
 			missingOK:  true,
 		})
 		issue.Labels = withoutLabel(issue.Labels, contribution.ClaimedLabel)
+	}
+	if contribution.HasAssignedClaimAuthor(issue, remaining) {
+		s.queueForgetRecord()
+		return
 	}
 	if contribution.OtherAssignee(issue, record.Author) {
 		s.queueForgetRecord()

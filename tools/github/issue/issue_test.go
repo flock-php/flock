@@ -231,6 +231,23 @@ func TestTriageSkipsMissingIssueEvent(t *testing.T) {
 	}
 }
 
+func TestTriageSkipsDeletedIssue(t *testing.T) {
+	var requests []string
+	client := testClient(t, func(w http.ResponseWriter, r *http.Request) {
+		requests = append(requests, r.Method+" "+r.URL.Path)
+		w.WriteHeader(http.StatusNotFound)
+		_, _ = io.WriteString(w, `{"message":"Not Found"}`)
+	})
+
+	event := []byte(`{"action":"opened","issue":{"number":73,"body":"### Platform\n\nLinux","user":{"login":"contributor","type":"User"}}}`)
+	if err := Triage(context.Background(), client, "flock-php", "flock", event); err != nil {
+		t.Fatal(err)
+	}
+	if len(requests) != 1 || requests[0] != "GET /repos/flock-php/flock/issues/73" {
+		t.Fatalf("requests = %v, want current issue read only", requests)
+	}
+}
+
 func TestTriageRejectsMalformedIssueJSON(t *testing.T) {
 	client, err := github.NewClient()
 	if err != nil {
