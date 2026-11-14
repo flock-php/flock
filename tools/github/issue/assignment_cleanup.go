@@ -39,7 +39,7 @@ func Assignment(ctx context.Context, client *github.Client, owner, repository st
 			return err
 		}
 	}
-	if current.HasLabel(contribution.ClaimedLabel) && hasUnassignedClaimAuthor(current, claims) {
+	if current.HasLabel(contribution.ClaimedLabel) && len(claims) != 0 && !contribution.HasAssignedClaimAuthor(current, claims) {
 		return removeLabel(ctx, client, owner, repository, event.issue.Number, contribution.ClaimedLabel)
 	}
 	return nil
@@ -53,30 +53,12 @@ func findIssueClaims(ctx context.Context, client *github.Client, owner, reposito
 		if err != nil {
 			return nil, err
 		}
-		for _, comment := range comments {
-			if comment.GetUser().GetLogin() != "github-actions[bot]" {
-				continue
-			}
-			pullRequestNumber, author, ok := contribution.ParseIssueClaim(comment.GetBody())
-			if !ok || pullRequestNumber == 0 {
-				continue
-			}
-			claims = append(claims, contribution.Claim{PullRequestNumber: pullRequestNumber, Author: author, CommentID: comment.GetID()})
-		}
+		claims = append(claims, contribution.ClaimsFromComments(comments)...)
 		if response.NextPage == 0 {
 			return claims, nil
 		}
 		options.Page = response.NextPage
 	}
-}
-
-func hasUnassignedClaimAuthor(item *contribution.Issue, claims []contribution.Claim) bool {
-	for _, claim := range claims {
-		if !item.HasAssignee(claim.Author) {
-			return true
-		}
-	}
-	return false
 }
 
 func removeLabel(ctx context.Context, client *github.Client, owner, repository string, number int, label string) error {

@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/google/go-github/v93/github"
@@ -130,7 +129,11 @@ func listClosingReferences(ctx context.Context, client *github.Client, owner, re
 		if !current.PageInfo.HasNextPage {
 			return issues, nil
 		}
-		cursor = &current.PageInfo.EndCursor
+		next := current.PageInfo.EndCursor
+		if next == "" || (cursor != nil && *cursor == next) {
+			return nil, fmt.Errorf("list linked issues for pull request #%d: page cursor did not advance", number)
+		}
+		cursor = &next
 	}
 }
 
@@ -208,59 +211,7 @@ func readIssueClaims(ctx context.Context, client *github.Client, owner string, r
 	if err != nil {
 		return nil, fmt.Errorf("read issue claims for %s: %w", reference, err)
 	}
-	var claims []contribution.Claim
-	for _, comment := range comments {
-		if comment.GetUser().GetLogin() != "github-actions[bot]" {
-			continue
-		}
-		number, author, ok := contribution.ParseIssueClaim(comment.GetBody())
-		if ok && number != 0 {
-			claims = append(claims, contribution.Claim{PullRequestNumber: number, Author: author, CommentID: comment.GetID()})
-		}
-	}
-	return claims, nil
-}
-
-func firstApproved(ctx context.Context, client *github.Client, owner, repository, author string, pullRequestNumber int, linked []contribution.LinkedIssue) (approved *contribution.IssueReference, denied *closeReason, err error) {
-	for _, reference := range linked {
-		if reference.Owner != owner || reference.Repository != repository {
-			continue
-		}
-		issue, readErr := readIssue(ctx, client, owner, contribution.IssueReference{Repository: repository, Number: reference.Number})
-		if readErr != nil {
-			return nil, nil, readErr
-		}
-		if issue == nil {
-			continue
-		}
-		claims, readErr := readIssueClaims(ctx, client, owner, contribution.IssueReference{Repository: repository, Number: reference.Number})
-		if readErr != nil {
-			return nil, nil, readErr
-		}
-		var foreignAuthors []string
-		for _, claim := range claims {
-			if claim.PullRequestNumber != pullRequestNumber {
-				foreignAuthors = appendUnique(foreignAuthors, "@"+claim.Author)
-			}
-		}
-		if contribution.IssueApprovalFor(issue, author) && len(foreignAuthors) == 0 {
-			result := contribution.IssueReference{Repository: repository, Number: reference.Number}
-			return &result, nil, nil
-		}
-		var names []string
-		for _, assignee := range issue.Assignees {
-			if assignee.Login != author {
-				names = appendUnique(names, "@"+assignee.Login)
-			}
-		}
-		for _, foreignAuthor := range foreignAuthors {
-			names = appendUnique(names, foreignAuthor)
-		}
-		if len(names) != 0 && denied == nil {
-			denied = &closeReason{Issue: fmt.Sprintf("%s#%d", repository, reference.Number), Names: strings.Join(names, " and ")}
-		}
-	}
-	return nil, denied, nil
+	return contribution.ClaimsFromComments(comments), nil
 }
 
 func appendUnique(values []string, value string) []string {

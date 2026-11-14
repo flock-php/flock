@@ -10,78 +10,122 @@ import (
 )
 
 func Release(ctx context.Context, client *github.Client, owner, repository string, eventData []byte) error {
-	event, err := parsePullRequestEvent(eventData)
-	if err != nil {
-		return fmt.Errorf("parse pull request event: %w", err)
-	}
-	if event.number == 0 {
-		return nil
-	}
-	pullRequest, err := readPullRequest(ctx, client, owner, repository, event.number)
-	if err != nil || pullRequest == nil || pullRequest.Merged {
-		return err
-	}
-	record, err := readClaimRecord(ctx, client, owner, repository, event.number)
-	if err != nil || record == nil {
-		return err
-	}
-	linked, err := listClosingReferences(ctx, client, owner, repository, event.number)
+	current, err := newState(client, owner, repository, eventData)
 	if err != nil {
 		return err
 	}
-	if pullRequest.State == "open" && pullRequest.BaseRef == "main" && containsReference(linked, owner, record.Issue) {
+	if current.event.number == 0 {
 		return nil
 	}
-	claims, err := readIssueClaims(ctx, client, owner, record.Issue)
-	if err != nil && !contribution.IsNotFound(err) {
+	if err := current.collectRelease(ctx); err != nil {
 		return err
 	}
-	for _, claim := range claims {
-		if claim.PullRequestNumber != event.number {
+	current.planRelease()
+	return current.apply(ctx)
+}
+
+func (s *state) planRelease() {
+	pullRequest := s.observed.pullRequest
+	record := s.observed.record
+	if pullRequest == nil || pullRequest.Merged || record == nil {
+		return
+	}
+	if pullRequest.State == "open" && pullRequest.BaseRef == "main" && containsReference(s.observed.links, s.owner, record.Issue) {
+		return
+	}
+	snapshot := s.issue(record.Issue)
+	if snapshot == nil || snapshot.issue == nil {
+		s.queueForgetRecord()
+		return
+	}
+	var remaining []contribution.Claim
+	for _, claim := range snapshot.claims {
+		if claim.PullRequestNumber != s.event.number {
+			remaining = append(remaining, claim)
 			continue
 		}
-		if err := deleteComment(ctx, client, owner, record.Issue.Repository, claim.CommentID); err != nil &&
-			!contribution.IsNotFound(err) {
-			return fmt.Errorf("delete issue claim for %s: %w", record.Issue, err)
-		}
+		s.changes = append(s.changes, change{
+			kind:       changeDeleteComment,
+			repository: record.Issue.Repository,
+			commentID:  claim.CommentID,
+			issue:      record.Issue,
+			missingOK:  true,
+		})
 	}
-	issue, err := readIssue(ctx, client, owner, record.Issue)
-	if err != nil {
-		return err
-	}
-	if issue == nil {
-		return deleteClaimRecord(ctx, client, owner, repository, event.number, record)
-	}
-	if issue.HasLabel(contribution.ClaimedLabel) {
-		if _, err := client.Issues.RemoveLabelForIssue(ctx, owner, record.Issue.Repository, record.Issue.Number, contribution.ClaimedLabel); err != nil &&
-			!contribution.IsNotFound(err) {
-			return fmt.Errorf("remove %q label from issue %s: %w", contribution.ClaimedLabel, record.Issue, err)
-		}
+	snapshot.claims = remaining
+	issue := snapshot.issue
+	if issue.HasLabel(contribution.ClaimedLabel) && !contribution.HasAssignedClaimAuthor(issue, remaining) {
+		s.changes = append(s.changes, change{
+			kind:       changeRemoveLabel,
+			repository: record.Issue.Repository,
+			number:     record.Issue.Number,
+			label:      contribution.ClaimedLabel,
+			issue:      record.Issue,
+			missingOK:  true,
+		})
+		issue.Labels = withoutLabel(issue.Labels, contribution.ClaimedLabel)
 	}
 	if contribution.OtherAssignee(issue, record.Author) {
-		return deleteClaimRecord(ctx, client, owner, repository, event.number, record)
+		s.queueForgetRecord()
+		return
 	}
-	assigner, assigned, err := readLatestAssignment(ctx, client, owner, record.Issue, record.Author)
-	if err != nil {
-		return err
+	if !snapshot.assigned || snapshot.assigner != "github-actions[bot]" {
+		s.queueForgetRecord()
+		return
 	}
-	if !assigned || assigner != "github-actions[bot]" {
-		return deleteClaimRecord(ctx, client, owner, repository, event.number, record)
+	s.changes = append(s.changes, change{
+		kind:       changeRemoveAssignee,
+		repository: record.Issue.Repository,
+		number:     record.Issue.Number,
+		user:       record.Author,
+		issue:      record.Issue,
+		missingOK:  true,
+	})
+	issue.Assignees = withoutUser(issue.Assignees, record.Author)
+	if issue.State == "open" && len(issue.Assignees) == 0 {
+		s.changes = append(s.changes, change{
+			kind:       changeAddLabel,
+			repository: record.Issue.Repository,
+			number:     record.Issue.Number,
+			label:      contribution.HelpWantedLabel,
+			issue:      record.Issue,
+		})
 	}
-	if _, _, err := client.Issues.RemoveAssignees(ctx, owner, record.Issue.Repository, record.Issue.Number, []string{record.Author}); err != nil &&
-		!contribution.IsNotFound(err) {
-		return fmt.Errorf("remove @%s from issue %s: %w", record.Author, record.Issue, err)
+	s.queueForgetRecord()
+}
+
+func (s *state) queueForgetRecord() {
+	record := s.observed.record
+	if record != nil && record.CommentID != 0 {
+		s.changes = append(s.changes, change{
+			kind:       changeDeleteComment,
+			repository: s.repository,
+			commentID:  record.CommentID,
+			body:       record.Issue.String(),
+			missingOK:  true,
+		})
 	}
-	current, err := readIssue(ctx, client, owner, record.Issue)
-	if err != nil {
-		return err
-	}
-	if current != nil && current.State == "open" && len(current.Assignees) == 0 {
-		if _, _, err := client.Issues.AddLabelsToIssue(ctx, owner, record.Issue.Repository, record.Issue.Number, []string{contribution.HelpWantedLabel}); err != nil {
-			return fmt.Errorf("restore %q label on issue %s: %w", contribution.HelpWantedLabel, record.Issue, err)
+	s.observed.record = nil
+}
+
+func withoutLabel(labels []contribution.Label, name string) []contribution.Label {
+	var remaining []contribution.Label
+	for _, label := range labels {
+		if label.Name != name {
+			remaining = append(remaining, label)
 		}
 	}
-	return deleteClaimRecord(ctx, client, owner, repository, event.number, record)
+	return remaining
+}
+
+func withoutUser(users []contribution.User, login string) []contribution.User {
+	var remaining []contribution.User
+	for _, user := range users {
+		if user.Login != login {
+			remaining = append(remaining, user)
+		}
+	}
+	return remaining
 }
 
 func containsReference(issues []contribution.LinkedIssue, owner string, reference contribution.IssueReference) bool {

@@ -157,6 +157,29 @@ func TestAssignmentRemovesClaimedWhenMarkerAuthorsAreNotAssigned(t *testing.T) {
 	)
 }
 
+func TestAssignmentKeepsClaimedWhenOneClaimAuthorIsStillAssigned(t *testing.T) {
+	var requests []string
+	client := testClient(t, func(w http.ResponseWriter, r *http.Request) {
+		requests = append(requests, r.Method+" "+r.URL.Path)
+		switch r.Method + " " + r.URL.Path {
+		case "GET /repos/flock-php/flock/issues/73":
+			_, _ = io.WriteString(w, `{"number":73,"assignees":[{"login":"contributor"}],"labels":[{"name":"claimed"}]}`)
+		case "GET /repos/flock-php/flock/issues/73/comments":
+			_, _ = io.WriteString(w, `[{"id":87,"body":"<!-- pr-gate:claim pr=42 author=contributor -->","user":{"login":"github-actions[bot]"}},{"id":88,"body":"<!-- pr-gate:claim pr=43 author=other-contributor -->","user":{"login":"github-actions[bot]"}}]`)
+		case "DELETE /repos/flock-php/flock/issues/73/labels/claimed":
+			_, _ = io.WriteString(w, `{}`)
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	})
+
+	event := []byte(`{"action":"assigned","issue":{"number":73}}`)
+	if err := Assignment(context.Background(), client, "flock-php", "flock", event); err != nil {
+		t.Fatal(err)
+	}
+	assertRequestCount(t, requests, "DELETE /repos/flock-php/flock/issues/73/labels/claimed", 0)
+}
+
 func TestAssignmentSkipsCleanupForUnassignedCurrentIssue(t *testing.T) {
 	var requests []string
 	client := testClient(t, func(w http.ResponseWriter, r *http.Request) {

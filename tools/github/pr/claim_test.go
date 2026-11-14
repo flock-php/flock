@@ -3,6 +3,7 @@ package pr
 import (
 	"context"
 	"net/http"
+	"strings"
 	"testing"
 )
 
@@ -125,6 +126,42 @@ func TestClaimAcceptsIssueAssignedToAuthor(t *testing.T) {
 	}
 	if countLog(logs, "POST", "/repos/owner/repo/issues/9/comments") != 1 {
 		t.Fatalf("issue claim count = %d, want 1", countLog(logs, "POST", "/repos/owner/repo/issues/9/comments"))
+	}
+}
+
+func TestClaimStopsBeforeLabelChangesWhenAssigneeIsIgnored(t *testing.T) {
+	var logs []requestLog
+	client, closeServer := testClient(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		logs = append(logs, requestLog{r.Method, r.URL.Path})
+		switch r.Method + " " + r.URL.Path {
+		case "GET /repos/owner/repo/pulls/1":
+			writeTestJSON(t, w, `{"number":1,"state":"open","base":{"ref":"main"},"user":{"login":"author","type":"User"},"author_association":"CONTRIBUTOR"}`)
+		case "POST /graphql":
+			writeTestJSON(t, w, `{"data":{"repository":{"pullRequest":{"closingIssuesReferences":{"nodes":[{"number":9,"repository":{"name":"repo","owner":{"login":"owner"}}}],"pageInfo":{"hasNextPage":false}}}}}}`)
+		case "GET /repos/owner/repo/issues/9":
+			writeTestJSON(t, w, `{"number":9,"state":"open","labels":[{"name":"help wanted"}],"assignees":[]}`)
+		case "GET /repos/owner/repo/issues/9/comments", "GET /repos/owner/repo/issues/1/comments":
+			writeTestJSON(t, w, `[]`)
+		case "POST /repos/owner/repo/issues/1/comments", "POST /repos/owner/repo/issues/9/comments":
+			writeTestJSON(t, w, `{"id":10}`)
+		case "GET /repos/owner/repo/labels/claimed":
+			writeTestJSON(t, w, `{}`)
+		case "POST /repos/owner/repo/issues/9/assignees":
+			writeTestJSON(t, w, `{"number":9,"state":"open","labels":[{"name":"help wanted"}],"assignees":[]}`)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer closeServer()
+
+	err := Claim(context.Background(), client, "owner", "repo", testPullRequestEvent("opened", 1, false))
+	if err == nil || !strings.Contains(err.Error(), "assignee was not applied") {
+		t.Fatalf("Claim() error = %v, want assignee not applied", err)
+	}
+	if containsLog(logs, "POST", "/repos/owner/repo/issues/9/labels") ||
+		containsLog(logs, "DELETE", "/repos/owner/repo/issues/9/labels/help wanted") ||
+		containsLog(logs, "POST", "/repos/owner/repo/issues/1/labels") {
+		t.Fatalf("Claim() changed labels after a dropped assignee: %v", logs)
 	}
 }
 
@@ -269,5 +306,36 @@ func TestClaimRetryAfterAssigneeFailureDoesNotCreateSecondMarker(t *testing.T) {
 	}
 	if countLog(logs, "POST", "/repos/owner/repo/issues/9/assignees") != 2 {
 		t.Fatalf("assignee attempts = %d, want 2", countLog(logs, "POST", "/repos/owner/repo/issues/9/assignees"))
+	}
+}
+
+func TestClaimDoesNotMutateADifferentApprovedIssue(t *testing.T) {
+	var logs []requestLog
+	client, closeServer := testClient(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		logs = append(logs, requestLog{r.Method, r.URL.Path})
+		switch r.Method + " " + r.URL.Path {
+		case "GET /repos/owner/repo/pulls/1":
+			writeTestJSON(t, w, `{"number":1,"state":"open","base":{"ref":"main"},"user":{"login":"author","type":"User"},"author_association":"CONTRIBUTOR"}`)
+		case "POST /graphql":
+			writeTestJSON(t, w, `{"data":{"repository":{"pullRequest":{"closingIssuesReferences":{"nodes":[{"number":10,"repository":{"name":"repo","owner":{"login":"owner"}}},{"number":9,"repository":{"name":"repo","owner":{"login":"owner"}}}],"pageInfo":{"hasNextPage":false}}}}}}`)
+		case "GET /repos/owner/repo/issues/1/comments":
+			writeTestJSON(t, w, `[{"id":10,"user":{"login":"github-actions[bot]"},"body":"<!-- pr-gate:claim issue=repo#9 author=author -->"}]`)
+		case "GET /repos/owner/repo/issues/10":
+			writeTestJSON(t, w, `{"number":10,"state":"open","labels":[{"name":"help wanted"}]}`)
+		case "GET /repos/owner/repo/issues/10/comments":
+			writeTestJSON(t, w, `[]`)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer closeServer()
+
+	if err := Claim(context.Background(), client, "owner", "repo", testPullRequestEvent("synchronize", 1, false)); err != nil {
+		t.Fatalf("Claim() error = %v", err)
+	}
+	if containsLog(logs, "POST", "/repos/owner/repo/issues/10/comments") ||
+		containsLog(logs, "POST", "/repos/owner/repo/issues/10/assignees") ||
+		containsLog(logs, "POST", "/repos/owner/repo/issues/1/comments") {
+		t.Fatalf("Claim() mutated a different issue: %v", logs)
 	}
 }

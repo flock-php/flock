@@ -40,22 +40,7 @@ jobs:
         with:
           go-version-file: go.mod
 
-      - name: Release
-        run: go run ./tools/github pr release
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
-
-      - name: Gate
-        run: go run ./tools/github pr gate
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
-
-      - name: Claim
-        run: go run ./tools/github pr claim
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
-
-      - name: Milestone
-        run: go run ./tools/github pr milestone
+      - name: Pull request
+        run: go run ./tools/github pr
         env:
           GITHUB_TOKEN: ${{ github.token }}

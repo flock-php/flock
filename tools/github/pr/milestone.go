@@ -2,64 +2,50 @@ package pr
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/google/go-github/v93/github"
-
-	"flock/tools/github/contribution"
 )
 
 const maxMilestoneRemovals = 3
 
 func Milestone(ctx context.Context, client *github.Client, owner, repository string, eventData []byte) error {
-	event, err := parsePullRequestEvent(eventData)
+	current, err := newState(client, owner, repository, eventData)
 	if err != nil {
-		return fmt.Errorf("parse pull request event: %w", err)
-	}
-	if event.number == 0 {
-		return nil
-	}
-	pullRequest, err := readPullRequest(ctx, client, owner, repository, event.number)
-	if err != nil || pullRequest == nil || pullRequest.State != "open" || pullRequest.BaseRef != "main" {
 		return err
 	}
-	record, err := readClaimRecord(ctx, client, owner, repository, event.number)
-	if err != nil || record == nil || record.Issue.Repository != repository {
-		return err
-	}
-	issue, _, err := client.Issues.Get(ctx, owner, record.Issue.Repository, record.Issue.Number)
-	if contribution.IsNotFound(err) {
+	if current.event.number == 0 {
 		return nil
 	}
-	if err != nil {
-		return fmt.Errorf("read issue %s for milestone: %w", record.Issue, err)
-	}
-	if issue == nil || issue.Milestone == nil {
-		return nil
-	}
-	target, err := readPullRequestIssue(ctx, client, owner, repository, event.number)
-	if err != nil || target == nil {
+	if err := current.collectMilestone(ctx); err != nil {
 		return err
 	}
-	milestone := issue.Milestone.GetNumber()
-	if pullRequestMilestone(target) != milestone {
-		if _, _, err := client.Issues.Update(ctx, owner, repository, event.number, github.UpdateIssueRequest{Milestone: &milestone}); err != nil {
-			return fmt.Errorf("set milestone on pull request #%d: %w", event.number, err)
-		}
+	current.planMilestone()
+	return current.apply(ctx)
+}
+
+func (s *state) planMilestone() {
+	pullRequest := s.observed.pullRequest
+	record := s.observed.record
+	if pullRequest == nil || pullRequest.State != "open" || pullRequest.BaseRef != "main" || record == nil || record.Issue.Repository != s.repository {
+		return
 	}
-	for attempt := 0; attempt < maxMilestoneRemovals; attempt++ {
-		_, _, removeErr := client.Issues.RemoveMilestone(ctx, owner, record.Issue.Repository, record.Issue.Number)
-		if removeErr == nil || contribution.IsNotFound(removeErr) {
-			return nil
-		}
-		if attempt == maxMilestoneRemovals-1 {
-			return fmt.Errorf("remove milestone from issue %s: %w", record.Issue, removeErr)
-		}
-		if err := wait(ctx, gateRetryDelay); err != nil {
-			return err
-		}
+	snapshot := s.issue(record.Issue)
+	if snapshot == nil || snapshot.milestone == 0 {
+		return
 	}
-	return nil
+	if s.observed.pullRequestMilestone != snapshot.milestone {
+		s.changes = append(s.changes, change{
+			kind:      changeSetMilestone,
+			number:    s.event.number,
+			milestone: snapshot.milestone,
+		})
+	}
+	s.changes = append(s.changes, change{
+		kind:       changeRemoveMilestone,
+		repository: record.Issue.Repository,
+		number:     record.Issue.Number,
+		issue:      record.Issue,
+	})
 }
 
 func pullRequestMilestone(item *github.Issue) int {

@@ -2,6 +2,7 @@ package pr
 
 import (
 	"context"
+	"io"
 	"net/http"
 	"strings"
 	"testing"
@@ -32,13 +33,13 @@ func TestGateClosedEditWithoutApprovalDoesNotLoop(t *testing.T) {
 	client, closeServer := testClient(t, handler)
 	defer closeServer()
 
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
 	defer cancel()
 	if err := Gate(ctx, client, "owner", "repo", testPullRequestEvent("edited", 1, true)); err != nil {
 		t.Fatalf("Gate() error = %v", err)
 	}
-	if countLog(logs, "POST", "/graphql") != 1 {
-		t.Fatalf("closing-reference requests = %d, want 1; logs=%v", countLog(logs, "POST", "/graphql"), logs)
+	if countLog(logs, "POST", "/graphql") != 3 {
+		t.Fatalf("closing-reference requests = %d, want 3; logs=%v", countLog(logs, "POST", "/graphql"), logs)
 	}
 	if containsLog(logs, "PATCH", "/repos/owner/repo/pulls/1") {
 		t.Fatal("Gate() reopened or closed the pull request")
@@ -94,6 +95,74 @@ func TestGateEditedOpenPullRequestClosesAfterApprovalRemoved(t *testing.T) {
 	}
 	if commentIndex == -1 || stateIndex == -1 || commentIndex >= stateIndex {
 		t.Fatalf("close comment and state requests are out of order: %v", logs)
+	}
+}
+
+func TestGateClosedEditRetriesUntilClosingReferenceAppears(t *testing.T) {
+	var logs []requestLog
+	graphqlCalls := 0
+	client, closeServer := testClient(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		logs = append(logs, requestLog{r.Method, r.URL.Path})
+		switch r.Method + " " + r.URL.Path {
+		case "GET /repos/owner/repo/pulls/1":
+			writeTestJSON(t, w, `{"number":1,"state":"closed","base":{"ref":"main"},"user":{"login":"author","type":"User"},"author_association":"CONTRIBUTOR"}`)
+		case "GET /repos/owner/repo/issues/1/comments":
+			writeTestJSON(t, w, `[{"user":{"login":"github-actions[bot]"},"body":"closed <!-- pr-gate:closed -->","created_at":"2026-01-01T00:00:00Z"}]`)
+		case "GET /repos/owner/repo/issues/1/events":
+			writeTestJSON(t, w, `[{"event":"closed","actor":{"login":"github-actions[bot]"},"created_at":"2026-01-01T00:00:01Z"}]`)
+		case "GET /repos/owner/repo/pulls/1/files":
+			writeTestJSON(t, w, `[{"filename":"internal/file.go"}]`)
+		case "POST /graphql":
+			graphqlCalls++
+			if graphqlCalls < 3 {
+				writeTestJSON(t, w, `{"data":{"repository":{"pullRequest":{"closingIssuesReferences":{"nodes":[],"pageInfo":{"hasNextPage":false}}}}}}`)
+				return
+			}
+			writeTestJSON(t, w, `{"data":{"repository":{"pullRequest":{"closingIssuesReferences":{"nodes":[{"number":9,"repository":{"name":"repo","owner":{"login":"owner"}}}],"pageInfo":{"hasNextPage":false}}}}}}`)
+		case "GET /repos/owner/repo/issues/9":
+			writeTestJSON(t, w, `{"number":9,"state":"open","labels":[{"name":"help wanted"}]}`)
+		case "GET /repos/owner/repo/issues/9/comments":
+			writeTestJSON(t, w, `[]`)
+		case "PATCH /repos/owner/repo/pulls/1":
+			writeTestJSON(t, w, `{"number":1,"state":"open"}`)
+		case "POST /repos/owner/repo/issues/1/comments":
+			writeTestJSON(t, w, `{"id":11}`)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer closeServer()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
+	defer cancel()
+	if err := Gate(ctx, client, "owner", "repo", testPullRequestEvent("edited", 1, true)); err != nil {
+		t.Fatalf("Gate() error = %v", err)
+	}
+	if countLog(logs, "POST", "/graphql") != 3 {
+		t.Fatalf("closing-reference requests = %d, want 3; logs=%v", countLog(logs, "POST", "/graphql"), logs)
+	}
+	if countLog(logs, "PATCH", "/repos/owner/repo/pulls/1") != 1 ||
+		countLog(logs, "POST", "/repos/owner/repo/issues/1/comments") != 1 {
+		t.Fatalf("reopen requests = %v, want one state update and one comment", logs)
+	}
+}
+
+func TestListClosingReferencesRejectsStalledCursor(t *testing.T) {
+	calls := 0
+	client, closeServer := testClient(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		writeTestJSON(t, w, `{"data":{"repository":{"pullRequest":{"closingIssuesReferences":{"nodes":[],"pageInfo":{"hasNextPage":true,"endCursor":"same"}}}}}}`)
+	}))
+	defer closeServer()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	_, err := listClosingReferences(ctx, client, "owner", "repo", 1)
+	if err == nil || !strings.Contains(err.Error(), "page cursor did not advance") {
+		t.Fatalf("listClosingReferences() error = %v", err)
+	}
+	if calls != 2 {
+		t.Fatalf("graphql calls = %d, want 2", calls)
 	}
 }
 
@@ -223,5 +292,75 @@ func TestGateWaitsAtMostTwiceBeforeClosing(t *testing.T) {
 	if countLog(logs, "POST", "/repos/owner/repo/issues/1/comments") != 1 ||
 		countLog(logs, "PATCH", "/repos/owner/repo/pulls/1") != 1 {
 		t.Fatalf("close requests = %v, want one comment followed by one state update", logs)
+	}
+}
+
+func TestGateReopensDocsOnlyPullRequest(t *testing.T) {
+	var logs []requestLog
+	client, closeServer := testClient(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		logs = append(logs, requestLog{r.Method, r.URL.Path})
+		switch r.Method + " " + r.URL.Path {
+		case "GET /repos/owner/repo/pulls/1":
+			writeTestJSON(t, w, `{"number":1,"state":"closed","base":{"ref":"main"},"user":{"login":"author","type":"User"},"author_association":"CONTRIBUTOR"}`)
+		case "GET /repos/owner/repo/issues/1/comments":
+			writeTestJSON(t, w, `[{"user":{"login":"github-actions[bot]"},"body":"closed <!-- pr-gate:closed -->","created_at":"2026-01-01T00:00:00Z"}]`)
+		case "GET /repos/owner/repo/issues/1/events":
+			writeTestJSON(t, w, `[{"event":"closed","actor":{"login":"github-actions[bot]"},"created_at":"2026-01-01T00:00:01Z"}]`)
+		case "GET /repos/owner/repo/pulls/1/files":
+			writeTestJSON(t, w, `[{"filename":"docs/guide.md"}]`)
+		case "POST /graphql":
+			writeTestJSON(t, w, `{"data":{"repository":{"pullRequest":{"closingIssuesReferences":{"nodes":[],"pageInfo":{"hasNextPage":false}}}}}}`)
+		case "PATCH /repos/owner/repo/pulls/1":
+			writeTestJSON(t, w, `{"number":1,"state":"open"}`)
+		case "POST /repos/owner/repo/issues/1/comments":
+			writeTestJSON(t, w, `{"id":11}`)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer closeServer()
+
+	if err := Gate(context.Background(), client, "owner", "repo", testPullRequestEvent("edited", 1, true)); err != nil {
+		t.Fatalf("Gate() error = %v", err)
+	}
+	if countLog(logs, "PATCH", "/repos/owner/repo/pulls/1") != 1 ||
+		countLog(logs, "POST", "/repos/owner/repo/issues/1/comments") != 1 {
+		t.Fatalf("docs-only reopen requests = %v", logs)
+	}
+}
+
+func TestGateKeepsAssigneePullRequestOpenDespiteForeignClaim(t *testing.T) {
+	var logs []requestLog
+	var commentBody string
+	client, closeServer := testClient(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		logs = append(logs, requestLog{r.Method, r.URL.Path})
+		switch r.Method + " " + r.URL.Path {
+		case "GET /repos/owner/repo/pulls/1":
+			writeTestJSON(t, w, `{"number":1,"state":"open","base":{"ref":"main"},"user":{"login":"author","type":"User"},"author_association":"CONTRIBUTOR"}`)
+		case "GET /repos/owner/repo/pulls/1/files":
+			writeTestJSON(t, w, `[{"filename":"internal/file.go"}]`)
+		case "POST /graphql":
+			writeTestJSON(t, w, `{"data":{"repository":{"pullRequest":{"closingIssuesReferences":{"nodes":[{"number":9,"repository":{"name":"repo","owner":{"login":"owner"}}}],"pageInfo":{"hasNextPage":false}}}}}}`)
+		case "GET /repos/owner/repo/issues/9":
+			writeTestJSON(t, w, `{"number":9,"state":"open","assignees":[{"login":"author"}]}`)
+		case "GET /repos/owner/repo/issues/9/comments":
+			writeTestJSON(t, w, `[{"id":11,"user":{"login":"github-actions[bot]"},"body":"<!-- pr-gate:claim pr=2 author=other -->"}]`)
+		case "POST /repos/owner/repo/issues/1/comments":
+			body, _ := io.ReadAll(r.Body)
+			commentBody = string(body)
+			writeTestJSON(t, w, `{"id":12}`)
+		case "PATCH /repos/owner/repo/pulls/1":
+			writeTestJSON(t, w, `{"number":1,"state":"closed"}`)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer closeServer()
+
+	if err := Gate(context.Background(), client, "owner", "repo", testPullRequestEvent("synchronize", 1, false)); err != nil {
+		t.Fatalf("Gate() error = %v", err)
+	}
+	if containsLog(logs, "PATCH", "/repos/owner/repo/pulls/1") || commentBody != "" {
+		t.Fatalf("Gate() closed an assignee pull request: %v body=%s", logs, commentBody)
 	}
 }

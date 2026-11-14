@@ -10,105 +10,119 @@ import (
 )
 
 func Claim(ctx context.Context, client *github.Client, owner, repository string, eventData []byte) error {
-	event, err := parsePullRequestEvent(eventData)
+	current, err := newState(client, owner, repository, eventData)
 	if err != nil {
-		return fmt.Errorf("parse pull request event: %w", err)
+		return err
 	}
-	if event.number == 0 {
+	if current.event.number == 0 {
 		return nil
 	}
-	pullRequest, err := readPullRequest(ctx, client, owner, repository, event.number)
-	if err != nil || pullRequest == nil {
+	if err := current.collectClaim(ctx); err != nil {
 		return err
 	}
-	if pullRequest.State == "closed" || pullRequest.Merged || pullRequest.BaseRef != "main" || bypassesGate(pullRequest) {
-		return nil
+	current.planClaim()
+	return current.apply(ctx)
+}
+
+func (s *state) planClaim() {
+	pullRequest := s.observed.pullRequest
+	if pullRequest == nil || pullRequest.State == "closed" || pullRequest.Merged || pullRequest.BaseRef != "main" || bypassesGate(pullRequest) {
+		return
 	}
-	linked, err := listClosingReferences(ctx, client, owner, repository, event.number)
-	if err != nil {
-		return err
+	s.resolve()
+	target := s.claimTarget()
+	if target == nil {
+		return
 	}
-	approved, _, err := firstApproved(ctx, client, owner, repository, pullRequest.Author.Login, event.number, linked)
-	if err != nil || approved == nil {
-		return err
-	}
-	claims, err := readIssueClaims(ctx, client, owner, *approved)
-	if err != nil {
-		return err
-	}
+	snapshot := s.issue(*target)
 	hasPullRequestClaim := false
-	for _, claim := range claims {
-		if claim.PullRequestNumber == event.number {
-			hasPullRequestClaim = true
-			break
+	if snapshot != nil {
+		for _, claim := range snapshot.claims {
+			if claim.PullRequestNumber == s.event.number {
+				hasPullRequestClaim = true
+				break
+			}
 		}
 	}
-	record, err := readClaimRecord(ctx, client, owner, repository, event.number)
-	if err != nil {
-		return err
-	}
-	if record == nil {
-		if err := createClaimRecord(ctx, client, owner, repository, event.number, *approved, pullRequest.Author.Login); err != nil {
-			return err
-		}
+	if s.observed.record == nil {
+		s.changes = append(s.changes, change{
+			kind:       changeComment,
+			repository: s.repository,
+			number:     s.event.number,
+			body:       fmt.Sprintf("<!-- pr-gate:claim issue=%s author=%s -->", *target, pullRequest.Author.Login),
+			issue:      *target,
+		})
+		s.observed.record = &contribution.ClaimRecord{Issue: *target, Author: pullRequest.Author.Login}
 	}
 	if !hasPullRequestClaim {
-		if err := createIssueClaim(ctx, client, owner, *approved, event.number, pullRequest.Author.Login); err != nil {
-			return err
-		}
+		s.changes = append(s.changes, change{
+			kind:       changeComment,
+			repository: target.Repository,
+			number:     target.Number,
+			body: fmt.Sprintf("<!-- pr-gate:claim pr=%d author=%s -->\n\nIssue claimed by @%s in PR #%d.",
+				s.event.number, pullRequest.Author.Login, pullRequest.Author.Login, s.event.number),
+			issue: *target,
+		})
 	}
-	issue, err := readIssue(ctx, client, owner, *approved)
-	if err != nil {
-		return err
+	if snapshot == nil || snapshot.issue == nil {
+		return
 	}
-	if issue == nil {
-		return nil
-	}
-	if err := ensureClaimedLabel(ctx, client, owner, repository); err != nil {
-		return err
+	issue := snapshot.issue
+	if !s.observed.claimedLabelExists {
+		s.changes = append(s.changes, change{kind: changeCreateLabel})
+		s.observed.claimedLabelExists = true
 	}
 	if !issue.HasAssignee(pullRequest.Author.Login) {
-		item, _, err := client.Issues.AddAssignees(ctx, owner, approved.Repository, approved.Number, []string{pullRequest.Author.Login})
-		if err != nil {
-			return fmt.Errorf("assign issue %s to @%s: %w", *approved, pullRequest.Author.Login, err)
-		}
-		issue = contribution.IssueFromGitHub(item)
+		s.changes = append(s.changes, change{
+			kind:       changeAddAssignee,
+			repository: target.Repository,
+			number:     target.Number,
+			user:       pullRequest.Author.Login,
+			issue:      *target,
+		})
 	}
 	if !issue.HasLabel(contribution.ClaimedLabel) {
-		if _, _, err := client.Issues.AddLabelsToIssue(ctx, owner, approved.Repository, approved.Number, []string{contribution.ClaimedLabel}); err != nil {
-			return fmt.Errorf("add %q label to %s: %w", contribution.ClaimedLabel, *approved, err)
-		}
+		s.changes = append(s.changes, change{
+			kind:       changeAddLabel,
+			repository: target.Repository,
+			number:     target.Number,
+			label:      contribution.ClaimedLabel,
+			issue:      *target,
+		})
 	}
 	if issue.HasLabel(contribution.HelpWantedLabel) {
-		if _, err := client.Issues.RemoveLabelForIssue(ctx, owner, approved.Repository, approved.Number, contribution.HelpWantedLabel); err != nil &&
-			!contribution.IsNotFound(err) {
-			return fmt.Errorf("remove %q label from %s: %w", contribution.HelpWantedLabel, *approved, err)
-		}
+		s.changes = append(s.changes, change{
+			kind:       changeRemoveLabel,
+			repository: target.Repository,
+			number:     target.Number,
+			label:      contribution.HelpWantedLabel,
+			issue:      *target,
+			missingOK:  true,
+		})
 	}
 	if !hasLabel(pullRequest, contribution.ClaimedLabel) {
-		if _, _, err := client.Issues.AddLabelsToIssue(ctx, owner, repository, event.number, []string{contribution.ClaimedLabel}); err != nil {
-			return fmt.Errorf("add %q label to pull request #%d: %w", contribution.ClaimedLabel, event.number, err)
+		s.changes = append(s.changes, change{
+			kind:       changeAddLabel,
+			repository: s.repository,
+			number:     s.event.number,
+			label:      contribution.ClaimedLabel,
+			issue:      contribution.IssueReference{Repository: s.repository, Number: s.event.number},
+		})
+	}
+}
+
+func (s *state) claimTarget() *contribution.IssueReference {
+	if s.observed.record != nil {
+		if !containsReference(s.observed.links, s.owner, s.observed.record.Issue) {
+			return nil
 		}
+		if s.decision.approved == nil || s.decision.approved.Repository != s.observed.record.Issue.Repository || s.decision.approved.Number != s.observed.record.Issue.Number {
+			return nil
+		}
+		issue := s.observed.record.Issue
+		return &issue
 	}
-	return nil
-}
-
-func createClaimRecord(ctx context.Context, client *github.Client, owner, repository string, pullRequestNumber int, reference contribution.IssueReference, author string) error {
-	body := fmt.Sprintf("<!-- pr-gate:claim issue=%s author=%s -->", reference, author)
-	_, _, err := client.Issues.CreateComment(ctx, owner, repository, pullRequestNumber, github.IssueCommentRequest{Body: body})
-	if err != nil {
-		return fmt.Errorf("create claim record for pull request #%d issue %s: %w", pullRequestNumber, reference, err)
-	}
-	return nil
-}
-
-func createIssueClaim(ctx context.Context, client *github.Client, owner string, reference contribution.IssueReference, pullRequestNumber int, author string) error {
-	body := fmt.Sprintf("<!-- pr-gate:claim pr=%d author=%s -->\n\nIssue claimed by @%s in PR #%d.", pullRequestNumber, author, author, pullRequestNumber)
-	_, _, err := client.Issues.CreateComment(ctx, owner, reference.Repository, reference.Number, github.IssueCommentRequest{Body: body})
-	if err != nil {
-		return fmt.Errorf("create issue claim for %s: %w", reference, err)
-	}
-	return nil
+	return s.decision.approved
 }
 
 func ensureClaimedLabel(ctx context.Context, client *github.Client, owner, repository string) error {

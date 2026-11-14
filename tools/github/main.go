@@ -18,7 +18,7 @@ import (
 
 func main() {
 	if !validCommand(os.Args[1:]) {
-		fail(errors.New("usage: github pr release|gate|claim|milestone | issue triage|assignment | merge"))
+		fail(errors.New("usage: github pr | issue triage|assignment | merge"))
 	}
 	owner, repo, err := parseRepository(os.Getenv("GITHUB_REPOSITORY"))
 	if err != nil {
@@ -39,16 +39,7 @@ func main() {
 	}
 	switch os.Args[1] {
 	case "pr":
-		switch os.Args[2] {
-		case "release":
-			err = pr.Release(ctx, client, owner, repo, event)
-		case "gate":
-			err = pr.Gate(ctx, client, owner, repo, event)
-		case "claim":
-			err = pr.Claim(ctx, client, owner, repo, event)
-		case "milestone":
-			err = pr.Milestone(ctx, client, owner, repo, event)
-		}
+		err = pr.Run(ctx, client, owner, repo, event)
 	case "issue":
 		if os.Args[2] == "triage" {
 			err = issue.Triage(ctx, client, owner, repo, event)
@@ -64,13 +55,10 @@ func main() {
 }
 
 func validCommand(args []string) bool {
-	if len(args) == 2 && args[0] == "pr" {
-		return args[1] == "release" || args[1] == "gate" || args[1] == "claim" || args[1] == "milestone"
+	if len(args) == 1 {
+		return args[0] == "pr" || args[0] == "merge"
 	}
-	if len(args) == 2 && args[0] == "issue" {
-		return args[1] == "triage" || args[1] == "assignment"
-	}
-	return len(args) == 1 && args[0] == "merge"
+	return len(args) == 2 && args[0] == "issue" && (args[1] == "triage" || args[1] == "assignment")
 }
 
 func newGitHubClient(baseURL, token string) (*github.Client, error) {
