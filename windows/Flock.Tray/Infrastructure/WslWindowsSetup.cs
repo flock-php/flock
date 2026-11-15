@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using System.Diagnostics;
+using System.Formats.Asn1;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using System.Text.Json;
@@ -18,7 +19,7 @@ namespace Flock.Tray.Infrastructure;
 /// </summary>
 public sealed partial class WslWindowsSetup(FlockBackend backend, string root, Func<string?> cli,
     Func<string, bool>? trusted = null, Func<string, bool>? ruleInstalled = null,
-    Func<string, IReadOnlyList<string>, CancellationToken, Task<int?>>? elevate = null)
+    Func<string, IReadOnlyList<string>, CancellationToken, Task<int?>>? elevate = null, Func<string, string, string?>? caProblem = null)
 {
     /// <summary>What a declined permission prompt reports, as `flock install` words it.</summary>
     public const string Declined = "administrator permission was declined";
@@ -32,6 +33,7 @@ public sealed partial class WslWindowsSetup(FlockBackend backend, string root, F
     private readonly Func<string, bool> trusted = trusted ?? IsTrusted;
     private readonly Func<string, bool> ruleInstalled = ruleInstalled ?? IsRuleInstalled;
     private readonly Func<string, IReadOnlyList<string>, CancellationToken, Task<int?>> elevate = elevate ?? ElevateAsync;
+    private readonly Func<string, string, string?> caProblem = caProblem ?? CaProblem;
 
     /// <summary>
     /// The Windows CLI that does the setup: the one shipped with the app, or the one an earlier
@@ -84,12 +86,14 @@ public sealed partial class WslWindowsSetup(FlockBackend backend, string root, F
     /// <summary>
     /// Whether Windows resolves and trusts the distro's sites. Also true when that can't be told
     /// or changed from here: the distro's Flock isn't installed yet, or its files can't be read.
+    /// A CA that can't sign the TLD's sites is not set up, whatever Windows trusts: setup says why.
     /// </summary>
     public bool IsSetUp()
     {
         try
         {
-            return !File.Exists(CaPath) || Tld() is not { } tld || (trusted(CaPath) && ruleInstalled(tld));
+            return !File.Exists(CaPath) || Tld() is not { } tld
+                || (caProblem(CaPath, tld) is null && trusted(CaPath) && ruleInstalled(tld));
         }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException or CryptographicException or System.Security.SecurityException)
         {
@@ -112,6 +116,18 @@ public sealed partial class WslWindowsSetup(FlockBackend backend, string root, F
         if (Tld() is not { } tld)
         {
             return new Installation.Result(false, $"Error: the TLD in the config.json of {name} is not one Windows can be set up for.");
+        }
+        try
+        {
+            if (caProblem(CaPath, tld) is { } problem)
+            {
+                return new Installation.Result(false, $"Error: the certificate authority of {name} {problem}. Windows isn't asked to trust it. " +
+                    $"Flock makes a new one for *.{tld} when the certs folder in the distro's Flock folder is removed and `{FlockBackend.LinuxCli} install` runs there.");
+            }
+        }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException or CryptographicException)
+        {
+            return new Installation.Result(false, $"Error: the certificate authority of {name} can't be read: {error.Message}");
         }
 
         // The elevated program gets copies in a Windows folder: a distro's share isn't always
@@ -138,7 +154,7 @@ public sealed partial class WslWindowsSetup(FlockBackend backend, string root, F
             return new Installation.Result(true,
                 $"✓ every *.{tld} name (any subdomain) is sent to {name}\n✓ the certificate authority of {name} is trusted");
         }
-        catch (Exception error) when (error is IOException or UnauthorizedAccessException or Win32Exception)
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException or Win32Exception or InvalidOperationException)
         {
             return new Installation.Result(false, "Error: " + error.Message);
         }
@@ -152,6 +168,67 @@ public sealed partial class WslWindowsSetup(FlockBackend backend, string root, F
             {
                 // Windows clears the temp folder.
             }
+        }
+    }
+
+    /// <summary>
+    /// Why the CA in the file shouldn't be trusted for tld, or null. Flock limits its CA to the TLD
+    /// it was made for (and localhost) with name constraints, so a CA from before the TLD changed
+    /// can't sign the sites' certificates, and one without constraints could sign any name: it
+    /// would get this machine's trust for every site, from a key that lives in the distro.
+    /// </summary>
+    private static string? CaProblem(string path, string tld)
+    {
+        using var certificate = X509CertificateLoader.LoadCertificateFromFile(path);
+        if (PermittedDnsNames(certificate) is not { Count: > 0 } permitted)
+        {
+            return $"isn't limited to *.{tld} names";
+        }
+        string[] own = [tld, "." + tld, "localhost"];
+        if (!permitted.Any(name => name == tld || name == "." + tld) || permitted.Except(own, StringComparer.OrdinalIgnoreCase).Any())
+        {
+            return $"was made for {string.Join(", ", permitted.Except(["localhost"]).Select(name => "*." + name.TrimStart('.')).Distinct())}, not for *.{tld}";
+        }
+        return null;
+    }
+
+    /// <summary>
+    /// The DNS names a CA's name constraints permit, or null when it has no such list or permits
+    /// other kinds of names (which this app doesn't judge).
+    /// </summary>
+    internal static IReadOnlyList<string>? PermittedDnsNames(X509Certificate2 certificate)
+    {
+        if (certificate.Extensions["2.5.29.30"] is not { } constraints)
+        {
+            return null;
+        }
+        try
+        {
+            // NameConstraints ::= SEQUENCE { permittedSubtrees [0] SEQUENCE OF GeneralSubtree, … };
+            // GeneralSubtree ::= SEQUENCE { base GeneralName, … }; a dNSName is [2] IA5String.
+            var permittedTag = new Asn1Tag(TagClass.ContextSpecific, 0, isConstructed: true);
+            var dnsTag = new Asn1Tag(TagClass.ContextSpecific, 2);
+            var sequence = new AsnReader(constraints.RawData, AsnEncodingRules.DER).ReadSequence();
+            if (!sequence.HasData || !sequence.PeekTag().HasSameClassAndValue(permittedTag))
+            {
+                return null;
+            }
+            var names = new List<string>();
+            var subtrees = sequence.ReadSequence(permittedTag);
+            while (subtrees.HasData)
+            {
+                var subtree = subtrees.ReadSequence();
+                if (!subtree.PeekTag().HasSameClassAndValue(dnsTag))
+                {
+                    return null;
+                }
+                names.Add(subtree.ReadCharacterString(UniversalTagNumber.IA5String, dnsTag));
+            }
+            return names;
+        }
+        catch (AsnContentException)
+        {
+            return null;
         }
     }
 

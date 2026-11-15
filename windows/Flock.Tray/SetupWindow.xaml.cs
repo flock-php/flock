@@ -25,6 +25,7 @@ internal sealed partial class SetupWindow : FlockWindow
         InitializeChrome(WindowRoot, WindowTitleBar, WindowCaption, WindowIcon);
         model.Changed += ShowDefaults;
         Closed += (_, _) => model.Changed -= ShowDefaults;
+        Closed += (_, _) => SkipWslSetup();
         if (model.Installation.Backend.WslDistro is { } distro)
         {
             ShowWslSetup(distro);
@@ -46,6 +47,16 @@ internal sealed partial class SetupWindow : FlockWindow
         Startup.Visibility = Visibility.Collapsed;
         NextStepsTitle.Visibility = Visibility.Collapsed;
         NextSteps.Visibility = Visibility.Collapsed;
+    }
+
+    /// <summary>Closing the window without setting up ("Not now") leaves it until the next start.</summary>
+    private void SkipWslSetup()
+    {
+        if (model.NeedsSetup && !model.Installation.IsInstalling && model.Installation.SkipSetup())
+        {
+            model.NeedsSetup = false;
+            model.NotifyChanged();
+        }
     }
 
     private void Render(Stage value)

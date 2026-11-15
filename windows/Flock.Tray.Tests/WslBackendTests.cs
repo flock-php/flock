@@ -1,6 +1,9 @@
 using System.Diagnostics;
+using System.Formats.Asn1;
 using System.Net;
 using System.Net.Sockets;
+using System.Security.Cryptography;
+using System.Security.Cryptography.X509Certificates;
 using Flock.Kit;
 using Flock.Tray.Features.Preferences;
 using Flock.Tray.Infrastructure;
@@ -50,19 +53,101 @@ public sealed class WslBackendTests : IDisposable
         return root;
     }
 
-    private WslWindowsSetup Setup(string root, string? cli = @"C:\Flock\flock.exe") =>
+    private WslWindowsSetup Setup(string root, string? cli = @"C:\Flock\flock.exe", bool realCa = false) =>
         new(wsl, root, () => cli, _ => trusted, _ => rule, (file, arguments, _) =>
         {
             elevated.Add(string.Join(' ', [file, .. arguments]));
             // The elevated program reads the copy of the CA it is given.
             var copy = arguments[arguments.ToList().IndexOf("--ca") + 1];
-            Assert.Equal("the distro's CA", File.ReadAllText(copy));
+            Assert.Equal(File.ReadAllText(Path.Combine(root, "certs", "ca.crt")), File.ReadAllText(copy));
             if (exitCode is > 0)
             {
                 File.WriteAllText(arguments[^1], "trust CA: access denied\n");
             }
             return Task.FromResult(exitCode);
-        });
+        }, realCa ? null : (_, _) => null);
+
+    /// <summary>Writes a CA as Flock makes it: limited to the names given, or to none of them.</summary>
+    private static void WriteCa(string root, params string[] permitted)
+    {
+        using var key = ECDsa.Create(ECCurve.NamedCurves.nistP256);
+        var request = new CertificateRequest("CN=Flock Local CA (test)", key, HashAlgorithmName.SHA256);
+        request.CertificateExtensions.Add(new X509BasicConstraintsExtension(true, false, 0, true));
+        if (permitted.Length > 0)
+        {
+            var writer = new AsnWriter(AsnEncodingRules.DER);
+            using (writer.PushSequence())
+            using (writer.PushSequence(new Asn1Tag(TagClass.ContextSpecific, 0)))
+            {
+                foreach (var name in permitted)
+                {
+                    using (writer.PushSequence())
+                    {
+                        writer.WriteCharacterString(UniversalTagNumber.IA5String, name, new Asn1Tag(TagClass.ContextSpecific, 2));
+                    }
+                }
+            }
+            request.CertificateExtensions.Add(new X509Extension("2.5.29.30", writer.Encode(), critical: true));
+        }
+        using var certificate = request.CreateSelfSigned(DateTimeOffset.UtcNow.AddDays(-1), DateTimeOffset.UtcNow.AddDays(30));
+        File.WriteAllText(Path.Combine(root, "certs", "ca.crt"), certificate.ExportCertificatePem());
+    }
+
+    [Fact]
+    public async Task ACaForTheTldIsHandedToTheElevatedStep()
+    {
+        var root = Root();
+        WriteCa(root, ".test", "test", "localhost");
+        var installation = Installation(Setup(root, realCa: true));
+
+        Assert.False(await installation.IsSetUpAsync());
+        Assert.True((await installation.InstallAsync()).Ok);
+        Assert.Single(elevated);
+    }
+
+    [Fact]
+    public async Task ACaMadeForAnotherTldIsNotTrustedAndSetupSaysSo()
+    {
+        // A CA from before the distro's TLD changed: Windows may trust it already, but it can't sign *.test sites.
+        trusted = rule = true;
+        var root = Root();
+        WriteCa(root, ".wsl", "wsl", "localhost");
+        var installation = Installation(Setup(root, realCa: true));
+
+        Assert.False(await installation.IsSetUpAsync());
+        var result = await installation.InstallAsync();
+        Assert.False(result.Ok);
+        Assert.Contains("was made for *.wsl, not for *.test", result.Output);
+        Assert.Empty(elevated);
+    }
+
+    [Theory]
+    [InlineData]
+    [InlineData(".test", "test", "localhost", "com")]
+    public async Task ACaThatCouldSignOtherNamesIsNotTrusted(params string[] permitted)
+    {
+        var root = Root();
+        WriteCa(root, permitted);
+        var installation = Installation(Setup(root, realCa: true));
+
+        Assert.False(await installation.IsSetUpAsync());
+        Assert.False((await installation.InstallAsync()).Ok);
+        Assert.Empty(elevated);
+    }
+
+    [Fact]
+    public async Task NotNowLeavesSetupForThisRun()
+    {
+        var installation = Installation();
+        Assert.False(await installation.IsSetUpAsync());
+
+        Assert.True(installation.SkipSetup());
+
+        Assert.True(await installation.IsSetUpAsync());
+        Assert.Empty(elevated);
+        // A daemon on Windows can't be shown before its setup.
+        Assert.False(new InstallationService(runner, new PreferencesService(Path.Combine(directory.FullName, "tray.json")), backend: FlockBackend.Local).SkipSetup());
+    }
 
     private InstallationService Installation(WslWindowsSetup? setup = null) =>
         new(runner, new PreferencesService(Path.Combine(directory.FullName, "tray.json")), backend: wsl, wslSetup: setup ?? Setup(Root()));

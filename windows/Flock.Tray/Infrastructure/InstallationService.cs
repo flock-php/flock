@@ -23,6 +23,17 @@ public sealed class InstallationService(CliProcessRunner processRunner, Preferen
 
     /// <summary>Whether this app can run setup: it needs a CLI on Windows for it.</summary>
     public bool CanSetUp => wsl?.IsAvailable ?? BundledFlock is not null;
+
+    /// <summary>
+    /// Leaves a WSL daemon's setup for this run, as declining its permission prompt does: the
+    /// daemon serves the sites either way, so the app is usable without it. False for a daemon on
+    /// Windows, which the app can't show before setup.
+    /// </summary>
+    public bool SkipSetup()
+    {
+        asked |= wsl is not null;
+        return wsl is not null;
+    }
     public bool IsInstalling => setup is { IsCompleted: false };
     public Task<List<Conflict>> ConflictsAsync() => Backend.IsWsl ? Task.FromResult(new List<Conflict>()) : Installation.ConflictsAsync(processRunner);
 

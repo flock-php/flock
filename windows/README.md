@@ -174,7 +174,9 @@ it asks once for administrator permission, for the NRPT rule that sends the dist
 (`*.test`) to 127.0.0.1, and to trust the distro's certificate authority (`certs\ca.crt` in its
 Flock folder), so HTTPS has no warnings (a Firefox-based browser reads Windows' trusted roots
 when it starts: restart it after the setup). It asks when either is missing, and again at the next
-start when the prompt was declined. Both are done by `flock.exe privileged-setup`, the step
+start when the prompt was declined or the window closed with "Not now". It only trusts a CA
+limited to the distro's TLD, as Flock makes it: one made for another TLD (Flock keeps its CA when
+the TLD changes) can't sign the sites' certificates, and setup says so instead. Both are done by `flock.exe privileged-setup`, the step
 Flock's own setup on Windows runs, without the hosts helper: the app needs the `flock.exe` it
 ships with, or the one an earlier Flock for Windows left in `%AppData%\Flock\bin` (a development
 build without either sets nothing up). Nothing removes them again: the rule goes with
