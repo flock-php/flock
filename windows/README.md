@@ -135,6 +135,57 @@ its default Git description may not be a version the updater can compare.
 Logs: `%AppData%\Flock\log\` (daemon.log, web.log, php8.x-cgi.log, php8.x-install.log) and
 `%LocalAppData%\Flock\tray.log` for unexpected errors in the tray app.
 
+## The daemon in WSL2 (experimental)
+
+The tray app can show a daemon that runs in a WSL2 distro instead of on Windows: the Linux
+version of Flock, with your projects in the distro's file system. The app talks to it as it does
+to the Windows daemon, over the loopback URL and token in `api.json`; it finds that file through
+the distro's share when `FLOCK_HOME` points there. Then it leaves setup and updates to the distro,
+runs Restart as `wsl.exe -d <distro> -- flk restart`, and opens the Linux paths the daemon reports
+through `\\wsl.localhost\<distro>\…`.
+
+Nothing sets this up for you yet:
+
+1. **Mirrored networking**, so Windows reaches the distro's ports (the API, 80 and 443) on
+   127.0.0.1. In `%UserProfile%\.wslconfig`:
+   ```ini
+   [wsl2]
+   networkingMode=mirrored
+   ```
+   then `wsl --shutdown`.
+2. **systemd and systemd-resolved** in the distro: `[boot]` `systemd=true` in `/etc/wsl.conf`,
+   then `sudo systemctl enable --now systemd-resolved`.
+3. **Flock for Linux** in the distro (the `.deb`/`.rpm`, see the main README), then `flk install`.
+   Windows' own Flock and the distro's share ports in mirrored mode, so quit it first (and
+   anything else on ports 80 and 443, in Windows or the distro).
+4. **`*.test` on Windows**: an NRPT rule sends the names to 127.0.0.1:53 (elevated PowerShell;
+   use the distro's TLD and remove the rule with `Remove-DnsClientNrptRule`). A machine that had
+   Flock for Windows installed has the rule already.
+   ```powershell
+   Add-DnsClientNrptRule -Namespace ".test" -NameServers "127.0.0.1" -Comment "Flock (WSL)"
+   ```
+   The app answers there, as the daemon's DNS server would (every name under the TLD is
+   127.0.0.1): NRPT rules can't name a port, and WSL keeps port 53 for its own DNS, so the
+   distro's server is out of reach on it, even with mirrored networking. So names resolve while
+   the app runs, and Windows' own Flock must not be running (it listens on the same port).
+5. **Optional, HTTPS without warnings**: trust the distro's CA on Windows, from an elevated
+   prompt: `certutil -addstore Root \\wsl.localhost\<distro>\home\<you>\.local\share\flock\certs\ca.crt`.
+   Without it, browsers on Windows warn about the certificates.
+6. **The app**: start `FlockTray.exe` with `FLOCK_HOME` set to the distro's Flock folder:
+   ```powershell
+   $env:FLOCK_HOME = "\\wsl.localhost\Ubuntu\home\<you>\.local\share\flock"; .\FlockTray.exe
+   ```
+   A user-level `FLOCK_HOME` makes the app at sign-in do the same, but also points a Windows
+   `flock.exe` there.
+
+While it runs, the app also keeps the distro running (a hidden `wsl.exe -d <distro> --exec sleep
+infinity`): WSL powers a distro off seconds after the last Windows program using it exits, and
+the daemon and the sites with it.
+
+Not handled yet: NAT networking; Firefox's own certificate store; Install, Update and the port
+check in the app (they say to run `flk` in the distro); `flk status` in the distro reporting that
+`*.test` doesn't resolve there when WSL's DNS tunneling bypasses systemd-resolved.
+
 ## Screenshots for the docs
 
 `Flock.Screenshots` renders the tray app's windows with demo data, for the website's docs: every

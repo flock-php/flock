@@ -154,6 +154,15 @@ public sealed class AppHost : IAsyncDisposable
             {
                 builder.Services.AddSingleton<IHostedService>(services => new UpdateScheduleService(
                     services.GetRequiredService<UpdateService>(), services.GetRequiredService<TimeProvider>()));
+                builder.Services.AddSingleton<IHostedService>(services => new WslKeepAliveService(
+                    services.GetRequiredService<InstallationService>().Backend,
+                    services.GetRequiredService<Microsoft.Extensions.Logging.ILogger<WslKeepAliveService>>(),
+                    timeProvider: services.GetRequiredService<TimeProvider>()));
+                builder.Services.AddSingleton<IHostedService>(services => new WslDnsService(
+                    services.GetRequiredService<InstallationService>().Backend,
+                    async token => (await services.GetRequiredService<Flock.Kit.FlockClient>().StatusAsync(token)).Dns.Tld,
+                    services.GetRequiredService<Microsoft.Extensions.Logging.ILogger<WslDnsService>>(),
+                    timeProvider: services.GetRequiredService<TimeProvider>()));
             }
             builder.Services.AddSingleton<RuntimeService>(services => new RuntimeService(
                 services.GetRequiredService<Flock.Kit.FlockClient>(),

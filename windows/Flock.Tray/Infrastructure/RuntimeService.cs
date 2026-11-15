@@ -189,10 +189,11 @@ public sealed class RuntimeService
         NotifyChanged();
         var outcome = await operations.RunMutationAsync("lifecycle", operationErrors, async token =>
         {
-            var result = await processRunner.RunAsync(FlockPaths.FlockBinary, ["restart"], TimeSpan.FromMinutes(2), token);
+            var (fileName, arguments) = installation.Backend.Cli("restart");
+            var result = await processRunner.RunAsync(fileName, arguments, TimeSpan.FromMinutes(2), token);
             if (!result.Succeeded)
             {
-                throw new FlockException(result.Output.Length == 0 ? $"Could not restart Flock ({FlockPaths.FlockBinary})." : result.Output);
+                throw new FlockException(result.Output.Length == 0 ? $"Could not restart Flock ({string.Join(' ', [fileName, .. arguments])})." : result.Output);
             }
         }, CancellationToken.None);
         ActionError = outcome switch
@@ -209,8 +210,9 @@ public sealed class RuntimeService
         }
     }
 
-    public ShellLaunchResult Open(string target) => ReportShellResult(shell.Open(target));
-    public ShellLaunchResult Reveal(string path) => ReportShellResult(shell.Reveal(path));
+    // Paths come from the daemon: Linux paths when it runs in WSL, opened through the distro's share.
+    public ShellLaunchResult Open(string target) => ReportShellResult(shell.Open(installation.Backend.ToWindowsPath(target)));
+    public ShellLaunchResult Reveal(string path) => ReportShellResult(shell.Reveal(installation.Backend.ToWindowsPath(path)));
     public ShellLaunchResult OpenConnection(string executable, string connection) => ReportShellResult(shell.OpenConnection(executable, connection));
 
     public void Open(Status.Site site)

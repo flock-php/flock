@@ -4,14 +4,19 @@ using Microsoft.Win32;
 
 namespace Flock.Tray.Infrastructure;
 
-/// <summary>Owns local setup admission while the daemon-owned install job continues after UI close.</summary>
-public sealed class InstallationService(CliProcessRunner processRunner, PreferencesService preferences, IUiDispatcher? dispatcher = null)
+/// <summary>
+/// Owns local setup admission while the daemon-owned install job continues after UI close. A daemon
+/// in WSL is set up, updated and restarted in its distro, so this app leaves it alone.
+/// </summary>
+public sealed class InstallationService(CliProcessRunner processRunner, PreferencesService preferences, IUiDispatcher? dispatcher = null,
+    FlockBackend? backend = null)
 {
     private readonly object gate = new();
     private Task<Installation.Result>? setup;
 
+    public FlockBackend Backend { get; } = backend ?? FlockBackend.Current;
     public bool IsInstalling => setup is { IsCompleted: false };
-    public Task<List<Conflict>> ConflictsAsync() => Installation.ConflictsAsync(processRunner);
+    public Task<List<Conflict>> ConflictsAsync() => Backend.IsWsl ? Task.FromResult(new List<Conflict>()) : Installation.ConflictsAsync(processRunner);
 
     public Task<Installation.Result> InstallAsync(Action<string>? onLine = null, CancellationToken cancellationToken = default, bool retry = false)
     {
@@ -28,6 +33,10 @@ public sealed class InstallationService(CliProcessRunner processRunner, Preferen
 
     private async Task<Installation.Result> InstallCoreAsync(Action<string>? onLine, CancellationToken cancellationToken)
     {
+        if (Backend.IsWsl)
+        {
+            return new Installation.Result(false, $"Flock runs in WSL ({Backend.WslDistro}) — {Backend.InstallHint}.");
+        }
         if (Installation.BundledFlock is not { } bundled)
         {
             return new Installation.Result(false, "This build of Flock has no bundled CLI — run `flock install` in a terminal.");
@@ -57,6 +66,10 @@ public sealed class InstallationService(CliProcessRunner processRunner, Preferen
 
     public async Task<bool> IsSetUpAsync(CancellationToken cancellationToken = default)
     {
+        if (Backend.IsWsl)
+        {
+            return true;
+        }
         if (!File.Exists(FlockPaths.FlockBinary))
         {
             return false;
@@ -75,7 +88,7 @@ public sealed class InstallationService(CliProcessRunner processRunner, Preferen
     public string? BundledFlock => Installation.BundledFlock;
 
     public async Task<bool> NeedsUpdateAsync(CancellationToken cancellationToken = default) =>
-        Installation.NeedsUpdate(await preferences.LoadAsync(cancellationToken));
+        !Backend.IsWsl && Installation.NeedsUpdate(await preferences.LoadAsync(cancellationToken));
 
     public async Task RecordInstalledAsync(CancellationToken cancellationToken = default)
     {
