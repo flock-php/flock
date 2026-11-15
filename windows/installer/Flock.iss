@@ -140,6 +140,17 @@ begin
     Sleep(500);
 end;
 
+// True when FLOCK_HOME points into a WSL distro: the app then shows the daemon there (see
+// windows/README.md), and the files there are the distro's, not this installation's.
+function HomeIsInWsl(): Boolean;
+var
+  Home: String;
+begin
+  Home := Lowercase(GetEnv('FLOCK_HOME'));
+  StringChangeEx(Home, '/', '\', True);
+  Result := (Pos('\\wsl.localhost\', Home) = 1) or (Pos('\\wsl$\', Home) = 1);
+end;
+
 // Runs at uninstall time, before the app's files go: `flock uninstall` removes the daemon, PATH
 // entry, hosts helper and CA trust (UAC prompt) and Flock's files, keeping the user's settings and
 // databases unless /PURGE. Skipped when Flock was never set up (it would ask for permission).
@@ -156,7 +167,13 @@ begin
       Params := 'uninstall --keep-app';
       if HasParam('/PURGE') then
         Params := Params + ' --purge';
-      Exec(ExpandConstant('{app}\flock.exe'), Params, '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+      // With FLOCK_HOME in a WSL distro, `flock uninstall` would remove the distro's Flock files:
+      // run it without the variable, so it removes Windows' own.
+      if HomeIsInWsl() then
+        Exec(ExpandConstant('{cmd}'), '/S /C "set "FLOCK_HOME=" & "' + ExpandConstant('{app}\flock.exe') + '" ' + Params + '"',
+             '', SW_HIDE, ewWaitUntilTerminated, ResultCode)
+      else
+        Exec(ExpandConstant('{app}\flock.exe'), Params, '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
     end;
   end;
   // The app's "Open Flock at sign-in" (asked in its setup, changed in Settings → General).

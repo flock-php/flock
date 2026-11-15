@@ -155,10 +155,17 @@ distro with systemd that Flock for Linux supports. Nothing sets this up for you 
    ```
    then `wsl --shutdown`.
 2. **systemd and systemd-resolved** in the distro: `[boot]` `systemd=true` in `/etc/wsl.conf`,
-   then `sudo systemctl enable --now systemd-resolved`.
+   then `wsl --shutdown` again and reopen the distro (the setting applies when the distro
+   starts), and `sudo systemctl enable --now systemd-resolved`.
 3. **Flock for Linux** in the distro (the `.deb`/`.rpm`, see the main README), then `flk install`.
-   Windows' own Flock and the distro's share ports in mirrored mode, so quit it first (and
-   anything else on ports 80 and 443, in Windows or the distro).
+   Windows' own Flock and the distro's share ports in mirrored mode (80, 443 and 53), so stop
+   it first, and anything else on those ports in Windows or the distro. Quitting the Flock app
+   leaves its daemon running, and the daemon starts again at sign-in, so end its task and turn
+   it off (`/ENABLE` and `/Run` bring it back):
+   ```powershell
+   schtasks /End /TN "Flock Daemon"
+   schtasks /Change /TN "Flock Daemon" /DISABLE
+   ```
 4. **`*.test` on Windows**: an NRPT rule sends the names to 127.0.0.1:53 (elevated PowerShell;
    use the distro's TLD and remove the rule with `Remove-DnsClientNrptRule`). A machine that had
    Flock for Windows installed has the rule already.
@@ -176,8 +183,10 @@ distro with systemd that Flock for Linux supports. Nothing sets this up for you 
    ```powershell
    $env:FLOCK_HOME = "\\wsl.localhost\Ubuntu\home\<you>\.local\share\flock"; .\FlockTray.exe
    ```
-   A user-level `FLOCK_HOME` makes the app at sign-in do the same, but also points a Windows
-   `flock.exe` there.
+   Set it for the app only, as above, not as a user or system variable: a Windows `flock.exe`
+   follows `FLOCK_HOME` too, and `flock uninstall` there would remove the distro's Flock files
+   (with `--purge` its settings and databases as well). The app's uninstaller runs
+   `flock uninstall` without the variable when it points into WSL.
 
 While it runs, the app also keeps the distro running (a hidden `wsl.exe -d <distro> --exec sleep
 infinity`): WSL powers a distro off seconds after the last Windows program using it exits, and

@@ -107,6 +107,27 @@ public sealed class WslBackendTests : IDisposable
     }
 
     [Fact]
+    public async Task AProcessInTheJobEndsWhenTheJobCloses()
+    {
+        // What Windows does with the app's job when the app is killed: its handle closes.
+        var start = new ProcessStartInfo("ping.exe", "-n 60 127.0.0.1") { UseShellExecute = false, CreateNoWindow = true };
+        using var process = Process.Start(start)!;
+        var job = KillOnCloseJob.Create();
+        try
+        {
+            Assert.NotNull(job);
+            Assert.True(job.Add(process));
+            Assert.False(process.HasExited);
+        }
+        finally
+        {
+            job?.Dispose();
+        }
+
+        await process.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(5));
+    }
+
+    [Fact]
     public async Task ALocalDaemonNeedsNothingKeptOpen()
     {
         var holds = 0;
@@ -137,6 +158,35 @@ public sealed class WslBackendTests : IDisposable
 
         Assert.Equal([0x12, 0x34], reply[..2]);
         Assert.Equal([127, 0, 0, 1], reply[^4..]);
+    }
+
+    [Fact]
+    public async Task TheAnswersFollowATldThatChanges()
+    {
+        var clock = new Microsoft.Extensions.Time.Testing.FakeTimeProvider();
+        var asked = 0;
+        var service = new WslDnsService(wsl, _ => Task.FromResult(Interlocked.Increment(ref asked) == 1 ? "test" : "dev"),
+            endpoint: new IPEndPoint(IPAddress.Loopback, 0), timeProvider: clock);
+        await service.StartAsync(CancellationToken.None);
+        var server = await service.Listening.WaitAsync(TimeSpan.FromSeconds(5));
+        byte[] query = [0x12, 0x34, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0, 3, (byte)'a', (byte)'p', (byte)'p', 3, (byte)'d', (byte)'e', (byte)'v', 0, 0, 1, 0, 1];
+
+        using var client = new UdpClient(AddressFamily.InterNetwork);
+        // Refused (no answer records) until the service has asked the daemon again.
+        var answers = 0;
+        var deadline = DateTime.UtcNow.AddSeconds(5);
+        while (answers == 0 && DateTime.UtcNow < deadline)
+        {
+            await client.SendAsync(query, server);
+            var reply = (await client.ReceiveAsync().WaitAsync(TimeSpan.FromSeconds(5))).Buffer;
+            answers = reply[7];
+            clock.Advance(WslDnsService.RefreshInterval);
+            await Task.Delay(10);
+        }
+        await service.StopAsync(CancellationToken.None);
+
+        Assert.Equal(1, answers);
+        Assert.True(service.ExecuteTask!.IsCompletedSuccessfully);
     }
 
     [Fact]

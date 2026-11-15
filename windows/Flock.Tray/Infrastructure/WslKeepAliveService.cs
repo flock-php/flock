@@ -65,10 +65,17 @@ public sealed class WslKeepAliveService(FlockBackend backend, ILogger<WslKeepAli
         }
     }
 
+    /// <summary>
+    /// Ends the process with the app when the app is ended without its cleanup (an update's
+    /// `taskkill /F`): a process left behind would keep the distro running with no app to stop it.
+    /// </summary>
+    private static readonly Lazy<KillOnCloseJob?> Job = new(KillOnCloseJob.Create);
+
     /// <summary>Runs the process until it exits or the app stops, which ends it.</summary>
     private static async Task HoldAsync(ProcessStartInfo start, CancellationToken cancellationToken)
     {
         using var process = Process.Start(start) ?? throw new InvalidOperationException("wsl.exe did not start.");
+        Job.Value?.Add(process);
         try
         {
             await process.WaitForExitAsync(cancellationToken);

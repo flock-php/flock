@@ -18,11 +18,14 @@ public sealed class WslDnsService(FlockBackend backend, Func<CancellationToken, 
     ILogger<WslDnsService>? logger = null, IPEndPoint? endpoint = null, TimeProvider? timeProvider = null) : BackgroundService
 {
     public static readonly TimeSpan RetryDelay = TimeSpan.FromSeconds(5);
+    /// <summary>How often the daemon is asked for its TLD again: it can change while the app runs.</summary>
+    public static readonly TimeSpan RefreshInterval = TimeSpan.FromSeconds(10);
 
     private readonly ILogger logger = logger ?? NullLogger<WslDnsService>.Instance;
     private readonly IPEndPoint endpoint = endpoint ?? new IPEndPoint(IPAddress.Loopback, 53);
     private readonly TimeProvider timeProvider = timeProvider ?? TimeProvider.System;
     private string? lastProblem;
+    private volatile string served = "";
     private readonly TaskCompletionSource<IPEndPoint> listening = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
     /// <summary>The address the server answers on, once it does (tests listen on port 0).</summary>
@@ -42,7 +45,8 @@ public sealed class WslDnsService(FlockBackend backend, Func<CancellationToken, 
                 var name = await tld(stoppingToken);
                 if (name.Length > 0)
                 {
-                    await ServeAsync(name, stoppingToken);
+                    served = name;
+                    await ServeAsync(stoppingToken);
                 }
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
@@ -69,7 +73,7 @@ public sealed class WslDnsService(FlockBackend backend, Func<CancellationToken, 
         }
     }
 
-    private async Task ServeAsync(string name, CancellationToken cancellationToken)
+    private async Task ServeAsync(CancellationToken cancellationToken)
     {
         using var socket = new Socket(AddressFamily.InterNetwork, SocketType.Dgram, ProtocolType.Udp);
         // Windows reports an unreachable client as a reset on the next receive; ignore those.
@@ -77,16 +81,55 @@ public sealed class WslDnsService(FlockBackend backend, Func<CancellationToken, 
         socket.Bind(endpoint);
         listening.TrySetResult((IPEndPoint)socket.LocalEndPoint!);
         lastProblem = null;
-        logger.LogInformation("Answering *.{Tld} lookups on {Endpoint} for the daemon in WSL.", name, socket.LocalEndPoint);
+        logger.LogInformation("Answering *.{Tld} lookups on {Endpoint} for the daemon in WSL.", served, socket.LocalEndPoint);
 
         // Larger than any query: a datagram that doesn't fit would end the receive with an error.
         var buffer = new byte[4096];
-        while (true)
+        using var serving = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        var refresh = RefreshAsync(serving.Token);
+        try
         {
-            var received = await socket.ReceiveFromAsync(buffer, SocketFlags.None, new IPEndPoint(IPAddress.Any, 0), cancellationToken);
-            if (WildcardDns.Answer(buffer.AsSpan(0, received.ReceivedBytes), name) is { } answer)
+            while (true)
             {
-                await socket.SendToAsync(answer, SocketFlags.None, received.RemoteEndPoint, cancellationToken);
+                var received = await socket.ReceiveFromAsync(buffer, SocketFlags.None, new IPEndPoint(IPAddress.Any, 0), cancellationToken);
+                if (WildcardDns.Answer(buffer.AsSpan(0, received.ReceivedBytes), served) is { } answer)
+                {
+                    await socket.SendToAsync(answer, SocketFlags.None, received.RemoteEndPoint, cancellationToken);
+                }
+            }
+        }
+        finally
+        {
+            serving.Cancel();
+            await refresh;
+        }
+    }
+
+    /// <summary>
+    /// Follows the daemon's TLD while the server answers, as it can change. A daemon that
+    /// doesn't answer (it restarts) keeps the TLD it had.
+    /// </summary>
+    private async Task RefreshAsync(CancellationToken cancellationToken)
+    {
+        while (!cancellationToken.IsCancellationRequested)
+        {
+            try
+            {
+                await Task.Delay(RefreshInterval, timeProvider, cancellationToken);
+                var name = await tld(cancellationToken);
+                if (name.Length > 0 && name != served)
+                {
+                    served = name;
+                    logger.LogInformation("Answering *.{Tld} lookups now: the daemon's TLD changed.", name);
+                }
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                return;
+            }
+            catch (Exception)
+            {
+                // The daemon is down or restarting: asked again at the next interval.
             }
         }
     }
