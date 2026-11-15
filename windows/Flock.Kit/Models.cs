@@ -44,6 +44,8 @@ public sealed class Status
     public int DumpCount { get; init; }
     public int EventCount { get; init; }
     public List<Site> Sites { get; init; } = [];
+    /// <summary>The groups of Sites, sorted by name, with the names of the sites in them; empty from older daemons.</summary>
+    public List<SiteGroup> Groups { get; init; } = [];
     /// <summary>Names served by a server of their own, e.g. a Node.js dev server (`flock proxy`); empty from older daemons.</summary>
     public List<Proxy> Proxies { get; init; } = [];
     public List<Process> Processes { get; init; } = [];
@@ -261,6 +263,13 @@ public sealed class Status
         public const string Node = "node";
     }
 
+    /// <summary>A group of sites: its name and the names of the sites in it.</summary>
+    public sealed class SiteGroup
+    {
+        public string Name { get; init; } = "";
+        public List<string> Sites { get; init; } = [];
+    }
+
     /// <summary>One of a site's extra domains: a subdomain ("tenant1") or an alias ("my-app-2.test").</summary>
     public sealed class SiteDomain
     {
@@ -294,6 +303,8 @@ public sealed class Status
         public string NodeShadowed { get; init; } = "";
         public bool Secured { get; init; }
         public bool Parked { get; init; }
+        /// <summary>The group the site is listed under; empty for none. A worktree is in its parent's group.</summary>
+        public string Group { get; init; } = "";
         public string? Url { get; init; }
         public string? Problem { get; init; }
         /// <summary>Something that needs a decision but isn't broken, e.g. that no document root was found.</summary>

@@ -637,6 +637,14 @@ pub struct SettingsChange {
     pub default_node: Option<String>,
 }
 
+/// A group of sites: its name and the names of the sites in it (api.SiteGroup).
+#[derive(Deserialize, Debug, Clone, PartialEq, Default)]
+#[serde(default)]
+pub struct SiteGroup {
+    pub name: String,
+    pub sites: Vec<String>,
+}
+
 /// GET /v1/status (api.Status).
 #[derive(Deserialize, Debug, Clone, PartialEq, Default)]
 #[serde(default)]
@@ -659,6 +667,9 @@ pub struct Status {
     pub xdebug: bool,
     pub xdebug_breakpoints: bool,
     pub sites: Vec<SiteStatus>,
+    /// The groups of sites, sorted by name, with the names of the sites in them; an older daemon
+    /// sends none.
+    pub groups: Vec<SiteGroup>,
     /// Names served by a server of their own, e.g. a dev server on a port (`flock proxy`); an
     /// older daemon sends none.
     pub proxies: Vec<ProxyStatus>,
@@ -1144,6 +1155,8 @@ pub struct SiteStatus {
     pub node_shadowed: String,
     pub secured: bool,
     pub parked: bool,
+    /// The group the site is listed under, "" for none; a worktree is in its parent's group.
+    pub group: String,
     /// Set on a git worktree of another site: that site's name, whose settings it uses. branch is
     /// the worktree's branch ("" when HEAD is detached).
     pub parent: String,
@@ -1571,6 +1584,23 @@ mod tests {
         assert_eq!(status.sites[0].url.as_deref(), Some("https://acme.test"));
         assert!(!status.sites[0].shared());
         assert!(!status.is_degraded());
+    }
+
+    #[test]
+    fn decodes_site_groups() {
+        let json = r#"{"sites":[
+            {"name":"api","group":"Work"},{"name":"blog","group":"Personal"},{"name":"scratch"}],
+            "groups":[{"name":"Personal","sites":["blog"]},{"name":"Work","sites":["api"]}]}"#;
+        let status: Status = serde_json::from_str(json).unwrap();
+        let names: Vec<&str> = status.groups.iter().map(|g| g.name.as_str()).collect();
+        assert_eq!(names, ["Personal", "Work"]);
+        assert_eq!(status.groups[1].sites, ["api"]);
+        let sites: Vec<&str> = status.sites.iter().map(|s| s.group.as_str()).collect();
+        assert_eq!(sites, ["Work", "Personal", ""]);
+
+        // An older daemon sends none, a newer one an empty list.
+        assert!(serde_json::from_str::<Status>("{}").unwrap().groups.is_empty());
+        assert!(serde_json::from_str::<Status>(r#"{"groups":[]}"#).unwrap().groups.is_empty());
     }
 
     // A site with two worktrees: one set up with a database of its own, one Flock didn't set up.

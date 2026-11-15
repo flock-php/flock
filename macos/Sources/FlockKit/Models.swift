@@ -30,6 +30,8 @@ public struct Status: Decodable, Sendable, Equatable {
     /// Installed PHP versions whose build has no agent extension: they only capture dumps.
     public var captureUnsupported: [String]
     public var sites: [Site]
+    /// The groups of `sites`, sorted by name, with the names of the sites in them (sites in no group are in none).
+    public var groups: [SiteGroup]
     /// Names served by a server of their own, e.g. a dashboard or an object store (`flock proxy`).
     public var proxies: [Proxy]
     public var processes: [Process]
@@ -69,6 +71,21 @@ public struct Status: Decodable, Sendable, Equatable {
             wildcard = try c.decodeIfPresent(Bool.self, forKey: .wildcard) ?? !addr.isEmpty
             wildcardProblem = try c.decodeIfPresent(String.self, forKey: .wildcardProblem) ?? ""
             maxDepth = try c.decodeIfPresent(Int.self, forKey: .maxDepth) ?? 4
+        }
+    }
+
+    /// A group of sites: its name and the names of the sites in it.
+    public struct SiteGroup: Decodable, Sendable, Equatable, Identifiable {
+        public var name: String
+        public var sites: [String]
+        public var id: String { name }
+
+        enum CodingKeys: String, CodingKey { case name, sites }
+
+        public init(from decoder: Decoder) throws {
+            let c = try decoder.container(keyedBy: CodingKeys.self)
+            name = try c.decode(String.self, forKey: .name)
+            sites = try c.decodeIfPresent([String].self, forKey: .sites) ?? []
         }
     }
 
@@ -195,6 +212,8 @@ public struct Status: Decodable, Sendable, Equatable {
         public var nodeShadowed: String
         public var secured: Bool
         public var parked: Bool
+        /// The group the site is listed under; empty for none. A worktree is in its parent's group.
+        public var group: String
         public var url: String?
         public var problem: String?
         /// Something that needs a decision but isn't broken, e.g. that no document root was found.
@@ -274,7 +293,7 @@ public struct Status: Decodable, Sendable, Equatable {
 
         enum CodingKeys: String, CodingKey {
             case name, domain, path, php, phpSource, phpPinned, phpFile, node, nodeSource, nodePinned, nodeFile, nodeShadowed
-            case secured, parked, url, problem, notice, root, rootSource, rootPinned, rootFile, rootState, rootSuggestions
+            case secured, parked, group, url, problem, notice, root, rootSource, rootPinned, rootFile, rootState, rootSuggestions
             case domains, debugging, server, worker, octaneAvailable, boost, share, parent, branch, worktree
             case type, nodeServer
             case frankenPHP = "frankenphp"
@@ -296,6 +315,7 @@ public struct Status: Decodable, Sendable, Equatable {
             nodeShadowed = try c.decodeIfPresent(String.self, forKey: .nodeShadowed) ?? ""
             secured = try c.decodeIfPresent(Bool.self, forKey: .secured) ?? false
             parked = try c.decodeIfPresent(Bool.self, forKey: .parked) ?? false
+            group = try c.decodeIfPresent(String.self, forKey: .group) ?? ""
             url = try c.decodeIfPresent(String.self, forKey: .url)
             problem = try c.decodeIfPresent(String.self, forKey: .problem)
             notice = try c.decodeIfPresent(String.self, forKey: .notice)
@@ -531,7 +551,7 @@ public struct Status: Decodable, Sendable, Equatable {
     enum CodingKeys: String, CodingKey {
         case version, pid, startedAt, dns, httpPort, httpsPort, mail, postgres, extras
         case xdebug, xdebugBreakpoints, dumps, captureOff, dumpsInPage, mailCount, dumpCount, eventCount, captureUnsupported
-        case sites, proxies, processes, warnings, channel, defaults
+        case sites, groups, proxies, processes, warnings, channel, defaults
     }
 
     // Go omits empty slices (`omitempty`) or sends null; treat both as empty.
@@ -556,6 +576,7 @@ public struct Status: Decodable, Sendable, Equatable {
         eventCount = try c.decodeIfPresent(Int.self, forKey: .eventCount) ?? 0
         captureUnsupported = try c.decodeIfPresent([String].self, forKey: .captureUnsupported) ?? []
         sites = try c.decodeIfPresent([Site].self, forKey: .sites) ?? []
+        groups = try c.decodeIfPresent([SiteGroup].self, forKey: .groups) ?? []
         proxies = try c.decodeIfPresent([Proxy].self, forKey: .proxies) ?? []
         processes = try c.decodeIfPresent([Process].self, forKey: .processes) ?? []
         warnings = try c.decodeIfPresent([String].self, forKey: .warnings) ?? []
