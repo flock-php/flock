@@ -25,7 +25,27 @@ internal sealed partial class SetupWindow : FlockWindow
         InitializeChrome(WindowRoot, WindowTitleBar, WindowCaption, WindowIcon);
         model.Changed += ShowDefaults;
         Closed += (_, _) => model.Changed -= ShowDefaults;
+        if (model.Installation.Backend.WslDistro is { } distro)
+        {
+            ShowWslSetup(distro);
+        }
         Render(Stage.Intro);
+    }
+
+    /// <summary>
+    /// A daemon in WSL is set up in its distro: here, setup is only what Windows needs to open its
+    /// sites. The app isn't registered to open at sign-in, where it would look for a daemon on Windows.
+    /// </summary>
+    private void ShowWslSetup(string distro)
+    {
+        IntroLead.Text = $"Flock runs in WSL ({distro}). Windows needs one more step to open its sites:";
+        DaemonCard.Visibility = Visibility.Collapsed;
+        TerminalCard.Visibility = Visibility.Collapsed;
+        TrustTitle.Text = "Sites with trusted HTTPS on Windows";
+        TrustDetail.Text = $"Windows asks once for administrator permission: to send the sites' names to Flock, and to trust the certificate of Flock in WSL ({distro}).";
+        Startup.Visibility = Visibility.Collapsed;
+        NextStepsTitle.Visibility = Visibility.Collapsed;
+        NextSteps.Visibility = Visibility.Collapsed;
     }
 
     private void Render(Stage value)
@@ -79,7 +99,7 @@ internal sealed partial class SetupWindow : FlockWindow
         LogText.Text = output;
 
         model.NeedsSetup = !await model.Installation.IsSetUpAsync();
-        if (result.Ok)
+        if (result.Ok && !model.Installation.Backend.IsWsl)
         {
             try
             {

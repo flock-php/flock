@@ -152,7 +152,7 @@ public sealed class RuntimeService
 
     public async Task RefreshSetupAsync()
     {
-        if (installation.IsInstalling || IsUpdating || installation.BundledFlock is null)
+        if (installation.IsInstalling || IsUpdating || !installation.CanSetUp)
         {
             return;
         }

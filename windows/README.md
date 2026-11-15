@@ -145,7 +145,7 @@ runs Restart as `wsl.exe -d <distro> -- flk restart`, and opens the Linux paths 
 through `\\wsl.localhost\<distro>\…`.
 
 It needs Windows 11 22H2 or later and WSL 2.0 or later (for mirrored networking), and a WSL 2
-distro with systemd that Flock for Linux supports. Nothing sets this up for you yet:
+distro with systemd that Flock for Linux supports. These steps are yours:
 
 1. **Mirrored networking**, so Windows reaches the distro's ports (the API, 80 and 443) on
    127.0.0.1. In `%UserProfile%\.wslconfig`:
@@ -160,20 +160,7 @@ distro with systemd that Flock for Linux supports. Nothing sets this up for you 
 3. **Flock for Linux** in the distro (the `.deb`/`.rpm`, see the main README), then `flk install`.
    Windows' own Flock and the distro's share ports in mirrored mode, so quit it first (and
    anything else on ports 80 and 443, in Windows or the distro).
-4. **`*.test` on Windows**: an NRPT rule sends the names to 127.0.0.1:53 (elevated PowerShell;
-   use the distro's TLD and remove the rule with `Remove-DnsClientNrptRule`). A machine that had
-   Flock for Windows installed has the rule already.
-   ```powershell
-   Add-DnsClientNrptRule -Namespace ".test" -NameServers "127.0.0.1" -Comment "Flock (WSL)"
-   ```
-   The app answers there, as the daemon's DNS server would (every name under the TLD is
-   127.0.0.1): NRPT rules can't name a port, and WSL keeps port 53 for its own DNS, so the
-   distro's server is out of reach on it, even with mirrored networking. So names resolve while
-   the app runs, and Windows' own Flock must not be running (it listens on the same port).
-5. **Optional, HTTPS without warnings**: trust the distro's CA on Windows, from an elevated
-   prompt: `certutil -addstore Root \\wsl.localhost\<distro>\home\<you>\.local\share\flock\certs\ca.crt`.
-   Without it, browsers on Windows warn about the certificates.
-6. **The app**: start `FlockTray.exe` with `FLOCK_HOME` set to the distro's Flock folder:
+4. **The app**: start `FlockTray.exe` with `FLOCK_HOME` set to the distro's Flock folder:
    ```powershell
    $env:FLOCK_HOME = "\\wsl.localhost\Ubuntu\home\<you>\.local\share\flock"; .\FlockTray.exe
    ```
@@ -182,12 +169,29 @@ distro with systemd that Flock for Linux supports. Nothing sets this up for you 
    (with `--purge` its settings and databases as well). The app's uninstaller runs
    `flock uninstall` without the variable when it points into WSL.
 
+The app then sets Windows up for the distro's sites, as its setup does for a daemon on Windows:
+it asks once for administrator permission, for the NRPT rule that sends the distro's TLD
+(`*.test`) to 127.0.0.1, and to trust the distro's certificate authority (`certs\ca.crt` in its
+Flock folder), so HTTPS has no warnings (a Firefox-based browser reads Windows' trusted roots
+when it starts: restart it after the setup). It asks when either is missing, and again at the next
+start when the prompt was declined. Both are done by `flock.exe privileged-setup`, the step
+Flock's own setup on Windows runs, without the hosts helper: the app needs the `flock.exe` it
+ships with, or the one an earlier Flock for Windows left in `%AppData%\Flock\bin` (a development
+build without either sets nothing up). Nothing removes them again: the rule goes with
+`Remove-DnsClientNrptRule` or Flock for Windows' uninstall, the CA with
+`certutil -delstore Root <its SHA-1 fingerprint>` (elevated).
+
+The app answers the names itself on 127.0.0.1:53, as the daemon's DNS server would (every name
+under the TLD is 127.0.0.1): NRPT rules can't name a port, and WSL keeps port 53 for its own DNS,
+so the distro's server is out of reach on it, even with mirrored networking. So names resolve
+while the app runs, and Windows' own Flock must not be running (it listens on the same port).
+
 While it runs, the app also keeps the distro running (a hidden `wsl.exe -d <distro> --exec sleep
 infinity`): WSL powers a distro off seconds after the last Windows program using it exits, and
 the daemon and the sites with it.
 
-Not handled yet: NAT networking; Firefox's own certificate store; Install, Update and the port
-check in the app (they say to run `flk` in the distro); `flk status` in the distro reporting that
+Not handled yet: NAT networking; installing and updating the
+distro's Flock and its port check from the app (run `flk` in the distro); `flk status` in the distro reporting that
 `*.test` doesn't resolve there when WSL's DNS tunneling bypasses systemd-resolved.
 
 ## Screenshots for the docs

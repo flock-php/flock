@@ -6,15 +6,23 @@ namespace Flock.Tray.Infrastructure;
 
 /// <summary>
 /// Owns local setup admission while the daemon-owned install job continues after UI close. A daemon
-/// in WSL is set up, updated and restarted in its distro, so this app leaves it alone.
+/// in WSL is set up, updated and restarted in its distro; setup here is what Windows needs to open
+/// its sites (<see cref="WslWindowsSetup"/>).
 /// </summary>
 public sealed class InstallationService(CliProcessRunner processRunner, PreferencesService preferences, IUiDispatcher? dispatcher = null,
-    FlockBackend? backend = null)
+    FlockBackend? backend = null, WslWindowsSetup? wslSetup = null)
 {
     private readonly object gate = new();
     private Task<Installation.Result>? setup;
+    private readonly WslWindowsSetup? wsl = (backend ?? FlockBackend.Current) is { IsWsl: true } distro
+        ? wslSetup ?? new WslWindowsSetup(distro, FlockPaths.Root, WslWindowsSetup.WindowsCli)
+        : null;
+    private volatile bool asked;
 
     public FlockBackend Backend { get; } = backend ?? FlockBackend.Current;
+
+    /// <summary>Whether this app can run setup: it needs a CLI on Windows for it.</summary>
+    public bool CanSetUp => wsl?.IsAvailable ?? BundledFlock is not null;
     public bool IsInstalling => setup is { IsCompleted: false };
     public Task<List<Conflict>> ConflictsAsync() => Backend.IsWsl ? Task.FromResult(new List<Conflict>()) : Installation.ConflictsAsync(processRunner);
 
@@ -33,16 +41,24 @@ public sealed class InstallationService(CliProcessRunner processRunner, Preferen
 
     private async Task<Installation.Result> InstallCoreAsync(Action<string>? onLine, CancellationToken cancellationToken)
     {
-        if (Backend.IsWsl)
+        CliProcessResult result;
+        if (wsl is not null)
         {
-            return new Installation.Result(false, $"Flock runs in WSL ({Backend.WslDistro}) — {Backend.InstallHint}.");
+            var outcome = await wsl.SetUpAsync(cancellationToken);
+            // Asked once per run: a declined prompt must not leave the app at "Not set up", as the
+            // daemon serves the sites either way. The next start asks again.
+            asked = true;
+            result = new CliProcessResult(true, outcome.Ok ? 0 : 1, outcome.Output);
         }
-        if (Installation.BundledFlock is not { } bundled)
+        else if (Installation.BundledFlock is not { } bundled)
         {
             return new Installation.Result(false, "This build of Flock has no bundled CLI — run `flock install` in a terminal.");
         }
-        var result = await processRunner.RunAsync(bundled, ["install"], cancellationToken: cancellationToken);
-        await RecordInstalledAsync(cancellationToken);
+        else
+        {
+            result = await processRunner.RunAsync(bundled, ["install"], cancellationToken: cancellationToken);
+            await RecordInstalledAsync(cancellationToken);
+        }
         if (result.Output.Length > 0)
         {
             foreach (var line in result.Output.Split('\n'))
@@ -66,9 +82,9 @@ public sealed class InstallationService(CliProcessRunner processRunner, Preferen
 
     public async Task<bool> IsSetUpAsync(CancellationToken cancellationToken = default)
     {
-        if (Backend.IsWsl)
+        if (wsl is not null)
         {
-            return true;
+            return asked || await Task.Run(wsl.IsSetUp, cancellationToken);
         }
         if (!File.Exists(FlockPaths.FlockBinary))
         {

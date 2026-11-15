@@ -128,7 +128,7 @@ public sealed partial class App : Application
             tray.Failure += TrayFailure;
             State.Changed += UpdateTray;
             WorktreeNotifier.Start(State, dispatcher, tray);
-            State.NeedsSetup = State.Installation.BundledFlock is not null && !await State.Installation.IsSetUpAsync();
+            State.NeedsSetup = State.Installation.CanSetUp && !await State.Installation.IsSetUpAsync();
 
             if (!Options.Identity.IsDevelopment && !State.NeedsSetup && await State.Installation.NeedsUpdateAsync())
             {

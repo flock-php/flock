@@ -7,7 +7,10 @@ using Flock.Tray.Infrastructure;
 
 namespace Flock.Tray.Tests;
 
-/// <summary>A daemon in WSL is set up and updated in its distro: the app runs nothing here for it.</summary>
+/// <summary>
+/// A daemon in WSL is set up and updated in its distro. Here the app sets up only what Windows
+/// needs to open its sites, keeps the distro running and answers its names.
+/// </summary>
 public sealed class WslBackendTests : IDisposable
 {
     private readonly DirectoryInfo directory = Directory.CreateTempSubdirectory("flock-wsl-");
@@ -27,14 +30,74 @@ public sealed class WslBackendTests : IDisposable
         }
     }
 
-    private InstallationService Installation() =>
-        new(runner, new PreferencesService(Path.Combine(directory.FullName, "tray.json")), backend: wsl);
+    private readonly List<string> elevated = [];
+    private bool trusted, rule;
+    private int? exitCode = 0;
+
+    /// <summary>The distro's Flock folder (config.json and the CA), as the share shows it.</summary>
+    private string Root(string? tld = "test", bool ca = true)
+    {
+        var root = Path.Combine(directory.FullName, "flock");
+        Directory.CreateDirectory(Path.Combine(root, "certs"));
+        if (tld is not null)
+        {
+            File.WriteAllText(Path.Combine(root, "config.json"), $$"""{"tld": "{{tld}}"}""");
+        }
+        if (ca)
+        {
+            File.WriteAllText(Path.Combine(root, "certs", "ca.crt"), "the distro's CA");
+        }
+        return root;
+    }
+
+    private WslWindowsSetup Setup(string root, string? cli = @"C:\Flock\flock.exe") =>
+        new(wsl, root, () => cli, _ => trusted, _ => rule, (file, arguments, _) =>
+        {
+            elevated.Add(string.Join(' ', [file, .. arguments]));
+            // The elevated program reads the copy of the CA it is given.
+            var copy = arguments[arguments.ToList().IndexOf("--ca") + 1];
+            Assert.Equal("the distro's CA", File.ReadAllText(copy));
+            if (exitCode is > 0)
+            {
+                File.WriteAllText(arguments[^1], "trust CA: access denied\n");
+            }
+            return Task.FromResult(exitCode);
+        });
+
+    private InstallationService Installation(WslWindowsSetup? setup = null) =>
+        new(runner, new PreferencesService(Path.Combine(directory.FullName, "tray.json")), backend: wsl, wslSetup: setup ?? Setup(Root()));
 
     [Fact]
-    public async Task ItIsSetUpWithoutLookingForTheDaemonsScheduledTask()
+    public async Task ItIsSetUpWhenWindowsResolvesAndTrustsTheDistrosSites()
     {
+        trusted = rule = true;
+
         Assert.True(await Installation().IsSetUpAsync());
         Assert.Empty(runner.Runs);
+    }
+
+    [Theory]
+    [InlineData(false, true)]
+    [InlineData(true, false)]
+    public async Task ItNeedsSetupWithoutTheTrustOrTheRule(bool hasTrust, bool hasRule)
+    {
+        (trusted, rule) = (hasTrust, hasRule);
+        var installation = Installation();
+
+        Assert.True(installation.CanSetUp);
+        Assert.False(await installation.IsSetUpAsync());
+    }
+
+    [Fact]
+    public async Task NothingIsAskedBeforeTheDistrosFlockIsInstalled()
+    {
+        var installation = Installation(Setup(Root(ca: false)));
+
+        Assert.True(await installation.IsSetUpAsync());
+        var result = await installation.InstallAsync();
+        Assert.False(result.Ok);
+        Assert.Contains("`flk install` in WSL (Ubuntu)", result.Output);
+        Assert.Empty(elevated);
     }
 
     [Fact]
@@ -48,13 +111,77 @@ public sealed class WslBackendTests : IDisposable
     }
 
     [Fact]
-    public async Task InstallingSaysWhereToRunIt()
+    public async Task SetupRunsFlocksElevatedStepForTheDistrosCaAndTld()
     {
+        var lines = new List<string>();
+        var result = await Installation(Setup(Root(tld: "dev"))).InstallAsync(lines.Add);
+
+        Assert.True(result.Ok);
+        var run = Assert.Single(elevated);
+        Assert.StartsWith(@"C:\Flock\flock.exe privileged-setup --tld dev --ca ", run);
+        Assert.Contains(@"\Flock\hosts.txt --no-helper --result-file ", run);
+        // Only Flock's own setup on Windows removes: this must leave its helper and rule alone.
+        Assert.DoesNotContain("--remove", run);
+        Assert.Equal(["✓ every *.dev name (any subdomain) is sent to Flock in WSL (Ubuntu)", "✓ the certificate authority of Flock in WSL (Ubuntu) is trusted"], lines);
+        Assert.Empty(runner.Runs);
+    }
+
+    [Fact]
+    public async Task ADeclinedPromptIsReportedAndNotAskedAgainInThisRun()
+    {
+        exitCode = null;
+        var installation = Installation();
+
+        var result = await installation.InstallAsync();
+
+        Assert.False(result.Ok);
+        Assert.Contains(WslWindowsSetup.Declined, result.Output);
+        // The daemon serves the sites either way: the app must not stay at "Not set up".
+        Assert.True(await installation.IsSetUpAsync());
+    }
+
+    [Fact]
+    public async Task AFailedSetupSaysWhatTheElevatedStepReported()
+    {
+        exitCode = 1;
+
         var result = await Installation().InstallAsync();
 
         Assert.False(result.Ok);
-        Assert.Contains("`flk install` in WSL (Ubuntu)", result.Output);
-        Assert.Empty(runner.Runs);
+        Assert.Equal("Error: trust CA: access denied", result.Output);
+    }
+
+    [Theory]
+    [InlineData("test'; Remove-Item C:\\ -Recurse; '")]
+    [InlineData("a.b")]
+    [InlineData("-x")]
+    [InlineData("TEST")]
+    public async Task ATldFromTheDistroThatIsNotANameIsNeverHandedToTheElevatedStep(string tld)
+    {
+        var root = Root(tld: null);
+        File.WriteAllText(Path.Combine(root, "config.json"), System.Text.Json.JsonSerializer.Serialize(new { tld }));
+        var installation = Installation(Setup(root));
+
+        Assert.True(await installation.IsSetUpAsync());
+        Assert.False((await installation.InstallAsync()).Ok);
+        Assert.Empty(elevated);
+    }
+
+    [Fact]
+    public void TheTldDefaultsToTestWithoutAConfig()
+    {
+        Assert.Equal("test", Setup(Root(tld: null)).Tld());
+        Assert.Equal("dev", Setup(Root(tld: "dev")).Tld());
+    }
+
+    [Fact]
+    public async Task WithoutAWindowsCliThereIsNoSetupToRun()
+    {
+        var installation = Installation(Setup(Root(), cli: null));
+
+        Assert.False(installation.CanSetUp);
+        Assert.False((await installation.InstallAsync()).Ok);
+        Assert.Empty(elevated);
     }
 
     [Fact]
