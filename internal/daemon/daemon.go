@@ -1148,6 +1148,7 @@ func (d *daemon) Status() api.Status {
 		Processes: d.procs.Status(),
 		Warnings:  d.warnings,
 	}
+	st.Groups = api.GroupSites(st.Sites)
 	d.liveNodeSites(st.Sites)
 	if d.mail != nil {
 		st.Mail = d.mail.Addr()

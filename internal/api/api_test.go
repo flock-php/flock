@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"reflect"
 	"slices"
 	"strings"
 	"testing"
@@ -735,5 +736,31 @@ func TestSiteGroupEndpoints(t *testing.T) {
 
 	if resp, _ := call(t, "PATCH", srv.URL+"/v1/sites/shop", "", `{"group":"`+strings.Repeat("x", config.MaxGroupLength+1)+`"}`); resp.StatusCode != http.StatusBadRequest {
 		t.Fatalf("a too long group must be rejected, got %d", resp.StatusCode)
+	}
+}
+
+func TestGroupSitesCollectsSitesByGroup(t *testing.T) {
+	sites := []SiteStatus{
+		{Name: "api", Group: "Work"},
+		{Name: "blog", Group: "Personal"},
+		{Name: "scratch"},
+		{Name: "shop", Group: "Work"},
+		{Name: "main.shop", Group: "Work", Parent: "shop"},
+	}
+
+	got := GroupSites(sites)
+	want := []SiteGroup{
+		{Name: "Personal", Sites: []string{"blog"}},
+		{Name: "Work", Sites: []string{"api", "shop", "main.shop"}},
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("GroupSites = %+v; want %+v", got, want)
+	}
+
+	for _, none := range [][]SiteStatus{nil, {{Name: "scratch"}}} {
+		out, _ := json.Marshal(GroupSites(none))
+		if string(out) != "[]" {
+			t.Errorf("no groups encode as %s; want []", out)
+		}
 	}
 }
