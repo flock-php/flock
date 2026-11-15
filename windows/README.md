@@ -158,14 +158,8 @@ distro with systemd that Flock for Linux supports. Nothing sets this up for you 
    then `wsl --shutdown` again and reopen the distro (the setting applies when the distro
    starts), and `sudo systemctl enable --now systemd-resolved`.
 3. **Flock for Linux** in the distro (the `.deb`/`.rpm`, see the main README), then `flk install`.
-   Windows' own Flock and the distro's share ports in mirrored mode (80, 443 and 53), so stop
-   it first, and anything else on those ports in Windows or the distro. Quitting the Flock app
-   leaves its daemon running, and the daemon starts again at sign-in, so end its task and turn
-   it off (`/ENABLE` and `/Run` bring it back):
-   ```powershell
-   schtasks /End /TN "Flock Daemon"
-   schtasks /Change /TN "Flock Daemon" /DISABLE
-   ```
+   Windows' own Flock and the distro's share ports in mirrored mode, so quit it first (and
+   anything else on ports 80 and 443, in Windows or the distro).
 4. **`*.test` on Windows**: an NRPT rule sends the names to 127.0.0.1:53 (elevated PowerShell;
    use the distro's TLD and remove the rule with `Remove-DnsClientNrptRule`). A machine that had
    Flock for Windows installed has the rule already.
