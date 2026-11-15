@@ -194,7 +194,7 @@ func (c *Config) worktreeSites(byName map[string]Site) {
 			// port are the parent's own.
 			byName[name] = Site{
 				Name: name, Path: wt.Path, Type: parent.Kind(), PHP: parent.PHP, Node: parent.Node, Secured: parent.Secured,
-				Root: parent.Root, Parent: parent.Name, Branch: wt.Branch,
+				Group: parent.Group, Root: parent.Root, Parent: parent.Name, Branch: wt.Branch,
 			}
 		}
 	}

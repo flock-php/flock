@@ -156,7 +156,21 @@ Site options such as `tls` and `handle_errors` aren't supported, and neither is 
 flock sites
 ```
 
-This lists every linked and parked site with its PHP version (its Node.js version for a Node.js app), URL and path, and every proxy with its URL and upstream.
+This lists every linked and parked site with its PHP version (its Node.js version for a Node.js app), URL and path, and every proxy with its URL and upstream. Once a site is in a group, the list has a `GROUP` column too.
+:::
+
+## Grouping sites
+
+A long list of sites is easier to scan when it is split up. A site can be in one group, such as `Clients` or `Personal`. A group exists while a site is in it, so there is nothing to create or delete first. Groups only organise the lists: nothing is served differently, and a [worktree](worktrees.md) is in its site's group.
+
+:::cli
+```bash
+flock group set Clients shop    # put shop in Clients (the site in this folder without a name)
+flock group list                # every group with its sites
+flock group clear shop          # take shop out of its group
+```
+
+Group names are at most 40 characters, and `clients` joins an existing `Clients` rather than starting a second group. A parked site is linked when you put it in a group, so the group can be stored.
 :::
 
 ## Document root

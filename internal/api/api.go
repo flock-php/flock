@@ -157,6 +157,9 @@ type SiteStatus struct {
 	NodeShadowed string `json:"node_shadowed"`
 	Secured      bool   `json:"secured"`
 	Parked       bool   `json:"parked"`
+	// Group is the group the site is listed under ("" for none; see config.Site.Group). A
+	// worktree is in its parent's group.
+	Group string `json:"group,omitempty"`
 	// Parent is set on a git worktree of another site: that site's name, whose settings it uses.
 	// Branch is the worktree's branch ("" when HEAD is detached).
 	Parent string `json:"parent,omitempty"`

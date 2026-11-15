@@ -668,7 +668,7 @@ func (d *daemon) reload() error {
 		phpVersion, nodeVersion := project.PHPFor(cfg, &site, site.Path), project.NodeFor(cfg, &site, site.Path)
 		version := phpVersion.Version
 		status := api.SiteStatus{
-			Name: site.Name, Domain: domain, Path: site.Path, Secured: site.Secured, Parked: site.Parked,
+			Name: site.Name, Domain: domain, Path: site.Path, Secured: site.Secured, Parked: site.Parked, Group: site.Group,
 			Parent: site.Parent, Branch: site.Branch,
 			PHP: version, PHPSource: phpVersion.Source, PHPPinned: phpVersion.Pinned, PHPFile: phpVersion.File,
 			Node: nodeVersion.Version, NodeSource: nodeVersion.Source, NodePinned: nodeVersion.Pinned, NodeFile: nodeVersion.File,

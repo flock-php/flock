@@ -125,6 +125,9 @@ type Site struct {
 	PHP     string `json:"php,omitempty"`  // "8.5"; empty means Config.DefaultPHP
 	Node    string `json:"node,omitempty"` // major, e.g. "22"; empty means Config.DefaultNode
 	Secured bool   `json:"secured"`
+	// Group is the name of the group the site is listed under, "" for none (see SetGroup). It only
+	// organises the lists of sites: nothing is served differently.
+	Group string `json:"group,omitempty"`
 	// Domains are extra names for the site (see NormalizeDomain): subdomains ("tenant1") and
 	// aliases ("my-app-2.test"). On Windows they go into the hosts file, so they also work where
 	// wildcard DNS doesn't.

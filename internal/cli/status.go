@@ -111,7 +111,13 @@ func newSitesCommand() *cobra.Command {
 			}
 
 			w := tabwriter.NewWriter(cmd.OutOrStdout(), 0, 0, 2, ' ', 0)
-			fmt.Fprintln(w, "SITE\tPHP\tURL\tROOT\tPATH")
+			// The group column is there once a site is in a group.
+			grouped := len(s.cfg.Groups()) > 0
+			header := "SITE\tPHP\tURL\tROOT\tPATH"
+			if grouped {
+				header = "SITE\tGROUP\tPHP\tURL\tROOT\tPATH"
+			}
+			fmt.Fprintln(w, header)
 
 			st, err := s.client().Status(cmd.Context())
 			if err == nil {
@@ -130,9 +136,9 @@ func newSitesCommand() *cobra.Command {
 					if site.Type == config.TypeNode {
 						version, root = "Node.js "+site.Node, "-"
 					}
-					fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n", site.Name, version, url, root, site.Path)
+					fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n", siteCell(site.Name, site.Group, grouped), version, url, root, site.Path)
 				}
-				printProxyRows(w, proxyRows(&st, s.cfg))
+				printProxyRows(w, proxyRows(&st, s.cfg), grouped)
 				return w.Flush()
 			}
 
@@ -146,19 +152,31 @@ func newSitesCommand() *cobra.Command {
 				if site.Kind() == config.TypeNode {
 					version, root = "Node.js "+s.cfg.NodeFor(site), "-"
 				}
-				fmt.Fprintf(w, "%s\t%s\t%s://%s\t%s\t%s\n", site.Name, version, scheme, s.cfg.Domain(site), root, site.Path)
+				fmt.Fprintf(w, "%s\t%s\t%s://%s\t%s\t%s\n", siteCell(site.Name, site.Group, grouped), version, scheme, s.cfg.Domain(site), root, site.Path)
 			}
-			printProxyRows(w, proxyRows(nil, s.cfg))
+			printProxyRows(w, proxyRows(nil, s.cfg), grouped)
 			return w.Flush()
 		},
 	}
 }
 
+// siteCell is the first cells of a row of `flock sites`: the name, and the group when the list has
+// that column ("-" for a site in none).
+func siteCell(name, group string, grouped bool) string {
+	if !grouped {
+		return name
+	}
+	if group == "" {
+		group = "-"
+	}
+	return name + "\t" + group
+}
+
 // printProxyRows adds the proxies to `flock sites`: "proxy" where a site has its PHP version, and the
 // upstream where it has its folder.
-func printProxyRows(w io.Writer, rows []proxyRow) {
+func printProxyRows(w io.Writer, rows []proxyRow, grouped bool) {
 	for _, p := range rows {
-		fmt.Fprintf(w, "%s\tproxy\t%s\t-\t%s\n", p.name, p.url, p.upstream)
+		fmt.Fprintf(w, "%s\tproxy\t%s\t-\t%s\n", siteCell(p.name, "", grouped), p.url, p.upstream)
 	}
 }
 

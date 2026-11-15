@@ -250,6 +250,7 @@ func registerConfig(mux *http.ServeMux, b Backend) {
 			Name    string `json:"name"`
 			PHP     string `json:"php"`
 			Secured bool   `json:"secured"`
+			Group   string `json:"group"`
 		}
 		if err := decodeBody(r, &body); err != nil {
 			writeError(w, http.StatusBadRequest, err)
@@ -266,7 +267,11 @@ func registerConfig(mux *http.ServeMux, b Backend) {
 			if name == "" {
 				name = filepath.Base(body.Path)
 			}
-			if err := cfg.Upsert(config.Site{Name: config.SiteName(name), Path: filepath.Clean(body.Path), PHP: body.PHP, Secured: body.Secured}); err != nil {
+			site := config.Site{Name: config.SiteName(name), Path: filepath.Clean(body.Path), PHP: body.PHP, Secured: body.Secured}
+			if err := cfg.SetGroup(&site, body.Group); err != nil {
+				return invalid("%v", err)
+			}
+			if err := cfg.Upsert(site); err != nil {
 				return invalid("%v", err)
 			}
 			return nil
@@ -285,6 +290,8 @@ func registerConfig(mux *http.ServeMux, b Backend) {
 			// Root is the document root on this machine, relative to the project ("" lets the
 			// project's .flockrc or detection decide again).
 			Root *string `json:"root"`
+			// Group is the group the site is listed under ("" takes it out of its group).
+			Group *string `json:"group"`
 		}
 		if err := decodeBody(r, &body); err != nil {
 			writeError(w, http.StatusBadRequest, err)
@@ -294,6 +301,11 @@ func registerConfig(mux *http.ServeMux, b Backend) {
 			site, ok := cfg.FindSite(r.PathValue("name"))
 			if !ok {
 				return invalid("no site named %s", r.PathValue("name"))
+			}
+			if body.Group != nil {
+				if err := cfg.SetGroup(&site, *body.Group); err != nil {
+					return invalid("%v", err)
+				}
 			}
 			if body.Type != nil {
 				if err := cfg.SetType(&site, *body.Type); err != nil {
