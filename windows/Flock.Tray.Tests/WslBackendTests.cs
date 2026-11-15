@@ -34,7 +34,7 @@ public sealed class WslBackendTests : IDisposable
     }
 
     private readonly List<string> elevated = [];
-    private bool trusted, rule;
+    private bool trusted, rule, policy;
     private int? exitCode = 0;
 
     /// <summary>The distro's Flock folder (config.json and the CA), as the share shows it.</summary>
@@ -65,10 +65,12 @@ public sealed class WslBackendTests : IDisposable
                 File.WriteAllText(arguments[^1], "trust CA: access denied\n");
             }
             return Task.FromResult(exitCode);
-        }, realCa ? null : (_, _) => null);
+        }, realCa ? null : (_, _) => null, () => policy);
 
     /// <summary>Writes a CA as Flock makes it: limited to the names given, or to none of them.</summary>
-    private static void WriteCa(string root, params string[] permitted)
+    private static void WriteCa(string root, params string[] permitted) => WriteCa(root, permitted, []);
+
+    private static void WriteCa(string root, string[] permitted, string[] excluded)
     {
         using var key = ECDsa.Create(ECCurve.NamedCurves.nistP256);
         var request = new CertificateRequest("CN=Flock Local CA (test)", key, HashAlgorithmName.SHA256);
@@ -86,6 +88,28 @@ public sealed class WslBackendTests : IDisposable
                         writer.WriteCharacterString(UniversalTagNumber.IA5String, name, new Asn1Tag(TagClass.ContextSpecific, 2));
                     }
                 }
+            }
+            if (excluded.Length > 0)
+            {
+                // Appended to the outer sequence by hand: the writer above has closed it.
+                var inner = new AsnWriter(AsnEncodingRules.DER);
+                using (inner.PushSequence(new Asn1Tag(TagClass.ContextSpecific, 1)))
+                {
+                    foreach (var name in excluded)
+                    {
+                        using (inner.PushSequence())
+                        {
+                            inner.WriteCharacterString(UniversalTagNumber.IA5String, name, new Asn1Tag(TagClass.ContextSpecific, 2));
+                        }
+                    }
+                }
+                var both = new AsnWriter(AsnEncodingRules.DER);
+                using (both.PushSequence())
+                {
+                    both.WriteEncodedValue(new AsnReader(writer.Encode(), AsnEncodingRules.DER).ReadSequence().ReadEncodedValue().Span);
+                    both.WriteEncodedValue(inner.Encode());
+                }
+                writer = both;
             }
             request.CertificateExtensions.Add(new X509Extension("2.5.29.30", writer.Encode(), critical: true));
         }
@@ -133,6 +157,58 @@ public sealed class WslBackendTests : IDisposable
         Assert.False(await installation.IsSetUpAsync());
         Assert.False((await installation.InstallAsync()).Ok);
         Assert.Empty(elevated);
+    }
+
+    [Fact]
+    public async Task ACaThatExcludesNamesIsNotTrusted()
+    {
+        // Permitting *.test and excluding it again leaves a CA that can't sign the sites.
+        var root = Root();
+        WriteCa(root, [".test", "test", "localhost"], [".test"]);
+        var installation = Installation(Setup(root, realCa: true));
+
+        Assert.False(await installation.IsSetUpAsync());
+        Assert.False((await installation.InstallAsync()).Ok);
+        Assert.Empty(elevated);
+    }
+
+    [Fact]
+    public async Task TheCaThatIsCheckedIsTheCopyTheElevatedStepGets()
+    {
+        // The distro's file can change between a check and a copy: the copy is what is checked.
+        var root = Root();
+        var checkedPaths = new List<string>();
+        string? handed = null;
+        var setup = new WslWindowsSetup(wsl, root, () => @"C:\Flocklock.exe", _ => false, _ => false, (_, arguments, _) =>
+        {
+            handed = arguments[arguments.ToList().IndexOf("--ca") + 1];
+            return Task.FromResult<int?>(0);
+        }, (path, _) =>
+        {
+            checkedPaths.Add(path);
+            return null;
+        }, () => false);
+
+        Assert.True((await setup.SetUpAsync()).Ok);
+        Assert.Equal(handed, Assert.Single(checkedPaths));
+        Assert.NotEqual(Path.Combine(root, "certs", "ca.crt"), handed);
+    }
+
+    [Fact]
+    public async Task RulesFromGroupPolicyLeaveTheRuleOutOfTheCheckAndSetupSaysSo()
+    {
+        // Windows ignores local rules then, so setup can't change where *.test goes.
+        policy = trusted = true;
+        var installation = Installation(Setup(Root()));
+        Assert.True(await installation.IsSetUpAsync());
+
+        trusted = false;
+        installation = Installation(Setup(Root()));
+        Assert.False(await installation.IsSetUpAsync());
+        var result = await installation.InstallAsync();
+        Assert.True(result.Ok);
+        Assert.Contains("Group Policy", result.Output);
+        Assert.DoesNotContain("is sent to", result.Output);
     }
 
     [Fact]

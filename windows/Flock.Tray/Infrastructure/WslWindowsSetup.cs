@@ -19,21 +19,20 @@ namespace Flock.Tray.Infrastructure;
 /// </summary>
 public sealed partial class WslWindowsSetup(FlockBackend backend, string root, Func<string?> cli,
     Func<string, bool>? trusted = null, Func<string, bool>? ruleInstalled = null,
-    Func<string, IReadOnlyList<string>, CancellationToken, Task<int?>>? elevate = null, Func<string, string, string?>? caProblem = null)
+    Func<string, IReadOnlyList<string>, CancellationToken, Task<int?>>? elevate = null, Func<string, string, string?>? caProblem = null,
+    Func<bool>? policyManaged = null)
 {
     /// <summary>What a declined permission prompt reports, as `flock install` words it.</summary>
     public const string Declined = "administrator permission was declined";
 
-    private static readonly string[] RuleKeys =
-    [
-        @"SYSTEM\CurrentControlSet\Services\Dnscache\Parameters\DnsPolicyConfig",
-        @"SOFTWARE\Policies\Microsoft\Windows NT\DNSClient\DnsPolicyConfig",
-    ];
+    private const string RuleKey = @"SYSTEM\CurrentControlSet\Services\Dnscache\Parameters\DnsPolicyConfig";
+    private const string PolicyRuleKey = @"SOFTWARE\Policies\Microsoft\Windows NT\DNSClient\DnsPolicyConfig";
 
     private readonly Func<string, bool> trusted = trusted ?? IsTrusted;
     private readonly Func<string, bool> ruleInstalled = ruleInstalled ?? IsRuleInstalled;
     private readonly Func<string, IReadOnlyList<string>, CancellationToken, Task<int?>> elevate = elevate ?? ElevateAsync;
     private readonly Func<string, string, string?> caProblem = caProblem ?? CaProblem;
+    private readonly Func<bool> policyManaged = policyManaged ?? IsPolicyManaged;
 
     /// <summary>
     /// The Windows CLI that does the setup: the one shipped with the app, or the one an earlier
@@ -87,13 +86,15 @@ public sealed partial class WslWindowsSetup(FlockBackend backend, string root, F
     /// Whether Windows resolves and trusts the distro's sites. Also true when that can't be told
     /// or changed from here: the distro's Flock isn't installed yet, or its files can't be read.
     /// A CA that can't sign the TLD's sites is not set up, whatever Windows trusts: setup says why.
+    /// Rules from Group Policy make Windows ignore the rule setup adds, so the rule isn't asked
+    /// for then: setup couldn't change what Windows does.
     /// </summary>
     public bool IsSetUp()
     {
         try
         {
             return !File.Exists(CaPath) || Tld() is not { } tld
-                || (caProblem(CaPath, tld) is null && trusted(CaPath) && ruleInstalled(tld));
+                || (caProblem(CaPath, tld) is null && trusted(CaPath) && (policyManaged() || ruleInstalled(tld)));
         }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException or CryptographicException or System.Security.SecurityException)
         {
@@ -117,27 +118,27 @@ public sealed partial class WslWindowsSetup(FlockBackend backend, string root, F
         {
             return new Installation.Result(false, $"Error: the TLD in the config.json of {name} is not one Windows can be set up for.");
         }
-        try
-        {
-            if (caProblem(CaPath, tld) is { } problem)
-            {
-                return new Installation.Result(false, $"Error: the certificate authority of {name} {problem}. Windows isn't asked to trust it. " +
-                    $"Flock makes a new one for *.{tld} when the certs folder in the distro's Flock folder is removed and `{FlockBackend.LinuxCli} install` runs there.");
-            }
-        }
-        catch (Exception error) when (error is IOException or UnauthorizedAccessException or CryptographicException)
-        {
-            return new Installation.Result(false, $"Error: the certificate authority of {name} can't be read: {error.Message}");
-        }
-
         // The elevated program gets copies in a Windows folder: a distro's share isn't always
-        // there for an administrator, and it reports its error through a file.
+        // there for an administrator, and it reports its error through a file. The copy is also
+        // the one that is checked, so the CA that is trusted is the CA that passed.
         var work = Directory.CreateTempSubdirectory("flock-wsl-");
         try
         {
             var ca = Path.Combine(work.FullName, "ca.crt");
             var result = Path.Combine(work.FullName, "result.txt");
             File.Copy(CaPath, ca);
+            try
+            {
+                if (caProblem(ca, tld) is { } problem)
+                {
+                    return new Installation.Result(false, $"Error: the certificate authority of {name} {problem}. Windows isn't asked to trust it. " +
+                        $"Flock makes a new one for *.{tld} when the certs folder in the distro's Flock folder is removed and `{FlockBackend.LinuxCli} install` runs there.");
+                }
+            }
+            catch (CryptographicException error)
+            {
+                return new Installation.Result(false, $"Error: the certificate authority of {name} can't be read: {error.Message}");
+            }
             // --source is the hosts helper's file, checked even though --no-helper leaves the helper out.
             var code = await elevate(exe,
                 ["privileged-setup", "--tld", tld, "--ca", ca, "--source", Path.Combine(WindowsRoot, "hosts.txt"), "--no-helper", "--result-file", result],
@@ -151,8 +152,10 @@ public sealed partial class WslWindowsSetup(FlockBackend backend, string root, F
                 var problem = File.Exists(result) ? File.ReadAllText(result).Trim() : "";
                 return new Installation.Result(false, "Error: " + (problem.Length > 0 ? problem : $"the elevated setup failed with exit code {code}"));
             }
-            return new Installation.Result(true,
-                $"✓ every *.{tld} name (any subdomain) is sent to {name}\n✓ the certificate authority of {name} is trusted");
+            var rule = policyManaged()
+                ? $"! your organization manages DNS rules (Group Policy), so Windows ignores Flock's rule for .{tld}"
+                : $"✓ every *.{tld} name (any subdomain) is sent to {name}";
+            return new Installation.Result(true, $"{rule}\n✓ the certificate authority of {name} is trusted");
         }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException or Win32Exception or InvalidOperationException)
         {
@@ -193,8 +196,8 @@ public sealed partial class WslWindowsSetup(FlockBackend backend, string root, F
     }
 
     /// <summary>
-    /// The DNS names a CA's name constraints permit, or null when it has no such list or permits
-    /// other kinds of names (which this app doesn't judge).
+    /// The DNS names a CA's name constraints permit, or null when it has no such list, permits
+    /// other kinds of names or excludes names (which this app doesn't judge).
     /// </summary>
     internal static IReadOnlyList<string>? PermittedDnsNames(X509Certificate2 certificate)
     {
@@ -224,7 +227,8 @@ public sealed partial class WslWindowsSetup(FlockBackend backend, string root, F
                 }
                 names.Add(subtree.ReadCharacterString(UniversalTagNumber.IA5String, dnsTag));
             }
-            return names;
+            // Anything after the permitted names is excludedSubtrees, which could take them back.
+            return sequence.HasData ? null : names;
         }
         catch (AsnContentException)
         {
@@ -242,26 +246,33 @@ public sealed partial class WslWindowsSetup(FlockBackend backend, string root, F
     }
 
     /// <summary>
-    /// Whether an NRPT rule sends .&lt;tld&gt; to 127.0.0.1, whoever made it: Flock's setup, or a
-    /// rule added by hand (the earlier instructions).
+    /// Whether a local NRPT rule sends .&lt;tld&gt; to 127.0.0.1, whoever made it: Flock's setup, or
+    /// a rule added by hand (the earlier instructions).
     /// </summary>
     private static bool IsRuleInstalled(string tld)
     {
-        foreach (var path in RuleKeys)
+        using var rules = Registry.LocalMachine.OpenSubKey(RuleKey);
+        foreach (var id in rules?.GetSubKeyNames() ?? [])
         {
-            using var rules = Registry.LocalMachine.OpenSubKey(path);
-            foreach (var id in rules?.GetSubKeyNames() ?? [])
+            using var rule = rules!.OpenSubKey(id);
+            if (rule?.GetValue("Name") is string[] names && names.Contains("." + tld, StringComparer.OrdinalIgnoreCase)
+                && rule.GetValue("GenericDNSServers") is string servers
+                && servers.Split(';', StringSplitOptions.TrimEntries).Contains("127.0.0.1"))
             {
-                using var rule = rules!.OpenSubKey(id);
-                if (rule?.GetValue("Name") is string[] names && names.Contains("." + tld, StringComparer.OrdinalIgnoreCase)
-                    && rule.GetValue("GenericDNSServers") is string servers
-                    && servers.Split(';', StringSplitOptions.TrimEntries).Contains("127.0.0.1"))
-                {
-                    return true;
-                }
+                return true;
             }
         }
         return false;
+    }
+
+    /// <summary>
+    /// Whether Group Policy deploys NRPT rules, which make Windows ignore the local ones (as
+    /// PolicyManaged in internal/dns/nrpt_windows.go).
+    /// </summary>
+    private static bool IsPolicyManaged()
+    {
+        using var rules = Registry.LocalMachine.OpenSubKey(PolicyRuleKey);
+        return rules?.SubKeyCount > 0;
     }
 
     /// <summary>
