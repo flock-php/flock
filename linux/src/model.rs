@@ -50,9 +50,7 @@ impl AppModel {
 
     /// Shows or hides the Sites submenu in the tray menu, and remembers it in the preferences.
     pub fn set_hides_sites(&self, hide: bool) -> std::io::Result<()> {
-        let mut p = prefs::load();
-        p.hide_sites = hide;
-        prefs::save(&p)?;
+        prefs::set_hide_sites(hide)?;
         self.hides_sites.set(hide);
         self.changed();
         Ok(())

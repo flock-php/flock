@@ -52,6 +52,13 @@ pub fn set_expanded(site: &str, expanded: bool) {
     let _ = save(&prefs);
 }
 
+/// Remembers whether the tray menu leaves out the Sites submenu.
+pub fn set_hide_sites(hide: bool) -> std::io::Result<()> {
+    let mut prefs = load();
+    prefs.hide_sites = hide;
+    save(&prefs)
+}
+
 pub fn save(prefs: &Prefs) -> std::io::Result<()> {
     std::fs::create_dir_all(dir())?;
     std::fs::write(file(), serde_json::to_vec_pretty(prefs).expect("prefs"))
