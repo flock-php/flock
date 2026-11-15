@@ -11,6 +11,7 @@ use gtk::{gio, glib};
 use crate::api::{Client, Error, SettingsChange, Status};
 use crate::installation;
 use crate::links::Link;
+use crate::prefs;
 
 /// How often the daemon is asked for its status.
 const POLL_INTERVAL: Duration = Duration::from_secs(2);
@@ -31,13 +32,30 @@ pub struct AppModel {
     listeners: RefCell<Vec<Rc<dyn Fn()>>>,
     /// Worktrees whose job a progress dialog follows, by folder: their failures aren't notified.
     followed_worktrees: RefCell<HashSet<String>>,
+    /// Whether the tray menu leaves out the Sites submenu, from the preferences.
+    hides_sites: Cell<bool>,
 }
 
 impl AppModel {
     pub fn new() -> Rc<Self> {
         let model = Rc::new(Self::default());
         model.needs_setup.set(installation::needs_setup());
+        model.hides_sites.set(prefs::load().hide_sites);
         model
+    }
+
+    pub fn hides_sites(&self) -> bool {
+        self.hides_sites.get()
+    }
+
+    /// Shows or hides the Sites submenu in the tray menu, and remembers it in the preferences.
+    pub fn set_hides_sites(&self, hide: bool) -> std::io::Result<()> {
+        let mut p = prefs::load();
+        p.hide_sites = hide;
+        prefs::save(&p)?;
+        self.hides_sites.set(hide);
+        self.changed();
+        Ok(())
     }
 
     pub fn status(&self) -> Option<Status> {

@@ -29,6 +29,32 @@ public sealed class PreferencesTests
     }
 
     [Fact]
+    public async Task PanelShowsSitesUntilTheyAreHiddenAndRemembersIt()
+    {
+        var directory = Directory.CreateTempSubdirectory("flock-preferences-");
+        try
+        {
+            var path = Path.Combine(directory.FullName, "tray.json");
+            // A file from before the preference existed.
+            await File.WriteAllTextAsync(path, "{\"Editor\":\"Cursor\",\"ExpandedSites\":\"acme\"}");
+            var service = new PreferencesService(path);
+            Assert.False((await service.LoadAsync()).HideSitesInPanel);
+            Assert.False(new PreferenceData().HideSitesInPanel);
+
+            await service.UpdateAsync(value => value with { HideSitesInPanel = true });
+
+            var reloaded = await new PreferencesService(path).LoadAsync();
+            Assert.True(reloaded.HideSitesInPanel);
+            Assert.Equal("Cursor", reloaded.Editor);
+            Assert.Equal("acme", reloaded.ExpandedSites);
+        }
+        finally
+        {
+            Directory.Delete(directory.FullName, recursive: true);
+        }
+    }
+
+    [Fact]
     public async Task MissingAndCorruptFilesUseDefaultsWithoutWriting()
     {
         var directory = Directory.CreateTempSubdirectory("flock-preferences-");

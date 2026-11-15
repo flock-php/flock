@@ -1,5 +1,5 @@
-//! General: the daemon, the domain, the data folder, opening at login, updates and the project
-//! folders.
+//! General: the daemon, the domain, the data folder, opening at login, the tray menu, updates and
+//! the project folders.
 
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -102,6 +102,17 @@ impl GeneralPane {
                 }
             },
         ));
+        group
+    }
+
+    fn tray(&self) -> adw::PreferencesGroup {
+        let group = group("Tray", "");
+        let (model, banner) = (self.model.clone(), self.banner.clone());
+        group.add(&switch_row("Hide sites in the tray menu", "The Sites page still lists them.", self.model.hides_sites(), move |on| {
+            if let Err(e) = model.set_hides_sites(on) {
+                report(&banner, Some(format!("Could not change the tray setting: {e}")));
+            }
+        }));
         group
     }
 
@@ -242,6 +253,7 @@ impl Pane for GeneralPane {
             groups.push(self.network(config, &status).upcast());
             groups.push(self.data(config).upcast());
             groups.push(self.startup().upcast());
+            groups.push(self.tray().upcast());
             groups.push(self.updates(config, &status).upcast());
             groups.push(self.project_folders(config).upcast());
         }

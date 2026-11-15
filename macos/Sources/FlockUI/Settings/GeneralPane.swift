@@ -91,7 +91,7 @@ struct GeneralPane: View {
                 Section("Menu bar") {
                     Toggle(isOn: $hideSitesInPanel) {
                         Text("Hide sites in the menu bar panel")
-                        Text("Sites stay available in Settings → Sites.")
+                        Text("Settings → Sites still lists them.")
                     }
                 }
 

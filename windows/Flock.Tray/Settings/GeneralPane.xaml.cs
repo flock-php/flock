@@ -24,6 +24,7 @@ internal sealed partial class GeneralPane : UserControl, ISettingsPane
         viewModel = new GeneralViewModel(model);
         DataContext = viewModel;
         Startup.IsOn = Native.StartsAtSignIn;
+        HideSites.IsOn = model.Preferences.Snapshot.HideSitesInPanel;
         model.UpdateService.Changed += UpdateChanged;
         viewModel.PropertyChanged += ViewModelChanged;
         loaded = true;
@@ -167,6 +168,24 @@ internal sealed partial class GeneralPane : UserControl, ISettingsPane
         catch (Exception e) when (e is UnauthorizedAccessException or SecurityException or IOException)
         {
             model.ShowRuntimeError($"Could not change the startup setting: {e.Message}");
+        }
+    }
+
+    private async void HideSitesToggled(object sender, RoutedEventArgs args)
+    {
+        if (!loaded || sender is not ToggleSwitch toggle || toggle.IsOn == model.Preferences.Snapshot.HideSitesInPanel)
+        {
+            return;
+        }
+        var hide = toggle.IsOn;
+        try
+        {
+            await model.Preferences.UpdateAsync(data => data with { HideSitesInPanel = hide });
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException or System.Text.Json.JsonException or OperationCanceledException)
+        {
+            toggle.IsOn = model.Preferences.Snapshot.HideSitesInPanel;
+            model.ShowRuntimeError($"Could not change the panel setting: {e.Message}");
         }
     }
 

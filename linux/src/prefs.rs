@@ -14,6 +14,8 @@ pub struct Prefs {
     pub editor: String,
     /// The sites whose worktrees the Sites list shows, by name; the others are collapsed.
     pub expanded_sites: Vec<String>,
+    /// Leaves the Sites submenu out of the tray menu (General → Tray).
+    pub hide_sites: bool,
 }
 
 /// Editors the Dumps window can open files in: id, name and URL scheme ("" for none).
@@ -53,4 +55,20 @@ pub fn set_expanded(site: &str, expanded: bool) {
 pub fn save(prefs: &Prefs) -> std::io::Result<()> {
     std::fs::create_dir_all(dir())?;
     std::fs::write(file(), serde_json::to_vec_pretty(prefs).expect("prefs"))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn shows_sites_unless_the_preference_says_otherwise() {
+        // app.json from before the preference existed.
+        let prefs: Prefs = serde_json::from_str(r#"{"editor":"zed","expanded_sites":["acme"]}"#).unwrap();
+        assert!(!prefs.hide_sites);
+        assert!(!Prefs::default().hide_sites);
+
+        let saved = serde_json::to_vec(&Prefs { hide_sites: true, ..Default::default() }).unwrap();
+        assert!(serde_json::from_slice::<Prefs>(&saved).unwrap().hide_sites);
+    }
 }

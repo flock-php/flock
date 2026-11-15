@@ -9,4 +9,6 @@ public sealed record PreferenceData
     public string Channel { get; init; } = "stable";
     /// <summary>The sites whose worktrees the panel shows, one per line (a string, so the record keeps its value equality).</summary>
     public string ExpandedSites { get; init; } = "";
+    /// <summary>Leaves the Sites section out of the panel (Settings → General).</summary>
+    public bool HideSitesInPanel { get; init; }
 }

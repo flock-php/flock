@@ -98,6 +98,22 @@
             </Border>
         </StackPanel>
         <StackPanel Spacing="4" Margin="0,0,0,24">
+            <TextBlock Text="Panel" Style="{StaticResource BodyStrongTextBlockStyle}" Margin="1,0,0,6" />
+            <Border Style="{StaticResource CardStyle}">
+                <Grid Style="{StaticResource SettingRowStyle}">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <StackPanel Spacing="1">
+                        <TextBlock Text="Hide sites in the panel" />
+                        <TextBlock Text="Settings → Sites still lists them."
+                                   Style="{StaticResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
+                    </StackPanel>
+                    <ToggleSwitch x:Name="HideSites" Grid.Column="1" MinWidth="0" Toggled="HideSitesToggled" OnContent="" OffContent="" />
+                </Grid>
+            </Border>
+        </StackPanel>
+        <StackPanel Spacing="4" Margin="0,0,0,24">
             <TextBlock Text="Updates" Style="{StaticResource BodyStrongTextBlockStyle}" Margin="1,0,0,6" />
             <StackPanel x:Name="UpdateHost" Spacing="4" />
             <Border Style="{StaticResource CardStyle}" Visibility="{Binding ConfigVisibility}">
