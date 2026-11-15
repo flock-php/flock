@@ -144,7 +144,8 @@ the distro's share when `FLOCK_HOME` points there. Then it leaves setup and upda
 runs Restart as `wsl.exe -d <distro> -- flk restart`, and opens the Linux paths the daemon reports
 through `\\wsl.localhost\<distro>\…`.
 
-Nothing sets this up for you yet:
+It needs Windows 11 22H2 or later and WSL 2.0 or later (for mirrored networking), and a WSL 2
+distro with systemd that Flock for Linux supports. Nothing sets this up for you yet:
 
 1. **Mirrored networking**, so Windows reaches the distro's ports (the API, 80 and 443) on
    127.0.0.1. In `%UserProfile%\.wslconfig`:

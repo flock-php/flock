@@ -22,6 +22,7 @@ public sealed class WslDnsService(FlockBackend backend, Func<CancellationToken, 
     private readonly ILogger logger = logger ?? NullLogger<WslDnsService>.Instance;
     private readonly IPEndPoint endpoint = endpoint ?? new IPEndPoint(IPAddress.Loopback, 53);
     private readonly TimeProvider timeProvider = timeProvider ?? TimeProvider.System;
+    private string? lastProblem;
     private readonly TaskCompletionSource<IPEndPoint> listening = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
     /// <summary>The address the server answers on, once it does (tests listen on port 0).</summary>
@@ -48,9 +49,14 @@ public sealed class WslDnsService(FlockBackend backend, Func<CancellationToken, 
             {
                 return;
             }
-            catch (Exception error) when (error is SocketException or FlockException or HttpRequestException)
+            catch (Exception error)
             {
-                logger.LogWarning("DNS for the WSL daemon is not available on {Endpoint}: {Message}", endpoint, error.Message);
+                // Retried every few seconds (the daemon is down, or another program has the port): log a problem once.
+                if (error.Message != lastProblem)
+                {
+                    lastProblem = error.Message;
+                    logger.LogWarning("DNS for the WSL daemon is not available on {Endpoint}: {Message}", endpoint, error.Message);
+                }
             }
             try
             {
@@ -70,9 +76,11 @@ public sealed class WslDnsService(FlockBackend backend, Func<CancellationToken, 
         socket.IOControl(unchecked((int)0x9800000C), [0], null);
         socket.Bind(endpoint);
         listening.TrySetResult((IPEndPoint)socket.LocalEndPoint!);
+        lastProblem = null;
         logger.LogInformation("Answering *.{Tld} lookups on {Endpoint} for the daemon in WSL.", name, socket.LocalEndPoint);
 
-        var buffer = new byte[512];
+        // Larger than any query: a datagram that doesn't fit would end the receive with an error.
+        var buffer = new byte[4096];
         while (true)
         {
             var received = await socket.ReceiveFromAsync(buffer, SocketFlags.None, new IPEndPoint(IPAddress.Any, 0), cancellationToken);
