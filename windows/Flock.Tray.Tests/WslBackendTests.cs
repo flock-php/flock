@@ -342,11 +342,14 @@ public sealed class WslBackendTests : IDisposable
     public async Task AFailedSetupSaysWhatTheElevatedStepReported()
     {
         exitCode = 1;
+        var installation = Installation();
 
-        var result = await Installation().InstallAsync();
+        var result = await installation.InstallAsync();
 
         Assert.False(result.Ok);
         Assert.Equal("Error: trust CA: access denied", result.Output);
+        // Unlike a declined prompt, a failed step is still not set up, so the tray can offer it again.
+        Assert.False(await installation.IsSetUpAsync());
     }
 
     [Theory]

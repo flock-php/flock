@@ -56,9 +56,9 @@ public sealed class InstallationService(CliProcessRunner processRunner, Preferen
         if (wsl is not null)
         {
             var outcome = await wsl.SetUpAsync(cancellationToken);
-            // Asked once per run: a declined prompt must not leave the app at "Not set up", as the
-            // daemon serves the sites either way. The next start asks again.
-            asked = true;
+            // A declined prompt must not leave the app at "Not set up": the daemon serves the sites
+            // either way, and the next start asks again. Any other failure is still not set up.
+            asked = !outcome.Ok && outcome.Output.Contains(WslWindowsSetup.Declined, StringComparison.Ordinal);
             result = new CliProcessResult(true, outcome.Ok ? 0 : 1, outcome.Output);
         }
         else if (Installation.BundledFlock is not { } bundled)
