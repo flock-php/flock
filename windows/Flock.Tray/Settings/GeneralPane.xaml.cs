@@ -178,6 +178,8 @@ internal sealed partial class GeneralPane : UserControl, ISettingsPane
             return;
         }
         var hide = toggle.IsOn;
+        // Until the save commits, the snapshot still has the old value: a second toggle would be ignored.
+        toggle.IsEnabled = false;
         try
         {
             await model.Preferences.UpdateAsync(data => data with { HideSitesInPanel = hide });
@@ -186,6 +188,10 @@ internal sealed partial class GeneralPane : UserControl, ISettingsPane
         {
             toggle.IsOn = model.Preferences.Snapshot.HideSitesInPanel;
             model.ShowRuntimeError($"Could not change the panel setting: {e.Message}");
+        }
+        finally
+        {
+            toggle.IsEnabled = true;
         }
     }
 
