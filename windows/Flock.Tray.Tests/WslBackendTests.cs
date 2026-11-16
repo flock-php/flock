@@ -232,6 +232,14 @@ public sealed class WslBackendTests : IDisposable
     }
 
     [Fact]
+    public async Task ACaThatIsNotACertificateNeedsSetup()
+    {
+        var installation = Installation(Setup(Root(), realCa: true));
+
+        Assert.False(await installation.IsSetUpAsync());
+    }
+
+    [Fact]
     public async Task RulesFromGroupPolicyLeaveTheRuleOutOfTheCheckAndSetupSaysSo()
     {
         // Windows ignores local rules then, so setup can't change where *.test goes.

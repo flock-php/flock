@@ -85,7 +85,8 @@ public sealed partial class WslWindowsSetup(FlockBackend backend, string root, F
     /// <summary>
     /// Whether Windows resolves and trusts the distro's sites. Also true when that can't be told
     /// or changed from here: the distro's Flock isn't installed yet, or its files can't be read.
-    /// A CA that can't sign the TLD's sites is not set up, whatever Windows trusts: setup says why.
+    /// A file that isn't a certificate, or a CA that can't sign the TLD's sites, is not set up,
+    /// whatever Windows trusts: setup says why.
     /// Rules from Group Policy make Windows ignore the rule setup adds, so the rule isn't asked
     /// for then: setup couldn't change what Windows does.
     /// </summary>
@@ -96,7 +97,12 @@ public sealed partial class WslWindowsSetup(FlockBackend backend, string root, F
             return !File.Exists(CaPath) || Tld() is not { } tld
                 || (caProblem(CaPath, tld) is null && trusted(CaPath) && (policyManaged() || ruleInstalled(tld)));
         }
-        catch (Exception error) when (error is IOException or UnauthorizedAccessException or CryptographicException or System.Security.SecurityException)
+        catch (CryptographicException)
+        {
+            // The file is there but isn't a certificate. Setup can say so; hiding it looks set up.
+            return false;
+        }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException or System.Security.SecurityException)
         {
             return true;
         }
