@@ -14,10 +14,11 @@ public sealed record FlockBackend
 
     private static readonly string[] SharePrefixes = [@"\\wsl.localhost\", @"\\wsl$\"];
 
-    private FlockBackend(string? wslDistro, string? sharePrefix)
+    private FlockBackend(string? wslDistro, string? sharePrefix, string? wslUser = null)
     {
         WslDistro = wslDistro;
         SharePrefix = sharePrefix;
+        WslUser = wslUser;
     }
 
     public static FlockBackend Local { get; } = new(null, null);
@@ -29,6 +30,12 @@ public sealed record FlockBackend
     public string? WslDistro { get; }
 
     public bool IsWsl => WslDistro is not null;
+
+    /// <summary>
+    /// The distro user whose daemon this is, from the folder (/home/&lt;user&gt;/… or /root/…), or
+    /// null when the folder doesn't say: commands then run as the distro's default user.
+    /// </summary>
+    public string? WslUser { get; }
 
     /// <summary>\\wsl.localhost\&lt;distro&gt; (or \\wsl$\&lt;distro&gt;, as FLOCK_HOME spells it).</summary>
     private string? SharePrefix { get; }
@@ -50,7 +57,13 @@ public sealed record FlockBackend
             {
                 return Local;
             }
-            return new FlockBackend(distro, path[..(prefix.Length + distro.Length)]);
+            var user = rest.Split('\\', StringSplitOptions.RemoveEmptyEntries) switch
+            {
+                [_, "home", var name, ..] => name,
+                [_, "root", ..] => "root",
+                _ => null,
+            };
+            return new FlockBackend(distro, path[..(prefix.Length + distro.Length)], user);
         }
         return Local;
     }
@@ -70,7 +83,8 @@ public sealed record FlockBackend
 
     /// <summary>
     /// How to run a CLI command: flock.exe in Flock's folder here, or the distro's `flk` through
-    /// wsl.exe, which runs it as the distro's default user (the one whose daemon this is).
+    /// wsl.exe, as the user whose folder FLOCK_HOME names: `flk` acts on the daemon of the user
+    /// that runs it, who isn't always the distro's default user.
     /// </summary>
     public (string FileName, IReadOnlyList<string> Arguments) Cli(params string[] arguments)
     {
@@ -78,7 +92,9 @@ public sealed record FlockBackend
         {
             return (FlockPaths.FlockBinary, arguments);
         }
-        return ("wsl.exe", ["-d", WslDistro, "--", LinuxCli, .. arguments]);
+        return WslUser is null
+            ? ("wsl.exe", ["-d", WslDistro, "--", LinuxCli, .. arguments])
+            : ("wsl.exe", ["-d", WslDistro, "-u", WslUser, "--", LinuxCli, .. arguments]);
     }
 
     /// <summary>The command a person runs to set Flock up for this backend, for messages.</summary>

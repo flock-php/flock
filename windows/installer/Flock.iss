@@ -98,6 +98,17 @@ begin
       Result := True;
 end;
 
+// True when FLOCK_HOME points into a WSL distro: the app then shows the daemon there (see
+// windows/README.md), and the files there are the distro's, not this installation's.
+function HomeIsInWsl(): Boolean;
+var
+  Home: String;
+begin
+  Home := Lowercase(GetEnv('FLOCK_HOME'));
+  StringChangeEx(Home, '/', '\', True);
+  Result := (Pos('\\wsl.localhost\', Home) = 1) or (Pos('\\wsl$\', Home) = 1);
+end;
+
 // Over a set-up Flock, the new flock.exe first updates what needs administrator rights: the DNS
 // rule, the hosts helper and the CA's trust (Windows asks only when one of them changed). When the
 // user declines, setup stops before replacing anything and the installed version stays as it was.
@@ -105,7 +116,7 @@ function UpdatePrivileged(): String;
 var
   ResultCode, I: Integer;
   Lines: TArrayOfString;
-  Flock, Output: String;
+  Flock, Output, Command: String;
 begin
   Result := '';
   if not FileExists(ExpandConstant('{userappdata}\Flock\bin\flock.exe')) then
@@ -114,7 +125,12 @@ begin
   ExtractTemporaryFile('flock-helper.exe');
   Flock := ExpandConstant('{tmp}\flock.exe');
   Output := ExpandConstant('{tmp}\privileged.txt');
-  if Exec(ExpandConstant('{cmd}'), '/S /C ""' + Flock + '" install --privileged-only > "' + Output + '" 2>&1"',
+  Command := '"' + Flock + '" install --privileged-only > "' + Output + '" 2>&1';
+  // The app that starts an update passes its FLOCK_HOME on: in a WSL distro, this step would set
+  // Windows up from the distro's files. Run it without the variable, as the uninstaller does.
+  if HomeIsInWsl() then
+    Command := 'set "FLOCK_HOME=" & ' + Command;
+  if Exec(ExpandConstant('{cmd}'), '/S /C "' + Command + '"',
           '', SW_HIDE, ewWaitUntilTerminated, ResultCode) and (ResultCode = 0) then
     Exit;
 
@@ -152,17 +168,6 @@ begin
   Exec(ExpandConstant('{sys}\taskkill.exe'), '/F /IM FlockTray.exe', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
   if ResultCode = 0 then
     Sleep(500);
-end;
-
-// True when FLOCK_HOME points into a WSL distro: the app then shows the daemon there (see
-// windows/README.md), and the files there are the distro's, not this installation's.
-function HomeIsInWsl(): Boolean;
-var
-  Home: String;
-begin
-  Home := Lowercase(GetEnv('FLOCK_HOME'));
-  StringChangeEx(Home, '/', '\', True);
-  Result := (Pos('\\wsl.localhost\', Home) = 1) or (Pos('\\wsl$\', Home) = 1);
 end;
 
 // Runs at uninstall time, before the app's files go: `flock uninstall` removes the daemon, PATH

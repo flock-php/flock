@@ -57,7 +57,23 @@ public class FlockBackendTests
         var (fileName, arguments) = FlockBackend.ForRoot(@"\\wsl.localhost\Ubuntu\home\me\.local\share\flock").Cli("restart");
 
         Assert.Equal("wsl.exe", fileName);
-        Assert.Equal(["-d", "Ubuntu", "--", "flk", "restart"], arguments);
+        Assert.Equal(["-d", "Ubuntu", "-u", "me", "--", "flk", "restart"], arguments);
+    }
+
+    [Theory]
+    [InlineData(@"\\wsl.localhost\Ubuntu\root\.local\share\flock", "root")]
+    [InlineData(@"\\wsl$\Debian\home\sam\.local\share\flock", "sam")]
+    [InlineData(@"\\wsl.localhost\Ubuntu\srv\flock", null)]
+    public void WslRunsTheCliAsTheUserWhoseFolderItIs(string root, string? user)
+    {
+        var backend = FlockBackend.ForRoot(root);
+        var (_, arguments) = backend.Cli("restart");
+
+        Assert.Equal(user, backend.WslUser);
+        string[] expected = user is null
+            ? ["-d", backend.WslDistro!, "--", "flk", "restart"]
+            : ["-d", backend.WslDistro!, "-u", user, "--", "flk", "restart"];
+        Assert.Equal(expected, arguments);
     }
 
     [Fact]

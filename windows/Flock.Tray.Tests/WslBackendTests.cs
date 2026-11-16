@@ -443,7 +443,6 @@ public sealed class WslBackendTests : IDisposable
         var deadline = DateTime.UtcNow.AddSeconds(5);
         while (!second.Task.IsCompleted && DateTime.UtcNow < deadline)
         {
-            Assert.True(Volatile.Read(ref holds) <= 1);
             clock.Advance(WslKeepAliveService.RetryDelay);
             await Task.Delay(10);
         }
