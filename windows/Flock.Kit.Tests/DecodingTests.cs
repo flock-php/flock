@@ -232,6 +232,24 @@ public class DecodingTests
     }
 
     [Fact]
+    public void DecodesSiteGroups()
+    {
+        var status = FlockJson.Decode<Status>("""
+            {"version":"dev","pid":1,"started_at":"2026-10-13T14:10:01Z",
+             "sites":[{"name":"api","group":"Work"},{"name":"blog","group":"Personal"},{"name":"scratch"}],
+             "groups":[{"name":"Personal","sites":["blog"]},{"name":"Work","sites":["api"]}]}
+            """);
+
+        Assert.Equal(["Personal", "Work"], status.Groups.Select(g => g.Name));
+        Assert.Equal(["api"], status.Groups[1].Sites);
+        Assert.Equal(["Work", "Personal", ""], status.Sites.Select(s => s.Group));
+
+        // An older daemon sends none, a newer one an empty list.
+        Assert.Empty(FlockJson.Decode<Status>("""{"version":"dev","pid":1,"started_at":"2026-10-13T14:10:01Z"}""").Groups);
+        Assert.Empty(FlockJson.Decode<Status>("""{"version":"dev","pid":1,"started_at":"2026-10-13T14:10:01Z","groups":[]}""").Groups);
+    }
+
+    [Fact]
     public void DecodesProxies()
     {
         var status = FlockJson.Decode<Status>("""

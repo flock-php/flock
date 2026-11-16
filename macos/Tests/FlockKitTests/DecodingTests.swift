@@ -41,6 +41,21 @@ private func decode<T: Decodable>(_ type: T.Type, _ json: String) throws -> T {
     #expect(status.channel == "beta")
 }
 
+@Test func decodesSiteGroups() throws {
+    let status = try decode(Status.self, """
+    {"version":"dev","pid":1,"started_at":"2026-10-13T14:10:01Z",
+     "sites":[{"name":"api","group":"Work"},{"name":"blog","group":"Personal"},{"name":"scratch"}],
+     "groups":[{"name":"Personal","sites":["blog"]},{"name":"Work","sites":["api"]}]}
+    """)
+    #expect(status.groups.map(\.name) == ["Personal", "Work"])
+    #expect(status.groups[1].sites == ["api"] && status.groups[1].id == "Work")
+    #expect(status.sites.map(\.group) == ["Work", "Personal", ""])
+
+    // An older daemon sends none, a newer one an empty list.
+    #expect(try decode(Status.self, #"{"version":"dev","pid":1,"started_at":"2026-10-13T14:10:01Z"}"#).groups.isEmpty)
+    #expect(try decode(Status.self, #"{"version":"dev","pid":1,"started_at":"2026-10-13T14:10:01Z","groups":[]}"#).groups.isEmpty)
+}
+
 @Test func decodesProxies() throws {
     let status = try decode(Status.self, """
     {"version":"dev","pid":1,"started_at":"2026-10-13T14:10:01Z",

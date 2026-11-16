@@ -668,7 +668,7 @@ func (d *daemon) reload() error {
 		phpVersion, nodeVersion := project.PHPFor(cfg, &site, site.Path), project.NodeFor(cfg, &site, site.Path)
 		version := phpVersion.Version
 		status := api.SiteStatus{
-			Name: site.Name, Domain: domain, Path: site.Path, Secured: site.Secured, Parked: site.Parked,
+			Name: site.Name, Domain: domain, Path: site.Path, Secured: site.Secured, Parked: site.Parked, Group: site.Group,
 			Parent: site.Parent, Branch: site.Branch,
 			PHP: version, PHPSource: phpVersion.Source, PHPPinned: phpVersion.Pinned, PHPFile: phpVersion.File,
 			Node: nodeVersion.Version, NodeSource: nodeVersion.Source, NodePinned: nodeVersion.Pinned, NodeFile: nodeVersion.File,
@@ -1148,6 +1148,7 @@ func (d *daemon) Status() api.Status {
 		Processes: d.procs.Status(),
 		Warnings:  d.warnings,
 	}
+	st.Groups = api.GroupSites(st.Sites)
 	d.liveNodeSites(st.Sites)
 	if d.mail != nil {
 		st.Mail = d.mail.Addr()

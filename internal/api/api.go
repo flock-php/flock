@@ -12,6 +12,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"sort"
 	"time"
 
 	"flock/internal/binaries"
@@ -50,6 +51,7 @@ type Status struct {
 	Xdebug             bool                    `json:"xdebug"`           // Xdebug detection; see config.Config.Xdebug
 	XdebugBreakpoints  bool                    `json:"xdebug_breakpoints"`
 	Sites              []SiteStatus            `json:"sites"`
+	Groups             []SiteGroup             `json:"groups"`            // the groups of Sites, see GroupSites
 	Proxies            []ProxyStatus           `json:"proxies,omitempty"` // see config.Proxy
 	Processes          []supervisor.ProcStatus `json:"processes"`
 	Warnings           []string                `json:"warnings,omitempty"`
@@ -57,6 +59,34 @@ type Status struct {
 	// Defaults is set while there is no default PHP or Node.js yet: the first run installs the
 	// newest stable ones and makes them the defaults.
 	Defaults *DefaultsStatus `json:"defaults,omitempty"`
+}
+
+// SiteGroup is a group of sites (see config.Site.Group) and the names of the sites in it, so a
+// client can show the groups without sorting the sites itself.
+type SiteGroup struct {
+	Name  string   `json:"name"`
+	Sites []string `json:"sites"` // site names, in the order of the sites they come from
+}
+
+// GroupSites collects the sites by group: one SiteGroup per group, sorted by name. Sites in no
+// group are in none of them. It is never nil, so it encodes as [].
+func GroupSites(sites []SiteStatus) []SiteGroup {
+	groups := []SiteGroup{}
+	index := map[string]int{}
+	for _, s := range sites {
+		if s.Group == "" {
+			continue
+		}
+		i, ok := index[s.Group]
+		if !ok {
+			i = len(groups)
+			index[s.Group] = i
+			groups = append(groups, SiteGroup{Name: s.Group, Sites: []string{}})
+		}
+		groups[i].Sites = append(groups[i].Sites, s.Name)
+	}
+	sort.Slice(groups, func(i, j int) bool { return groups[i].Name < groups[j].Name })
+	return groups
 }
 
 // ProxyStatus is a name served by a server of its own, e.g. a dashboard or a Docker container (see config.Proxy).
@@ -157,6 +187,9 @@ type SiteStatus struct {
 	NodeShadowed string `json:"node_shadowed"`
 	Secured      bool   `json:"secured"`
 	Parked       bool   `json:"parked"`
+	// Group is the group the site is listed under ("" for none; see config.Site.Group). A
+	// worktree is in its parent's group.
+	Group string `json:"group,omitempty"`
 	// Parent is set on a git worktree of another site: that site's name, whose settings it uses.
 	// Branch is the worktree's branch ("" when HEAD is detached).
 	Parent string `json:"parent,omitempty"`

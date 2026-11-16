@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"reflect"
 	"slices"
 	"strings"
 	"testing"
@@ -694,5 +695,72 @@ func TestClearingAServiceLog(t *testing.T) {
 	}
 	if resp, _ := call(t, "DELETE", srv.URL+"/v1/logs/services/..%2Fconfig.json", "", ""); resp.StatusCode != http.StatusBadRequest {
 		t.Fatalf("a path must be refused, got %d", resp.StatusCode)
+	}
+}
+
+func TestSiteGroupEndpoints(t *testing.T) {
+	b := &fakeBackend{root: t.TempDir()}
+	srv := serve(t, b, "")
+	first, second := t.TempDir(), t.TempDir()
+
+	if resp, body := call(t, "POST", srv.URL+"/v1/sites", "", `{"path":`+jsonString(first)+`,"name":"api","group":"  Work "}`); resp.StatusCode != http.StatusOK {
+		t.Fatalf("link with a group: %d %s", resp.StatusCode, body)
+	}
+	if site, _ := b.config(t).FindSite("api"); site.Group != "Work" {
+		t.Fatalf("group after linking = %q; want Work", site.Group)
+	}
+
+	if resp, body := call(t, "POST", srv.URL+"/v1/sites", "", `{"path":`+jsonString(second)+`,"name":"shop"}`); resp.StatusCode != http.StatusOK {
+		t.Fatalf("link: %d %s", resp.StatusCode, body)
+	}
+	if resp, body := call(t, "PATCH", srv.URL+"/v1/sites/shop", "", `{"group":"work"}`); resp.StatusCode != http.StatusOK {
+		t.Fatalf("patch: %d %s", resp.StatusCode, body)
+	}
+	if site, _ := b.config(t).FindSite("shop"); site.Group != "Work" {
+		t.Fatalf("an existing group keeps its spelling: got %q", site.Group)
+	}
+
+	// A patch that leaves group out keeps it; an empty group takes the site out.
+	if resp, _ := call(t, "PATCH", srv.URL+"/v1/sites/shop", "", `{"secured":true}`); resp.StatusCode != http.StatusOK {
+		t.Fatalf("patch without group: %d", resp.StatusCode)
+	}
+	if site, _ := b.config(t).FindSite("shop"); site.Group != "Work" || !site.Secured {
+		t.Fatalf("patch without group changed it: %+v", site)
+	}
+	if resp, _ := call(t, "PATCH", srv.URL+"/v1/sites/shop", "", `{"group":""}`); resp.StatusCode != http.StatusOK {
+		t.Fatalf("clear: %d", resp.StatusCode)
+	}
+	if site, _ := b.config(t).FindSite("shop"); site.Group != "" {
+		t.Fatalf("group after clearing = %q", site.Group)
+	}
+
+	if resp, _ := call(t, "PATCH", srv.URL+"/v1/sites/shop", "", `{"group":"`+strings.Repeat("x", config.MaxGroupLength+1)+`"}`); resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("a too long group must be rejected, got %d", resp.StatusCode)
+	}
+}
+
+func TestGroupSitesCollectsSitesByGroup(t *testing.T) {
+	sites := []SiteStatus{
+		{Name: "api", Group: "Work"},
+		{Name: "blog", Group: "Personal"},
+		{Name: "scratch"},
+		{Name: "shop", Group: "Work"},
+		{Name: "main.shop", Group: "Work", Parent: "shop"},
+	}
+
+	got := GroupSites(sites)
+	want := []SiteGroup{
+		{Name: "Personal", Sites: []string{"blog"}},
+		{Name: "Work", Sites: []string{"api", "shop", "main.shop"}},
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("GroupSites = %+v; want %+v", got, want)
+	}
+
+	for _, none := range [][]SiteStatus{nil, {{Name: "scratch"}}} {
+		out, _ := json.Marshal(GroupSites(none))
+		if string(out) != "[]" {
+			t.Errorf("no groups encode as %s; want []", out)
+		}
 	}
 }
