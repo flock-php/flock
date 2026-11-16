@@ -59,6 +59,41 @@ func TestReusesCAAndCurrentCerts(t *testing.T) {
 	}
 }
 
+func TestReplacesCAWhenTheTLDChanges(t *testing.T) {
+	dir := t.TempDir()
+	old, _ := Ensure(dir, "wsl")
+	if _, _, err := old.SiteCert("app.wsl"); err != nil {
+		t.Fatal(err)
+	}
+
+	ca, err := Ensure(dir, "test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ca.Fingerprint() == old.Fingerprint() {
+		t.Fatal("CA for .wsl was kept for .test")
+	}
+	certPath, _, err := ca.SiteCert("app.test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := verify(t, ca, certPath, "app.test"); err != nil {
+		t.Fatalf("app.test: %v", err)
+	}
+
+	again, err := Ensure(dir, "test")
+	if err != nil || again.Fingerprint() != ca.Fingerprint() {
+		t.Fatalf("new CA was not reused: %v", err)
+	}
+}
+
+func TestKeepsCAWithoutNameConstraints(t *testing.T) {
+	ca := &CA{cert: &x509.Certificate{}}
+	if !ca.permits("test") {
+		t.Fatal("a CA without name constraints allows every TLD")
+	}
+}
+
 func TestRootIsNameConstrainedToTheTLD(t *testing.T) {
 	ca, _ := Ensure(t.TempDir(), "test")
 

@@ -20,6 +20,7 @@ import (
 	"os/user"
 	"path/filepath"
 	"slices"
+	"strings"
 	"time"
 )
 
@@ -37,13 +38,17 @@ type CA struct {
 	key  *ecdsa.PrivateKey
 }
 
-// Ensure loads the CA from dir, creating it on first use.
+// Ensure loads the CA from dir, creating it on first use. A CA made for another TLD is replaced:
+// its name constraints make browsers reject what it signs for tld. The new one isn't trusted
+// yet, which `flock install` notices by its fingerprint and fixes.
 func Ensure(dir, tld string) (*CA, error) {
 	ca := &CA{dir: dir}
 
-	if err := ca.load(); err == nil {
+	err := ca.load()
+	switch {
+	case err == nil && ca.permits(tld):
 		return ca, nil
-	} else if !errors.Is(err, os.ErrNotExist) {
+	case err != nil && !errors.Is(err, os.ErrNotExist):
 		return nil, err
 	}
 
@@ -52,6 +57,15 @@ func Ensure(dir, tld string) (*CA, error) {
 	}
 
 	return ca, nil
+}
+
+// permits reports whether the CA's name constraints allow names under tld. A CA without
+// constraints allows every name.
+func (ca *CA) permits(tld string) bool {
+	permitted := ca.cert.PermittedDNSDomains
+	return len(permitted) == 0 || slices.ContainsFunc(permitted, func(d string) bool {
+		return strings.EqualFold(d, "."+tld)
+	})
 }
 
 // CertPath is the PEM file of the root certificate (what gets trusted by the OS).
