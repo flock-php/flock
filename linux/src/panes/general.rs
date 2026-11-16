@@ -107,12 +107,24 @@ impl GeneralPane {
 
     fn tray(&self) -> adw::PreferencesGroup {
         let group = group("Tray", "");
+        let row = adw::SwitchRow::builder()
+            .title("Hide sites in the tray menu")
+            .subtitle("The Sites page still lists them.")
+            .active(self.model.hides_sites())
+            .build();
         let (model, banner) = (self.model.clone(), self.banner.clone());
-        group.add(&switch_row("Hide sites in the tray menu", "The Sites page still lists them.", self.model.hides_sites(), move |on| {
+        row.connect_active_notify(move |row| {
+            let on = row.is_active();
+            // Also the switch going back after a failed save.
+            if on == model.hides_sites() {
+                return;
+            }
             if let Err(e) = model.set_hides_sites(on) {
                 report(&banner, Some(format!("Could not change the tray setting: {e}")));
+                row.set_active(!on);
             }
-        }));
+        });
+        group.add(&row);
         group
     }
 
