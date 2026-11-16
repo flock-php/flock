@@ -195,6 +195,29 @@ public sealed class WslBackendTests : IDisposable
     }
 
     [Fact]
+    public async Task TheCheckedCopyCannotBeReplacedWhileSetupIsElevated()
+    {
+        var root = Root();
+        Exception? writeError = null;
+        var setup = new WslWindowsSetup(wsl, root, () => @"C:\Flock\flock.exe", _ => false, _ => false, (_, arguments, _) =>
+        {
+            var handed = arguments[arguments.ToList().IndexOf("--ca") + 1];
+            try
+            {
+                using var replaced = new FileStream(handed, FileMode.Create, FileAccess.Write, FileShare.ReadWrite);
+            }
+            catch (Exception error)
+            {
+                writeError = error;
+            }
+            return Task.FromResult<int?>(0);
+        }, (_, _) => null, () => false);
+
+        Assert.True((await setup.SetUpAsync()).Ok);
+        Assert.True(writeError is IOException or UnauthorizedAccessException, writeError?.ToString());
+    }
+
+    [Fact]
     public async Task RulesFromGroupPolicyLeaveTheRuleOutOfTheCheckAndSetupSaysSo()
     {
         // Windows ignores local rules then, so setup can't change where *.test goes.

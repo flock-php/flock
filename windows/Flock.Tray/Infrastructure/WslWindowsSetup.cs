@@ -120,13 +120,17 @@ public sealed partial class WslWindowsSetup(FlockBackend backend, string root, F
         }
         // The elevated program gets copies in a Windows folder: a distro's share isn't always
         // there for an administrator, and it reports its error through a file. The copy is also
-        // the one that is checked, so the CA that is trusted is the CA that passed.
+        // the one that is checked, so the CA that is trusted is the CA that passed. It stays open
+        // until that program finishes: the distro can write this temp folder through /mnt/c, and
+        // the permission prompt is long enough to swap the file after the check.
         var work = Directory.CreateTempSubdirectory("flock-wsl-");
         try
         {
             var ca = Path.Combine(work.FullName, "ca.crt");
             var result = Path.Combine(work.FullName, "result.txt");
             File.Copy(CaPath, ca);
+            // No delete share: while this handle is open, the distro can't replace or delete the copy.
+            await using var caLock = new FileStream(ca, FileMode.Open, FileAccess.Read, FileShare.Read);
             try
             {
                 if (caProblem(ca, tld) is { } problem)
@@ -143,6 +147,7 @@ public sealed partial class WslWindowsSetup(FlockBackend backend, string root, F
             var code = await elevate(exe,
                 ["privileged-setup", "--tld", tld, "--ca", ca, "--source", Path.Combine(WindowsRoot, "hosts.txt"), "--no-helper", "--result-file", result],
                 cancellationToken);
+            _ = caLock;
             if (code is null)
             {
                 return new Installation.Result(false, $"Error: {Declined}");
