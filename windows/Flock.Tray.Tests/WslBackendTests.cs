@@ -70,7 +70,7 @@ public sealed class WslBackendTests : IDisposable
     /// <summary>Writes a CA as Flock makes it: limited to the names given, or to none of them.</summary>
     private static void WriteCa(string root, params string[] permitted) => WriteCa(root, permitted, []);
 
-    private static void WriteCa(string root, string[] permitted, string[] excluded)
+    private static void WriteCa(string root, string[] permitted, string[] excluded, bool critical = true)
     {
         using var key = ECDsa.Create(ECCurve.NamedCurves.nistP256);
         var request = new CertificateRequest("CN=Flock Local CA (test)", key, HashAlgorithmName.SHA256);
@@ -111,7 +111,7 @@ public sealed class WslBackendTests : IDisposable
                 }
                 writer = both;
             }
-            request.CertificateExtensions.Add(new X509Extension("2.5.29.30", writer.Encode(), critical: true));
+            request.CertificateExtensions.Add(new X509Extension("2.5.29.30", writer.Encode(), critical));
         }
         using var certificate = request.CreateSelfSigned(DateTimeOffset.UtcNow.AddDays(-1), DateTimeOffset.UtcNow.AddDays(30));
         File.WriteAllText(Path.Combine(root, "certs", "ca.crt"), certificate.ExportCertificatePem());
@@ -215,6 +215,20 @@ public sealed class WslBackendTests : IDisposable
 
         Assert.True((await setup.SetUpAsync()).Ok);
         Assert.True(writeError is IOException or UnauthorizedAccessException, writeError?.ToString());
+    }
+
+    [Fact]
+    public async Task ACaWhoseNameLimitsAreNotCriticalIsNotTrusted()
+    {
+        var root = Root();
+        WriteCa(root, [".test", "test", "localhost"], [], critical: false);
+        var installation = Installation(Setup(root, realCa: true));
+
+        Assert.False(await installation.IsSetUpAsync());
+        var result = await installation.InstallAsync();
+        Assert.False(result.Ok);
+        Assert.Contains("aren't marked critical", result.Output);
+        Assert.Empty(elevated);
     }
 
     [Fact]

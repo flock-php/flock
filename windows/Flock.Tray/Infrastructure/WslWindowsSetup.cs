@@ -188,6 +188,10 @@ public sealed partial class WslWindowsSetup(FlockBackend backend, string root, F
     private static string? CaProblem(string path, string tld)
     {
         using var certificate = X509CertificateLoader.LoadCertificateFromFile(path);
+        if (certificate.Extensions["2.5.29.30"] is { Critical: false })
+        {
+            return "has name limits that aren't marked critical, so a program that doesn't implement them would trust it for every name";
+        }
         if (PermittedDnsNames(certificate) is not { Count: > 0 } permitted)
         {
             return $"isn't limited to *.{tld} names";
@@ -201,12 +205,14 @@ public sealed partial class WslWindowsSetup(FlockBackend backend, string root, F
     }
 
     /// <summary>
-    /// The DNS names a CA's name constraints permit, or null when it has no such list, permits
-    /// other kinds of names or excludes names (which this app doesn't judge).
+    /// The DNS names a CA's name constraints permit, or null when it has no such list, the list
+    /// isn't marked critical, it permits other kinds of names, or it excludes names (which this
+    /// app doesn't judge). A program that doesn't implement name constraints ignores them unless
+    /// they are critical, so a non-critical list is the same as no limit.
     /// </summary>
     internal static IReadOnlyList<string>? PermittedDnsNames(X509Certificate2 certificate)
     {
-        if (certificate.Extensions["2.5.29.30"] is not { } constraints)
+        if (certificate.Extensions["2.5.29.30"] is not { Critical: true } constraints)
         {
             return null;
         }
