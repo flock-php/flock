@@ -179,7 +179,7 @@ public sealed class WslBackendTests : IDisposable
         var root = Root();
         var checkedPaths = new List<string>();
         string? handed = null;
-        var setup = new WslWindowsSetup(wsl, root, () => @"C:\Flocklock.exe", _ => false, _ => false, (_, arguments, _) =>
+        var setup = new WslWindowsSetup(wsl, root, () => @"C:\Flock\flock.exe", _ => false, _ => false, (_, arguments, _) =>
         {
             handed = arguments[arguments.ToList().IndexOf("--ca") + 1];
             return Task.FromResult<int?>(0);
