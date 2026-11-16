@@ -5,6 +5,7 @@ using System.Net.Sockets;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using Flock.Kit;
+using Flock.Tray;
 using Flock.Tray.Features.Preferences;
 using Flock.Tray.Infrastructure;
 
@@ -254,6 +255,15 @@ public sealed class WslBackendTests : IDisposable
         Assert.True(result.Ok);
         Assert.Contains("Group Policy", result.Output);
         Assert.DoesNotContain("is sent to", result.Output);
+        Assert.Equal(
+            "Your organization manages DNS rules (Group Policy), so Windows ignores Flock's rule for .test.",
+            SetupWindow.DnsWarningText(result.Output));
+    }
+
+    [Fact]
+    public void ASuccessfulSetupWithoutThatWarningHasNothingToShowOnTheDoneStage()
+    {
+        Assert.Null(SetupWindow.DnsWarningText("✓ every *.test name (any subdomain) is sent to Flock in WSL (Ubuntu)\n✓ the certificate authority is trusted"));
     }
 
     [Fact]

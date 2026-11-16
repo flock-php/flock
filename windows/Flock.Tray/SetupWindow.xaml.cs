@@ -13,6 +13,7 @@ internal sealed partial class SetupWindow : FlockWindow
     private readonly RuntimeService model;
     private List<ConflictingApp> conflicts = [];
     private string defaultPhp = "", defaultNode = "";
+    private string? dnsWarning;
     private string output = "";
     private bool sawDefaults;
     private Stage stage;
@@ -34,8 +35,8 @@ internal sealed partial class SetupWindow : FlockWindow
     }
 
     /// <summary>
-    /// A daemon in WSL is set up in its distro: here, setup is only what Windows needs to open its
-    /// sites. The app isn't registered to open at sign-in, where it would look for a daemon on Windows.
+    ///     A daemon in WSL is set up in its distro: here, setup is only what Windows needs to open its
+    ///     sites. The app isn't registered to open at sign-in, where it would look for a daemon on Windows.
     /// </summary>
     private void ShowWslSetup(string distro)
     {
@@ -68,23 +69,27 @@ internal sealed partial class SetupWindow : FlockWindow
         RunningStage.Visibility = value == Stage.Running ? Visibility.Visible : Visibility.Collapsed;
         DoneStage.Visibility = value == Stage.Done ? Visibility.Visible : Visibility.Collapsed;
         FailedStage.Visibility = value == Stage.Failed ? Visibility.Visible : Visibility.Collapsed;
-        if (value == Stage.Conflicts)
+        switch (value)
         {
-            ConflictsItems.ItemsSource = conflicts;
-        }
-        if (value == Stage.Failed)
-        {
-            var declined = output.Contains("administrator permission was declined", StringComparison.Ordinal);
-            FailedMessage.Text = declined
-                ? "Windows' permission prompt was declined. Flock runs, but *.test sites won't resolve and HTTPS isn't trusted until you allow it."
-                : "Something went wrong. The output below says what; you can try again.";
-            FailedLogText.Text = output;
-        }
-        if (value == Stage.Done)
-        {
-            StartupProblem.Text = startupProblem ?? "";
-            StartupProblem.Visibility = startupProblem is null ? Visibility.Collapsed : Visibility.Visible;
-            ShowDefaults();
+            case Stage.Conflicts:
+                ConflictsItems.ItemsSource = conflicts;
+                break;
+            case Stage.Failed:
+            {
+                var declined = output.Contains("administrator permission was declined", StringComparison.Ordinal);
+                FailedMessage.Text = declined
+                    ? "Windows' permission prompt was declined. Flock runs, but *.test sites won't resolve and HTTPS isn't trusted until you allow it."
+                    : "Something went wrong. Please try again.";
+                FailedLogText.Text = output;
+                break;
+            }
+            case Stage.Done:
+                StartupProblem.Text = startupProblem ?? "";
+                StartupProblem.Visibility = startupProblem is null ? Visibility.Collapsed : Visibility.Visible;
+                DnsWarning.Message = dnsWarning ?? string.Empty;
+                DnsWarning.IsOpen = dnsWarning is not null;
+                ShowDefaults();
+                break;
         }
     }
 
@@ -110,14 +115,10 @@ internal sealed partial class SetupWindow : FlockWindow
         LogText.Text = output;
 
         model.NeedsSetup = !await model.Installation.IsSetUpAsync();
-        if (result.Ok && model.Installation.Backend.IsWsl)
-        {
-            // The running log is hidden once setup finishes. A Group Policy warning there is the
-            // only signal that *.tld still won't resolve, so it has to stay on the done stage.
-            var warnings = string.Join("\n", output.Split('\n').Select(line => line.TrimEnd('\r')).Where(line => line.StartsWith('!')));
-            startupProblem = warnings.Length > 0 ? warnings : null;
-        }
-        else if (result.Ok)
+        // Success hides the running log. The Group Policy line is the only signal that Windows
+        // ignores the DNS rule, so the done stage has to show it.
+        dnsWarning = result.Ok ? DnsWarningText(output) : null;
+        if (result.Ok && !model.Installation.Backend.IsWsl)
         {
             try
             {
@@ -131,6 +132,29 @@ internal sealed partial class SetupWindow : FlockWindow
         model.NotifyChanged();
         Render(result.Ok ? Stage.Done : Stage.Failed);
         await model.RefreshAsync();
+    }
+
+    /// <summary>
+    ///     The Group Policy warning from setup output, as a sentence, or null. The <c>!</c> is a log
+    ///     marker, not something to show on the done stage.
+    /// </summary>
+    internal static string? DnsWarningText(string output)
+    {
+        foreach (var raw in output.Split('\n'))
+        {
+            var line = raw.TrimEnd('\r').Trim();
+            if (line.StartsWith('!'))
+            {
+                line = line[1..].TrimStart();
+            }
+            if (!line.Contains("Group Policy", StringComparison.Ordinal) || line.Length == 0)
+            {
+                continue;
+            }
+            var sentence = char.ToUpperInvariant(line[0]) + line[1..];
+            return sentence.EndsWith('.') ? sentence : sentence + ".";
+        }
+        return null;
     }
 
     private void ShowDefaults()

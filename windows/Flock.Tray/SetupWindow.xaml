@@ -120,6 +120,7 @@
 
                 <StackPanel x:Name="DoneStage" Spacing="0" Visibility="Collapsed">
                     <TextBlock Text="Flock is ready" Style="{StaticResource TitleTextBlockStyle}" Margin="0,8,0,24" />
+                    <InfoBar x:Name="DnsWarning" Title="Site names may not resolve" Severity="Warning" IsClosable="False" IsOpen="False" Margin="0,0,0,24" />
                     <StackPanel x:Name="Defaults" Spacing="4" Margin="0,0,0,24" />
                     <TextBlock x:Name="StartupProblem" TextWrapping="Wrap" Foreground="{ThemeResource SystemFillColorCriticalBrush}" Visibility="Collapsed"
                                Margin="0,0,0,12" />
