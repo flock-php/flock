@@ -71,3 +71,24 @@ func TestRootIsNameConstrainedToTheTLD(t *testing.T) {
 		t.Fatal("name constraint not enforced")
 	}
 }
+
+func TestNewCAWhenTheTLDChanges(t *testing.T) {
+	dir := t.TempDir()
+	first, _ := Ensure(dir, "wsl")
+
+	second, err := Ensure(dir, "test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if second.Fingerprint() == first.Fingerprint() {
+		t.Fatal("CA for .wsl was kept for .test")
+	}
+
+	certPath, _, err := second.SiteCert("app.test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := verify(t, second, certPath, "app.test"); err != nil {
+		t.Fatal(err)
+	}
+}

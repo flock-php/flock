@@ -37,12 +37,15 @@ type CA struct {
 	key  *ecdsa.PrivateKey
 }
 
-// Ensure loads the CA from dir, creating it on first use.
+// Ensure loads the CA from dir, creating it on first use and again when the TLD changed,
+// as the root is only valid for the TLD it was created for.
 func Ensure(dir, tld string) (*CA, error) {
 	ca := &CA{dir: dir}
 
 	if err := ca.load(); err == nil {
-		return ca, nil
+		if slices.Contains(ca.cert.PermittedDNSDomains, tld) {
+			return ca, nil
+		}
 	} else if !errors.Is(err, os.ErrNotExist) {
 		return nil, err
 	}
