@@ -2,7 +2,8 @@
     x:Class="Flock.Tray.Settings.GeneralPane"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-    xmlns:controls="using:Flock.Tray.Controls">
+    xmlns:controls="using:Flock.Tray.Controls"
+    xmlns:automation="using:Microsoft.UI.Xaml.Automation">
     <StackPanel Spacing="0">
         <StackPanel Spacing="4" Margin="0,0,0,24">
             <TextBlock Text="Daemon" Style="{StaticResource BodyStrongTextBlockStyle}" Margin="1,0,0,6" />
@@ -109,7 +110,8 @@
                         <TextBlock Text="Settings → Sites still lists them."
                                    Style="{StaticResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
                     </StackPanel>
-                    <ToggleSwitch x:Name="HideSites" Grid.Column="1" MinWidth="0" Toggled="HideSitesToggled" OnContent="" OffContent="" />
+                    <ToggleSwitch x:Name="HideSites" Grid.Column="1" MinWidth="0" Toggled="HideSitesToggled" OnContent="" OffContent=""
+                                  automation:AutomationProperties.Name="Hide sites in the panel" />
                 </Grid>
             </Border>
         </StackPanel>
