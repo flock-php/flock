@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -47,21 +48,36 @@ func shortTempDir(t *testing.T) string {
 	return dir
 }
 
+// The ports freePort has returned.
+var (
+	givenMu sync.Mutex
+	given   = map[int]bool{}
+)
+
 // freePort returns a port that's free for TCP and UDP: Caddy also listens for HTTP/3 over
-// UDP, and Windows can reserve a port for UDP that's free for TCP.
+// UDP, and Windows can reserve a port for UDP that's free for TCP. It never returns a port twice:
+// the OS can hand a closed port out again, and a daemon whose HTTP and DNS ports are the same
+// answers HTTP requests with DNS.
 func freePort(t *testing.T) int {
 	t.Helper()
 
-	for range 20 {
+	givenMu.Lock()
+	defer givenMu.Unlock()
+	for range 100 {
 		ln, err := net.Listen("tcp", "127.0.0.1:0")
 		if err != nil {
 			t.Fatal(err)
 		}
 		port := ln.Addr().(*net.TCPAddr).Port
+		if given[port] {
+			ln.Close()
+			continue
+		}
 		pc, err := net.ListenPacket("udp", "127.0.0.1:"+strconv.Itoa(port))
 		ln.Close()
 		if err == nil {
 			pc.Close()
+			given[port] = true
 
 			return port
 		}

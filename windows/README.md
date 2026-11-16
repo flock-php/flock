@@ -198,6 +198,22 @@ Not handled yet: NAT networking; installing and updating the
 distro's Flock and its port check from the app (run `flk` in the distro); `flk status` in the distro reporting that
 `*.test` doesn't resolve there when WSL's DNS tunneling bypasses systemd-resolved.
 
+## Translations
+
+The app's and the installer's texts come from [`lang/`](../lang/README.md), which the three apps share: add or
+change a text there, then run `make i18n` (`go run ./tools/i18n`) from the repository root. It writes
+`Flock.Kit/Strings.resx` with a `Strings.<language>.resx` per language (a text a language lacks falls back to
+English), `Flock.Kit/Languages.g.cs` with the languages and their plural rules, and `installer/Strings.iss`. Code
+uses the public `Strings` class the build generates from `Strings.resx` (into `obj\`, no Designer file is
+committed): `Strings.Sites_Title` for the key `sites.title`. XAML uses `{l:Loc Key=Sites_Title}`
+(`xmlns:l="using:Flock.Tray"`), counts use `Localization.Plural` with the `_one`/`_other`/... forms.
+`ResourcesTests` in Flock.Kit.Tests fails for a broken translation, a changed placeholder, an unknown key in XAML
+or untranslated text in XAML.
+
+Settings → General → Language picks the language (Windows' preferred languages by default); it applies after
+Relaunch Flock, which starts a new instance (`--relaunch=<pid>`, waiting for the old one to exit). The installer speaks
+the Windows display language; the app's updater passes it the app's language with `/LANG`.
+
 ## Screenshots for the docs
 
 `Flock.Screenshots` renders the tray app's windows with demo data, for the website's docs: every
