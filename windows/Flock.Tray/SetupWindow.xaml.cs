@@ -110,7 +110,14 @@ internal sealed partial class SetupWindow : FlockWindow
         LogText.Text = output;
 
         model.NeedsSetup = !await model.Installation.IsSetUpAsync();
-        if (result.Ok && !model.Installation.Backend.IsWsl)
+        if (result.Ok && model.Installation.Backend.IsWsl)
+        {
+            // The running log is hidden once setup finishes. A Group Policy warning there is the
+            // only signal that *.tld still won't resolve, so it has to stay on the done stage.
+            var warnings = string.Join("\n", output.Split('\n').Select(line => line.TrimEnd('\r')).Where(line => line.StartsWith('!')));
+            startupProblem = warnings.Length > 0 ? warnings : null;
+        }
+        else if (result.Ok)
         {
             try
             {
