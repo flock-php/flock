@@ -1,7 +1,11 @@
 package certs
 
 import (
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	"crypto/rand"
 	"crypto/x509"
+	"errors"
 	"os"
 	"testing"
 )
@@ -56,6 +60,62 @@ func TestReusesCAAndCurrentCerts(t *testing.T) {
 	after, _ := os.ReadFile(certPath)
 	if string(before) != string(after) {
 		t.Fatal("current certificate was reissued")
+	}
+}
+
+func TestRegeneratesMismatchedCA(t *testing.T) {
+	dir := t.TempDir()
+	first, err := Ensure(dir, "test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := writeKey(first.keyPath(), key); err != nil {
+		t.Fatal(err)
+	}
+	if err := (&CA{dir: dir}).load(); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("load mismatch: got %v, want os.ErrNotExist", err)
+	}
+
+	second, err := Ensure(dir, "test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if second.Fingerprint() == first.Fingerprint() {
+		t.Fatal("mismatched CA was reused")
+	}
+	certPath, _, err := second.SiteCert("app.test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := verify(t, second, certPath, "app.test"); err != nil {
+		t.Fatal(err)
+	}
+	if err := (&CA{dir: dir}).load(); err != nil {
+		t.Fatalf("load regenerated CA: %v", err)
+	}
+}
+
+func TestEnsurePreservesCertificateReadErrors(t *testing.T) {
+	dir := t.TempDir()
+	ca, err := Ensure(dir, "test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(ca.CertPath(), 0); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(ca.CertPath(), 0o644) })
+	if _, err := os.ReadFile(ca.CertPath()); err == nil {
+		t.Skip("certificate permissions are not enforced")
+	} else if !errors.Is(err, os.ErrPermission) {
+		t.Fatal(err)
+	}
+	if _, err := Ensure(dir, "test"); !errors.Is(err, os.ErrPermission) {
+		t.Fatalf("Ensure: got %v, want permission error", err)
 	}
 }
 

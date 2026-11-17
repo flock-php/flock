@@ -94,6 +94,9 @@ func (ca *CA) load() error {
 	if err != nil {
 		return fmt.Errorf("%s: %w", ca.keyPath(), err)
 	}
+	if !key.PublicKey.Equal(cert.PublicKey) {
+		return fmt.Errorf("CA certificate and private key do not match: %w", os.ErrNotExist)
+	}
 
 	ca.cert, ca.key = cert, key
 	return nil
