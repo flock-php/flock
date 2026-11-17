@@ -31,8 +31,8 @@ internal sealed class OutputPanel
             HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
             VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
         };
-        var clear = Ui.Button("Clear", () => _ = ClearAsync());
-        var open = Ui.Button("Open Log", () =>
+        var clear = Ui.Button(Strings.Logs_Clear, () => _ = ClearAsync());
+        var open = Ui.Button(Strings.Sites_OpenLog, () =>
         {
             if (log is not null)
             {
@@ -40,7 +40,7 @@ internal sealed class OutputPanel
             }
         });
         Root = Ui.Column(6,
-            Ui.Spread(Ui.Text("Output", "BodyStrongTextBlockStyle"), clear, open),
+            Ui.Spread(Ui.Text(Strings.Sites_Output, "BodyStrongTextBlockStyle"), clear, open),
             new Border
             {
                 Child = scroller,
@@ -128,7 +128,7 @@ internal sealed class OutputPanel
             return;
         }
         var trimmed = (output ?? "").TrimEnd();
-        var shown = trimmed.Length == 0 ? "No output yet." : trimmed;
+        var shown = trimmed.Length == 0 ? Strings.Sites_NoOutputYet : trimmed;
         if (shown == text.Text)
         {
             return;
@@ -148,7 +148,7 @@ internal sealed class OutputPanel
         // Only for the log still shown: another may have been selected while it was cleared.
         if (log is { } name && await sites.ClearServiceLogAsync(name) && name == log)
         {
-            text.Text = "No output yet.";
+            text.Text = Strings.Sites_NoOutputYet;
         }
     }
 }

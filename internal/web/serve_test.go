@@ -12,26 +12,41 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
 	"flock/internal/certs"
 )
 
+// The ports freePort has returned.
+var (
+	givenMu sync.Mutex
+	given   = map[int]bool{}
+)
+
 // freePort returns a port that's free for TCP and UDP: Caddy also listens for HTTP/3 over
-// UDP, and Windows can reserve a port for UDP that's free for TCP.
+// UDP, and Windows can reserve a port for UDP that's free for TCP. It never returns a port twice,
+// though the OS can hand a closed port out again.
 func freePort(t *testing.T) int {
 	t.Helper()
-	for range 20 {
+	givenMu.Lock()
+	defer givenMu.Unlock()
+	for range 100 {
 		ln, err := net.Listen("tcp", "127.0.0.1:0")
 		if err != nil {
 			t.Fatal(err)
 		}
 		port := ln.Addr().(*net.TCPAddr).Port
+		if given[port] {
+			ln.Close()
+			continue
+		}
 		pc, err := net.ListenPacket("udp", fmt.Sprintf("127.0.0.1:%d", port))
 		ln.Close()
 		if err == nil {
 			pc.Close()
+			given[port] = true
 			return port
 		}
 	}
