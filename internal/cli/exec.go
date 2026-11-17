@@ -23,7 +23,7 @@ import (
 )
 
 // tools are the commands Flock puts on PATH as shims.
-var tools = append([]string{"php", "composer", "node", "npm", "npx", "redis-cli", "valkey-cli"}, postgres.ClientTools...)
+var tools = append([]string{"php", "composer", "node", "npm", "npx", "redis-cli", "valkey-cli", "mysql", "mysqldump"}, postgres.ClientTools...)
 
 // cliAliases are other names for the flock command, installed next to it. On Linux `flk` is also
 // the one that never hands a call to util-linux's flock (see PassThrough).
@@ -186,6 +186,26 @@ func resolveTool(s *state, cwd, tool string, args []string) (path string, argv, 
 			args = append([]string{"-p", strconv.Itoa(port)}, args...)
 		}
 		return path, append([]string{path}, args...), nil, nil
+
+	case "mysql", "mysqldump":
+		// MySQL's clients when it is installed, else MariaDB's (which work with both).
+		var port int
+		if x, ok := s.cfg.Services.Extra("mysql"); ok && fileExists(catalog.SQLClient(s.root, "mysql", x.Version, tool)) {
+			path, port = catalog.SQLClient(s.root, "mysql", x.Version, tool), x.Port
+		} else if x, ok := s.cfg.Services.Extra("mariadb"); ok && fileExists(catalog.SQLClient(s.root, "mariadb", x.Version, tool)) {
+			path, port = catalog.SQLClient(s.root, "mariadb", x.Version, tool), x.Port
+		} else {
+			return "", nil, nil, errMySQLMissing
+		}
+
+		// Default to Flock's server over TCP (it has no socket where the clients look for one);
+		// explicit flags or MYSQL_* variables still win.
+		for key, value := range map[string]string{"MYSQL_HOST": "127.0.0.1", "MYSQL_TCP_PORT": strconv.Itoa(port)} {
+			if os.Getenv(key) == "" {
+				env = append(env, key+"="+value)
+			}
+		}
+		return path, append([]string{path}, args...), env, nil
 	}
 
 	if slices.Contains(postgres.ClientTools, tool) {

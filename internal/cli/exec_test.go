@@ -199,6 +199,53 @@ func TestRedisCLIUsesTheConfiguredPort(t *testing.T) {
 	}
 }
 
+func TestMySQLClientsUseTheInstalledServer(t *testing.T) {
+	root := t.TempDir()
+	touchAll := func(files ...string) {
+		for _, f := range files {
+			if err := os.MkdirAll(filepath.Dir(f), 0o755); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(f, nil, 0o755); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	cfg := withDefaults()
+	s := &state{root: root, cfg: cfg}
+	if _, _, _, err := resolveTool(s, "/x", "mysqldump", nil); !errors.Is(err, errMySQLMissing) {
+		t.Fatalf("nothing installed: %v", err)
+	}
+
+	// With only MariaDB, its mariadb-dump stands in for mysqldump, on MariaDB's port.
+	dump := catalog.SQLClient(root, "mariadb", "11.8.3", "mysqldump")
+	if !strings.Contains(filepath.Base(dump), "mariadb-dump") {
+		t.Fatalf("MariaDB's dump tool: %s", dump)
+	}
+	touchAll(dump)
+	cfg.Services.SetExtra("mariadb", config.Extra{Version: "11.8.3", Port: 3307})
+	t.Setenv("MYSQL_HOST", "")
+	t.Setenv("MYSQL_TCP_PORT", "")
+	path, argv, env, err := resolveTool(s, "/x", "mysqldump", []string{"laravel"})
+	if err != nil || path != dump || argv[1] != "laravel" {
+		t.Fatalf("got %s %v %v", path, argv, err)
+	}
+	joined := strings.Join(env, " ")
+	if !strings.Contains(joined, "MYSQL_HOST=127.0.0.1") || !strings.Contains(joined, "MYSQL_TCP_PORT=3307") {
+		t.Fatalf("MYSQL_HOST/MYSQL_TCP_PORT must default to Flock's server: %v", env)
+	}
+
+	// With MySQL installed, its own clients win; an explicit MYSQL_TCP_PORT too.
+	mysql := catalog.SQLClient(root, "mysql", "8.4.6", "mysql")
+	touchAll(mysql)
+	cfg.Services.SetExtra("mysql", config.Extra{Version: "8.4.6", Port: 3306})
+	t.Setenv("MYSQL_TCP_PORT", "3310")
+	path, _, env, err = resolveTool(s, "/x", "mysql", nil)
+	if err != nil || path != mysql || strings.Contains(strings.Join(env, " "), "MYSQL_TCP_PORT") {
+		t.Fatalf("got %s %v %v", path, env, err)
+	}
+}
+
 func TestShimToolRecognisesShimNames(t *testing.T) {
 	for argv0, want := range map[string]string{
 		`C:\Users\me\AppData\Roaming\Flock\bin\php.exe`: "php",
