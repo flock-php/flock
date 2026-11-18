@@ -10,6 +10,7 @@ import (
 	"crypto/elliptic"
 	"crypto/rand"
 	"crypto/sha1"
+	"crypto/tls"
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/pem"
@@ -158,7 +159,7 @@ func (ca *CA) SiteCert(domain string) (certPath, keyPath string, err error) {
 	dir := filepath.Dir(certPath)
 
 	if ca.leafIsCurrent(certPath, domain) {
-		if _, err := os.Stat(keyPath); err == nil {
+		if _, err := tls.LoadX509KeyPair(certPath, keyPath); err == nil {
 			return certPath, keyPath, nil
 		}
 	}
@@ -256,7 +257,23 @@ func writeKey(path string, key *ecdsa.PrivateKey) error {
 }
 
 func writePEM(path, typ string, der []byte, mode os.FileMode) error {
-	return os.WriteFile(path, pem.EncodeToMemory(&pem.Block{Type: typ, Bytes: der}), mode)
+	f, err := os.CreateTemp(filepath.Dir(path), "."+filepath.Base(path)+"-*")
+	if err != nil {
+		return err
+	}
+	defer os.Remove(f.Name())
+	if err := f.Chmod(mode); err != nil {
+		f.Close()
+		return err
+	}
+	_, err = f.Write(pem.EncodeToMemory(&pem.Block{Type: typ, Bytes: der}))
+	if closeErr := f.Close(); err == nil {
+		err = closeErr
+	}
+	if err != nil {
+		return err
+	}
+	return os.Rename(f.Name(), path)
 }
 
 func randomSerial() *big.Int {
