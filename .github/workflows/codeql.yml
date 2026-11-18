@@ -1,0 +1,134 @@
+name: "CodeQL Advanced"
+
+on:
+    push:
+        branches: [ "main" ]
+    pull_request:
+        branches: [ "main" ]
+
+jobs:
+    changes:
+        runs-on: ubuntu-24.04
+        permissions:
+            contents: read
+            pull-requests: read
+        outputs:
+            matrix: ${{ steps.changes.outputs.matrix }}
+            has-languages: ${{ steps.changes.outputs.has-languages }}
+        steps:
+            - name: Filter changed paths
+              if: github.event_name == 'pull_request'
+              id: filter
+              uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d
+              with:
+                  filters: |
+                      go: &go
+                        - 'cmd/**'
+                        - 'internal/**'
+                        - 'tools/**'
+                        - 'go.mod'
+                        - 'go.sum'
+                        - 'Makefile'
+                        - '.github/workflows/codeql.yml'
+                        - '.github/codeql/**'
+                        - '.github/codeql.yml'
+                        - '.github/codeql.yaml'
+                      rust:
+                        - *go
+                        - 'linux/**'
+                        - 'lang/**'
+                      swift:
+                        - *go
+                        - 'macos/**'
+                        - 'lang/**'
+                      csharp:
+                        - *go
+                        - 'windows/**'
+                        - 'design/icongen/**'
+                        - 'lang/**'
+                      actions:
+                        - '.github/workflows/**'
+                        - '**/action.yml'
+                        - '**/action.yaml'
+                        - '.github/codeql/**'
+                        - '.github/codeql.yml'
+                        - '.github/codeql.yaml'
+
+            - name: Select Languages
+              id: changes
+              env:
+                  EVENT: ${{ github.event_name }}
+                  CHANGES: ${{ steps.filter.outputs.changes }}
+              shell: bash
+              #language=bash
+              run: |
+                  set -euo pipefail
+                  if [ "$EVENT" != pull_request ]; then
+                    CHANGES='["actions","csharp","go","rust","swift"]'
+                  fi
+                  matrix=$(jq -cn --argjson changes "$CHANGES" '
+                    [
+                      {language: "actions", build_mode: "none", os: "ubuntu-24.04"},
+                      {language: "csharp", build_mode: "none", os: "ubuntu-24.04"},
+                      {language: "go", build_mode: "autobuild", os: "ubuntu-24.04"},
+                      {language: "rust", build_mode: "none", os: "ubuntu-24.04"},
+                      {language: "swift", build_mode: "manual", os: "macos-26"}
+                    ] | map(select(.language as $language | $changes | index($language)))')
+                  echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
+                  echo "has-languages=$(jq -r 'length > 0' <<< "$matrix")" >> "$GITHUB_OUTPUT"
+
+    analyze:
+        needs: changes
+        if: needs.changes.outputs.has-languages == 'true'
+        name: Analyze (${{ matrix.language }})
+        runs-on: ${{ matrix.os }}
+        permissions:
+            # required for all workflows
+            security-events: write
+
+            # required to fetch internal or private CodeQL packs
+            packages: read
+
+            # only required for workflows in private repositories
+            actions: read
+            contents: read
+
+        strategy:
+            fail-fast: false
+            matrix:
+                include: ${{ fromJSON(needs.changes.outputs.matrix) }}
+        steps:
+            - name: Checkout Repository
+              uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+
+            - name: Setup Go
+              if: matrix.language == 'go'
+              uses: actions/setup-go@v7
+              with:
+                  go-version-file: go.mod
+
+            - name: Install Rust System Dependencies
+              if: matrix.language == 'rust'
+              run: sudo apt-get update -qq && sudo apt-get install -y --no-install-recommends libgtk-4-dev libadwaita-1-dev libwebkitgtk-6.0-dev
+
+            # Initializes the CodeQL tools for scanning.
+            - name: Initialize CodeQL
+              uses: github/codeql-action/init@52cf1852265d99e9bea071b03366fc777a602909
+              with:
+                  languages: ${{ matrix.language }}
+                  build-mode: ${{ matrix.build_mode }}
+                  # If you wish to specify custom queries, you can do so here or in a config file.
+                  # By default, queries listed here will override any specified in a config file.
+                  # Prefix the list here with "+" to use these queries and those in the config file.
+
+                  # For more details on CodeQL's query packs, refer to: https://docs.github.com/en/code-security/code-scanning/automatically-scanning-your-code-for-vulnerabilities-and-errors/configuring-code-scanning#using-queries-in-ql-packs
+                  # queries: security-extended,security-and-quality
+
+            - name: Build Swift Package
+              if: matrix.language == 'swift'
+              run: swift build --package-path macos
+
+            - name: Perform CodeQL Analysis
+              uses: github/codeql-action/analyze@52cf1852265d99e9bea071b03366fc777a602909
+              with:
+                  category: "/language:${{matrix.language}}"
