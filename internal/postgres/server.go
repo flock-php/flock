@@ -55,6 +55,19 @@ func Spec(binDir, dataDir, runDir, logFile string, port int, preload ...string) 
 	}
 }
 
+// ReplacePort rewrites the -p flag in a postgres Spec's Args to port.
+func ReplacePort(args []string, port int) []string {
+	out := make([]string, len(args))
+	copy(out, args)
+	for i, a := range out {
+		if a == "-p" && i+1 < len(out) {
+			out[i+1] = strconv.Itoa(port)
+			return out
+		}
+	}
+	return out
+}
+
 // StopFast requests postgres' "fast" shutdown (roll back open transactions, checkpoint, exit)
 // through pg_ctl, which signals the postmaster of dataDir: with SIGINT on unix, over its named
 // pipe on Windows, which has no signals. It does not wait (-W); the caller waits for the exit.
