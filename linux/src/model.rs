@@ -175,8 +175,11 @@ impl AppModel {
         self.lifecycle("stop");
     }
 
+    /// Runs one command at a time, like the Windows tray: one that comes while another runs is ignored.
     fn lifecycle(self: &Rc<Self>, command: &'static str) {
-        self.restarting.set(true);
+        if self.restarting.replace(true) {
+            return;
+        }
         self.changed();
         let this = self.clone();
         glib::spawn_future_local(async move {

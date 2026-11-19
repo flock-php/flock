@@ -108,4 +108,4 @@ Switch off the switch at the top of the Flock panel, and switch it on to start F
 Run `flock stop`, and `flock start` to start Flock again.
 :::
 
-Flock starts again at your next login.
+Flock starts again at your next login on macOS and Windows, and when the computer starts on Linux.
