@@ -121,6 +121,6 @@ This page lists the `flock` commands. The other pages show where to find each ac
 These commands are put on your PATH and run the version that the current project uses:
 
 ```text
-php  composer  node  npm  npx  redis-cli  valkey-cli
+php  composer  node  npm  npx  redis-cli  valkey-cli  mysql  mysqldump
 psql  pg_dump  pg_restore  pg_dumpall  createdb  dropdb
 ```
