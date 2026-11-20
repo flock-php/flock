@@ -48,6 +48,11 @@ private final class StubProtocol: URLProtocol, @unchecked Sendable {
             return Self.respond
         }(seen)
 
+        if status < 0 {
+            client?.urlProtocol(self, didFailWithError: URLError(URLError.Code(rawValue: status)))
+            return
+        }
+
         let response = HTTPURLResponse(url: request.url!, statusCode: status, httpVersion: "HTTP/1.1", headerFields: nil)!
         client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
         client?.urlProtocol(self, didLoad: Data(text.utf8))
@@ -337,5 +342,66 @@ struct ClientTests {
             "POST \(base)/sites/my%20app/boost",
         ])
         #expect(StubProtocol.requests.map(\.timeout) == [5, 30, 30, 120])
+    }
+
+    @Test func listsAppTemplatesAndCreatesApps() async throws {
+        StubProtocol.reset { request in
+            request.url.contains("/templates")
+                ? (200, #"{"templates":[{"name":"blank","requires_db":false},{"name":"wordpress","requires_db":true}]}"#)
+                : (200, #"{"version":"dev","pid":1,"started_at":"2026-10-13T14:10:01Z","sites":[]}"#)
+        }
+        let client = client(try apiJSON(token: "t"))
+
+        let templates = try await client.appTemplates()
+        #expect(templates == [
+            AppTemplate(name: "blank", requiresDb: false),
+            AppTemplate(name: "wordpress", requiresDb: true),
+        ])
+
+        _ = try await client.createApp(CreateAppRequest(
+            name: "my-blog",
+            parentDir: "/Users/demo/Sites",
+            type: "wordpress",
+            db: true,
+            dbService: "mysql",
+            secured: true
+        ))
+
+        let base = "http://127.0.0.1:53531/v1"
+        #expect(StubProtocol.requests.map { "\($0.method) \($0.url)" } == [
+            "GET \(base)/apps/templates",
+            "POST \(base)/apps",
+        ])
+        let body = try JSONSerialization.jsonObject(with: Data(StubProtocol.requests[1].body.utf8)) as? [String: Any]
+        #expect(body?["name"] as? String == "my-blog")
+        #expect(body?["parent_dir"] as? String == "/Users/demo/Sites")
+        #expect(body?["type"] as? String == "wordpress")
+        #expect(body?["db"] as? Bool == true)
+        #expect(body?["db_service"] as? String == "mysql")
+        #expect(body?["secured"] as? Bool == true)
+        #expect(body?["php"] == nil)
+        #expect(StubProtocol.requests.map(\.timeout) == [5, 180])
+    }
+
+    @Test func createAppDoesNotRetryTransportFailureAndPreserves401Retry() async throws {
+        StubProtocol.reset { _ in (URLError.Code.networkConnectionLost.rawValue, "") }
+        let path = try apiJSON(token: "old")
+        let transportClient = client(path)
+
+        await #expect(throws: FlockError.outcomeUnknown) {
+            try await transportClient.createApp(CreateAppRequest(name: "my-app", parentDir: "/Users/demo/Sites"))
+        }
+        #expect(StubProtocol.requests.count == 1)
+
+        StubProtocol.reset { request in
+            if request.authorization == "Bearer old" {
+                try? Data(#"{"url":"http://127.0.0.1:53531","token":"new"}"#.utf8).write(to: path)
+                return (401, #"{"error":"missing or invalid token"}"#)
+            }
+            return (200, #"{"version":"dev","pid":1,"started_at":"2026-10-13T14:10:01Z","sites":[]}"#)
+        }
+        let authClient = client(path)
+        _ = try await authClient.createApp(CreateAppRequest(name: "my-app", parentDir: "/Users/demo/Sites"))
+        #expect(StubProtocol.requests.map(\.authorization) == ["Bearer old", "Bearer new"])
     }
 }

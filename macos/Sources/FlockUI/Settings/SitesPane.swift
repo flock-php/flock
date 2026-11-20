@@ -65,6 +65,9 @@ struct SitesPane: View {
         get { proxyBusyState.wrappedValue }
         nonmutating set { proxyBusyState.wrappedValue = newValue }
     }
+    /// Templates loaded for the New App sheet (non-nil while the sheet is open).
+    private let newAppTemplatesState = State<[AppTemplate]?>(initialValue: nil)
+    private let creatingAppState = State<Bool>(initialValue: false)
 
     var body: some View {
         let store = model.settings
@@ -76,6 +79,13 @@ struct SitesPane: View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(alignment: .bottom) {
                 PaneHeader(title: "settings.pane.sites", subtitle: "sites.subtitle")
+                if creatingAppState.wrappedValue {
+                    ProgressView().controlSize(.small).padding(.bottom, 8)
+                }
+                Button("sites.new_app") { openNewAppSheet() }
+                    .disabled(creatingAppState.wrappedValue)
+                    .help("sites.new_app_tooltip")
+                    .padding(.bottom, 6)
                 Button("sites.add_proxy") { addingProxyState.wrappedValue = true }
                     .help("sites.serve_a_server_of_its \(model.status?.dns.tld ?? "test")")
                     .padding(.bottom, 6)
@@ -174,6 +184,23 @@ struct SitesPane: View {
                 startShare(name, allow: allow, debug: debug)
             } cancel: {
                 sharing = nil
+            }
+        }
+        .sheet(isPresented: Binding(get: { newAppTemplatesState.wrappedValue != nil },
+                                    set: { if !$0 { newAppTemplatesState.wrappedValue = nil } })) {
+            let defaultFolder = store.config?.parked.first ?? FileManager.default.homeDirectoryForCurrentUser.path
+            let tld = model.status?.dns.tld.isEmpty == false ? (model.status?.dns.tld ?? "test") : "test"
+            let hasRunningDb = model.status?.extras.contains { ($0.id == "mysql" || $0.id == "mariadb") && $0.up } ?? false
+            NewAppSheet(
+                templates: newAppTemplatesState.wrappedValue ?? AppTemplate.builtInDefaults,
+                defaultFolder: defaultFolder,
+                tld: tld,
+                hasRunningDb: hasRunningDb
+            ) { req in
+                newAppTemplatesState.wrappedValue = nil
+                createApp(req)
+            } cancel: {
+                newAppTemplatesState.wrappedValue = nil
             }
         }
         .confirmationDialog(confirm?.title ?? "", isPresented: Binding(get: { confirm != nil }, set: { if !$0 { confirm = nil } }), presenting: confirm) { action in
@@ -1385,5 +1412,196 @@ private struct ShareSheet: View {
         }
         .padding(20)
         .frame(width: 420)
+    }
+}
+
+private extension SitesPane {
+    func openNewAppSheet() {
+        guard !creatingAppState.wrappedValue else { return }
+        creatingAppState.wrappedValue = true
+        Task {
+            defer { creatingAppState.wrappedValue = false }
+            do {
+                let list = try await model.client.appTemplates()
+                newAppTemplatesState.wrappedValue = list.isEmpty ? AppTemplate.builtInDefaults : list
+            } catch FlockError.server(status: 404, message: _) {
+                newAppTemplatesState.wrappedValue = AppTemplate.builtInDefaults
+            } catch {
+                model.settings.error = error.localizedDescription
+            }
+        }
+    }
+
+    func createApp(_ req: CreateAppRequest) {
+        creatingAppState.wrappedValue = true
+        let targetPath = URL(fileURLWithPath: req.parentDir).appendingPathComponent(req.name).path
+        let existedBefore = model.status?.sites.contains { $0.path == targetPath } ?? false
+        let fallbackName = appSlug(req.name)
+        Task {
+            defer { creatingAppState.wrappedValue = false }
+            let outcome = await model.settings.perform { client in
+                _ = try await client.createApp(req)
+            }
+            switch outcome {
+            case .succeeded:
+                let created = model.status?.sites.first { $0.path == targetPath }
+                selectionState.wrappedValue = created?.name ?? fallbackName
+            case .unknown:
+                if model.status?.sites.first(where: { $0.path == targetPath }) == nil {
+                    await model.refresh()
+                }
+                if !existedBefore, let created = model.status?.sites.first(where: { $0.path == targetPath }) {
+                    selectionState.wrappedValue = created.name
+                }
+            case .failed:
+                break
+            }
+        }
+    }
+}
+
+/// Hostname label matching `config.SiteName` on the daemon.
+private func appSlug(_ name: String) -> String {
+    let mapped = name.lowercased().unicodeScalars.map { s -> Character in
+        ((s >= "a" && s <= "z") || (s >= "0" && s <= "9") || s == "-") ? Character(s) : "-"
+    }
+    return String(mapped).trimmingCharacters(in: CharacterSet(charactersIn: "-"))
+}
+
+private struct NewAppSheet: View {
+    let templates: [AppTemplate]
+    let tld: String
+    let hasRunningDb: Bool
+    let create: (CreateAppRequest) -> Void
+    let cancel: () -> Void
+
+    private let nameState = State<String>(initialValue: "")
+    private let templateState: State<String>
+    private let folderState: State<String>
+    private let dbState = State<Bool>(initialValue: false)
+    private let dbServiceState = State<String>(initialValue: "")
+    private let securedState = State<Bool>(initialValue: false)
+
+    init(
+        templates: [AppTemplate],
+        defaultFolder: String,
+        tld: String,
+        hasRunningDb: Bool,
+        create: @escaping (CreateAppRequest) -> Void,
+        cancel: @escaping () -> Void
+    ) {
+        self.templates = templates
+        self.tld = tld
+        self.hasRunningDb = hasRunningDb
+        self.create = create
+        self.cancel = cancel
+        let initialTemplate = templates.first { $0.name.caseInsensitiveCompare("php") == .orderedSame }?.name
+            ?? templates.first?.name ?? "php"
+        self.templateState = State(initialValue: initialTemplate)
+        self.folderState = State(initialValue: defaultFolder)
+    }
+
+    private var selectedTemplate: AppTemplate {
+        templates.first { $0.name == templateState.wrappedValue } ?? AppTemplate(name: "php")
+    }
+
+    var body: some View {
+        let tmpl = selectedTemplate
+        let wantsDb = tmpl.requiresDb || dbState.wrappedValue
+        let rawName = nameState.wrappedValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        let rawFolder = folderState.wrappedValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        let slug = appSlug(rawName)
+        let valid = !slug.isEmpty && !rawFolder.isEmpty
+        let scheme = securedState.wrappedValue ? "https" : "http"
+
+        VStack(alignment: .leading, spacing: 12) {
+            Text("sites.new_app_title").font(.headline)
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text("sites.new_app_name")
+                TextField("sites.new_app_name", text: nameState.projectedValue, prompt: Text(verbatim: "my-app"))
+                    .labelsHidden()
+                    .textFieldStyle(.roundedBorder)
+            }
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text("sites.new_app_template")
+                Picker("sites.new_app_template", selection: templateState.projectedValue) {
+                    ForEach(templates) { item in
+                        Text(item.name).tag(item.name)
+                    }
+                }
+                .labelsHidden()
+            }
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text("sites.new_app_folder")
+                HStack(spacing: 8) {
+                    TextField("sites.new_app_parent_folder", text: folderState.projectedValue)
+                        .textFieldStyle(.roundedBorder)
+                    Button("sites.new_app_browse") {
+                        let initial = rawFolder.isEmpty ? nil : URL(fileURLWithPath: rawFolder)
+                        if let chosen = SettingsStore.chooseDirectories(prompt: String(localized: "sites.server.choose"), multiple: false, in: initial).first {
+                            folderState.wrappedValue = chosen.path
+                        }
+                    }
+                }
+            }
+
+            VStack(alignment: .leading, spacing: 6) {
+                Toggle("sites.new_app_db", isOn: Binding(
+                    get: { wantsDb },
+                    set: { dbState.wrappedValue = $0 }
+                ))
+                .disabled(tmpl.requiresDb)
+
+                if wantsDb {
+                    Picker("sites.new_app_db_service", selection: dbServiceState.projectedValue) {
+                        Text("sites.new_app_db_service_auto").tag("")
+                        Text(verbatim: "MySQL").tag("mysql")
+                        Text(verbatim: "MariaDB").tag("mariadb")
+                    }
+                    .labelsHidden()
+
+                    if !hasRunningDb {
+                        Text(tmpl.requiresDb
+                             ? "sites.new_app_hint_requires_db"
+                             : "sites.new_app_hint_no_db")
+                            .font(.caption)
+                            .foregroundStyle(.orange)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+            }
+
+            Toggle("sites.new_app_https", isOn: securedState.projectedValue)
+
+            (valid
+             ? Text(verbatim: "\(URL(fileURLWithPath: rawFolder).appendingPathComponent(rawName).path) → \(scheme)://\(slug).\(tld)")
+             : Text("sites.new_app_preview_hint \(scheme) \(tld)"))
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            HStack {
+                Spacer()
+                Button("common.cancel", role: .cancel) { cancel() }
+                    .keyboardShortcut(.cancelAction)
+                Button("sites.new_app_create") {
+                    create(CreateAppRequest(
+                        name: rawName,
+                        parentDir: rawFolder,
+                        type: tmpl.name,
+                        db: wantsDb,
+                        dbService: wantsDb && !dbServiceState.wrappedValue.isEmpty ? dbServiceState.wrappedValue : nil,
+                        secured: securedState.wrappedValue
+                    ))
+                }
+                .disabled(!valid)
+                .keyboardShortcut(.defaultAction)
+            }
+        }
+        .padding(20)
+        .frame(width: 440)
     }
 }

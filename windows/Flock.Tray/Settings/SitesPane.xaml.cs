@@ -305,6 +305,196 @@ internal sealed partial class SitesPane : UserControl, ISettingsPane, ISiteDetai
         Start("add-site", AddSiteAsync, false);
     }
 
+    private void NewAppClicked(object sender, RoutedEventArgs args)
+    {
+        Start("create-app", NewAppAsync, false);
+    }
+
+    /// <summary>Asks for a name, template and parent folder, then creates and links the project.</summary>
+    private async Task NewAppAsync()
+    {
+        List<AppTemplate> templates;
+        try
+        {
+            templates = await Model.Sites.AppTemplatesAsync();
+        }
+        catch (Exception error)
+        {
+            App.Log(error);
+            await new ContentDialog
+            {
+                Title = Strings.Sites_NewAppLoadError,
+                Content = error.Message,
+                CloseButtonText = Strings.Common_Ok,
+                DefaultButton = ContentDialogButton.Close,
+                XamlRoot = Window.XamlRoot
+            }.ShowAsync();
+            return;
+        }
+        var tld = Model.Status?.Dns.Tld is { Length: > 0 } t ? t : "test";
+        var hasRunningDb = Model.Status?.Extras.Any(s => s.Id is "mysql" or "mariadb" && s.Up) ?? false;
+
+        var nameBox = new TextBox { Header = Strings.Sites_NewAppName, PlaceholderText = "my-app" };
+        var templateBox = new ComboBox
+        {
+            Header = Strings.Sites_NewAppTemplate,
+            HorizontalAlignment = HorizontalAlignment.Stretch,
+            ItemsSource = templates.Select(tmpl => new ComboBoxItem { Content = tmpl.Name, Tag = tmpl }).ToList()
+        };
+        templateBox.SelectedIndex = Math.Max(0, templates.FindIndex(tmpl => string.Equals(tmpl.Name, "php", StringComparison.OrdinalIgnoreCase)));
+
+        var defaultFolder = Model.Configuration.Current?.Parked.FirstOrDefault()
+            ?? Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        var folderBox = new TextBox { Text = defaultFolder, Width = 280 };
+        var browseButton = new Button { Content = Strings.Sites_NewAppBrowse };
+        var folderGroup = Ui.Column(4, Ui.Text(Strings.Sites_NewAppFolder), Ui.Row(8, folderBox, browseButton));
+
+        var dbCheck = new CheckBox { Content = Strings.Sites_NewAppDb };
+        var dbServiceBox = new ComboBox
+        {
+            HorizontalAlignment = HorizontalAlignment.Stretch,
+            Visibility = Visibility.Collapsed,
+            ItemsSource = new[]
+            {
+                new ComboBoxItem { Content = Strings.Sites_NewAppDbServiceAuto, Tag = "" },
+                new ComboBoxItem { Content = "MySQL", Tag = "mysql" },
+                new ComboBoxItem { Content = "MariaDB", Tag = "mariadb" }
+            },
+            SelectedIndex = 0
+        };
+        var dbHint = Ui.Caption("", Ui.Caution);
+        dbHint.Visibility = Visibility.Collapsed;
+
+        var securedCheck = new CheckBox { Content = Strings.Sites_NewAppHttps };
+        var preview = Ui.Caption("");
+
+        var form = Ui.Column(12, nameBox, templateBox, folderGroup, dbCheck, dbServiceBox, dbHint, securedCheck, preview);
+        var scroller = new ScrollViewer
+        {
+            Content = form,
+            VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+            HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
+        };
+        Ui.FitDialog(Window.XamlRoot, scroller);
+
+        var dialog = new ContentDialog
+        {
+            Title = Strings.Sites_NewAppTitle,
+            Content = scroller,
+            PrimaryButtonText = Strings.Sites_NewAppCreate,
+            CloseButtonText = Strings.Common_Cancel,
+            DefaultButton = ContentDialogButton.Primary,
+            IsPrimaryButtonEnabled = false,
+            XamlRoot = Window.XamlRoot
+        };
+
+        AppTemplate SelectedTemplate() =>
+            (templateBox.SelectedItem as ComboBoxItem)?.Tag as AppTemplate ?? new AppTemplate { Name = "php" };
+
+        void SyncState()
+        {
+            var tmpl = SelectedTemplate();
+            if (tmpl.RequiresDb)
+            {
+                dbCheck.IsChecked = true;
+            }
+            dbCheck.IsEnabled = !tmpl.RequiresDb;
+
+            var wantsDb = dbCheck.IsChecked == true;
+            dbServiceBox.Visibility = wantsDb ? Visibility.Visible : Visibility.Collapsed;
+            dbHint.Text = tmpl.RequiresDb
+                ? Strings.Sites_NewAppHintRequiresDb
+                : Strings.Sites_NewAppHintNoDb;
+            dbHint.Visibility = wantsDb && !hasRunningDb ? Visibility.Visible : Visibility.Collapsed;
+
+            var rawName = nameBox.Text.Trim();
+            var rawFolder = folderBox.Text.Trim();
+            var slug = AppSlug(rawName);
+            dialog.IsPrimaryButtonEnabled = slug.Length > 0 && rawFolder.Length > 0;
+
+            var scheme = securedCheck.IsChecked == true ? "https" : "http";
+            preview.Text = dialog.IsPrimaryButtonEnabled
+                ? $"{Path.Combine(rawFolder, rawName)} → {scheme}://{slug}.{tld}"
+                : Localization.Format(Strings.Sites_NewAppPreviewHint, scheme, tld);
+        }
+
+        nameBox.TextChanged += (_, _) => SyncState();
+        folderBox.TextChanged += (_, _) => SyncState();
+        templateBox.SelectionChanged += (_, _) => SyncState();
+        foreach (var box in new[] { dbCheck, securedCheck })
+        {
+            box.Checked += (_, _) => SyncState();
+            box.Unchecked += (_, _) => SyncState();
+        }
+        browseButton.Click += (_, _) => _ = PickFolderIntoAsync(folderBox);
+        SyncState();
+
+        if (await dialog.ShowAsync() != ContentDialogResult.Primary)
+        {
+            return;
+        }
+
+        var appName = nameBox.Text.Trim();
+        var parentDir = folderBox.Text.Trim();
+        var selected = SelectedTemplate();
+        var createDb = dbCheck.IsChecked == true;
+        var dbService = createDb && (dbServiceBox.SelectedItem as ComboBoxItem)?.Tag is string s && s.Length > 0 ? s : null;
+        var secured = securedCheck.IsChecked == true;
+
+        SetNewAppBusy(true);
+        try
+        {
+            var outcome = await Model.Sites.CreateAppAsync(appName, parentDir, selected.Name, createDb, dbService, secured);
+            if (outcome == OperationOutcome.Succeeded)
+            {
+                var targetPath = Path.Combine(parentDir, appName);
+                var created = Model.Status?.Sites.FirstOrDefault(site => string.Equals(site.Path, targetPath, StringComparison.OrdinalIgnoreCase));
+                Select(created?.Name ?? AppSlug(appName));
+            }
+        }
+        finally
+        {
+            SetNewAppBusy(false);
+        }
+    }
+
+    /// <summary>Hostname label matching <c>config.SiteName</c> on the daemon.</summary>
+    internal static string AppSlug(string name)
+    {
+        var builder = new System.Text.StringBuilder(name.Length);
+        foreach (var rune in name.ToLowerInvariant().EnumerateRunes())
+        {
+            var c = rune.Value is (>= 'a' and <= 'z') or (>= '0' and <= '9') or '-' ? (char)rune.Value : '-';
+            builder.Append(c);
+        }
+        return builder.ToString().Trim('-');
+    }
+
+    private void SetNewAppBusy(bool busy)
+    {
+        NewAppButton.IsEnabled = !busy;
+        EmptyNewAppButton.IsEnabled = !busy;
+        NewAppProgress.IsActive = busy;
+        NewAppProgress.Visibility = busy ? Visibility.Visible : Visibility.Collapsed;
+        EmptyNewAppProgress.IsActive = busy;
+        EmptyNewAppProgress.Visibility = busy ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    private async Task PickFolderIntoAsync(TextBox target)
+    {
+        try
+        {
+            if (await Window.PickFolder() is { } picked)
+            {
+                target.Text = picked;
+            }
+        }
+        catch (Exception error)
+        {
+            App.Log(error);
+        }
+    }
+
     private void SiteSelectionChanged(object sender, SelectionChangedEventArgs args)
     {
         if (SiteList.SelectedItem is SiteRowViewModel row)
