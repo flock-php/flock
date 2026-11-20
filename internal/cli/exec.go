@@ -152,17 +152,28 @@ func resolveTool(s *state, cwd, tool string, args []string) (path string, argv, 
 			return "", nil, nil, err
 		}
 
-		name := tool
-		if runtime.GOOS == "windows" && tool != "node" {
-			name += ".cmd"
-		} else if runtime.GOOS == "windows" {
-			name += ".exe"
-		}
-
 		// npm and npx are scripts that look `node` up on PATH. Global packages, and an npm updated
 		// with `npm install -g npm`, go to the major's global prefix (see node.GlobalDir).
 		env = append(node.NpmEnv(s.root, version, binDir), "NODE_EXTRA_CA_CERTS="+filepath.Join(s.root, "certs", "ca.crt"))
 		env = append(env, viteTLSEnv(s, site, inSite)...)
+
+		name := tool
+		if runtime.GOOS == "windows" && tool != "node" {
+			// Run npm and npx through node instead of their generated .cmd files. The
+			// wrappers do not reliably preserve paths containing spaces.
+			cli := node.Npx(s.root, version)
+			if tool == "npm" {
+				_, cli = node.Npm(s.root, version)
+			}
+			if cli == "" {
+				return "", nil, nil, fmt.Errorf("Node.js %s has no %s", version, tool)
+			}
+			path = filepath.Join(binDir, "node.exe")
+			return path, append([]string{path, cli}, args...), env, nil
+		} else if runtime.GOOS == "windows" {
+			name += ".exe"
+		}
+
 		path = filepath.Join(binDir, name)
 		if tool != "node" {
 			if updated := filepath.Join(node.GlobalBin(node.GlobalDir(s.root, node.MajorOf(version))), name); fileExists(updated) {
