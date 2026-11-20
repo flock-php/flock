@@ -1,0 +1,2066 @@
+# Russian texts of the Flock Linux app (linux/src), by key.
+# Generated from lang/ by tools/i18n: edit lang/*/app.json, then run make i18n.
+msgid ""
+msgstr ""
+"Project-Id-Version: flock-app\n"
+"Language: ru\n"
+"X-Language-Name: Русский\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=3; plural=(n%10==1 && n%100!=11) ? 0 : (n%10>=2 && n%10<=4 && (n%100<10 || n%100>=20)) ? 1 : 2;\n"
+
+msgid "about.also_delete_data"
+msgstr "Также удалить настройки моих сайтов и базы данных"
+
+msgid "about.app_version"
+msgstr "Приложение {version}"
+
+msgid "about.daemon_not_running"
+msgstr "не запущено"
+
+msgid "about.daemon_version"
+msgstr "Демон {version}"
+
+msgid "about.data_folder_title_case"
+msgstr "Папка данных"
+
+msgid "about.flock_docs"
+msgstr "Документация Flock"
+
+msgid "about.found_a_bug_report_an"
+msgstr "Нашли ошибку? Сообщите о проблеме"
+
+msgid "about.license"
+msgstr "Лицензия"
+
+msgid "about.license_description"
+msgstr "Copyright © Guava s.r.o. Лицензия AGPL-3.0."
+
+msgid "about.password_prompt_was_cancelled_so"
+msgstr "Приглашение пароля было отменено, поэтому DNS-настройка и сертификат остаются на месте."
+
+msgid "about.sponsor"
+msgstr "Стать спонсором"
+
+msgid "about.star_on_github"
+msgstr "Поставить звезду на GitHub"
+
+msgid "about.stops_flock_and_removes_it_from"
+msgstr "Останавливает Flock и удаляет его с этого компьютера. Ваши сайты, базы данных и настройки сохраняются."
+
+msgid "about.support_description"
+msgstr "Flock бесплатен и имеет открытый исходный код, навсегда. Спонсорство помогает поддерживать его."
+
+msgid "about.tagline"
+msgstr "Нативное локальное окружение разработки для Laravel."
+
+msgid "about.uninstall_flock"
+msgstr "Удалить Flock"
+
+msgid "about.uninstall_flock_ellipsis"
+msgstr "Удалить Flock…"
+
+msgid "about.uninstall_question"
+msgstr "Удалить Flock?"
+
+msgid "about.uninstalling_flock"
+msgstr "Удаление Flock…"
+
+msgid "ai.add_to_settings"
+msgstr "Добавьте это в настройки MCP клиента."
+
+msgid "ai.added_once"
+msgstr "Добавленный один раз, Flock работает во всех проектах. После добавления Flock перезапустите клиент или перезагрузите его MCP-серверы."
+
+msgid "ai.clients"
+msgstr "ИИ-клиенты"
+
+msgid "ai.flock_added"
+msgstr "Flock добавлен"
+
+msgid "ai.other_clients"
+msgstr "Другие клиенты"
+
+msgid "ai.subtitle"
+msgstr "Позвольте ИИ-агентам, таким как Claude Code и Cursor, работать с Flock: URL и версии PHP ваших сайтов, журналы, дампы и почта, а также установка версий и служб."
+
+msgid "app.conflict.port"
+msgstr "порт {port} ({service})"
+
+msgid "app.conflict.quit"
+msgstr "Закрыть {app}"
+
+msgid "app.copy_database"
+msgstr "копия"
+
+msgid "app.could_not_relaunch"
+msgstr "Не удалось перезапустить Flock: {error}"
+
+msgid "app.flock_is_not_installed_for_this"
+msgstr "Flock не установлен для этого пользователя (отсутствует {path}) — выполните `flk install` один раз."
+
+msgid "app.flock_isnt_installed_install_the"
+msgstr "Flock не установлен: сначала установите пакет flockphp."
+
+msgid "app.fresh_database"
+msgstr "новая"
+
+msgid "app.http_status"
+msgstr "Flock ответил с HTTP {status}"
+
+msgid "app.n_events"
+msgid_plural "app.n_events"
+msgstr[0] "{n} событие"
+msgstr[1] "{n} события"
+msgstr[2] "{n} событий"
+
+msgid "app.needs_attention_version"
+msgstr "Требует внимания · {version}"
+
+msgid "app.not_running"
+msgstr "Flock не запущен"
+
+msgid "app.program_uses_ports"
+msgstr "{program} использует {ports}."
+
+msgid "app.running_version"
+msgstr "Работает · {version}"
+
+msgid "app.shared_database"
+msgstr "общая"
+
+msgid "app.unexpected_answer_from_flock_error"
+msgstr "неожиданный ответ от Flock: {error}"
+
+msgid "common.add"
+msgstr "Добавить"
+
+msgid "common.cancel"
+msgstr "Отмена"
+
+msgid "common.choose"
+msgstr "Выбрать…"
+
+msgid "common.close"
+msgstr "Закрыть"
+
+msgid "common.copy"
+msgstr "Копировать"
+
+msgid "common.done"
+msgstr "Готово"
+
+msgid "common.downloading"
+msgstr "Загрузка…"
+
+msgid "common.e_b"
+msgstr "%d.%m"
+
+msgid "common.e_b_y_h_m"
+msgstr "%d.%m.%Y, %H:%M:%S"
+
+msgid "common.empty_parenthesized"
+msgstr "(пусто)"
+
+msgid "common.hide"
+msgstr "Скрыть"
+
+msgid "common.install"
+msgstr "Установить"
+
+msgid "common.installed"
+msgstr "Установлено"
+
+msgid "common.installing"
+msgstr "Установка…"
+
+msgid "common.list.and"
+msgstr "{first} и {second}"
+
+msgid "common.loading"
+msgstr "Загрузка…"
+
+msgid "common.n_hours_ago"
+msgid_plural "common.n_hours_ago"
+msgstr[0] "{n} час назад"
+msgstr[1] "{n} часа назад"
+msgstr[2] "{n} часов назад"
+
+msgid "common.n_minutes_ago"
+msgid_plural "common.n_minutes_ago"
+msgstr[0] "{n} минуту назад"
+msgstr[1] "{n} минуты назад"
+msgstr[2] "{n} минут назад"
+
+msgid "common.not_installed"
+msgstr "Не установлено"
+
+msgid "common.ok"
+msgstr "ОК"
+
+msgid "common.open"
+msgstr "Открыть"
+
+msgid "common.open_in_browser"
+msgstr "Открыть в браузере"
+
+msgid "common.open_target"
+msgstr "Открыть {site}"
+
+msgid "common.remove"
+msgstr "Удалить"
+
+msgid "common.remove_question"
+msgstr "Удалить {name}?"
+
+msgid "common.remove_target"
+msgstr "Удалить {domain}?"
+
+msgid "common.retry"
+msgstr "Повторить"
+
+msgid "common.save"
+msgstr "Сохранить"
+
+msgid "common.time.just_now"
+msgstr "только что"
+
+msgid "common.uninstall"
+msgstr "Удалить"
+
+msgid "common.uninstall_ellipsis"
+msgstr "Удалить…"
+
+msgid "common.uninstalling"
+msgstr "Удаление…"
+
+msgid "common.update"
+msgstr "Обновить"
+
+msgid "common.updating"
+msgstr "Обновление…"
+
+msgid "debugger.availability"
+msgstr "Доступность"
+
+msgid "debugger.available"
+msgstr "Доступен"
+
+msgid "debugger.client_port"
+msgstr "Порт клиента"
+
+msgid "debugger.connect_ide"
+msgstr "Подключите вашу IDE"
+
+msgid "debugger.debugging_now"
+msgstr "Отладка сейчас"
+
+msgid "debugger.detect_breakpoints"
+msgstr "Определять точки остановки PhpStorm"
+
+msgid "debugger.detect_requests"
+msgstr "Определять запросы Xdebug"
+
+msgid "debugger.mode"
+msgstr "Режим"
+
+msgid "debugger.not_in_build"
+msgstr "Нет в этой сборке"
+
+msgid "debugger.start_session"
+msgstr "Начать сеанс"
+
+msgid "debugger.start_session_description"
+msgstr "Установите точку остановки в PhpStorm и слушайте отладочные подключения, используйте расширение браузера Xdebug или добавьте ?XDEBUG_TRIGGER=1 в URL. В командной строке запустите `flock debug artisan …`."
+
+msgid "debugger.subtitle"
+msgstr "Проходите по шагам запросы и команды с помощью Xdebug."
+
+msgid "debugger.xdebug_loads_only_for_requests"
+msgstr "Xdebug загружается только для запросов, которые его запрашивают, поэтому всё остальное остаётся быстрым. Пока в проекте есть точки остановки в PhpStorm, каждый запрос к его сайту отлаживается."
+
+msgid "dumps.capture_description"
+msgstr "Отключите, чтобы снова видеть дампы на странице."
+
+msgid "dumps.capture_dumps"
+msgstr "Захват дампов"
+
+msgid "dumps.capture_dumps_queries_logs_views"
+msgstr "Захват дампов, запросов, журналов, представлений и заданий"
+
+msgid "dumps.capture_is_off_turn_it_on"
+msgstr "Захват выключен — включите его кнопкой записи, чтобы собирать здесь дампы, запросы, журналы, представления и задания."
+
+msgid "dumps.capture_options_and_editor"
+msgstr "Параметры захвата и редактор"
+
+msgid "dumps.capture_short"
+msgstr "Захват"
+
+msgid "dumps.captured"
+msgstr "Захвачено"
+
+msgid "dumps.clear_everything_captured"
+msgstr "Очистить всё захваченное?"
+
+msgid "dumps.dd_always_shows_in_the"
+msgstr "dd() всегда показывается и на странице, так как завершает запрос."
+
+msgid "dumps.empty_capturing"
+msgstr "Вывод dump() и dd(), запросы, журналы, представления и задания с ваших сайтов и команд artisan появятся здесь."
+
+msgid "dumps.event_kind.jobs"
+msgstr "Задания"
+
+msgid "dumps.event_kind.logs"
+msgstr "Журналы"
+
+msgid "dumps.event_kind.queries"
+msgstr "SQL-запросы"
+
+msgid "dumps.event_kind.requests"
+msgstr "HTTP-запросы"
+
+msgid "dumps.event_kind.views"
+msgstr "Представления"
+
+msgid "dumps.every_captured_dump_query_log"
+msgstr "Каждый захваченный дамп, запрос, журнал, представление и задание удаляется из всех запросов и команд."
+
+msgid "dumps.latest_request_only"
+msgstr "Только последний запрос"
+
+msgid "dumps.n_dumps"
+msgid_plural "dumps.n_dumps"
+msgstr[0] "{n} дамп"
+msgstr[1] "{n} дампа"
+msgstr[2] "{n} дампов"
+
+msgid "dumps.n_entries"
+msgid_plural "dumps.n_entries"
+msgstr[0] "{n} запись"
+msgstr[1] "{n} записи"
+msgstr[2] "{n} записей"
+
+msgid "dumps.nothing_captured_yet"
+msgstr "Пока ничего не захвачено"
+
+msgid "dumps.nothing_matches"
+msgstr "Ничего не совпадает"
+
+msgid "dumps.open"
+msgstr "Открыть дампы"
+
+msgid "dumps.open_files_in"
+msgstr "Открывать файлы в"
+
+msgid "dumps.open_sources_in_sentence_case"
+msgstr "Открывать исходники в"
+
+msgid "dumps.php_versions_only_capture_dumps"
+msgid_plural "dumps.php_versions_only_capture_dumps"
+msgstr[0] "PHP {versions} захватывает только дампы — в его сборке ещё нет расширения агента, поэтому запросы, журналы, представления и задания здесь отсутствуют."
+msgstr[1] "PHP {versions} захватывают только дампы — в их сборках ещё нет расширения агента, поэтому запросы, журналы, представления и задания здесь отсутствуют."
+msgstr[2] "PHP {versions} захватывают только дампы — в их сборках ещё нет расширения агента, поэтому запросы, журналы, представления и задания здесь отсутствуют."
+
+msgid "dumps.php_versions_only_capture_dumps_their"
+msgid_plural "dumps.php_versions_only_capture_dumps_their"
+msgstr[0] "PHP {versions} захватывает только дампы: в его сборке ещё нет расширения агента."
+msgstr[1] "PHP {versions} захватывают только дампы: в их сборках ещё нет расширения агента."
+msgstr[2] "PHP {versions} захватывают только дампы: в их сборках ещё нет расширения агента."
+
+msgid "dumps.search_dumps_queries_logs"
+msgstr "Поиск дампов, запросов, журналов"
+
+msgid "dumps.send_dump_and_dd_output"
+msgstr "Отправлять вывод dump() и dd(), запросы, журналы, представления и задания в Flock вместо страницы или терминала — без изменений в ваших проектах."
+
+msgid "dumps.show_dump_in_the_page"
+msgstr "Показывать dump() и на странице"
+
+msgid "dumps.show_dump_output_in_the"
+msgstr "Показывать вывод dump() и на странице"
+
+msgid "dumps.sources"
+msgstr "Источники"
+
+msgid "dumps.timeline.context"
+msgstr "контекст"
+
+msgid "dumps.timeline.queue_name"
+msgstr "очередь {name}"
+
+msgid "dumps.while_capturing"
+msgstr "Во время захвата"
+
+msgid "general.add_project_folders_title"
+msgstr "Добавить папки проектов"
+
+msgid "general.beta"
+msgstr "Бета-версии"
+
+msgid "general.beta_description"
+msgstr "Получайте новые версии Flock, PHP и служб раньше, включая предварительные выпуски. Они могут работать ещё нестабильно."
+
+msgid "general.check_for_updates_linux"
+msgstr "Проверить наличие обновлений…"
+
+msgid "general.could_not_change_startup"
+msgstr "Не удалось изменить параметр автозапуска: {error}"
+
+msgid "general.could_not_open_program_error"
+msgstr "Не удалось открыть {program}: {error}"
+
+msgid "general.daemon"
+msgstr "Демон"
+
+msgid "general.data"
+msgstr "Данные"
+
+msgid "general.domain"
+msgstr "Домен"
+
+msgid "general.every_name_any_subdomain_included_is"
+msgstr "Каждое имя, включая любые поддомены, разрешается DNS-сервером Flock через systemd-resolved."
+
+msgid "general.experimental_channel_packages_that_arent"
+msgstr "Экспериментальный канал: предлагаются пакеты, которые ещё не выпущены. `flock channel stable` переключает обратно."
+
+msgid "general.flocks_dns_server_isnt_running"
+msgstr "DNS-сервер Flock не запущен"
+
+msgid "general.folder"
+msgstr "Папка"
+
+msgid "general.language"
+msgstr "Язык"
+
+msgid "general.language_restart_note"
+msgstr "Flock будет использовать новый язык после перезапуска."
+
+msgid "general.language_system"
+msgstr "Системный по умолчанию"
+
+msgid "general.network"
+msgstr "Сеть"
+
+msgid "general.new_versions_come_from_the"
+msgstr "Новые версии поступают из пакета AUR {package}: обновите его с помощью своего AUR-помощника, например `yay -Syu`."
+
+msgid "general.new_versions_come_with_your"
+msgstr "Новые версии приходят с обновлениями вашей системы. `flock update` сразу установит одну."
+
+msgid "general.no_project_folders"
+msgstr "Нет папок проектов"
+
+msgid "general.opens_name"
+msgstr "Открывает {name}"
+
+msgid "general.pid"
+msgstr "pid {pid}"
+
+msgid "general.ports"
+msgstr "Сайты используют порты {http} (HTTP) и {https} (HTTPS), заданные в config.json, поэтому их адреса включают порт."
+
+msgid "general.process"
+msgstr "Процесс"
+
+msgid "general.project_folders"
+msgstr "Папки проектов"
+
+msgid "general.project_folders_description"
+msgstr "Каждая папка внутри папки проекта обслуживается как <folder>.{tld} — то же самое, что `flock park`."
+
+msgid "general.relaunch_flock"
+msgstr "Перезапустить Flock"
+
+msgid "general.remove_project_folder_question"
+msgstr "Удалить {name} из папок проектов?"
+
+msgid "general.restart_daemon"
+msgstr "Перезапустить демон"
+
+msgid "general.restarting"
+msgstr "Перезапуск…"
+
+msgid "general.shows_the_flock_icon_in"
+msgstr "Показывает значок Flock в трее при входе в систему. Сам демон всегда запускается вместе с компьютером."
+
+msgid "general.sites_in_path_are_no"
+msgstr "Сайты в {path} больше не обслуживаются. Папка и её проекты не затрагиваются."
+
+msgid "general.software_updater"
+msgstr "Обновление ПО"
+
+msgid "general.startup"
+msgstr "Автозапуск"
+
+msgid "general.status"
+msgstr "Статус"
+
+msgid "general.subtitle"
+msgstr "Демон Flock запускает ваши сайты, PHP и службы в фоне."
+
+msgid "general.title"
+msgstr "Основные"
+
+msgid "general.tld_doesnt_resolve_problem_linux"
+msgstr "*.{tld} не резолвится: {problem}. В Linux нет резервного механизма hosts-файла, поэтому сайты не будут открываться, пока это не исправится; `flock install` настроит это заново."
+
+msgid "general.update_to"
+msgstr "Обновить до {version}"
+
+msgid "general.updates"
+msgstr "Обновления"
+
+msgid "general.version"
+msgstr "Версия"
+
+msgid "links.install.already_installed_message"
+msgstr "Вы найдёте его в Настройках → {pane}."
+
+msgid "links.install.already_installed_title"
+msgstr "{name} уже установлен"
+
+msgid "links.install.flock_doesnt_offer_name_version"
+msgstr "Flock не предлагает {name} {version}"
+
+msgid "links.install.install_message"
+msgstr "Ссылка попросила Flock установить {name} {version}. {purpose}"
+
+msgid "links.install.install_title"
+msgstr "Установить {name} {version}?"
+
+msgid "links.install.installing_message"
+msgstr "В Настройках → {pane} видно, как далеко это продвинулось."
+
+msgid "links.install.installing_title"
+msgstr "{name} уже устанавливается"
+
+msgid "links.install.newer_flock"
+msgstr "Ссылка может быть предназначена для более новой версии Flock. Обновите Flock и попробуйте снова."
+
+msgid "links.install.no_build"
+msgstr "Нет сборки под этот компьютер, либо ссылка предназначена для более новой версии Flock."
+
+msgid "links.install.purpose_node"
+msgstr "Проекты, которые его используют, получат node, npm и npx, как только он будет установлен."
+
+msgid "links.install.purpose_php"
+msgstr "Сайты, которые его используют, будут обслуживаться, как только он будет установлен."
+
+msgid "links.install.purpose_service"
+msgstr "Он работает на 127.0.0.1 для ваших сайтов."
+
+msgid "links.install.unavailable_message"
+msgstr "Flock не может запустить его на этой платформе."
+
+msgid "links.install.unavailable_title"
+msgstr "{name} недоступен на этом компьютере"
+
+msgid "links.install.unknown_title"
+msgstr "Flock не предлагает {name}"
+
+msgid "links.secure.already_secured_message"
+msgstr "Он обслуживается по адресу https://{domain}."
+
+msgid "links.secure.already_secured_title"
+msgstr "{site} уже защищён"
+
+msgid "links.secure.secure_message"
+msgstr "Ссылка попросила Flock защитить {domain}. Он получит сертификат, которому этот компьютер уже доверяет."
+
+msgid "links.secure.secure_title"
+msgstr "Обслуживать {site} по HTTPS?"
+
+msgid "links.secure.unknown_message"
+msgstr "Сначала добавьте сайт в Настройках → Сайты."
+
+msgid "links.secure.unknown_title"
+msgstr "У Flock нет сайта с именем {site}"
+
+msgid "logs.all_levels"
+msgstr "Все уровни"
+
+msgid "logs.clear"
+msgstr "Очистить"
+
+msgid "logs.clear_question"
+msgstr "Очистить журнал {site}?"
+
+msgid "logs.clear_the_sites_log"
+msgstr "Очистить журнал сайта"
+
+msgid "logs.deletes_the_laravel_log_files"
+msgstr "Удаляет файлы журнала Laravel в storage/logs у {site}. Это нельзя отменить."
+
+msgid "logs.details"
+msgstr "Подробности"
+
+msgid "logs.error_and_above"
+msgstr "Ошибки и выше"
+
+msgid "logs.info_and_above"
+msgstr "Информация и выше"
+
+msgid "logs.laravel_log"
+msgstr "Журнал Laravel"
+
+msgid "logs.no_entry_matches_the_search"
+msgstr "Ни одна запись не соответствует поиску или уровню."
+
+msgid "logs.no_log_entries"
+msgstr "Нет записей журнала"
+
+msgid "logs.no_results"
+msgstr "Нет результатов"
+
+msgid "logs.pick_a_log"
+msgstr "Выберите журнал"
+
+msgid "logs.reload_the_log_every_2"
+msgstr "Перезагружать журнал каждые 2 секунды"
+
+msgid "logs.search_logs"
+msgstr "Поиск по журналам"
+
+msgid "logs.service_log"
+msgstr "Журнал службы"
+
+msgid "logs.show_only_entries_of_this"
+msgstr "Показывать только записи этого уровня и выше (журналы сайтов)"
+
+msgid "logs.storage_logs_of_site_is"
+msgstr "storage/logs у {site} пуст."
+
+msgid "logs.warning_and_above"
+msgstr "Предупреждения и выше"
+
+msgid "mail.add_these_lines_to_your"
+msgstr "Добавьте эти строки в .env вашего проекта. MAIL_USERNAME выбирает ящик, поэтому каждый проект получает свой."
+
+msgid "mail.catch_your_apps_mail"
+msgstr "Перехватывайте почту вашего приложения"
+
+msgid "mail.caught"
+msgstr "Перехваченные письма"
+
+msgid "mail.could_not_load_message"
+msgstr "Не удалось загрузить сообщение"
+
+msgid "mail.could_not_load_the_raw"
+msgstr "Не удалось загрузить исходное сообщение"
+
+msgid "mail.delete_all"
+msgstr "Удалить всё"
+
+msgid "mail.delete_all_question"
+msgstr "Удалить всю перехваченную почту?"
+
+msgid "mail.detail.cc"
+msgstr "Копия"
+
+msgid "mail.detail.date"
+msgstr "Дата"
+
+msgid "mail.detail.from"
+msgstr "От"
+
+msgid "mail.detail.headers"
+msgstr "Заголовки"
+
+msgid "mail.detail.inbox"
+msgstr "Входящие"
+
+msgid "mail.detail.raw"
+msgstr "Исходник"
+
+msgid "mail.detail.text"
+msgstr "Текст"
+
+msgid "mail.detail.to"
+msgstr "Кому"
+
+msgid "mail.environment_variables_title_case"
+msgstr "Переменные окружения"
+
+msgid "mail.flock_catches_every_email_your_apps"
+msgstr "Flock перехватывает каждое письмо, которое отправляют ваши приложения, — ничто не покидает ваш компьютер."
+
+msgid "mail.host"
+msgstr "Хост"
+
+msgid "mail.message"
+msgstr "Сообщение"
+
+msgid "mail.no_html_part_title_case"
+msgstr "Нет HTML-части"
+
+msgid "mail.no_mail_title_case"
+msgstr "Нет почты"
+
+msgid "mail.no_message_selected_title_case"
+msgstr "Сообщение не выбрано"
+
+msgid "mail.no_subject"
+msgstr "(без темы)"
+
+msgid "mail.no_text_part"
+msgstr "(нет текстовой части)"
+
+msgid "mail.open"
+msgstr "Открыть почту"
+
+msgid "mail.port"
+msgstr "Порт"
+
+msgid "mail.refresh"
+msgstr "Обновить"
+
+msgid "mail.save_attachment"
+msgstr "Сохранить…"
+
+msgid "mail.smtp_server"
+msgstr "SMTP-сервер"
+
+msgid "mail.username_inbox"
+msgstr "MAIL_USERNAME выбирает ящик, поэтому каждый проект получает свой."
+
+msgid "menu.down"
+msgstr "не работает"
+
+msgid "menu.dumps"
+msgstr "Дампы"
+
+msgid "menu.manage_sites"
+msgstr "Управление сайтами…"
+
+msgid "menu.no_sites_yet"
+msgstr "Пока нет сайтов"
+
+msgid "menu.open_flock"
+msgstr "Открыть Flock"
+
+msgid "menu.quit_flock"
+msgstr "Выйти из Flock"
+
+msgid "menu.restart"
+msgstr "Перезапустить"
+
+msgid "menu.restart_flock"
+msgstr "Перезапустить Flock"
+
+msgid "menu.set_up_flock"
+msgstr "Настроить Flock…"
+
+msgid "menu.settings"
+msgstr "Настройки…"
+
+msgid "menu.start_flock"
+msgstr "Запустить Flock"
+
+msgid "menu.status.needs_attention"
+msgstr "Требует внимания"
+
+msgid "menu.status.not_set_up"
+msgstr "Не настроен"
+
+msgid "node.downloads_node_js_new_then"
+msgstr "Загружает Node.js {new}, затем удаляет {old}. Глобальные пакеты сохраняются."
+
+msgid "node.loading_node_js_versions"
+msgstr "Загрузка версий Node.js…"
+
+msgid "node.make_default"
+msgstr "Сделать по умолчанию"
+
+msgid "node.making_node_version_the_default"
+msgstr "Делаем Node {version} версией по умолчанию…"
+
+msgid "node.no_versions"
+msgstr "Пока нет версий Node.js для отображения."
+
+msgid "node.npm_version_available"
+msgstr " (доступен npm {version})"
+
+msgid "node.official_node_js_builds_the"
+msgstr "Официальные сборки Node.js, самый новый релиз каждой мажорной версии. Проект, который закрепляет версию в .nvmrc, получит предложение этой мажорной версии, когда вы запустите node, npm или npx там. Глобальные пакеты (npm install -g) принадлежат линии Node и переживают её обновления; пакеты версии по умолчанию находятся в вашем PATH."
+
+msgid "node.subtitle"
+msgstr "node, npm и npx следуют за .nvmrc / .node-version проекта, затем за версией сайта, затем за версией по умолчанию."
+
+msgid "node.uninstall_details"
+msgstr "Его глобальные npm-пакеты также удаляются. Проекты и сайты, использующие Node {version}, перейдут на версию по умолчанию, пока вы не установите её снова."
+
+msgid "node.uninstall_node_version"
+msgstr "Удалить Node {version}?"
+
+msgid "node.update_npm"
+msgstr "Обновить npm"
+
+msgid "node.updating_npm_to_version"
+msgstr "Обновление npm до {version}…"
+
+msgid "php.downloading_percent"
+msgstr "Загрузка… {percent}%"
+
+msgid "php.downloads_php_version_size_mb"
+msgstr "Загружает PHP {version} ({size} МБ)"
+
+msgid "php.every_installed_version_runs_its"
+msgstr "Каждая установленная версия запускает собственный пул PHP-FPM. Сайты используют версию по умолчанию, если не закреплены за конкретной."
+
+msgid "php.loading_php_versions"
+msgstr "Загрузка версий PHP…"
+
+msgid "php.no_install_log_yet"
+msgstr "Пока нет журнала установки."
+
+msgid "php.open_ini"
+msgstr "Открыть php.ini"
+
+msgid "php.php_version_install_log"
+msgstr "Журнал установки PHP {version}"
+
+msgid "php.php_version_isnt_released_yet"
+msgstr "PHP {version} ещё не выпущен — он может не работать. Предлагается на бета-канале."
+
+msgid "php.sites_that_run_on_frankenphp"
+msgstr "Сайты, работающие на FrankenPHP с этой версией, обслуживаются через PHP-FPM, пока он снова не загрузится сам."
+
+msgid "php.uninstall_details"
+msgstr "Его php.ini также удаляется. Сайты, закреплённые за PHP {version}, перестанут работать, пока вы не выберете другую версию."
+
+msgid "php.uninstall_franken_question"
+msgstr "Удалить FrankenPHP для PHP {version}?"
+
+msgid "php.uninstall_php_version"
+msgstr "Удалить PHP {version}?"
+
+msgid "php.update_to_php_version"
+msgstr "Обновить до PHP {version}"
+
+msgid "services.active"
+msgstr "Активна"
+
+msgid "services.all"
+msgstr "Все"
+
+msgid "services.catalog.downloading_name"
+msgstr "Загрузка {name}…"
+
+msgid "services.catalog.name_version_starts_with_empty"
+msgstr "{name} {version} запускается с пустыми данными."
+
+msgid "services.catalog.name_version_stops_and_name"
+msgstr "{name} {version} останавливается, и {name} {next} становится активной версией."
+
+msgid "services.catalog.name_version_stops_your_sites"
+msgstr "{name} {version} останавливается; ваши сайты не смогут использовать {name}, пока вы не установите версию снова."
+
+msgid "services.catalog.name_version_uses_its_own"
+msgstr "{name} {version} использует собственные данные."
+
+msgid "services.catalog.not_available"
+msgstr "Недоступен"
+
+msgid "services.catalog.switch_to_name_version"
+msgstr "Переключиться на {name} {version}?"
+
+msgid "services.catalog.uninstall_and_delete_data"
+msgstr "Удалить и стереть данные"
+
+msgid "services.catalog.uninstall_keep_data"
+msgstr "Удалить, сохранив данные"
+
+msgid "services.catalog.uninstall_name_version"
+msgstr "Удалить {name} {version}?"
+
+msgid "services.category.cache_queue"
+msgstr "Кэш и очередь"
+
+msgid "services.category.core"
+msgstr "Ядро"
+
+msgid "services.category.database"
+msgstr "База данных"
+
+msgid "services.category.debugging"
+msgstr "Отладка"
+
+msgid "services.category.mail"
+msgstr "Почта"
+
+msgid "services.category.search"
+msgstr "Поиск"
+
+msgid "services.category.storage"
+msgstr "Хранилище"
+
+msgid "services.change_port"
+msgstr "Изменить порт"
+
+msgid "services.connection"
+msgstr "Подключение"
+
+msgid "services.dns_server_isnt_running"
+msgstr "DNS-сервер не запущен"
+
+msgid "services.every_service_flock_offers_mysql"
+msgstr "Каждая служба, которую предлагает Flock: MySQL, Redis, Meilisearch и многое другое"
+
+msgid "services.extensions_folder"
+msgstr "Папка расширений"
+
+msgid "services.flock_cant_run_this_service"
+msgstr "Flock не может запустить эту службу здесь."
+
+msgid "services.install_failed"
+msgstr "Установка не удалась"
+
+msgid "services.install_log"
+msgstr "Журнал установки {name}"
+
+msgid "services.installing_failed"
+msgstr "Установка {name} не удалась"
+
+msgid "services.installing_name"
+msgstr "Установка {name}…"
+
+msgid "services.keep_its_data_to_pick"
+msgstr "Сохраните его данные, чтобы продолжить с того места, где вы остановились, когда снова установите его."
+
+msgid "services.log"
+msgstr "Журнал"
+
+msgid "services.more"
+msgstr "Больше"
+
+msgid "services.more_services_count"
+msgstr "Другие службы ({count})…"
+
+msgid "services.name_version_stops_its_data"
+msgstr "{name} {version} останавливается; его данные сохраняются, но не используются, пока вы не переключитесь обратно. {then}"
+
+msgid "services.no_data"
+msgstr "Он не содержит данных."
+
+msgid "services.not_available_on_linux"
+msgstr "Недоступен в Linux"
+
+msgid "services.not_installed_its_data_is"
+msgstr "Не установлен · его данные сохраняются · {version}"
+
+msgid "services.not_installed_size_of_databases"
+msgstr "Не установлен · сохранено {size} баз данных"
+
+msgid "services.not_installed_version"
+msgstr "Не установлен · {version}"
+
+msgid "services.not_offered"
+msgstr "Не предлагается"
+
+msgid "services.old_to_new_available"
+msgstr "{old} → {new} доступно"
+
+msgid "services.port_between_1024_and_65535"
+msgstr "Порт от 1024 до 65535, который не используется другими программами."
+
+msgid "services.port_number"
+msgstr "Порт {port}"
+
+msgid "services.port_set_by_flock_install"
+msgstr "{port} · задан через `flock install`"
+
+msgid "services.postgres.after_installing_one_run_create"
+msgstr "После установки одной выполните CREATE EXTENSION в каждой базе данных, которая её использует."
+
+msgid "services.postgres.also_install_the_extensions_of"
+msgstr "Также установить расширения PostgreSQL {version}?"
+
+msgid "services.postgres.couldnt_check_for_new_releases"
+msgstr "Не удалось проверить наличие новых выпусков: {error}"
+
+msgid "services.postgres.extensions_for_postgresql_version_where"
+msgstr "{extensions} для PostgreSQL {version}, где они для него доступны. Вы сможете изменить это позже в разделе «Расширения…»."
+
+msgid "services.postgres.extensions_of_postgresql_version_postgis"
+msgstr "Расширения PostgreSQL {version}: PostGIS, pgRouting, pgvector, TimescaleDB и ваши собственные"
+
+msgid "services.postgres.install_with_extensions"
+msgstr "Установить с расширениями"
+
+msgid "services.postgres.installing_postgresql_version"
+msgstr "Установка PostgreSQL {version}…"
+
+msgid "services.postgres.license_license"
+msgstr "Лицензия: {license}"
+
+msgid "services.postgres.no_longer_updated_for_postgresql"
+msgstr "Больше не обновляется для PostgreSQL {version}"
+
+msgid "services.postgres.not_available_for_postgresql_version"
+msgstr "Недоступно для PostgreSQL {version}"
+
+msgid "services.postgres.postgresql_only"
+msgstr "Только PostgreSQL"
+
+msgid "services.postgres.postgresql_version_extensions"
+msgstr "Расширения PostgreSQL {version}"
+
+msgid "services.postgres.postgresql_version_restarts_to_load"
+msgstr "PostgreSQL {version} перезапустится, чтобы загрузить его"
+
+msgid "services.postgres.postgresql_version_starts_with_a"
+msgstr "PostgreSQL {version} запускается с новым, пустым набором баз данных."
+
+msgid "services.postgres.postgresql_version_stops_and_flock"
+msgstr "PostgreSQL {version} останавливается, и Flock переключается на PostgreSQL {next} с его собственными базами данных."
+
+msgid "services.postgres.postgresql_version_stops_and_your"
+msgstr "PostgreSQL {version} останавливается, и ваши сайты не смогут использовать PostgreSQL, пока вы не установите версию снова."
+
+msgid "services.postgres.postgresql_version_uses_its_own"
+msgstr "PostgreSQL {version} использует собственные базы данных."
+
+msgid "services.postgres.removes_the_postgresql_version_server"
+msgstr "Удаляет сервер PostgreSQL {version}."
+
+msgid "services.postgres.side_by_side"
+msgstr "Установленные версии живут рядом. Одновременно работает одна; каждая хранит свои базы данных, и обновления в пределах версии их сохраняют."
+
+msgid "services.postgres.stopped"
+msgstr "Остановлен"
+
+msgid "services.postgres.switch_to_postgresql_version"
+msgstr "Переключиться на PostgreSQL {version}?"
+
+msgid "services.postgres.switching_to_postgresql_version"
+msgstr "Переключение на PostgreSQL {version}…"
+
+msgid "services.postgres.uninstall_name"
+msgstr "Удалить {name}"
+
+msgid "services.postgres.uninstall_postgresql_version"
+msgstr "Удалить PostgreSQL {version}?"
+
+msgid "services.postgres.uninstalling_postgresql_version"
+msgstr "Удаление PostgreSQL {version}…"
+
+msgid "services.postgres.updating_postgresql_version"
+msgstr "Обновление PostgreSQL {version}…"
+
+msgid "services.postgres.waiting"
+msgstr "Ожидание…"
+
+msgid "services.postgres.yours"
+msgstr "Ваши"
+
+msgid "services.postgresql_version_stops_its_databases"
+msgstr "PostgreSQL {version} останавливается; его базы данных остаются, но недоступны, пока вы не переключитесь обратно. {then}"
+
+msgid "services.put_a_library_in_lib"
+msgstr "Поместите библиотеку в lib/, а её файлы .control и .sql — в extension/. Flock сохраняет их при обновлениях PostgreSQL {version}."
+
+msgid "services.reinstall"
+msgstr "Переустановить {version}"
+
+msgid "services.service_port"
+msgstr "Порт {service}"
+
+msgid "services.show_last_log"
+msgstr "Показать последний журнал"
+
+msgid "services.side_by_side"
+msgstr "Установленные версии живут рядом. Одновременно работает одна; каждая хранит свои данные, и обновления в пределах версии их сохраняют."
+
+msgid "services.start"
+msgstr "Запустить"
+
+msgid "services.stop_question"
+msgstr "Остановить {service}?"
+
+msgid "services.subtitle"
+msgstr "Базы данных, кэши, поиск и инструменты вокруг ваших сайтов. Всё слушает только 127.0.0.1."
+
+msgid "services.switch_ellipsis"
+msgstr "Переключить…"
+
+msgid "services.systemd_resolved_sends_every_name"
+msgstr "systemd-resolved отправляет каждое имя под .{tld} сюда (настроено через `flock install`), поэтому любой поддомен сайта работает (tenant1.app.{tld}, a.b.app.{tld}) без добавления."
+
+msgid "services.this_flock_daemon_doesnt_know"
+msgstr "Этот демон Flock не знает эту службу. Обновите Flock и попробуйте снова."
+
+msgid "services.uninstall_and_delete_databases_size"
+msgstr "Удалить и стереть базы данных ({size})"
+
+msgid "services.uninstall_keep_databases"
+msgstr "Удалить, сохранив базы данных"
+
+msgid "services.update_noun"
+msgstr "Обновление"
+
+msgid "services.updates_keep_data"
+msgstr "Обновления сохраняют ваши данные."
+
+msgid "services.web_down"
+msgstr "Сайты не открываются, пока веб-сервер выключен. Его журнал может объяснить причину; `flock restart` запустит его снова."
+
+msgid "services.web_running"
+msgstr "Caddy обслуживает каждый сайт по HTTPS (https://app.{tld}) с сертификатами из локального центра сертификации Flock, которому доверяет `flock install`."
+
+msgid "services.withdrawn"
+msgstr "Отозван: {reason}"
+
+msgid "services.withdrawn_update"
+msgstr "Отозван: {reason} — обновите, чтобы заменить"
+
+msgid "services.your_own_extensions"
+msgstr "Ваши собственные расширения"
+
+msgid "services.your_sites_cant_use_service"
+msgstr "Ваши сайты не смогут использовать {service}, пока вы не запустите его снова; он остаётся остановленным после перезапусков."
+
+msgid "settings.editor.none"
+msgstr "Не связывать"
+
+msgid "settings.flock_is_not_running"
+msgstr "Flock не запущен"
+
+msgid "settings.pane.about"
+msgstr "О программе"
+
+msgid "settings.pane.ai"
+msgstr "ИИ"
+
+msgid "settings.pane.debugger"
+msgstr "Отладчик"
+
+msgid "settings.pane.services"
+msgstr "Службы"
+
+msgid "settings.pane.sites"
+msgstr "Сайты"
+
+msgid "settings.start_daemon_to_change"
+msgstr "Запустите демон, чтобы изменить его настройки."
+
+msgid "setup.as_soon_as_flock_can"
+msgid_plural "setup.as_soon_as_flock_can"
+msgstr[0] "Как только Flock сможет его загрузить."
+msgstr[1] "Как только Flock сможет их загрузить."
+msgstr[2] "Как только Flock сможет их загрузить."
+
+msgid "setup.back"
+msgstr "Назад"
+
+msgid "setup.background"
+msgstr "Работает в фоне"
+
+msgid "setup.check_again_title_case"
+msgstr "Проверить снова"
+
+msgid "setup.checking_ports"
+msgstr "Проверка портов Flock…"
+
+msgid "setup.could_not_change_the_startup"
+msgstr "Не удалось изменить параметр автозапуска: {error}."
+
+msgid "setup.did_not_finish"
+msgstr "Настройка не завершилась"
+
+msgid "setup.error_try_again_in_settings"
+msgstr "{error}Попробуйте снова в Настройках → {pane}."
+
+msgid "setup.failed"
+msgstr "Что-то пошло не так. Вывод ниже объясняет, что именно; можно попробовать снова."
+
+msgid "setup.flock_daemon_serves_your_sites_and"
+msgstr "Демон Flock обслуживает ваши сайты и службы и запускается вместе с вашим компьютером."
+
+msgid "setup.flock_makes_them_the_default"
+msgid_plural "setup.flock_makes_them_the_default"
+msgstr[0] "Flock делает его версией по умолчанию для ваших сайтов и терминала."
+msgstr[1] "Flock делает их версиями по умолчанию для ваших сайтов и терминала."
+msgstr[2] "Flock делает их версиями по умолчанию для ваших сайтов и терминала."
+
+msgid "setup.flock_needs_these_ports_and"
+msgstr "Flock нуждается в этих портах и *.{tld} для себя, но их используют другие программы. Работа обоих оставит ни одного работающим."
+
+msgid "setup.flock_runs_your_laravel_sites_php"
+msgstr "Flock запускает ваши сайты Laravel, PHP, почту и базы данных на этом компьютере. Настройка занимает мгновение:"
+
+msgid "setup.flock_stops_and_is_removed"
+msgstr "Flock остановится и будет удалён из вашего PATH вместе со своими версиями PHP и Node.js, сертификатами, журналами и кэшами. Linux запросит ваш пароль для удаления DNS-настройки *.test и доверенного сертификата Flock.\n\nНастройки ваших сайтов и базы данных остаются в {folder}, поэтому после переустановки вы продолжите с того места, где остановились, — если только вы также не удалите их."
+
+msgid "setup.flock_was_uninstalled_remove_the"
+msgstr "Flock удалён. Удалите приложение с помощью менеджера пакетов (sudo apt remove flockphp или sudo dnf remove flockphp). Откройте новый терминал: Flock больше нет в его PATH."
+
+msgid "setup.flock_wont_open_at_login"
+msgstr "Flock не будет открываться при входе"
+
+msgid "setup.installing"
+msgstr "Установка {names}…"
+
+msgid "setup.link_project"
+msgstr "Связать проект"
+
+msgid "setup.link_project_description"
+msgstr "В проекте Laravel выполните `flock link`: сайт тогда будет по адресу http://<folder>.test. `flock secure` добавляет HTTPS."
+
+msgid "setup.linux_asks_for_your_password"
+msgstr "Linux через мгновение запросит ваш пароль."
+
+msgid "setup.linux_asks_for_your_password_once"
+msgstr "Linux один раз запросит ваш пароль: чтобы запустить фоновую службу, резолвить *.test через Flock и доверять сертификату Flock в системе и браузерах."
+
+msgid "setup.name_couldnt_be_installed"
+msgstr "{name} не удалось установить"
+
+msgid "setup.names_are_installed"
+msgstr "{names} установлены"
+
+msgid "setup.new_terminal"
+msgstr "Откройте новый терминал"
+
+msgid "setup.new_terminal_description"
+msgstr "Уже открытые терминалы всё ещё имеют старый PATH."
+
+msgid "setup.next_steps"
+msgstr "Дальнейшие шаги"
+
+msgid "setup.open_flock_at_login"
+msgstr "Открывать Flock при входе"
+
+msgid "setup.open_flock_when_i_log"
+msgstr "Открывать Flock, когда я вхожу в систему"
+
+msgid "setup.open_settings"
+msgstr "Открыть настройки"
+
+msgid "setup.password_prompt_was_cancelled_flock"
+msgstr "Приглашение пароля было отменено. Flock работает, но сайты *.test не будут резолвиться, а HTTPS не будет доверенным, пока вы это не разрешите."
+
+msgid "setup.problem_settings_to_general_has"
+msgstr "{problem} Настройки → Основные тоже имеют это."
+
+msgid "setup.ready"
+msgstr "Flock готов"
+
+msgid "setup.setting_up"
+msgstr "Настройка Flock…"
+
+msgid "setup.star"
+msgstr "Flock бесплатен и имеет открытый исходный код. Если он вам нравится, [звезда на GitHub](https://github.com/flock-php/flock) поможет другим найти его."
+
+msgid "setup.stop_other_web_servers_first"
+msgstr "Сначала остановите другие веб-серверы"
+
+msgid "setup.terminal_description"
+msgstr "Версии Flock идут первыми в вашем PATH. После настройки откройте новый терминал."
+
+msgid "setup.terminal_title"
+msgstr "php, composer и node в вашем терминале"
+
+msgid "setup.theyre_the_defaults_for_your"
+msgstr "Они являются версиями по умолчанию для ваших сайтов и терминала."
+
+msgid "setup.trusted_https_title"
+msgstr "Сайты *.test с доверенным HTTPS"
+
+msgid "setup.try_again"
+msgstr "Попробовать снова"
+
+msgid "setup.uninstalling_didnt_finish_the_output"
+msgstr "Удаление не завершилось. Вывод ниже объясняет, что именно; можно попробовать снова."
+
+msgid "setup.waiting_to_install_names"
+msgstr "Ожидание установки {names}"
+
+msgid "setup.welcome"
+msgstr "Добро пожаловать в Flock"
+
+msgid "setup.window_title"
+msgstr "Настроить Flock"
+
+msgid "sites.add_domain"
+msgstr "Добавить домен…"
+
+msgid "sites.add_domain_title"
+msgstr "Добавить домен к {site}"
+
+msgid "sites.add_proxy"
+msgstr "Добавить прокси…"
+
+msgid "sites.add_proxy_title"
+msgstr "Добавить прокси"
+
+msgid "sites.add_site"
+msgstr "Добавить сайт…"
+
+msgid "sites.add_site_linux"
+msgstr "Добавить сайт"
+
+msgid "sites.add_to_composer_json"
+msgstr "Добавить в composer.json"
+
+msgid "sites.adding"
+msgstr "Добавление…"
+
+msgid "sites.alias"
+msgstr "{domain} (псевдоним)"
+
+msgid "sites.boost_add"
+msgstr "Добавить Flock в его рекомендации…"
+
+msgid "sites.boost_add_question"
+msgstr "Добавить Flock в рекомендации Boost для {site}?"
+
+msgid "sites.boost_missing"
+msgstr "Проект использует Laravel Boost. Добавление Flock в его рекомендации сообщает ИИ-агентам, что Flock обслуживает приложение и выбирает его версию PHP."
+
+msgid "sites.boost_outdated"
+msgstr "Рекомендация Flock в рекомендациях Boost проекта устарела."
+
+msgid "sites.boost_update"
+msgstr "Обновить…"
+
+msgid "sites.boost_update_question"
+msgstr "Обновить рекомендацию Flock в {site}?"
+
+msgid "sites.branch_pins_it_in_file"
+msgstr "Ветка закрепляет его в {file}"
+
+msgid "sites.change"
+msgstr "Изменить…"
+
+msgid "sites.change_action"
+msgstr "Изменить"
+
+msgid "sites.change_its_php_and_node"
+msgstr "Изменить его версии PHP и Node.js, HTTPS и корневую папку на сайте."
+
+msgid "sites.change_upstream_details"
+msgstr "Порт означает 127.0.0.1; укажите хост и порт (localhost:5173) или URL (https://127.0.0.1:8443) для всего остального."
+
+msgid "sites.change_upstream_title"
+msgstr "Изменить апстрим {proxy}"
+
+msgid "sites.choose_folder"
+msgstr "Выбрать папку…"
+
+msgid "sites.choose_folder_in_project_details"
+msgstr "{folder} не находится в {project}. Корневая папка должна быть папкой в проекте."
+
+msgid "sites.choose_folder_linux"
+msgstr "Выбрать папку"
+
+msgid "sites.choose_the_folder_with_the_apps"
+msgstr "Выберите папку с index.php приложения в {site}"
+
+msgid "sites.classic"
+msgstr "Классический"
+
+msgid "sites.command"
+msgstr "Команда"
+
+msgid "sites.create_one_here_with_git"
+msgstr "Создайте один здесь, с git или с приложением-агентом."
+
+msgid "sites.database_of_its_own_gets"
+msgstr "Собственная база данных получает миграции ветки."
+
+msgid "sites.default"
+msgstr "По умолчанию"
+
+msgid "sites.default_tool_version"
+msgstr "По умолчанию ({tool} {version})"
+
+msgid "sites.dev_server"
+msgstr "Сервер разработки"
+
+msgid "sites.document_root"
+msgstr "Корневая папка"
+
+msgid "sites.document_root_is_the_folder"
+msgstr "Корневая папка — это папка, из которой Flock обслуживает сайт. Выбранная здесь применяется только на этой машине; закрепите её, чтобы записать в .flockrc для всех."
+
+msgid "sites.domain_is_no_longer_served"
+msgstr "{domain} больше не обслуживается сайтом {site}."
+
+msgid "sites.downloading_frankenphp"
+msgstr "Загрузка FrankenPHP для PHP {version}…"
+
+msgid "sites.e_g_my_app_to"
+msgstr "например my-app → my-app.{tld}"
+
+msgid "sites.each_git_worktree_of_site"
+msgstr "Каждое git-рабочее дерево {site} обслуживается по адресу <branch>.{domain} со своими зависимостями и .env."
+
+msgid "sites.every_request_passes_to_the"
+msgstr "Каждый запрос передаётся апстриму с его заголовком Host, включая WebSocket-апгрейды (горячая перезагрузка). Пока сервер не ответит, {domain} показывает страницу с этим сообщением."
+
+msgid "sites.every_subdomain_up_to_n"
+msgid_plural "sites.every_subdomain_up_to_n"
+msgstr[0] "Каждый поддомен до {n} уровня ниже сайта уже работает. Добавьте полное имя вроде {site}-2.{tld} для псевдонима или поддомен (tenant1, a.b), чтобы он был указан здесь и также резолвился на машинах Windows без подстановочного DNS."
+msgstr[1] "Каждый поддомен до {n} уровней ниже сайта уже работает. Добавьте полное имя вроде {site}-2.{tld} для псевдонима или поддомен (tenant1, a.b), чтобы он был указан здесь и также резолвился на машинах Windows без подстановочного DNS."
+msgstr[2] "Каждый поддомен до {n} уровней ниже сайта уже работает. Добавьте полное имя вроде {site}-2.{tld} для псевдонима или поддомен (tenant1, a.b), чтобы он был указан здесь и также резолвился на машинах Windows без подстановочного DNS."
+
+msgid "sites.extension_required_by"
+msgstr "Требуется пакетами {packages}"
+
+msgid "sites.extension_used"
+msgstr "Не требуется, но используется: {hint}"
+
+msgid "sites.extensions_footnote"
+msgstr "Требование расширения в composer.json заставляет composer install отказать серверу без него, вместо того чтобы приложение падало там."
+
+msgid "sites.extensions_laravel"
+msgstr "PHP {version} · приложение Laravel"
+
+msgid "sites.extensions_none"
+msgstr "Проект не требует расширений PHP."
+
+msgid "sites.extensions_title"
+msgstr "PHP-расширения {site}"
+
+msgid "sites.extra_domains_subdomains_and_aliases"
+msgstr "Дополнительные домены: поддомены и псевдонимы"
+
+msgid "sites.flock_copies_site_s_database"
+msgstr "Flock копирует базу данных {site} и запускает на ней миграции ветки."
+
+msgid "sites.flock_hasnt_set_this_worktree"
+msgstr "Flock ещё не настроил это рабочее дерево"
+
+msgid "sites.flock_runs_the_projects_dev"
+msgstr "Flock запускает dev-скрипт проекта при посещении сайта и останавливает его через 30 минут без посещений."
+
+msgid "sites.flock_stops_serving_domain_the"
+msgstr "Flock перестаёт обслуживать {domain}. Проект в {path} не затрагивается."
+
+msgid "sites.flocks_php_version_doesnt_include"
+msgstr " — PHP {version} Flock не включает его"
+
+msgid "sites.frankenphp_needs_php_8_2"
+msgstr "FrankenPHP требует PHP 8.2 или новее. Запросы, запрашивающие Xdebug, по-прежнему идут в PHP-FPM."
+
+msgid "sites.frankenphp_needs_php_8_2_or"
+msgstr "FrankenPHP требует PHP 8.2 или новее. Запросы, запрашивающие Xdebug, по-прежнему идут в PHP-FPM. Для режима воркера установите Laravel Octane в проекте (composer require laravel/octane)."
+
+msgid "sites.frankenphp_running"
+msgstr "Работает FrankenPHP {version} с PHP {php}"
+
+msgid "sites.give_flock_the_commands_that"
+msgstr "Дайте Flock команды, которые запускают и останавливают сервер, чтобы вы могли запустить его здесь."
+
+msgid "sites.give_worktree_a_copy_of"
+msgstr "Дать {worktree} копию базы данных?"
+
+msgid "sites.give_worktree_a_fresh_database"
+msgstr "Дать {worktree} новую базу данных?"
+
+msgid "sites.n3000_host_port_or_url"
+msgstr "3000, хост:порт или URL. Порт означает 127.0.0.1."
+
+msgid "sites.n_worktrees"
+msgid_plural "sites.n_worktrees"
+msgstr[0] "{n} рабочее дерево"
+msgstr[1] "{n} рабочих дерева"
+msgstr[2] "{n} рабочих деревьев"
+
+msgid "sites.no_public_www_web_or"
+msgstr "Не найдено public/, www/, web/ или webroot/ с index.php, поэтому Flock показывает страницу вместо сайта. Выберите папку с index.php приложения."
+
+msgid "sites.no_sites"
+msgstr "Нет сайтов"
+
+msgid "sites.no_sites_description"
+msgstr "Добавьте отдельный сайт здесь или добавьте папку проекта в Основных."
+
+msgid "sites.no_worktrees"
+msgstr "Нет рабочих деревьев"
+
+msgid "sites.node_version_is_isolated_here"
+msgstr "Node {version} изолирован здесь; проект закрепляет {pinned} в {file}."
+
+msgid "sites.node_wins"
+msgstr "Node {pinned} из .flockrc побеждает {other}."
+
+msgid "sites.nothing_answers_yet"
+msgstr "По адресу {upstream} пока никто не отвечает."
+
+msgid "sites.open_in_the_browser"
+msgstr "Открыть в браузере"
+
+msgid "sites.open_log"
+msgstr "Открыть журнал"
+
+msgid "sites.open_the_folder"
+msgstr "Открыть папку"
+
+msgid "sites.open_the_project_folder"
+msgstr "Открыть папку проекта"
+
+msgid "sites.output"
+msgstr "Вывод"
+
+msgid "sites.percent"
+msgstr "{percent}%"
+
+msgid "sites.php_extensions"
+msgstr "PHP-расширения"
+
+msgid "sites.php_fpm_serves_the_site"
+msgstr "PHP-FPM временно обслуживает сайт."
+
+msgid "sites.php_fpm_serves_the_site_until"
+msgstr "PHP-FPM обслуживает сайт, пока он не будет готов."
+
+msgid "sites.php_version_is_isolated_here"
+msgstr "PHP {version} изолирован здесь; проект закрепляет {pinned} в {file}."
+
+msgid "sites.pin"
+msgstr "Закрепить"
+
+msgid "sites.pin_menu_tooltip"
+msgstr "Закрепить версии и корневую папку за проектом"
+
+msgid "sites.pin_node_item"
+msgstr "Закрепить Node {version} за проектом…"
+
+msgid "sites.pin_node_question"
+msgstr "Закрепить Node {version} за {site}?"
+
+msgid "sites.pin_php_item"
+msgstr "Закрепить PHP {version} за проектом…"
+
+msgid "sites.pin_php_question"
+msgstr "Закрепить PHP {version} за {site}?"
+
+msgid "sites.pin_root_item"
+msgstr "Закрепить корневую папку ({root}) за проектом…"
+
+msgid "sites.pin_root_question"
+msgstr "Закрепить корневую папку {root} за {site}?"
+
+msgid "sites.project_folder_badge"
+msgstr "Папка проекта"
+
+msgid "sites.project_pins_tool_version_in"
+msgstr "Проект закрепляет {tool} {version} в {file}."
+
+msgid "sites.proxies"
+msgstr "Прокси"
+
+msgid "sites.proxy"
+msgstr "Прокси"
+
+msgid "sites.proxy.add_commands"
+msgstr "Добавить команды…"
+
+msgid "sites.proxy.commands"
+msgstr "Команды"
+
+msgid "sites.proxy.commands_optional"
+msgstr "Команды (необязательно)"
+
+msgid "sites.proxy.commands_title"
+msgstr "Команды {proxy}"
+
+msgid "sites.proxy.not_running"
+msgstr "Не запущен"
+
+msgid "sites.proxy.remove_commands"
+msgstr "Удалить команды"
+
+msgid "sites.proxy.running"
+msgstr "Работает"
+
+msgid "sites.proxy.stop_command_hint"
+msgstr "Только для сервера, работающего в фоне, например docker compose up -d."
+
+msgid "sites.proxy_footnote_no_commands"
+msgstr "Каждый запрос передаётся апстриму с его заголовком Host, включая WebSocket-апгрейды (горячая перезагрузка). Flock не запускает сервер, поэтому запустите его как обычно или дайте ему команды ниже. Пока он не ответит, {domain} показывает страницу с этим сообщением."
+
+msgid "sites.proxy_name"
+msgstr "Имя"
+
+msgid "sites.qr_code_of_url"
+msgstr "QR-код {url}"
+
+msgid "sites.rebuild_assets"
+msgstr "Пересобрать ресурсы"
+
+msgid "sites.remove_proxy"
+msgstr "Удалить прокси"
+
+msgid "sites.remove_proxy_details"
+msgstr "Flock перестаёт обслуживать {domain}. Сервер по адресу {upstream} продолжает работать."
+
+msgid "sites.remove_site"
+msgstr "Удалить сайт"
+
+msgid "sites.removes_root_from_flockrc_in"
+msgstr "Удаляет root= из .flockrc в {path}. Затем Flock сам находит корневую папку. Это изменяет файлы в вашем проекте."
+
+msgid "sites.removes_the_node_js_version"
+msgstr "Удаляет версию Node.js из .flockrc и удаляет .nvmrc / .node-version в {path}. Затем сайт использует Node.js по умолчанию Flock. Это изменяет файлы в вашем проекте."
+
+msgid "sites.removes_the_php_version_from"
+msgstr "Удаляет версию PHP из {file}. Затем сайт использует PHP по умолчанию Flock. Это изменяет файлы в вашем проекте."
+
+msgid "sites.require"
+msgstr "Требовать"
+
+msgid "sites.require_ext_name_in_composer"
+msgstr "Требовать ext-{name} в composer.json?"
+
+msgid "sites.require_tooltip"
+msgstr "Запускает composer require ext-{name}:* в {path}, что изменяет composer.json и composer.lock. Закоммитьте их с проектом."
+
+msgid "sites.restart_frankenphp_tooltip"
+msgstr "Перезапустить FrankenPHP, например чтобы воркеры Octane загрузили изменённый код"
+
+msgid "sites.reverb.env_needs"
+msgstr "Приложению нужно в .env:"
+
+msgid "sites.reverb.explanation"
+msgstr "Flock запускает php artisan reverb:start для сайта. Браузеры достигают его по адресу {address}, без своего порта или сертификата."
+
+msgid "sites.reverb.footnote"
+msgstr "WebSocket-подключения к /app и трансляции Laravel к /apps идут в Reverb; каждый остальной запрос остаётся у приложения. Flock не изменяет .env проекта. После изменения пересоберите фронтенд."
+
+msgid "sites.reverb.install"
+msgstr "Установите Laravel Reverb в проекте (php artisan install:broadcasting --reverb), чтобы запустить его."
+
+msgid "sites.reverb.restart_tooltip"
+msgstr "Перезапустить Reverb, например чтобы он загрузил изменённый код"
+
+msgid "sites.reverb.run"
+msgstr "Запустить Reverb"
+
+msgid "sites.reverb.running_at"
+msgstr "Работает по адресу {address}"
+
+msgid "sites.reverb.title"
+msgstr "Reverb"
+
+msgid "sites.root_automatic"
+msgstr "Автоматически"
+
+msgid "sites.root_automatic_found"
+msgstr "Автоматически ({root})"
+
+msgid "sites.root_automatic_none"
+msgstr "Автоматически (ничего не найдено)"
+
+msgid "sites.root_missing"
+msgstr "Выберите папку с index.php приложения или создайте {root}."
+
+msgid "sites.root_no_index"
+msgstr "В {root} нет index.php или index.html, поэтому Flock показывает страницу вместо сайта, пока он не появится."
+
+msgid "sites.root_shadowed"
+msgstr "{root} задан здесь; проект задаёт {pinned} в .flockrc."
+
+msgid "sites.runs_npm_run_build_again"
+msgstr "Запускает npm run build снова, чтобы посетители увидели ваши последние изменения при перезагрузке"
+
+msgid "sites.runs_on"
+msgstr "Работает на"
+
+msgid "sites.secure"
+msgstr "Защитить"
+
+msgid "sites.serve_a_server_of_its"
+msgstr "Обслуживать собственный сервер, например панель, объектное хранилище, Docker-контейнер или приложение на Go или Python, на домене .{tld}"
+
+msgid "sites.served_over_https"
+msgstr "Обслуживается по HTTPS"
+
+msgid "sites.server"
+msgstr "Сервер"
+
+msgid "sites.server.choose"
+msgstr "Выбрать"
+
+msgid "sites.server.failed"
+msgstr "Не удался"
+
+msgid "sites.server.failed_because"
+msgstr "Не удался: {problem}"
+
+msgid "sites.server.running_on_port"
+msgstr "Работает на порту {port}"
+
+msgid "sites.server.sleeping"
+msgstr "Спит · запустится при следующем посещении"
+
+msgid "sites.server.stopped_because"
+msgstr "Остановлен: {problem}"
+
+msgid "sites.server.stopping"
+msgstr "Остановка…"
+
+msgid "sites.setting_it_up_copies_dependencies"
+msgstr "Настройка копирует зависимости и .env, устанавливает и запускает хуки проекта."
+
+msgid "sites.share.allow_explanation"
+msgstr "Любой, у кого есть ссылка, может открыть сайт, если вы не перечислите адреса электронной почты — тогда Cloudflare отправит им код. Ссылка перестаёт работать через 8 часов или когда вы прекратите общий доступ."
+
+msgid "sites.share.allow_header"
+msgstr "Только эти люди (необязательно)"
+
+msgid "sites.share.building"
+msgstr "Сборка ресурсов…"
+
+msgid "sites.share.debug_on"
+msgstr "Режим отладки включён: посетители видят стек-трейсы"
+
+msgid "sites.share.dismiss"
+msgstr "Отклонить"
+
+msgid "sites.share.ends_at"
+msgstr "Истекает в {time}"
+
+msgid "sites.share.explanation"
+msgstr "Покажите сайт по временному публичному адресу, чтобы предпросмотреть работу в процессе, никогда для продакшна. Посетители не видят страницы отладки, дампы или инструменты разработчика."
+
+msgid "sites.share.only_for"
+msgstr "Только для: {emails}"
+
+msgid "sites.share.rebuilding"
+msgstr "Пересборка…"
+
+msgid "sites.share.share"
+msgstr "Открыть общий доступ"
+
+msgid "sites.share.share_ellipsis"
+msgstr "Открыть общий доступ…"
+
+msgid "sites.share.show_errors"
+msgstr "Показывать подробности ошибок посетителям"
+
+msgid "sites.share.show_errors_explanation"
+msgstr "Включает режим отладки приложения для этого общего доступа, поэтому посетители видят стек-трейсы. Только для людей, которым вы доверяете."
+
+msgid "sites.share.starting"
+msgstr "Запуск туннеля…"
+
+msgid "sites.share.stop"
+msgstr "Остановить"
+
+msgid "sites.share.title"
+msgstr "Открыть общий доступ к {site}"
+
+msgid "sites.shared"
+msgstr "Опубликован"
+
+msgid "sites.sharing_failed"
+msgstr "Открытие общего доступа не удалось."
+
+msgid "sites.show_log"
+msgstr "Показать журнал"
+
+msgid "sites.site"
+msgstr "Сайт"
+
+msgid "sites.stop_sharing"
+msgstr "Прекратить общий доступ"
+
+msgid "sites.subdomains_only_here"
+msgstr "Поддомены работают, только когда вы добавляете их здесь: {problem}."
+
+msgid "sites.subtitle"
+msgstr "Сайты, добавленные вами по одному, плюс каждая папка внутри ваших папок проектов."
+
+msgid "sites.tenant1_a_b_or_site"
+msgstr "tenant1, a.b или {site}-2.{tld}"
+
+msgid "sites.tool_version_is_set_for"
+msgstr "{tool} {version} задан для этого сайта на этой машине (изолирован)."
+
+msgid "sites.type"
+msgstr "Тип"
+
+msgid "sites.unpin"
+msgstr "Открепить"
+
+msgid "sites.unpin_node_item"
+msgstr "Открепить Node ({file})…"
+
+msgid "sites.unpin_node_question"
+msgstr "Открепить Node от {site}?"
+
+msgid "sites.unpin_php_item"
+msgstr "Открепить PHP ({file})…"
+
+msgid "sites.unpin_php_question"
+msgstr "Открепить PHP от {site}?"
+
+msgid "sites.unpin_root_item"
+msgstr "Открепить корневую папку (.flockrc)…"
+
+msgid "sites.unpin_root_question"
+msgstr "Открепить корневую папку от {site}?"
+
+msgid "sites.upstream"
+msgstr "Апстрим"
+
+msgid "sites.upstream_placeholder"
+msgstr "Порт, хост:порт или URL"
+
+msgid "sites.url"
+msgstr "URL"
+
+msgid "sites.use_file"
+msgstr "Использовать {file}"
+
+msgid "sites.use_file_tool_version"
+msgstr "Использовать {file} ({tool} {version})"
+
+msgid "sites.use_flockrc"
+msgstr "Использовать .flockrc"
+
+msgid "sites.use_flockrc_root"
+msgstr "Использовать .flockrc ({root})"
+
+msgid "sites.uses_site_s_settings"
+msgstr "Использует настройки {site}"
+
+msgid "sites.version_default"
+msgstr "Сайт следует версии {tool} по умолчанию Flock."
+
+msgid "sites.version_picked_here_applies_on_this_machine"
+msgstr "Версия, выбранная здесь, применяется только на этой машине. Чтобы задать её для всех, работающих над проектом, закрепите её: PHP попадает в .flockrc, Node.js — в .nvmrc."
+
+msgid "sites.wildcard_subdomains_dont_work_here"
+msgstr "Подстановочные поддомены не работают здесь ({problem}), поэтому добавьте каждый используемый вами поддомен (tenant1, a.b). Полное имя добавляет псевдоним."
+
+msgid "sites.worker_mode"
+msgstr " · режим воркера"
+
+msgid "sites.worktree_then_uses_site_s"
+msgstr "{worktree} затем использует базу данных {site}."
+
+msgid "sites.writes_ai_guidelines_flock_md"
+msgstr "Записывает .ai/guidelines/flock.md в {path} и запускает php artisan boost:update, чтобы ИИ-агенты знали, что Flock обслуживает приложение и выбирает его версию PHP. Закоммитьте это вместе с остальной частью .ai/guidelines. Это изменяет файлы в вашем проекте."
+
+msgid "sites.writes_php_version_to_flockrc"
+msgstr "Записывает php={version} в .flockrc в {path}. Закоммитьте это, и каждый, кто использует Flock в этом проекте, получит PHP {version}. Это изменяет файл в вашем проекте."
+
+msgid "sites.writes_root_value_to_flockrc"
+msgstr "Записывает root={value} в .flockrc в {path}. Закоммитьте это, и каждый, кто использует Flock в этом проекте, будет обслуживать его из {root}. Это изменяет файл в вашем проекте."
+
+msgid "sites.writes_version_to_file_in"
+msgstr "Записывает {version} в {file} в {path}. Закоммитьте это, и Flock, nvm и другие Node-инструменты будут использовать Node {version} для этого проекта. Это изменяет файл в вашем проекте."
+
+msgid "versions.check_now"
+msgstr "Проверить сейчас"
+
+msgid "versions.checked_just_now"
+msgstr "Проверено только что"
+
+msgid "versions.checked_n_days_ago"
+msgid_plural "versions.checked_n_days_ago"
+msgstr[0] "Проверено {n} день назад"
+msgstr[1] "Проверено {n} дня назад"
+msgstr[2] "Проверено {n} дней назад"
+
+msgid "versions.checked_n_hours_ago"
+msgid_plural "versions.checked_n_hours_ago"
+msgstr[0] "Проверено {n} час назад"
+msgstr[1] "Проверено {n} часа назад"
+msgstr[2] "Проверено {n} часов назад"
+
+msgid "versions.checked_n_minutes_ago"
+msgid_plural "versions.checked_n_minutes_ago"
+msgstr[0] "Проверено {n} минуту назад"
+msgstr[1] "Проверено {n} минуты назад"
+msgstr[2] "Проверено {n} минут назад"
+
+msgid "versions.checking"
+msgstr "Проверка…"
+
+msgid "versions.could_not_check_updates"
+msgstr "Не удалось проверить наличие обновлений: {error}"
+
+msgid "versions.download_failed"
+msgstr "Загрузка не удалась."
+
+msgid "versions.downloading_node"
+msgstr "Загрузка Node.js {version}…"
+
+msgid "versions.franken_not_installed"
+msgstr "Не установлен · загружается сам, когда сайт его использует"
+
+msgid "versions.new_build"
+msgstr "Доступна новая сборка"
+
+msgid "versions.not_checked"
+msgstr "Ещё не проверено"
+
+msgid "versions.prerelease"
+msgstr "Предварительный выпуск"
+
+msgid "versions.show_last_install_log"
+msgstr "Показать последний журнал установки"
+
+msgid "versions.up_to_date"
+msgstr "Актуально"
+
+msgid "versions.update_available"
+msgstr "Доступно обновление"
+
+msgid "versions.versions"
+msgstr "Версии"
+
+msgid "worktrees.branch_stays"
+msgstr "Ветка {branch} остаётся."
+
+msgid "worktrees.could_not_remove"
+msgstr "Не удалось удалить {name}"
+
+msgid "worktrees.create"
+msgstr "Создать"
+
+msgid "worktrees.database_copy"
+msgstr "Копия базы данных сайта"
+
+msgid "worktrees.database_fresh"
+msgstr "Новая, пустая"
+
+msgid "worktrees.database_shared"
+msgstr "База данных сайта"
+
+msgid "worktrees.detached_head"
+msgstr "Нет (отделённый HEAD)"
+
+msgid "worktrees.drop_question"
+msgstr "Удалить {database}?"
+
+msgid "worktrees.give_fresh_details"
+msgstr "Flock создаёт пустую базу данных и запускает миграции."
+
+msgid "worktrees.its_database_database_is_dropped"
+msgstr "Его база данных {database} удаляется."
+
+msgid "worktrees.job.ready"
+msgstr "Готово"
+
+msgid "worktrees.job.ready_at"
+msgstr "Готово по адресу {url}"
+
+msgid "worktrees.job.see_log"
+msgstr "смотрите журнал"
+
+msgid "worktrees.job.setup_failed"
+msgstr "Настройка не удалась: {error}"
+
+msgid "worktrees.job.starting"
+msgstr "Запуск…"
+
+msgid "worktrees.new"
+msgstr "Новое рабочее дерево…"
+
+msgid "worktrees.new.branch"
+msgstr "Ветка"
+
+msgid "worktrees.new.branch_placeholder"
+msgstr "имя вроде brave-otter"
+
+msgid "worktrees.new.current_branch"
+msgstr "{name} (текущая)"
+
+msgid "worktrees.new.current_commit"
+msgstr "Текущий коммит"
+
+msgid "worktrees.new.database"
+msgstr "База данных"
+
+msgid "worktrees.new.default_branch"
+msgstr "{name} (по умолчанию)"
+
+msgid "worktrees.new.explain_existing"
+msgstr "{branch} существует, поэтому рабочее дерево переключается на неё. Flock создаёт его рядом с {site}, настраивает и обслуживает по адресу {address}."
+
+msgid "worktrees.new.explain_new"
+msgstr "Flock создаёт рабочее дерево рядом с {site} на новой ветке {branch}, настраивает его и обслуживает по адресу {address}."
+
+msgid "worktrees.new.explain_unnamed"
+msgstr "Flock создаёт рабочее дерево рядом с {site} на новой ветке с собственным именем, настраивает его и обслуживает по собственному адресу."
+
+msgid "worktrees.new.start_from"
+msgstr "Начать от"
+
+msgid "worktrees.new_title"
+msgstr "Новое рабочее дерево {site}"
+
+msgid "worktrees.own_database"
+msgstr "собственная база данных"
+
+msgid "worktrees.own_database_tooltip"
+msgstr "Его собственная база данных: {database}"
+
+msgid "worktrees.project_default"
+msgstr "По умолчанию проекта"
+
+msgid "worktrees.remove"
+msgstr "Удалить рабочее дерево"
+
+msgid "worktrees.remove_anyway"
+msgstr "Всё равно удалить"
+
+msgid "worktrees.remove_details"
+msgstr "Flock запускает его хук before_delete и удаляет {path}."
+
+msgid "worktrees.remove_details_database"
+msgstr "Flock запускает его хук before_delete и удаляет {path} и его базу данных {database}."
+
+msgid "worktrees.run_again"
+msgstr "Запустить настройку снова"
+
+msgid "worktrees.see_log"
+msgstr "смотрите его журнал"
+
+msgid "worktrees.set_up_action"
+msgstr "Настроить"
+
+msgid "worktrees.setting_up"
+msgstr "Настройка…"
+
+msgid "worktrees.setting_up_title"
+msgstr "Настройка {worktree}"
+
+msgid "worktrees.setup"
+msgstr "Настройка"
+
+msgid "worktrees.setup_failed"
+msgstr "Настройка не удалась"
+
+msgid "worktrees.setup_failed_sentence"
+msgstr "Настройка не удалась."
+
+msgid "worktrees.setup_failed_title"
+msgstr "Настройка {worktree} не удалась"
+
+msgid "worktrees.setup_goes_on_flock_tells"
+msgstr "Настройка продолжается; Flock сообщит, если она не удастся"
+
+msgid "worktrees.switch"
+msgstr "Переключить"
+
+msgid "worktrees.switching_database"
+msgstr "Переключение базы данных {worktree}"
+
+msgid "worktrees.use_site_s_database"
+msgstr "Использовать базу данных {site}?"
+
+msgid "worktrees.worktree"
+msgstr "Рабочее дерево"
+
+msgid "worktrees.worktrees"
+msgstr "Рабочие деревья"
