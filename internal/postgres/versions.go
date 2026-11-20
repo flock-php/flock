@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"flock/internal/binaries"
+	"flock/internal/config"
 	"flock/internal/ports"
 )
 
@@ -41,6 +42,16 @@ type Service interface {
 	Reload() error
 }
 
+// MultiService extends Service with multi-version support: running non-active majors alongside
+// the active one, each on its own port. Implementations that support it (the daemon) provide
+// these methods; the CLI's cliPGService does not (it starts nothing).
+type MultiService interface {
+	Service
+	EnableMajor(id string, port int) error
+	DisableMajor(major string) error
+	ExtraMajors() map[string]config.PGLineRun
+}
+
 // Versions is the state of every offered or installed major (GET /v1/postgres/versions).
 type Versions struct {
 	Active     string         `json:"active"`
@@ -62,10 +73,12 @@ type MajorVersion struct {
 	Prerelease bool     `json:"prerelease"`
 	Yanked     string   `json:"yanked"` // why the installed build was withdrawn, "" when it wasn't
 	Active     bool     `json:"active"`
+	Running    bool     `json:"running"`              // this major is configured to run (active or enabled)
+	RunPort    int      `json:"run_port,omitempty"`   // the port this major runs on, when running
 	HasData    bool     `json:"has_data"`
 	DataSize   int64    `json:"data_size"`
 	EOL        string   `json:"eol"`
-	Busy       string   `json:"busy"`       // "" | "installing" | "updating" | "switching" | "uninstalling"
+	Busy       string   `json:"busy"`       // "" | "installing" | "updating" | "switching" | "uninstalling" | "enabling"
 	Extensions []string `json:"extensions"` // names of the extensions installed for it
 }
 
@@ -207,6 +220,11 @@ func (m *Manager) Versions() Versions {
 	}
 	sortMajors(list)
 
+	var extras map[string]config.PGLineRun
+	if ms, ok := m.Service.(MultiService); ok {
+		extras = ms.ExtraMajors()
+	}
+
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	for _, major := range list {
@@ -219,6 +237,13 @@ func (m *Manager) Versions() Versions {
 			EOL:        EndOfLife[major],
 			Busy:       m.busy[major],
 			Extensions: InstalledExtensions(m.root(), major),
+		}
+		if v.Active {
+			v.Running = true
+			v.RunPort = out.Port
+		} else if r, ok := extras[major]; ok {
+			v.Running = true
+			v.RunPort = r.Port
 		}
 		offer, ok := available[major]
 		if ok {
@@ -476,6 +501,9 @@ func (m *Manager) activate(ctx context.Context, id, previous string) error {
 	if err := m.prepare(id); err != nil {
 		return err
 	}
+	if ms, ok := m.Service.(MultiService); ok {
+		_ = ms.DisableMajor(MajorOf(id))
+	}
 	if err := m.Service.Apply(id, true); err != nil {
 		return err
 	}
@@ -503,6 +531,10 @@ func (m *Manager) Uninstall(ctx context.Context, major string, deleteData bool) 
 	installed := m.installedByMajor(active)
 	if installed[major] == "" && !(deleteData && HasCluster(DataDir(m.root(), major))) {
 		return fmt.Errorf("PostgreSQL %s is %w", major, ErrNotInstalled)
+	}
+
+	if ms, ok := m.Service.(MultiService); ok {
+		_ = ms.DisableMajor(major)
 	}
 
 	if active != "" && MajorOf(active) == major {
@@ -541,6 +573,42 @@ func (m *Manager) Uninstall(ctx context.Context, major string, deleteData bool) 
 		}
 	}
 	return nil
+}
+
+// EnableMajor makes an installed non-active major run on its own port alongside the active one.
+// The daemon starts it on the next reload.
+func (m *Manager) EnableMajor(ctx context.Context, major string, port int) error {
+	done, err := m.begin(major, "enabling")
+	if err != nil {
+		return err
+	}
+	defer done()
+
+	active, _ := m.Service.Active()
+	id := m.installedByMajor(active)[major]
+	if id == "" {
+		return fmt.Errorf("PostgreSQL %s is %w", major, ErrNotInstalled)
+	}
+	if MajorOf(active) == major {
+		return nil // already the active major
+	}
+	ms, ok := m.Service.(MultiService)
+	if !ok {
+		return errors.New("multi-version running requires the daemon")
+	}
+	if err := m.prepare(id); err != nil {
+		return err
+	}
+	return ms.EnableMajor(id, port)
+}
+
+// DisableMajor stops a running non-active major. Its install and data stay.
+func (m *Manager) DisableMajor(ctx context.Context, major string) error {
+	ms, ok := m.Service.(MultiService)
+	if !ok {
+		return errors.New("multi-version running requires the daemon")
+	}
+	return ms.DisableMajor(major)
 }
 
 // prepare makes sure id's major has a cluster, so a failing initdb is reported to the caller

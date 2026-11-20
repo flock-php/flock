@@ -314,7 +314,57 @@ Laravel app to it (env).`,
 		},
 	}
 
-	cmd.AddCommand(install, update, uninstall, use, list, createDB, extensions)
+	var enablePort int
+	enable := &cobra.Command{
+		Use:   "enable <service> <version> [--port <port>]",
+		Short: "Also run a non-active installed version on its own port (the active version keeps running too)",
+		Args:  cobra.ExactArgs(2),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			s, err := load()
+			if err != nil {
+				return err
+			}
+			if isPostgres(args[0]) {
+				return postgresOperation(cmd, args[1], "enabling", func(ctx context.Context, ops pgOps) error {
+					return ops.EnableMajor(ctx, args[1], enablePort)
+				})
+			}
+			c, err := s.client().EnableServiceLine(cmd.Context(), args[0], args[1], enablePort)
+			if err != nil {
+				return err
+			}
+			e, _ := c.Find(args[0])
+			cmd.Printf("%s %s enabled\n", cmp.Or(e.Name, args[0]), args[1])
+			return nil
+		},
+	}
+	enable.Flags().IntVar(&enablePort, "port", 0, "port to listen on (0 for a suggested one)")
+
+	disable := &cobra.Command{
+		Use:   "disable <service> <version>",
+		Short: "Stop a non-active version that was enabled with `enable` (the active version keeps running)",
+		Args:  cobra.ExactArgs(2),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			s, err := load()
+			if err != nil {
+				return err
+			}
+			if isPostgres(args[0]) {
+				return postgresOperation(cmd, args[1], "disabling", func(ctx context.Context, ops pgOps) error {
+					return ops.DisableMajor(ctx, args[1])
+				})
+			}
+			c, err := s.client().DisableServiceLine(cmd.Context(), args[0], args[1])
+			if err != nil {
+				return err
+			}
+			e, _ := c.Find(args[0])
+			cmd.Printf("%s %s disabled\n", cmp.Or(e.Name, args[0]), args[1])
+			return nil
+		},
+	}
+
+	cmd.AddCommand(install, update, uninstall, use, list, createDB, extensions, enable, disable)
 	return cmd
 }
 
@@ -325,8 +375,11 @@ func printLines(out io.Writer, root string, e catalog.Entry) {
 	fmt.Fprintln(tw, "  VERSION\tINSTALLED\tLATEST\tDATA\t")
 	for _, l := range e.Lines {
 		marker := " "
-		if l.Active {
+		switch {
+		case l.Active:
 			marker = "*"
+		case l.Running:
+			marker = "+"
 		}
 		installed, latest, data := dash(l.Version), dash(l.Latest), "-"
 		if l.Update {
@@ -337,6 +390,9 @@ func printLines(out io.Writer, root string, e catalog.Entry) {
 		}
 		if e.Job != nil && e.Job.State == "running" && e.Job.Line == l.ID {
 			installed += " (" + strings.TrimSuffix(e.Job.Action, "e") + "ing)"
+		}
+		if l.Running && !l.Active && l.RunPort != 0 {
+			installed += fmt.Sprintf(" (port %d)", l.RunPort)
 		}
 		fmt.Fprintf(tw, "%s %s\t%s\t%s\t%s\t\n", marker, l.ID, installed, latest, data)
 	}

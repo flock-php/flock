@@ -967,11 +967,39 @@ func (d *daemon) reload() error {
 		warnings = append(warnings, id+": "+problem)
 	}
 
+	for major, r := range cfg.Services.PostgresExtra {
+		if !cfg.Services.Running("postgres") {
+			break
+		}
+		lineSpec, pgWarnings, err := d.postgresSpec(cfg, r.ID)
+		for _, w := range pgWarnings {
+			warnings = append(warnings, "postgres-"+major+": "+w)
+		}
+		if err == nil {
+			lineSpec.Name = "postgres-" + major
+			lineSpec.LogFile = filepath.Join(d.root, "log", "postgres-"+major+".log")
+			lineSpec.Args = postgres.ReplacePort(lineSpec.Args, r.Port)
+		}
+		start("postgres-"+major, r.Port, lineSpec, err)
+	}
+
 	if d.catalog != nil {
 		for _, k := range d.catalog.Kinds() {
 			if x, ok := cfg.Services.Extra(k.ID); ok && cfg.Services.Running(k.ID) {
 				spec, err := catalog.Spec(d.root, k, x)
 				start(k.ID, x.Port, spec, err)
+				for _, lr := range x.Lines {
+					lineSpec, lineErr := catalog.LineSpec(d.root, k, lr)
+					if lineErr == nil {
+						start(lineSpec.Name, lr.Port, lineSpec, nil)
+					} else {
+						lineID := lineSpec.Name
+						if lineID == "" {
+							lineID = k.ID + "-" + k.LineOf(lr.Version)
+						}
+						start(lineID, lr.Port, lineSpec, lineErr)
+					}
+				}
 			}
 		}
 	}
@@ -1158,6 +1186,30 @@ func (s pgService) Port() int {
 func (s pgService) Live() bool { return true }
 
 func (s pgService) Reload() error { return s.d.reload() }
+
+func (s pgService) EnableMajor(id string, port int) error {
+	major := postgres.MajorOf(id)
+	return s.d.Mutate(func(cfg *config.Config) error {
+		cfg.Services.SetPGLine(major, config.PGLineRun{ID: id, Port: port})
+		cfg.Services.SetRunning("postgres", true)
+		return nil
+	})
+}
+
+func (s pgService) DisableMajor(major string) error {
+	return s.d.Mutate(func(cfg *config.Config) error {
+		cfg.Services.RemovePGLine(major)
+		return nil
+	})
+}
+
+func (s pgService) ExtraMajors() map[string]config.PGLineRun {
+	cfg, err := config.Load(s.d.root)
+	if err != nil {
+		return nil
+	}
+	return cfg.Services.PostgresExtra
+}
 
 // Status implements api.Backend.
 func (d *daemon) Status() api.Status {
