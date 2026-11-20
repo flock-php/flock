@@ -31,3 +31,19 @@ func TestWriteShimsLinksAliases(t *testing.T) {
 		t.Fatalf("flk → %s, want %s", got, want)
 	}
 }
+
+// A ZDOTDIR that does not exist is ignored, so .zshrc stays in home instead of failing the install.
+func TestProfilePathIgnoresMissingZDOTDIR(t *testing.T) {
+	home := t.TempDir()
+	zdotdir := filepath.Join(home, "zsh")
+	t.Setenv("ZDOTDIR", zdotdir)
+	if got, want := profilePath(home, ".zshrc"), filepath.Join(home, ".zshrc"); got != want {
+		t.Fatalf("missing ZDOTDIR: got %s, want %s", got, want)
+	}
+	if err := os.Mkdir(zdotdir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if got, want := profilePath(home, ".zshrc"), filepath.Join(zdotdir, ".zshrc"); got != want {
+		t.Fatalf("existing ZDOTDIR: got %s, want %s", got, want)
+	}
+}

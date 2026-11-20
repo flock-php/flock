@@ -57,7 +57,7 @@ To set Flock up from the terminal instead, run `flk install`. The package names 
 
 The setup:
 
-- adds Flock's `bin` folder to your PATH, in `~/.bashrc`, `~/.zshrc`, fish's `conf.d` and `~/.config/environment.d` for apps started from the desktop,
+- adds Flock's `bin` folder to your PATH, in `~/.bashrc`, `~/.zshrc` (or `$ZDOTDIR/.zshrc` if `ZDOTDIR` is set to an existing directory), fish's `conf.d` and `~/.config/environment.d` for apps started from the desktop,
 - registers the `flock@<user>` systemd service, which starts with your computer,
 - tells systemd-resolved to send `*.test` lookups to Flock's DNS server,
 - adds Flock's certificate authority to the system's trust store, to Firefox through a policy, and to the certificate databases of Chrome and other Chromium browsers.
