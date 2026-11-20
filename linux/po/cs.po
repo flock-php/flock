@@ -226,6 +226,9 @@ msgstr "Uložit"
 msgid "common.time.just_now"
 msgstr "právě teď"
 
+msgid "common.turn_flock_on_or_off"
+msgstr "Zapnout nebo vypnout Flock"
+
 msgid "common.uninstall"
 msgstr "Odinstalovat"
 
@@ -765,6 +768,9 @@ msgstr "Vyžaduje pozornost"
 
 msgid "menu.status.not_set_up"
 msgstr "Nenastaveno"
+
+msgid "menu.stop_flock"
+msgstr "Zastavit Flock"
 
 msgid "node.downloads_node_js_new_then"
 msgstr "Stáhne Node.js {new} a pak odebere {old}. Globální balíčky zůstanou."

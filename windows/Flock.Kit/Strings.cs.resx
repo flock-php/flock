@@ -183,6 +183,9 @@
 
 Podrobnosti najdete v %LocalAppData%\Flock\tray.log.</value>
     </data>
+    <data name="App_CouldNotStop" xml:space="preserve">
+        <value>Flock se nepodařilo zastavit ({0}).</value>
+    </data>
     <data name="App_DidNotStart" xml:space="preserve">
         <value>Proces se nespustil.</value>
     </data>
@@ -338,6 +341,9 @@ Podrobnosti najdete v %LocalAppData%\Flock\tray.log.</value>
     </data>
     <data name="Common_TryAgain" xml:space="preserve">
         <value>Zkusit znovu</value>
+    </data>
+    <data name="Common_TurnFlockOnOrOff" xml:space="preserve">
+        <value>Zapnout nebo vypnout Flock</value>
     </data>
     <data name="Common_Uninstall" xml:space="preserve">
         <value>Odinstalovat</value>
@@ -929,6 +935,9 @@ Podrobnosti najdete v %LocalAppData%\Flock\tray.log.</value>
     </data>
     <data name="Menu_Status_Updating" xml:space="preserve">
         <value>Aktualizuje se…</value>
+    </data>
+    <data name="Menu_StopFlock" xml:space="preserve">
+        <value>Zastavit Flock</value>
     </data>
     <data name="Menu_Stopped" xml:space="preserve">
         <value>zastaveno</value>

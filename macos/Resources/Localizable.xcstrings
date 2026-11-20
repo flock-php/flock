@@ -6578,28 +6578,6 @@
         }
       }
     },
-    "menu.updating" : {
-      "localizations" : {
-        "cs" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Flock se aktualizuje…"
-          }
-        },
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Updating Flock…"
-          }
-        },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Actualizando Flock…"
-          }
-        }
-      }
-    },
     "menu.version_on_port %@ %@" : {
       "comment" : "{0}: the version, {1}: the port",
       "localizations" : {
