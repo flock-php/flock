@@ -21,11 +21,11 @@
                     <StackPanel Margin="0,8,0,24" Spacing="12">
                         <Image Source="Assets/AppIcon.png" Width="48" Height="48" automation:AutomationProperties.Name="Flock" />
                         <TextBlock Text="{l:Loc Key=Setup_Welcome}" Style="{StaticResource TitleTextBlockStyle}" />
-                        <TextBlock Text="{l:Loc Key=Setup_Intro}" TextWrapping="Wrap"
+                        <TextBlock x:Name="IntroLead" Text="{l:Loc Key=Setup_Intro}" TextWrapping="Wrap"
                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                     </StackPanel>
                     <StackPanel Spacing="4" Margin="0,0,0,24">
-                        <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                        <Border x:Name="DaemonCard" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
                                 BorderThickness="1" CornerRadius="6" Padding="16,12">
                             <Grid ColumnSpacing="12">
                                 <Grid.ColumnDefinitions><ColumnDefinition Width="Auto" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
@@ -38,7 +38,7 @@
                                 </StackPanel>
                             </Grid>
                         </Border>
-                        <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                        <Border x:Name="TerminalCard" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
                                 BorderThickness="1" CornerRadius="6" Padding="16,12">
                             <Grid ColumnSpacing="12">
                                 <Grid.ColumnDefinitions><ColumnDefinition Width="Auto" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
@@ -58,8 +58,8 @@
                                 <FontIcon Glyph="{StaticResource GlyphLock}" FontFamily="{StaticResource SymbolsFont}" FontSize="18"
                                           automation:AutomationProperties.Name="{l:Loc Key=Setup_TrustedHttps}" VerticalAlignment="Top" Margin="0,2,0,0" />
                                 <StackPanel Grid.Column="1" Spacing="1">
-                                    <TextBlock Text="{l:Loc Key=Setup_TrustedHttpsTitle}" />
-                                    <TextBlock
+                                    <TextBlock x:Name="TrustTitle" Text="{l:Loc Key=Setup_TrustedHttpsTitle}" />
+                                    <TextBlock x:Name="TrustDetail"
                                         Text="{l:Loc Key=Setup_TrustedHttpsDescription}"
                                         Style="{StaticResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
                                 </StackPanel>
@@ -123,11 +123,12 @@
 
                 <StackPanel x:Name="DoneStage" Spacing="0" Visibility="Collapsed">
                     <TextBlock Text="{l:Loc Key=Setup_Ready}" Style="{StaticResource TitleTextBlockStyle}" Margin="0,8,0,24" />
+                    <InfoBar x:Name="DnsWarning" Title="{l:Loc Key=Setup_DnsWarningTitle}" Severity="Warning" IsClosable="False" IsOpen="False" Margin="0,0,0,24" />
                     <StackPanel x:Name="Defaults" Spacing="4" Margin="0,0,0,24" />
                     <TextBlock x:Name="StartupProblem" TextWrapping="Wrap" Foreground="{ThemeResource SystemFillColorCriticalBrush}" Visibility="Collapsed"
                                Margin="0,0,0,12" />
-                    <TextBlock Text="{l:Loc Key=Setup_NextSteps}" Style="{StaticResource BodyStrongTextBlockStyle}" Margin="1,0,0,6" />
-                    <StackPanel Spacing="4">
+                    <TextBlock x:Name="NextStepsTitle" Text="{l:Loc Key=Setup_NextSteps}" Style="{StaticResource BodyStrongTextBlockStyle}" Margin="1,0,0,6" />
+                    <StackPanel x:Name="NextSteps" Spacing="4">
                         <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
                                 BorderThickness="1" CornerRadius="6" Padding="16,12">
                             <StackPanel Spacing="1">

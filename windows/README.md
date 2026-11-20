@@ -135,6 +135,69 @@ its default Git description may not be a version the updater can compare.
 Logs: `%AppData%\Flock\log\` (daemon.log, web.log, php8.x-cgi.log, php8.x-install.log) and
 `%LocalAppData%\Flock\tray.log` for unexpected errors in the tray app.
 
+## The daemon in WSL2 (experimental)
+
+The tray app can show a daemon that runs in a WSL2 distro instead of on Windows: the Linux
+version of Flock, with your projects in the distro's file system. The app talks to it as it does
+to the Windows daemon, over the loopback URL and token in `api.json`; it finds that file through
+the distro's share when `FLOCK_HOME` points there. Then it leaves setup and updates to the distro,
+runs Restart as `wsl.exe -d <distro> -- flk restart`, and opens the Linux paths the daemon reports
+through `\\wsl.localhost\<distro>\…`.
+
+It needs Windows 11 22H2 or later and WSL 2.0 or later (for mirrored networking), and a WSL 2
+distro with systemd that Flock for Linux supports. These steps are yours:
+
+1. **Mirrored networking**, so Windows reaches the distro's ports (the API, 80 and 443) on
+   127.0.0.1. In `%UserProfile%\.wslconfig`:
+   ```ini
+   [wsl2]
+   networkingMode=mirrored
+   ```
+   then `wsl --shutdown`.
+2. **systemd and systemd-resolved** in the distro: `[boot]` `systemd=true` in `/etc/wsl.conf`,
+   then `wsl --shutdown` again and reopen the distro (the setting applies when the distro
+   starts), and `sudo systemctl enable --now systemd-resolved`.
+3. **Flock for Linux** in the distro (the `.deb`/`.rpm`, see the main README), then `flk install`.
+   Windows' own Flock and the distro's share ports in mirrored mode, so quit it first (and
+   anything else on ports 80 and 443, in Windows or the distro).
+4. **The app**: start `FlockTray.exe` with `FLOCK_HOME` set to the distro's Flock folder:
+   ```powershell
+   $env:FLOCK_HOME = "\\wsl.localhost\Ubuntu\home\<you>\.local\share\flock"; .\FlockTray.exe
+   ```
+   Set it for the app only, as above, not as a user or system variable: a Windows `flock.exe`
+   follows `FLOCK_HOME` too, and `flock uninstall` there would remove the distro's Flock files
+   (with `--purge` its settings and databases as well). The app's uninstaller runs
+   `flock uninstall` without the variable when it points into WSL.
+
+The app then sets Windows up for the distro's sites, as its setup does for a daemon on Windows:
+it asks once for administrator permission, for the NRPT rule that sends the distro's TLD
+(`*.test`) to 127.0.0.1, and to trust the distro's certificate authority (`certs\ca.crt` in its
+Flock folder), so HTTPS has no warnings (a Firefox-based browser reads Windows' trusted roots
+when it starts: restart it after the setup). It asks when either is missing, and again at the next
+start when the prompt was declined or the window closed with "Not now". It only trusts a CA
+limited to the distro's TLD, as Flock makes it: one made for another TLD (Flock keeps its CA when
+the TLD changes) can't sign the sites' certificates, and setup says so instead. Where Group Policy
+deploys NRPT rules, Windows ignores the rule setup adds: the app then only asks for the CA, and
+setup says the names aren't sent to it. Both are done by `flock.exe privileged-setup`, the step
+Flock's own setup on Windows runs, without the hosts helper: the app needs the `flock.exe` it
+ships with, or the one an earlier Flock for Windows left in `%AppData%\Flock\bin` (a development
+build without either sets nothing up). Nothing removes them again: the rule goes with
+`Remove-DnsClientNrptRule` or Flock for Windows' uninstall, the CA with
+`certutil -delstore Root <its SHA-1 fingerprint>` (elevated).
+
+The app answers the names itself on 127.0.0.1:53, as the daemon's DNS server would (every name
+under the TLD is 127.0.0.1): NRPT rules can't name a port, and WSL keeps port 53 for its own DNS,
+so the distro's server is out of reach on it, even with mirrored networking. So names resolve
+while the app runs, and Windows' own Flock must not be running (it listens on the same port).
+
+While it runs, the app also keeps the distro running (a hidden `wsl.exe -d <distro> --exec sleep
+infinity`): WSL powers a distro off seconds after the last Windows program using it exits, and
+the daemon and the sites with it.
+
+Not handled yet: NAT networking; installing and updating the
+distro's Flock and its port check from the app (run `flk` in the distro); `flk status` in the distro reporting that
+`*.test` doesn't resolve there when WSL's DNS tunneling bypasses systemd-resolved.
+
 ## Translations
 
 The app's and the installer's texts come from [`lang/`](../lang/README.md), which the three apps share: add or
