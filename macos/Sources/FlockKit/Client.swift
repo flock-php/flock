@@ -26,8 +26,8 @@ public enum FlockError: LocalizedError, Equatable {
 
     public var errorDescription: String? {
         switch self {
-        case .notRunning: "Flock is not running"
-        case let .server(status, message): message.isEmpty ? "Flock answered with HTTP \(status)" : message
+        case .notRunning: String(localized: "app.not_running")
+        case let .server(status, message): message.isEmpty ? String(localized: "app.http_status \(String(status))") : message
         }
     }
 }
@@ -119,6 +119,11 @@ public actor FlockClient {
     /// Node.js site's dev server (starting it when it sleeps).
     public func restartSite(_ name: String) async throws -> Status {
         try await decode(Status.self, "POST", "/v1/sites/\(escape(name))/restart", timeout: Self.siteRestartTimeout)
+    }
+
+    /// Restarts only a site's Reverb server, e.g. so it loads changed code.
+    public func restartReverb(_ name: String) async throws -> Status {
+        try await decode(Status.self, "POST", "/v1/sites/\(escape(name))/reverb/restart", timeout: Self.siteRestartTimeout)
     }
 
     /// Puts a Node.js site's dev server to sleep until the site's next request.

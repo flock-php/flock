@@ -1,3 +1,5 @@
+using Flock.Kit;
+
 namespace Flock.Tray.Features.Preferences;
 
 /// <summary>Persisted tray preferences. This type has no file or UI side effects.</summary>
@@ -11,4 +13,6 @@ public sealed record PreferenceData
     public string ExpandedSites { get; init; } = "";
     /// <summary>Leaves the Sites section out of the panel (Settings → General).</summary>
     public bool HideSitesInPanel { get; init; }
+    /// <summary>The UI language: "system" (Windows' preferred languages) or one of Localization.Languages. Applied at startup.</summary>
+    public string Language { get; init; } = Localization.System;
 }
