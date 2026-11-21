@@ -409,6 +409,9 @@ msgstr "Vyhledat aktualizace…"
 msgid "general.could_not_change_startup"
 msgstr "Nastavení spouštění se nepodařilo změnit: {error}"
 
+msgid "general.could_not_change_tray_setting"
+msgstr "Nastavení nabídky v oznamovací oblasti se nepodařilo změnit: {error}"
+
 msgid "general.could_not_open_program_error"
 msgstr "{program} se nepodařilo otevřít: {error}"
 
@@ -432,6 +435,12 @@ msgstr "DNS server Flocku neběží"
 
 msgid "general.folder"
 msgstr "Složka"
+
+msgid "general.hide_sites_in_tray_menu"
+msgstr "Skrýt weby v nabídce oznamovací oblasti"
+
+msgid "general.hide_sites_in_tray_menu_description"
+msgstr "Stránka Weby je stále zobrazuje."
 
 msgid "general.language"
 msgstr "Jazyk"
@@ -507,6 +516,9 @@ msgstr "Obecné"
 
 msgid "general.tld_doesnt_resolve_problem_linux"
 msgstr "*.{tld} se nepřekládá: {problem}. Linux nemá záložní soubor hosts, takže weby se neotevřou, dokud se to nespraví; `flock install` to znovu nastaví."
+
+msgid "general.tray"
+msgstr "Oznamovací oblast"
 
 msgid "general.update_to"
 msgstr "Aktualizovat na {version}"

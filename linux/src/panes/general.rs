@@ -97,10 +97,10 @@ impl GeneralPane {
     }
 
     fn tray(&self) -> adw::PreferencesGroup {
-        let group = group("Tray", "");
+        let group = group(tr!("general.tray"), "");
         let row = adw::SwitchRow::builder()
-            .title("Hide sites in the tray menu")
-            .subtitle("The Sites page still lists them.")
+            .title(tr!("general.hide_sites_in_tray_menu"))
+            .subtitle(tr!("general.hide_sites_in_tray_menu_description"))
             .active(self.model.hides_sites())
             .build();
         let (model, banner) = (self.model.clone(), self.banner.clone());
@@ -111,7 +111,7 @@ impl GeneralPane {
                 return;
             }
             if let Err(e) = model.set_hides_sites(on) {
-                report(&banner, Some(format!("Could not change the tray setting: {e}")));
+                report(&banner, Some(tr!("general.could_not_change_tray_setting", error = e)));
                 row.set_active(!on);
             }
         });
