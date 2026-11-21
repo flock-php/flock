@@ -156,6 +156,47 @@ func TestPlanGateAppliesOnlyRequiredPullRequestStateChanges(t *testing.T) {
 	}
 }
 
+func TestPlanDoesNotCloseUnapprovedMaintainerPullRequest(t *testing.T) {
+	current := decisionState()
+	current.observed.pullRequest.AuthorAssociation = "MEMBER"
+	current.observed.files = []contribution.File{{Filename: "internal/file.go"}}
+
+	current.plan()
+
+	assertChangeKinds(t, current.changes, nil)
+}
+
+func TestPlanMovesStaleMaintainerClaimToApprovedIssue(t *testing.T) {
+	current := decisionState()
+	current.observed.pullRequest.AuthorAssociation = "MEMBER"
+	current.observed.links = []contribution.LinkedIssue{
+		{Owner: "owner", Repository: "repo", Number: 9},
+		{Owner: "owner", Repository: "repo", Number: 10},
+	}
+	current.observed.record = &contribution.ClaimRecord{
+		Issue: contribution.IssueReference{Repository: "repo", Number: 9}, Author: "author", CommentID: 10,
+	}
+	current.observed.claimedLabelExists = true
+	current.observed.issues["repo#9"] = &issueSnapshot{
+		issue: &contribution.Issue{
+			State: "open", Assignees: []contribution.User{{Login: "maintainer"}},
+			Labels: []contribution.Label{{Name: contribution.ClaimedLabel}},
+		},
+		claims: []contribution.Claim{{PullRequestNumber: 1, Author: "author", CommentID: 11}},
+	}
+	current.observed.issues["repo#10"] = &issueSnapshot{
+		issue:  &contribution.Issue{State: "open", Labels: []contribution.Label{{Name: contribution.HelpWantedLabel}}},
+		claims: []contribution.Claim{},
+	}
+
+	current.plan()
+
+	assertChangeKinds(t, current.changes, []changeKind{
+		changeDeleteComment, changeRemoveLabel, changeDeleteComment,
+		changeComment, changeComment, changeAddAssignee, changeAddLabel, changeRemoveLabel, changeAddLabel,
+	})
+}
+
 func TestExemptFilesOnly(t *testing.T) {
 	tests := []struct {
 		name  string
