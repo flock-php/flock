@@ -6,6 +6,10 @@ import SwiftUI
 struct PanelView: View {
     @Environment(AppModel.self) private var model
     @Environment(\.openWindow) private var openWindow
+    @AppStorage(PanelView.hideSitesKey) private var hideSites = false
+
+    /// UserDefaults key: whether the Sites section is left out of the panel (Settings → General).
+    static let hideSitesKey = "panel.hideSites"
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -27,8 +31,10 @@ struct PanelView: View {
                 Divider()
                 services(status)
                 Divider()
-                sites(status.sites, proxies: status.proxies)
-                Divider()
+                if !hideSites {
+                    sites(status.sites, proxies: status.proxies)
+                    Divider()
+                }
                 toggles(status)
                 Divider()
                 shortcuts(status)

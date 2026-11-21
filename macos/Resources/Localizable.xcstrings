@@ -3870,6 +3870,50 @@
         }
       }
     },
+    "general.hide_sites_in_menu_bar_panel" : {
+      "localizations" : {
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Skrýt weby v panelu řádku nabídek"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hide sites in the menu bar panel"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ocultar sitios en el panel de la barra de menús"
+          }
+        }
+      }
+    },
+    "general.hide_sites_in_menu_bar_panel_description" : {
+      "localizations" : {
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nastavení → Weby je stále zobrazuje."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Settings → Sites still lists them."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ajustes → Sitios sigue mostrándolos."
+          }
+        }
+      }
+    },
     "general.language" : {
       "localizations" : {
         "cs" : {
@@ -3932,6 +3976,28 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Predeterminado del sistema"
+          }
+        }
+      }
+    },
+    "general.menu_bar" : {
+      "localizations" : {
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Řádek nabídek"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Menu bar"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Barra de menús"
           }
         }
       }

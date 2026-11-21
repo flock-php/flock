@@ -47,6 +47,8 @@ struct State {
     running: bool,
     /// The sites, each with its worktrees; problems are in the main window.
     sites: Vec<SiteItem>,
+    /// The Sites submenu is left out (General → Tray).
+    hide_sites: bool,
     /// The proxies (`flock proxy`), after the sites.
     proxies: Vec<SiteItem>,
     mail_count: u32,
@@ -72,6 +74,7 @@ impl State {
             warning: status.as_ref().and_then(|s| s.warnings.first().cloned()),
             needs_setup,
             sites: status.as_ref().map(SiteItem::all).unwrap_or_default(),
+            hide_sites: model.hides_sites(),
             proxies: status.as_ref().map(|s| s.proxies.iter().map(SiteItem::proxy).collect()).unwrap_or_default(),
             mail_count: status.as_ref().map_or(0, |s| s.mail_count),
             dump_count: status.as_ref().map_or(0, |s| s.dump_count),
@@ -252,7 +255,7 @@ impl ksni::Tray for FlockTray {
             items.extend([item(tr!("menu.set_up_flock"), || Command::Open("setup")), MenuItem::Separator]);
         } else {
             items.extend([item(tr!("menu.open_flock"), || Command::Show), MenuItem::Separator]);
-            if self.state.running {
+            if self.state.running && !self.state.hide_sites {
                 items.push(self.sites());
             }
             items.extend([
@@ -376,5 +379,37 @@ mod tests {
         )
         .unwrap();
         assert_eq!(SiteItem::proxy(&started.proxies[0]).label, "admin.test · Starting…");
+    }
+
+    /// The labels of the menu's submenus.
+    fn submenus(hide_sites: bool) -> Vec<String> {
+        let state = State {
+            icon: "",
+            headline: "Running".to_owned(),
+            warning: None,
+            needs_setup: false,
+            running: true,
+            sites: vec![SiteItem { label: "acme.test".to_owned(), url: None, worktrees: Vec::new() }],
+            hide_sites,
+            proxies: Vec::new(),
+            mail_count: 0,
+            dump_count: 0,
+            xdebug: false,
+            dumps: false,
+        };
+        let tray = FlockTray { state, icon_theme_path: String::new(), sender: async_channel::unbounded().0 };
+        ksni::Tray::menu(&tray)
+            .into_iter()
+            .filter_map(|item| match item {
+                MenuItem::SubMenu(submenu) => Some(submenu.label),
+                _ => None,
+            })
+            .collect()
+    }
+
+    #[test]
+    fn hides_the_sites_submenu_when_asked() {
+        assert_eq!(submenus(false), ["Sites"]);
+        assert!(submenus(true).is_empty());
     }
 }

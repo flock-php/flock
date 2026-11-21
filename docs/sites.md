@@ -148,7 +148,7 @@ Site options such as `tls` and `handle_errors` aren't supported, and neither is 
 ## Listing sites
 
 :::app
-**Settings → Sites** lists every linked and parked site with its domain and a lock when it's secured. Select one to see its PHP and Node versions, domains and server. Sites from a project folder carry a **Project folder** badge. The **Sites** section of the Flock panel lists them too: click one to open it in your browser.
+**Settings → Sites** lists every linked and parked site with its domain and a lock when it's secured. Select one to see its PHP and Node versions, domains and server. Sites from a project folder carry a **Project folder** badge. The **Sites** section of the Flock panel lists them too: click one to open it in your browser. To keep the panel short, switch on **Hide sites in the menu bar panel** in **Settings → General** (**Hide sites in the panel** on Windows). On Linux, **Hide sites in the tray menu** in **General** leaves out the tray menu's **Sites** submenu.
 :::
 
 :::cli

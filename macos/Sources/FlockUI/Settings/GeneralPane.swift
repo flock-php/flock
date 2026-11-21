@@ -19,6 +19,7 @@ struct GeneralPane: View {
         get { confirmUnparkState.wrappedValue }
         nonmutating set { confirmUnparkState.wrappedValue = newValue }
     }
+    @AppStorage(PanelView.hideSitesKey) private var hideSitesInPanel = false
     private let launchAtLoginState = State<Bool>(initialValue: LoginItem.isEnabled)
     private var launchAtLogin: Bool {
         get { launchAtLoginState.wrappedValue }
@@ -86,6 +87,13 @@ struct GeneralPane: View {
                     Toggle("general.open_flocks_menu_bar_app", isOn: Binding(get: { launchAtLogin }, set: { setLaunchAtLogin($0) }))
                     if let loginError {
                         Text(loginError).font(.caption).foregroundStyle(.orange)
+                    }
+                }
+
+                Section("general.menu_bar") {
+                    Toggle(isOn: $hideSitesInPanel) {
+                        Text("general.hide_sites_in_menu_bar_panel")
+                        Text("general.hide_sites_in_menu_bar_panel_description")
                     }
                 }
 

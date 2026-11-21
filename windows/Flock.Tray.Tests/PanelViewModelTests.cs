@@ -73,6 +73,14 @@ public sealed class PanelViewModelTests
     }
 
     [Fact]
+    public void SitesSectionShowsUntilThePreferenceHidesIt()
+    {
+        Assert.Equal(Microsoft.UI.Xaml.Visibility.Visible, PanelViewModel.SitesSection(new Features.Preferences.PreferenceData()));
+        Assert.Equal(Microsoft.UI.Xaml.Visibility.Collapsed,
+            PanelViewModel.SitesSection(new Features.Preferences.PreferenceData { HideSitesInPanel = true }));
+    }
+
+    [Fact]
     public void ServiceRowUpdatesInPlaceAndRaisesNotification()
     {
         var row = new PanelServiceRow(new PanelServiceValue("web", "Web", "up", true));

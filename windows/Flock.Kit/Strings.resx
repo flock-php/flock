@@ -595,6 +595,12 @@ Details are in %LocalAppData%\Flock\tray.log.</value>
     <data name="General_Folder" xml:space="preserve">
         <value>Folder</value>
     </data>
+    <data name="General_HideSitesInPanel" xml:space="preserve">
+        <value>Hide sites in the panel</value>
+    </data>
+    <data name="General_HideSitesInPanelDescription" xml:space="preserve">
+        <value>Settings → Sites still lists them.</value>
+    </data>
     <data name="General_Language" xml:space="preserve">
         <value>Language</value>
     </data>
@@ -615,6 +621,9 @@ Details are in %LocalAppData%\Flock\tray.log.</value>
     </data>
     <data name="General_OpenAtSignInDescription" xml:space="preserve">
         <value>Shows the Flock icon in the notification area when you sign in. The daemon itself always starts at sign-in.</value>
+    </data>
+    <data name="General_Panel" xml:space="preserve">
+        <value>Panel</value>
     </data>
     <data name="General_Pid" xml:space="preserve">
         <value>pid {0}</value>

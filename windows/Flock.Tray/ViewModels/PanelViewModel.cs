@@ -28,6 +28,7 @@ public sealed class PanelViewModel : ObservableObject, IDisposable
         model.Changed += ModelChanged;
         model.UpdateChanged += UpdateChanged;
         model.Dumps.Changed += DumpsChanged;
+        model.Preferences.StateChanged += PreferencesChanged;
         ToggleDumpsCommand = new AsyncRelayCommand<bool>(SetDumpsAsync, _ => !model.Dumps.IsCaptureBusy);
         ToggleXdebugCommand = new AsyncRelayCommand<bool>(SetXdebugAsync);
         RestartCommand = new AsyncRelayCommand(model.RestartAsync, () => !IsRestarting);
@@ -96,6 +97,8 @@ public sealed class PanelViewModel : ObservableObject, IDisposable
     public Visibility StatusContentVisibility => HasStatusContent ? Visibility.Visible : Visibility.Collapsed;
     public Visibility WarningsVisibility => Status?.Warnings.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
     public Visibility SitesVisibility => HasSites ? Visibility.Visible : Visibility.Collapsed;
+    /// <summary>The Sites section, unless Settings → General hides it.</summary>
+    public Visibility SitesSectionVisibility => SitesSection(model.Preferences.Snapshot);
     public Visibility EmptySitesVisibility => HasSites ? Visibility.Collapsed : Visibility.Visible;
     public Visibility NotRunningVisibility => HasStatusContent ? Visibility.Collapsed : Visibility.Visible;
     public Visibility SetupVisibility => NeedsSetup ? Visibility.Visible : Visibility.Collapsed;
@@ -164,6 +167,9 @@ public sealed class PanelViewModel : ObservableObject, IDisposable
         }
     }
 
+    internal static Visibility SitesSection(Features.Preferences.PreferenceData preferences) =>
+        preferences.HideSitesInPanel ? Visibility.Collapsed : Visibility.Visible;
+
     public void DismissError()
     {
         model.DismissError();
@@ -180,6 +186,12 @@ public sealed class PanelViewModel : ObservableObject, IDisposable
         model.Changed -= ModelChanged;
         model.UpdateChanged -= UpdateChanged;
         model.Dumps.Changed -= DumpsChanged;
+        model.Preferences.StateChanged -= PreferencesChanged;
+    }
+
+    private void PreferencesChanged()
+    {
+        OnPropertyChanged(nameof(SitesSectionVisibility));
     }
 
     private void ModelChanged()

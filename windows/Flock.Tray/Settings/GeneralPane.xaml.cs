@@ -22,6 +22,7 @@ internal sealed partial class GeneralPane : ISettingsPane
         viewModel = new GeneralViewModel(model);
         DataContext = viewModel;
         Startup.IsOn = Native.StartsAtSignIn;
+        HideSites.IsOn = model.Preferences.Snapshot.HideSitesInPanel;
         LanguageHost.Children.Add(LanguageSetting.Create(model.Preferences));
         viewModel.PropertyChanged += ViewModelChanged;
         loaded = true;
@@ -151,6 +152,30 @@ internal sealed partial class GeneralPane : ISettingsPane
         catch (Exception e) when (e is UnauthorizedAccessException or SecurityException or IOException)
         {
             model.ShowRuntimeError(Localization.Format(Strings.General_CouldNotChangeStartup, e.Message));
+        }
+    }
+
+    private async void HideSitesToggled(object sender, RoutedEventArgs args)
+    {
+        if (!loaded || sender is not ToggleSwitch toggle || toggle.IsOn == model.Preferences.Snapshot.HideSitesInPanel)
+        {
+            return;
+        }
+        var hide = toggle.IsOn;
+        // Until the save commits, the snapshot still has the old value: a second toggle would be ignored.
+        toggle.IsEnabled = false;
+        try
+        {
+            await model.Preferences.UpdateAsync(data => data with { HideSitesInPanel = hide });
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException or System.Text.Json.JsonException or OperationCanceledException)
+        {
+            toggle.IsOn = model.Preferences.Snapshot.HideSitesInPanel;
+            model.ShowRuntimeError($"Could not change the panel setting: {e.Message}");
+        }
+        finally
+        {
+            toggle.IsEnabled = true;
         }
     }
 

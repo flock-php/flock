@@ -546,6 +546,12 @@ Encontrarás los detalles en %LocalAppData%\Flock\tray.log.</value>
     <data name="General_Folder" xml:space="preserve">
         <value>Carpeta</value>
     </data>
+    <data name="General_HideSitesInPanel" xml:space="preserve">
+        <value>Ocultar sitios en el panel</value>
+    </data>
+    <data name="General_HideSitesInPanelDescription" xml:space="preserve">
+        <value>Configuración → Sitios sigue mostrándolos.</value>
+    </data>
     <data name="General_Language" xml:space="preserve">
         <value>Idioma</value>
     </data>
@@ -566,6 +572,9 @@ Encontrarás los detalles en %LocalAppData%\Flock\tray.log.</value>
     </data>
     <data name="General_OpenAtSignInDescription" xml:space="preserve">
         <value>Muestra el icono de Flock en el área de notificación al iniciar sesión. El demonio siempre se inicia al iniciar sesión.</value>
+    </data>
+    <data name="General_Panel" xml:space="preserve">
+        <value>Panel</value>
     </data>
     <data name="General_Pid" xml:space="preserve">
         <value>PID {0}</value>

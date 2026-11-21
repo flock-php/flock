@@ -95,9 +95,10 @@
                     </ItemsControl>
                 </StackPanel>
 
-                <Border Height="1" Background="{ThemeResource DividerStrokeColorDefaultBrush}" Margin="-16,0" />
+                <Border Height="1" Background="{ThemeResource DividerStrokeColorDefaultBrush}" Margin="-16,0"
+                        Visibility="{Binding SitesSectionVisibility}" />
 
-                <StackPanel Spacing="4">
+                <StackPanel Spacing="4" Visibility="{Binding SitesSectionVisibility}">
                     <TextBlock Text="{l:Loc Key=Logs_SitesHeading}" Style="{StaticResource CaptionTextBlockStyle}" FontSize="11" FontWeight="SemiBold"
                                Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                     <TextBlock

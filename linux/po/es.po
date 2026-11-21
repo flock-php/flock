@@ -402,6 +402,9 @@ msgstr "Buscar actualizaciones…"
 msgid "general.could_not_change_startup"
 msgstr "No se pudo cambiar el ajuste de inicio: {error}"
 
+msgid "general.could_not_change_tray_setting"
+msgstr "No se pudo cambiar el ajuste de la bandeja del sistema: {error}"
+
 msgid "general.could_not_open_program_error"
 msgstr "No se pudo abrir {program}: {error}"
 
@@ -425,6 +428,12 @@ msgstr "El servidor DNS de Flock no está en ejecución"
 
 msgid "general.folder"
 msgstr "Carpeta"
+
+msgid "general.hide_sites_in_tray_menu"
+msgstr "Ocultar sitios en el menú de la bandeja del sistema"
+
+msgid "general.hide_sites_in_tray_menu_description"
+msgstr "La página Sitios sigue mostrándolos."
 
 msgid "general.language"
 msgstr "Idioma"
@@ -500,6 +509,9 @@ msgstr "General"
 
 msgid "general.tld_doesnt_resolve_problem_linux"
 msgstr "*.{tld} no se resuelve: {problem}. Linux no tiene el archivo hosts como respaldo, así que los sitios no abren hasta que se resuelva; `flock install` lo vuelve a configurar."
+
+msgid "general.tray"
+msgstr "Bandeja del sistema"
 
 msgid "general.update_to"
 msgstr "Actualizar a {version}"
