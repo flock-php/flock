@@ -30,7 +30,7 @@ func Gate(ctx context.Context, client *github.Client, owner, repository string, 
 
 func (s *state) planGate() {
 	pullRequest := s.observed.pullRequest
-	if pullRequest == nil || bypassesGate(pullRequest) || pullRequest.Merged {
+	if pullRequest == nil || contribution.BypassesGate(pullRequest) || pullRequest.Merged {
 		return
 	}
 	if pullRequest.State == "closed" {
@@ -99,14 +99,6 @@ func (s *state) planReopen(body string) {
 		body:       body,
 	})
 	s.observed.pullRequest.State = "open"
-}
-
-func bypassesGate(pullRequest *contribution.PullRequest) bool {
-	if pullRequest == nil {
-		return true
-	}
-	return pullRequest.Author.Type == "Bot" || pullRequest.AuthorAssociation == "OWNER" ||
-		pullRequest.AuthorAssociation == "MEMBER" || pullRequest.AuthorAssociation == "COLLABORATOR"
 }
 
 func exemptFilesOnly(files []contribution.File) bool {

@@ -101,7 +101,7 @@ func (s *state) plan() {
 		return
 	}
 	s.planRelease()
-	if bypassesGate(s.observed.pullRequest) {
+	if contribution.BypassesGate(s.observed.pullRequest) {
 		return
 	}
 	s.planGate()

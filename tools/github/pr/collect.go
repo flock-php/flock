@@ -21,7 +21,7 @@ func (s *state) collect(ctx context.Context) error {
 	if err := s.loadRecord(ctx); err != nil {
 		return err
 	}
-	if bypassesGate(s.observed.pullRequest) {
+	if contribution.BypassesGate(s.observed.pullRequest) {
 		return s.collectReleaseDetails(ctx)
 	}
 	if err := s.loadFiles(ctx); err != nil {
@@ -88,7 +88,7 @@ func (s *state) collectGate(ctx context.Context) error {
 		return err
 	}
 	pullRequest := s.observed.pullRequest
-	if pullRequest == nil || bypassesGate(pullRequest) || pullRequest.Merged {
+	if pullRequest == nil || contribution.BypassesGate(pullRequest) || pullRequest.Merged {
 		return nil
 	}
 	if pullRequest.State == "closed" {
@@ -112,7 +112,7 @@ func (s *state) collectClaim(ctx context.Context) error {
 		return err
 	}
 	pullRequest := s.observed.pullRequest
-	if pullRequest == nil || pullRequest.State == "closed" || pullRequest.Merged || pullRequest.BaseRef != "main" || bypassesGate(pullRequest) {
+	if pullRequest == nil || pullRequest.State == "closed" || pullRequest.Merged || pullRequest.BaseRef != "main" || contribution.BypassesGate(pullRequest) {
 		return nil
 	}
 	if err := s.loadLinks(ctx); err != nil {

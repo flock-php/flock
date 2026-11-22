@@ -12,6 +12,14 @@ func IsNotFound(err error) bool {
 	return errors.As(err, &response) && response.Response != nil && response.Response.StatusCode == http.StatusNotFound
 }
 
+func BypassesGate(pullRequest *PullRequest) bool {
+	if pullRequest == nil {
+		return true
+	}
+	return pullRequest.Author.Type == "Bot" || pullRequest.AuthorAssociation == "OWNER" ||
+		pullRequest.AuthorAssociation == "MEMBER" || pullRequest.AuthorAssociation == "COLLABORATOR"
+}
+
 func HasAssignedClaimAuthor(item *Issue, claims []Claim) bool {
 	if item == nil {
 		return false

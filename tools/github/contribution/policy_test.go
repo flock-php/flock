@@ -30,6 +30,31 @@ func TestIssueApprovalFor(t *testing.T) {
 	}
 }
 
+func TestBypassesGate(t *testing.T) {
+	tests := []struct {
+		name string
+		pr   *PullRequest
+		want bool
+	}{
+		{name: "nil pull request", want: true},
+		{name: "bot", pr: &PullRequest{Author: User{Type: "Bot"}}, want: true},
+		{name: "owner", pr: &PullRequest{AuthorAssociation: "OWNER"}, want: true},
+		{name: "member", pr: &PullRequest{AuthorAssociation: "MEMBER"}, want: true},
+		{name: "collaborator", pr: &PullRequest{AuthorAssociation: "COLLABORATOR"}, want: true},
+		{name: "contributor", pr: &PullRequest{AuthorAssociation: "CONTRIBUTOR"}},
+		{name: "first timer", pr: &PullRequest{AuthorAssociation: "FIRST_TIMER"}},
+		{name: "first time contributor", pr: &PullRequest{AuthorAssociation: "FIRST_TIME_CONTRIBUTOR"}},
+		{name: "none", pr: &PullRequest{AuthorAssociation: "NONE"}},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if got := BypassesGate(test.pr); got != test.want {
+				t.Fatalf("BypassesGate() = %v, want %v", got, test.want)
+			}
+		})
+	}
+}
+
 func TestHasAssignedClaimAuthor(t *testing.T) {
 	issue := &Issue{Assignees: []User{{Login: "contributor"}}}
 	claims := []Claim{{Author: "other-contributor", PullRequestNumber: 43}, {Author: "contributor", PullRequestNumber: 42}}

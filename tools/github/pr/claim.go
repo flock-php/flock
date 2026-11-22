@@ -26,7 +26,7 @@ func Claim(ctx context.Context, client *github.Client, owner, repository string,
 
 func (s *state) planClaim() {
 	pullRequest := s.observed.pullRequest
-	if pullRequest == nil || pullRequest.State == "closed" || pullRequest.Merged || pullRequest.BaseRef != "main" || bypassesGate(pullRequest) {
+	if pullRequest == nil || pullRequest.State == "closed" || pullRequest.Merged || pullRequest.BaseRef != "main" || contribution.BypassesGate(pullRequest) {
 		return
 	}
 	s.resolve()
