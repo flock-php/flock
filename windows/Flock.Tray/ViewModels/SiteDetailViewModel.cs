@@ -24,16 +24,20 @@ internal sealed partial class SiteDetailViewModel : DetailViewModel
     private int rootIndex;
     private int rootShown;
 
-    public SiteDetailViewModel(ISiteDetailHost host, OutputViewModel output)
+    /// <param name="devOutput">The dev server's own output, so it and Reverb's don't share one; without it, the one output shows either.</param>
+    public SiteDetailViewModel(ISiteDetailHost host, OutputViewModel output, OutputViewModel? devOutput = null)
     {
         this.host = host;
+        separateDevOutput = devOutput is not null;
         Php = new VersionPickerViewModel(Strings.Common_Php);
         Node = new VersionPickerViewModel(Strings.Common_Node);
         Share = new ShareSectionViewModel(host);
         Server = new SiteServerSectionViewModel(host);
         Reverb = new ReverbSectionViewModel(host, output);
-        DevServer = new DevServerSectionViewModel(host, output);
+        DevServer = new DevServerSectionViewModel(host, devOutput ?? output);
     }
+
+    private readonly bool separateDevOutput;
 
     public bool IsShown { get; private set; }
     public Status.Site Site => site;
@@ -176,8 +180,11 @@ internal sealed partial class SiteDetailViewModel : DetailViewModel
     public bool HasNoWorktrees => Worktrees.Count == 0;
     public string WorktreesNote => Localization.Format(Strings.Worktrees_Explanation, site.Domain);
 
-    /// <summary>The output shown: the dev server's of a Node.js site, else Reverb's, else a PHP site's Vite.</summary>
-    public OutputSource? Output => site.IsNode ? DevServer.Output : Reverb.Output ?? DevServer.Output;
+    /// <summary>The output shown: the dev server's of a Node.js site, else Reverb's, else a PHP site's Vite. With a dev output of its own, only Reverb's.</summary>
+    public OutputSource? Output => separateDevOutput ? Reverb.Output : site.IsNode ? DevServer.Output : Reverb.Output ?? DevServer.Output;
+
+    /// <summary>The dev server's output, in the dev output it has of its own (null without one).</summary>
+    public OutputSource? DevOutput => separateDevOutput ? DevServer.Output : null;
 
     private string NodeMajor => Major(site.Node ?? "");
 

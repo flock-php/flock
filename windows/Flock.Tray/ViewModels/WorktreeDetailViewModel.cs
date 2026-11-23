@@ -19,10 +19,11 @@ internal sealed partial class WorktreeDetailViewModel : DetailViewModel
     private int databaseIndex;
     private int databaseShown;
 
-    public WorktreeDetailViewModel(ISiteDetailHost host, OutputViewModel output)
+    public WorktreeDetailViewModel(ISiteDetailHost host, OutputViewModel output, OutputViewModel? devOutput = null)
     {
         this.host = host;
-        DevServer = new DevServerSectionViewModel(host, output);
+        separateDevOutput = devOutput is not null;
+        DevServer = new DevServerSectionViewModel(host, devOutput ?? output);
     }
 
     public bool IsShown { get; private set; }
@@ -97,7 +98,12 @@ internal sealed partial class WorktreeDetailViewModel : DetailViewModel
     public bool HasLog => Setup is { Log.Length: > 0 };
     public bool CanRunAgain => Setup is { IsBusy: false };
 
-    public OutputSource? Output => worktree.DevServerStatus is not null ? DevServer.Output : null;
+    public OutputSource? Output => !separateDevOutput && worktree.DevServerStatus is not null ? DevServer.Output : null;
+
+    /// <summary>The dev server's output, in the dev output it has of its own (null without one).</summary>
+    public OutputSource? DevOutput => separateDevOutput ? DevServer.Output : null;
+
+    private readonly bool separateDevOutput;
 
     public void Hide()
     {

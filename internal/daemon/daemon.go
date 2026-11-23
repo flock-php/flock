@@ -710,7 +710,7 @@ func (d *daemon) reload() error {
 			nodeSpecs[site.Name], nodePorts[site.Name] = spec, port
 			status.Server, status.Worker, status.OctaneAvailable, status.ReverbAvailable, status.PHP = "", "", false, false, ""
 			status.NodeServer = &api.SiteNodeServer{State: api.NodeSleeping, Port: port, Command: spec.Shell, Log: spec.Name, Problem: nodeSiteProblem(site)}
-			d.ensureIfAwake(site.Name, spec, port, false, keep)
+			d.ensureIfAwake(site.Name, spec, false, keep)
 			ws := web.Site{Domain: domain, Aliases: aliases, Proxy: "localhost:" + strconv.Itoa(port), Node: site.Name}
 			if site.Secured {
 				if ws.CertFile, ws.KeyFile, err = ca.SiteCert(domain); err != nil {
@@ -771,7 +771,7 @@ func (d *daemon) reload() error {
 			nodeSpecs[site.Name], nodePorts[site.Name], devOnly[site.Name] = spec, port, true
 			ws.DevServer = site.Name
 			status.DevServer = &api.SiteNodeServer{State: api.NodeSleeping, Port: port, Command: spec.Shell, Log: spec.Name, Problem: nodeSiteProblem(site)}
-			d.ensureIfAwake(site.Name, spec, port, true, keep)
+			d.ensureIfAwake(site.Name, spec, true, keep)
 		}
 		if cfg.Xdebug {
 			ws.DebugFPM = debugPool(version)

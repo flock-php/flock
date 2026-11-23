@@ -354,40 +354,54 @@ func TestPreferredNodePortsAreStableAndInRange(t *testing.T) {
 	}
 }
 
-func TestPHPSiteDevServerRunningOutsideFlockIsLeftAlone(t *testing.T) {
+// viteScript is what Vite's /@vite/client answers: a script that logs "[vite]".
+const viteScript = `console.debug("[vite] connecting...")`
+
+// fakeVite serves Vite's client script at base + "@vite/client".
+func fakeVite(t *testing.T, base string) *httptest.Server {
+	t.Helper()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != base+"@vite/client" {
+			http.NotFound(w, r)
+			return
+		}
+		_, _ = io.WriteString(w, viteScript)
+	}))
+	t.Cleanup(srv.Close)
+	return srv
+}
+
+func TestPHPSiteDevServerRunningWithoutFlockIsFound(t *testing.T) {
 	dir := t.TempDir()
-	if runsOutsideFlock(dir, 22000) {
+	if externalDevServer(dir) != 0 {
 		t.Fatal("no public/hot, yet a dev server of its own")
 	}
-	vite := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/@vite/client" {
-			http.NotFound(w, r)
-		}
-	}))
-	defer vite.Close()
+	vite := fakeVite(t, "/")
 	other := httptest.NewServer(http.NotFoundHandler())
 	defer other.Close()
+	// A server that answers 200 to every path isn't Vite either.
+	always := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { _, _ = io.WriteString(w, "ok") }))
+	defer always.Close()
+	u, _ := url.Parse(vite.URL)
+	vitePort, _ := strconv.Atoi(u.Port())
 	if err := os.Mkdir(filepath.Join(dir, "public"), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	hot := filepath.Join(dir, "public", "hot")
+
 	writeFile(t, hot, vite.URL+"\n")
-	if !runsOutsideFlock(dir, 22000) {
-		t.Fatal("a Vite in public/hot isn't seen")
-	}
-	// Flock's own server writes the same file: it isn't someone else's.
-	u, _ := url.Parse(vite.URL)
-	port, _ := strconv.Atoi(u.Port())
-	if runsOutsideFlock(dir, port) {
-		t.Fatal("Flock's own dev server taken for another one")
+	if got := externalDevServer(dir); got != vitePort {
+		t.Fatalf("a Vite in public/hot: port %d, want %d", got, vitePort)
 	}
 	// A stale public/hot, with another program on its port, isn't a Vite.
-	writeFile(t, hot, other.URL+"\n")
-	if runsOutsideFlock(dir, 22000) {
-		t.Fatal("a server that isn't Vite taken for one")
+	for _, stale := range []*httptest.Server{other, always} {
+		writeFile(t, hot, stale.URL+"\n")
+		if externalDevServer(dir) != 0 {
+			t.Fatalf("%s taken for a Vite", stale.URL)
+		}
 	}
 
-	// vite-plugin-symfony says where Vite listens in its build directory's entrypoints.json.
+	// vite-plugin-symfony says where Vite listens in its build directory's entrypoints.json, with its base.
 	if err := os.Remove(hot); err != nil {
 		t.Fatal(err)
 	}
@@ -395,21 +409,63 @@ func TestPHPSiteDevServerRunningOutsideFlockIsLeftAlone(t *testing.T) {
 		t.Fatal(err)
 	}
 	entrypoints := filepath.Join(dir, "public", "build", "entrypoints.json")
-	writeFile(t, entrypoints, `{"base":"/build/","isProd":false,"viteServer":{"origin":"`+vite.URL+`"},"entryPoints":{}}`)
-	if !runsOutsideFlock(dir, 22000) {
-		t.Fatal("a Vite in entrypoints.json isn't seen")
+	writeFile(t, entrypoints, `{"base":"/","isProd":false,"viteServer":{"origin":"`+vite.URL+`"},"entryPoints":{}}`)
+	if got := externalDevServer(dir); got != vitePort {
+		t.Fatalf("a Vite in entrypoints.json: port %d, want %d", got, vitePort)
 	}
-	if runsOutsideFlock(dir, port) {
-		t.Fatal("Flock's own dev server in entrypoints.json taken for another one")
+	based := fakeVite(t, "/build/")
+	u, _ = url.Parse(based.URL)
+	basedPort, _ := strconv.Atoi(u.Port())
+	writeFile(t, entrypoints, `{"base":"/build/","viteServer":{"origin":"`+based.URL+`"}}`)
+	if got := externalDevServer(dir); got != basedPort {
+		t.Fatalf("a Vite under /build/: port %d, want %d", got, basedPort)
 	}
-	// Built files (viteServer is false), or a stale origin of another program, aren't a dev server.
+	// Built files (viteServer is false), or the origin of another program, aren't a dev server.
 	writeFile(t, entrypoints, `{"isProd":true,"viteServer":false,"entryPoints":{}}`)
-	if runsOutsideFlock(dir, 22000) {
+	if externalDevServer(dir) != 0 {
 		t.Fatal("built files taken for a dev server")
 	}
 	writeFile(t, entrypoints, `{"viteServer":{"origin":"`+other.URL+`"}}`)
-	if runsOutsideFlock(dir, 22000) {
+	if externalDevServer(dir) != 0 {
 		t.Fatal("a server that isn't Vite taken for one")
+	}
+}
+
+func TestAVitePublicHotIsOutsideFlockUnlessItsProcessIsFlocks(t *testing.T) {
+	if runningAsRoot() {
+		t.Skip("Flock doesn't run a project's dev server as root")
+	}
+	root := shortTempDir(t)
+	fakeNpm(t, root, "flock-test-server")
+	if err := os.MkdirAll(filepath.Join(root, "log"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	dir := t.TempDir()
+	vite := fakeVite(t, "/")
+	if err := os.Mkdir(filepath.Join(dir, "public"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeFile(t, filepath.Join(dir, "public", "hot"), vite.URL+"\n")
+	d := &daemon{root: root, procs: supervisor.New(), restarts: map[string]int{}}
+	t.Cleanup(func() { d.procs.Retain(map[string]bool{}) })
+
+	// Nothing of Flock's runs: the Vite in public/hot is the project's own.
+	u, _ := url.Parse(vite.URL)
+	if got := strconv.Itoa(d.outsideDevServer("app", dir)); got != u.Port() {
+		t.Fatalf("outside port %s, want %s", got, u.Port())
+	}
+	// Flock's own process runs: the Vite in public/hot is its own, even on the same port.
+	spec := d.nodeSpec(config.Default(), config.Site{Name: "app", Path: dir}, freePort(t), "22", false)
+	d.procs.Ensure(spec)
+	deadline := time.Now().Add(5 * time.Second)
+	for !d.procUp("node-app") {
+		if time.Now().After(deadline) {
+			t.Fatal("the fake dev server didn't start")
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	if got := d.outsideDevServer("app", dir); got != 0 {
+		t.Fatalf("Flock's own process taken for an outside Vite on port %d", got)
 	}
 }
 
@@ -431,12 +487,14 @@ func TestAViteConfigsFixedPortIsRespected(t *testing.T) {
 		t.Fatalf("no config, port %d", got)
 	}
 	for config, want := range map[string]int{
-		"export default { server: { host: true, port: 5199 } }":                     5199,
-		"export default { server: { hmr: { port: 24678 }, port: 5200 } }":           5200,
-		"export default { server: { hmr: { port: 24678 } } }":                       0,
-		"export default { preview: { port: 4173 } }":                                0,
-		"export default { server: { host: true } } // port: 3000":                   0,
-		"export default { server: {\n // port: 3000\n port: 5201 /* port: 1 */ } }": 5201,
+		"export default { server: { host: true, port: 5199 } }":                      5199,
+		"export default { server: { hmr: { port: 24678 }, port: 5200 } }":            5200,
+		"export default { server: { hmr: { port: 24678 } } }":                        0,
+		"export default { preview: { port: 4173 } }":                                 0,
+		"export default { server: { host: true } } // port: 3000":                    0,
+		"export default { server: {\n // port: 3000\n port: 5201 /* port: 1 */ } }":  5201,
+		`export default { server: { origin: "http://localhost:5199", port: 5199 } }`: 5199,
+		`export default { server: { proxy: { "/api": "http://x" }, port: 5202 } }`:   5202,
 	} {
 		writeFile(t, filepath.Join(dir, "vite.config.ts"), config)
 		if got := viteConfigPort(dir); got != want {
@@ -477,7 +535,7 @@ func TestARequestWaitsForTheDevServerOfAPHPSiteToAnswer(t *testing.T) {
 	defer srv.Close()
 	u, _ := url.Parse(srv.URL)
 	port, _ := strconv.Atoi(u.Port())
-	d := &daemon{}
+	d := &daemon{procs: supervisor.New()}
 	d.node.ports = map[string]int{"app": port}
 	d.node.specs = map[string]supervisor.Spec{"app": {Dir: t.TempDir()}}
 	d.node.woke = map[string]time.Time{"app": time.Now()}
@@ -501,6 +559,9 @@ func TestARequestWaitsForTheDevServerOfAPHPSiteToAnswer(t *testing.T) {
 }
 
 func TestAPHPSitesViteStartsOnTheFirstRequestAndSleepsOnceNoTabIsOpen(t *testing.T) {
+	if runningAsRoot() {
+		t.Skip("Flock doesn't run a project's dev server as root")
+	}
 	root := shortTempDir(t)
 	fakeNpm(t, root, "flock-test-server")
 	if err := os.MkdirAll(filepath.Join(root, "log"), 0o755); err != nil {
@@ -526,6 +587,19 @@ func TestAPHPSitesViteStartsOnTheFirstRequestAndSleepsOnceNoTabIsOpen(t *testing
 		t.Fatalf("the request returned before the dev server answered:\n%s", readLog(t, root, "node-app"))
 	}
 	done()
+
+	// A dev server replaced by a new spec (a restart) makes requests wait for it again.
+	before := d.node.woke["app"]
+	time.Sleep(20 * time.Millisecond)
+	d.restarts["app"] = 1
+	d.ensureIfAwake("app", d.nodeSpec(config.Default(), config.Site{Name: "app", Path: dir}, port, "22", false), true, map[string]bool{})
+	if !d.node.woke["app"].After(before) {
+		t.Fatal("the wait for the dev server didn't start again after a restart")
+	}
+	d.awaitDevServer("app")
+	if !answers("http://localhost:" + strconv.Itoa(port)) {
+		t.Fatal("the wait ended before the restarted dev server answered")
+	}
 
 	// An open tab (a connection straight to Vite) keeps it awake past the idle time.
 	conn, err := net.Dial("tcp", "127.0.0.1:"+strconv.Itoa(port))
