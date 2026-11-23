@@ -160,6 +160,7 @@ internal sealed partial class SiteDetailViewModel : DetailViewModel
     public ShareSectionViewModel Share { get; }
     public SiteServerSectionViewModel Server { get; }
     public DevServerSectionViewModel DevServer { get; }
+    public bool HasDevServer => site.DevServerStatus is not null;
     public ReverbSectionViewModel Reverb { get; }
 
     // Laravel Boost: the project uses it, and Flock's guideline is missing from it or outdated.
@@ -175,8 +176,8 @@ internal sealed partial class SiteDetailViewModel : DetailViewModel
     public bool HasNoWorktrees => Worktrees.Count == 0;
     public string WorktreesNote => Localization.Format(Strings.Worktrees_Explanation, site.Domain);
 
-    /// <summary>The output shown: the dev server's of a Node.js site, else Reverb's.</summary>
-    public OutputSource? Output => site.IsNode ? DevServer.Output : Reverb.Output;
+    /// <summary>The output shown: the dev server's of a Node.js site, else Reverb's, else a PHP site's Vite.</summary>
+    public OutputSource? Output => site.IsNode ? DevServer.Output : Reverb.Output ?? DevServer.Output;
 
     private string NodeMajor => Major(site.Node ?? "");
 

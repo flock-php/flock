@@ -93,7 +93,7 @@
                 </settings:DetailField>
                 <TextBlock Text="{Binding SettingsNote}" Style="{StaticResource DetailNoteStyle}" />
             </StackPanel>
-            <Grid Visibility="{Binding IsNode, Converter={StaticResource BooleanVisibilityConverter}}">
+            <Grid Visibility="{Binding HasDevServer, Converter={StaticResource BooleanVisibilityConverter}}">
                 <settings:DevServerSection DataContext="{Binding DevServer}" />
             </Grid>
 

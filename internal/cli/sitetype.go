@@ -13,7 +13,10 @@ func newTypeCommand() *cobra.Command {
 		Long: "Flock tells a project's type from its files: a package.json with a dev script and nothing of PHP's " +
 			"makes a Node.js app. This sets it instead.\n\n" +
 			"A Node.js app's dev server (`npm run dev`, with the project's Node.js version) starts when the site " +
-			"is first visited, on a port Flock picks.",
+			"is first visited, on a port Flock picks.\n\n" +
+			"A PHP site whose package.json dev script is Vite's (Laravel) gets that dev server beside PHP, " +
+			"started on the site's first visit and stopped when nobody uses it. Flock leaves it alone " +
+			"when public/hot shows a Vite already running without it.",
 		Example:   "  flock type node\n  flock type php blog",
 		Args:      cobra.RangeArgs(1, 2),
 		ValidArgs: []string{config.TypePHP, config.TypeNode},

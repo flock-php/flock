@@ -665,6 +665,9 @@ struct SitesPane: View {
                 section("sites.reverb.title") {
                     reverbFields(site)
                 }
+                if site.devServer != nil {
+                    NodeDevServerSection(site: site)
+                }
             }
 
             if site.boost == .missing || site.boost == .outdated {

@@ -311,3 +311,34 @@ func TestCaddyfileSendsReverbRequestsFirst(t *testing.T) {
 		t.Errorf("Reverb's route isn't ahead of the custom handlers in the route:\n%s", cf)
 	}
 }
+
+func TestPHPSiteWithDevServerWakesItBeforePHP(t *testing.T) {
+	cfg := testConfig()
+	cfg.Sites[0].DevServer = "plain"
+	cf := Caddyfile(cfg)
+	want := "\troot * " + quote(cfg.Sites[0].Root) + "\n\tflock_wake \"plain\"\n"
+	if !strings.Contains(cf, want) {
+		t.Fatalf("the dev server isn't woken ahead of PHP:\n%s", cf)
+	}
+	if strings.Contains(cf, "node-{http.vars.flock_node_state}") {
+		t.Fatalf("a PHP site gets the Node.js waiting page:\n%s", cf)
+	}
+	if _, _, err := caddyconfig.GetAdapter("caddyfile").Adapt([]byte(cf), nil); err != nil {
+		t.Fatalf("%v\n%s", err, cf)
+	}
+}
+
+func TestPHPSiteDevServerIsWokenBeforeXdebugHandles(t *testing.T) {
+	cfg := testConfig()
+	cfg.Sites[0].DevServer = "plain"
+	cfg.Sites[0].DebugFPM = []string{"unix//run/php85-xdebug.sock"}
+	adapted, _, err := caddyconfig.GetAdapter("caddyfile").Adapt([]byte(Caddyfile(cfg)), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wake, xdebug := strings.Index(string(adapted), `"handler":"flock_wake"`), strings.Index(string(adapted), "XDEBUG_SESSION")
+	// The Xdebug and default handles end the request: the wake must come before them.
+	if wake < 0 || xdebug < 0 || wake > xdebug {
+		t.Fatalf("flock_wake at %d, the Xdebug handle at %d:\n%s", wake, xdebug, adapted)
+	}
+}

@@ -22,7 +22,7 @@ var currentWake atomic.Pointer[WakeFunc]
 func init() {
 	caddy.RegisterModule(wakeHandler{})
 	httpcaddyfile.RegisterHandlerDirective("flock_wake", parseWakeHandler)
-	httpcaddyfile.RegisterDirectiveOrder("flock_wake", httpcaddyfile.Before, "reverse_proxy")
+	httpcaddyfile.RegisterDirectiveOrder("flock_wake", httpcaddyfile.Before, "handle")
 }
 
 // wakeHandler tells the daemon of a request to a Node.js site, and sets {http.vars.flock_node_state}

@@ -130,6 +130,9 @@ func newSitesCommand() *cobra.Command {
 					if site.Reverb != nil {
 						version += " + Reverb"
 					}
+					if site.DevServer != nil {
+						version += " + Vite"
+					}
 					if site.Type == config.TypeNode {
 						version, root = "Node.js "+site.Node, "-"
 					}

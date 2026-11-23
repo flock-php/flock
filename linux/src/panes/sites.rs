@@ -458,6 +458,10 @@ impl Inner {
             if let Some(reverb) = &site.reverb {
                 groups.push(self.output.show(&reverb_log(site, reverb), reverb.running()));
             }
+            if let Some(server) = site.dev_server.as_ref() {
+                groups.push(self.dev_server_group(site, server).upcast());
+                groups.push(self.output.show(&server.log, server.live()));
+            }
             if site.boost == "missing" || site.boost == "outdated" {
                 groups.push(self.boost_group(site).upcast());
             }
@@ -1418,8 +1422,8 @@ impl Inner {
 
     fn render_worktree(self: &Rc<Self>, site: &SiteStatus) {
         let mut groups: Vec<gtk::Widget> = vec![self.worktree_header(site).upcast(), self.worktree_info(site).upcast()];
-        // A Node.js site's worktree runs a dev server of its own.
-        if let Some(server) = site.node_server.as_ref().filter(|_| site.is_node()) {
+        // A Node.js site's (or a PHP site's Vite) worktree runs a dev server of its own.
+        if let Some(server) = site.dev_server_status() {
             groups.push(self.dev_server_group(site, server).upcast());
             groups.push(self.output.show(&server.log, server.live()));
         }
@@ -2217,7 +2221,7 @@ fn site_suffixes(site: &SiteStatus) -> Vec<gtk::Widget> {
         warning.set_tooltip_text(Some(&problem));
         widgets.push(warning.upcast());
     }
-    if let Some(server) = site.node_server.as_ref().filter(|_| site.is_node()) {
+    if let Some(server) = site.dev_server_status() {
         let dot = state_dot(&server.state);
         dot.set_tooltip_text(Some(&server.text()));
         widgets.push(dot.upcast());

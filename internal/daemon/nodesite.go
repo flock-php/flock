@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"hash/fnv"
+	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -30,7 +32,10 @@ const (
 )
 
 // nodeCommand runs the project's dev script; npm passes what follows -- to it.
-const nodeCommand = "npm run dev -- --port "
+const (
+	devCommand  = "npm run dev"
+	nodeCommand = devCommand + " -- --port "
+)
 
 // A dev server goes back to sleep once nothing has used it for nodeIdle: no request and no open
 // connection (a tab with the app open keeps its hot-reload WebSocket), and no share. It's checked
@@ -42,12 +47,14 @@ var (
 
 // nodeRuns are the Node.js sites' dev servers, by site name.
 type nodeRuns struct {
-	mu     sync.Mutex
-	specs  map[string]supervisor.Spec // every Node.js site's dev server, as of the last reload
-	awake  map[string]bool            // started by a request (or the apps) and kept running
-	ports  map[string]int             // the port each site got
-	open   map[string]int             // requests in progress, open WebSockets included
-	active map[string]time.Time       // when a request last came or ended
+	mu      sync.Mutex
+	specs   map[string]supervisor.Spec // every Node.js site's dev server, as of the last reload
+	awake   map[string]bool            // started by a request (or the apps) and kept running
+	ports   map[string]int             // the port each site got
+	open    map[string]int             // requests in progress, open WebSockets included
+	active  map[string]time.Time       // when a request last came or ended
+	devOnly map[string]bool            // PHP sites' dev servers: the browser reaches them directly, see sleepNodeSites
+	woke    map[string]time.Time       // when a sleeping server was woken, for how long a request waits for it
 	// idleAfter is how long a server may go unused before it sleeps (see sleepNodeSites).
 	idleAfter time.Duration
 }
@@ -55,10 +62,13 @@ type nodeRuns struct {
 // wake marks a site's server as to run, and as used now. It reports whether it was asleep.
 func (r *nodeRuns) wake(site string) bool {
 	if r.awake == nil {
-		r.awake, r.open, r.active = map[string]bool{}, map[string]int{}, map[string]time.Time{}
+		r.awake, r.open, r.active, r.woke = map[string]bool{}, map[string]int{}, map[string]time.Time{}, map[string]time.Time{}
 	}
 	asleep := !r.awake[site]
 	r.awake[site], r.active[site] = true, time.Now()
+	if asleep {
+		r.woke[site] = time.Now()
+	}
 	return asleep
 }
 
@@ -95,7 +105,8 @@ func (d *daemon) nodePort(site string, taken map[int]bool) int {
 
 // nodeSpec is a Node.js site's dev server, on the Node.js version the site uses (node). Its whole
 // tree is stopped with it: npm's child holds the port. The shims on PATH pick that version for npm.
-func (d *daemon) nodeSpec(cfg *config.Config, site config.Site, port int, node string) supervisor.Spec {
+// ownPort is set when the project fixes its dev server's port itself, which Flock then leaves alone.
+func (d *daemon) nodeSpec(cfg *config.Config, site config.Site, port int, node string, ownPort bool) supervisor.Spec {
 	d.mu.Lock()
 	restart := d.restarts[site.Name]
 	d.mu.Unlock()
@@ -108,6 +119,9 @@ func (d *daemon) nodeSpec(cfg *config.Config, site config.Site, port int, node s
 		env = append(env, "FLOCK_RESTART="+strconv.Itoa(restart)) // a new spec, so Ensure restarts it
 	}
 	command := nodeCommand + strconv.Itoa(port)
+	if ownPort {
+		command = devCommand
+	}
 	// next dev listens on every interface unless told otherwise: past the web server's local-only
 	// guard and a share's protections, to the whole network.
 	if nextDev.MatchString(devScript(site.Path)) {
@@ -141,7 +155,7 @@ func devScript(dir string) string {
 func hasDevScript(dir string) bool { return devScript(dir) != "" }
 
 // keepNodeSites records the reload's Node.js sites, forgetting those that are gone.
-func (r *nodeRuns) keep(specs map[string]supervisor.Spec, ports map[string]int) {
+func (r *nodeRuns) keep(specs map[string]supervisor.Spec, ports map[string]int, devOnly map[string]bool) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	for name := range r.awake {
@@ -149,7 +163,7 @@ func (r *nodeRuns) keep(specs map[string]supervisor.Spec, ports map[string]int) 
 			delete(r.awake, name)
 		}
 	}
-	r.specs, r.ports = specs, ports
+	r.specs, r.ports, r.devOnly = specs, ports, devOnly
 }
 
 // isAwake reports whether a site's dev server is to run.
@@ -173,6 +187,7 @@ func (d *daemon) wakeNode(site string) (string, string, func()) {
 	}
 	asleep := r.wake(site)
 	r.open[site]++
+	devOnly := r.devOnly[site]
 	r.mu.Unlock()
 
 	var once sync.Once
@@ -184,9 +199,18 @@ func (d *daemon) wakeNode(site string) (string, string, func()) {
 			r.mu.Unlock()
 		})
 	}
+	if asleep && devOnly {
+		// PHP renders @vite as soon as it runs, and needs the server's public/hot by then.
+		d.startNode(site)
+		d.awaitDevServer(site)
+		return api.NodeStarting, "", done
+	}
 	if asleep {
 		go d.startNode(site)
 		return api.NodeStarting, "", done
+	}
+	if devOnly {
+		d.awaitDevServer(site)
 	}
 	state, problem := d.nodeState(site, false)
 	return state, problem, done
@@ -217,6 +241,9 @@ func (d *daemon) sleepNodeSites(ctx context.Context, idleAfter, check time.Durat
 		}
 		r.mu.Unlock()
 		for _, site := range idle {
+			if d.browserConnected(site) {
+				continue
+			}
 			d.sleepNode(site, true)
 		}
 	}
@@ -253,7 +280,14 @@ func (d *daemon) sleepNode(site string, whenIdle bool) {
 	d.procs.Retain(keep)
 }
 
-// StopSite implements api.Backend: it puts a Node.js site's dev server to sleep now, until the
+// hasDevServer reports whether a PHP site runs a dev server of its own (see phpDevServer).
+func (r *nodeRuns) hasDevServer(site string) bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.devOnly[site]
+}
+
+// StopSite implements api.Backend: it puts a site's dev server to sleep now, until the
 // site's next request.
 func (d *daemon) StopSite(name string) error {
 	d.mu.Lock()
@@ -266,8 +300,8 @@ func (d *daemon) StopSite(name string) error {
 	switch {
 	case !ok:
 		return fmt.Errorf("%w: no site named %s", api.ErrInvalidRequest, name)
-	case site.Kind() != config.TypeNode:
-		return fmt.Errorf("%w: %s isn't a Node.js app: its server runs while Flock does", api.ErrInvalidRequest, name)
+	case site.Kind() != config.TypeNode && !d.node.hasDevServer(name):
+		return fmt.Errorf("%w: %s has no dev server for Flock to stop: its server runs while Flock does", api.ErrInvalidRequest, name)
 	}
 	d.sleepNode(name, false)
 	return nil
@@ -280,9 +314,10 @@ func (d *daemon) startNode(site string) {
 	r := &d.node
 	r.mu.Lock()
 	spec, ok := r.specs[site]
-	awake := r.awake[site]
+	awake, devOnly := r.awake[site], r.devOnly[site]
+	port := r.ports[site]
 	r.mu.Unlock()
-	if ok && awake {
+	if ok && awake && !(devOnly && runsOutsideFlock(spec.Dir, port)) {
 		d.procs.Ensure(spec)
 	}
 }
@@ -322,21 +357,28 @@ func nodeExitProblem(lastErr string) string {
 // sites shares them with the last reload.
 func (d *daemon) liveNodeSites(sites []api.SiteStatus) {
 	for i, s := range sites {
-		if s.NodeServer == nil {
-			continue
+		if s.NodeServer != nil {
+			sites[i].NodeServer = d.liveDevServer(s, s.NodeServer)
 		}
-		n := *s.NodeServer
-		n.State, n.Problem = d.nodeState(s.Name, answers("http://localhost:"+strconv.Itoa(n.Port)))
-		if n.State == api.NodeFailed {
-			if _, err := os.Stat(filepath.Join(s.Path, "node_modules")); err != nil {
-				n.Problem = "node_modules is missing: run npm install in the project"
-			}
+		if s.DevServer != nil {
+			sites[i].DevServer = d.liveDevServer(s, s.DevServer)
 		}
-		if n.Problem == "" {
-			n.Problem = s.NodeServer.Problem
-		}
-		sites[i].NodeServer = &n
 	}
+}
+
+// liveDevServer is a copy of a site's dev server status with its state now.
+func (d *daemon) liveDevServer(s api.SiteStatus, server *api.SiteNodeServer) *api.SiteNodeServer {
+	n := *server
+	n.State, n.Problem = d.nodeState(s.Name, answers("http://localhost:"+strconv.Itoa(n.Port)))
+	if n.State == api.NodeFailed {
+		if _, err := os.Stat(filepath.Join(s.Path, "node_modules")); err != nil {
+			n.Problem = "node_modules is missing: run npm install in the project"
+		}
+	}
+	if n.Problem == "" {
+		n.Problem = server.Problem
+	}
+	return &n
 }
 
 // nodeSiteProblem is what keeps a Node.js site from starting, found on reload.
@@ -348,4 +390,164 @@ func nodeSiteProblem(site config.Site) string {
 		return fmt.Sprintf("%s has no dev script in package.json for Flock to run", site.Name)
 	}
 	return ""
+}
+
+// runsOutsideFlock reports whether a PHP site's dev server already runs without Flock: public/hot
+// (written by laravel-vite-plugin) names a Vite that answers on a port other than the one Flock
+// would give it. Flock then leaves it alone, so two servers don't fight for the port.
+func runsOutsideFlock(dir string, flockPort int) bool {
+	data, err := os.ReadFile(filepath.Join(dir, "public", "hot"))
+	if err != nil {
+		return false
+	}
+	u, err := url.Parse(strings.TrimSpace(string(data)))
+	if err != nil || u.Port() == "" || u.Port() == strconv.Itoa(flockPort) {
+		return false
+	}
+	return isVite(u.Port())
+}
+
+// isVite reports whether Vite's dev server answers on a loopback port: it serves its client script
+// at /@vite/client. A stale public/hot, with some other program on its port, doesn't count.
+func isVite(port string) bool {
+	if !answers("http://localhost:" + port) {
+		return false
+	}
+	client := http.Client{Timeout: time.Second}
+	resp, err := client.Get("http://localhost:" + port + "/@vite/client")
+	if err != nil {
+		return false
+	}
+	defer resp.Body.Close()
+	return resp.StatusCode == http.StatusOK
+}
+
+// browserConnected reports whether a PHP site's dev server has a browser connected (an open tab's
+// hot-reload WebSocket goes straight to it, past Flock's web server), and counts that as use.
+func (d *daemon) browserConnected(site string) bool {
+	r := &d.node
+	r.mu.Lock()
+	port, devOnly := r.ports[site], r.devOnly[site]
+	r.mu.Unlock()
+	if !devOnly || ports.Connections(port) == 0 {
+		return false
+	}
+	r.mu.Lock()
+	r.active[site] = time.Now()
+	r.mu.Unlock()
+	return true
+}
+
+// ensureIfAwake keeps a dev server running when a request woke it (see wakeNode), and not when
+// Flock runs as root, or when a PHP site's (devOnly) already runs without Flock.
+func (d *daemon) ensureIfAwake(site string, spec supervisor.Spec, port int, devOnly bool, keep map[string]bool) {
+	if devOnly && runsOutsideFlock(spec.Dir, port) {
+		return // the project's own server does the work
+	}
+	if d.node.isAwake(site) && !runningAsRoot() {
+		d.procs.Ensure(spec)
+		keep[spec.Name] = true
+	}
+}
+
+// phpDevServer is the dev server a PHP site runs beside PHP: Vite, when the project's dev script
+// is just `vite`, on the port Flock gives it, or on the one the project's vite.config fixes. ok is
+// false for any other site. takenPorts gets the port. reloadMu is held.
+func (d *daemon) phpDevServer(cfg *config.Config, site config.Site, node string, takenPorts map[int]bool) (spec supervisor.Spec, port int, ok bool) {
+	if !isViteDev(devScript(site.Path)) {
+		return spec, 0, false
+	}
+	// A port another site already fixed or got isn't taken twice: Flock gives this one its own.
+	port = viteConfigPort(site.Path)
+	ownPort := port != 0 && !takenPorts[port]
+	if !ownPort {
+		port = d.nodePort(site.Name, takenPorts)
+	}
+	takenPorts[port] = true
+	return d.nodeSpec(cfg, site, port, node, ownPort), port, true
+}
+
+// viteDev matches a dev script that is only Vite's dev server, possibly with flags: anything else
+// (`vite build`, `concurrently …`, `mix`) can't be given a --port.
+var viteDev = regexp.MustCompile(`^\s*(npx\s+)?vite(\s+(--?[\w-]+([ =][\w./:-]+)?\s*)*)?$`)
+
+// isViteDev reports whether a project's dev script runs Vite's dev server.
+func isViteDev(script string) bool {
+	if script == "" || regexp.MustCompile(`\b(build|preview|optimize)\b`).MatchString(script) {
+		return false
+	}
+	return viteDev.MatchString(script)
+}
+
+// devWait is how long a request to a PHP site waits for its dev server to answer after waking it.
+// Tests shorten it.
+var devWait = 15 * time.Second
+
+// awaitDevServer holds a request to a PHP site until its dev server answers (so public/hot exists
+// when PHP renders @vite), it fails, or devWait has passed since it was woken.
+func (d *daemon) awaitDevServer(site string) {
+	r := &d.node
+	r.mu.Lock()
+	port, woke, specDir := r.ports[site], r.woke[site], r.specs[site].Dir
+	r.mu.Unlock()
+	if port == 0 || runsOutsideFlock(specDir, port) {
+		return
+	}
+	for time.Since(woke) < devWait {
+		if answers("http://localhost:" + strconv.Itoa(port)) {
+			return
+		}
+		if state, _ := d.nodeState(site, false); state == api.NodeFailed || !d.node.isAwake(site) {
+			return
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+}
+
+// vitePort matches a port set in the body of a Vite config's server block.
+var vitePort = regexp.MustCompile(`\bport\s*:\s*(\d{2,5})\b`)
+
+// serverBlock matches where a Vite config's server options start.
+var serverBlock = regexp.MustCompile(`\bserver\s*:\s*\{`)
+
+// comments matches JavaScript comments, which don't count.
+var comments = regexp.MustCompile(`(?s)/\*.*?\*/|//[^\n]*`)
+
+// viteConfigPort is the server port a project's vite.config fixes in its `server` options, 0 when
+// it doesn't. A port nested deeper (hmr, proxy) or in a comment isn't the server's.
+func viteConfigPort(dir string) int {
+	for _, ext := range []string{"js", "ts", "mjs", "mts", "cjs", "cts"} {
+		data, err := os.ReadFile(filepath.Join(dir, "vite.config."+ext))
+		if err != nil {
+			continue
+		}
+		src := comments.ReplaceAllString(string(data), "")
+		loc := serverBlock.FindStringIndex(src)
+		if loc == nil {
+			return 0
+		}
+		// The block's own properties: what is at depth 1 between its braces.
+		var own strings.Builder
+		depth := 0
+		for _, c := range src[loc[1]-1:] {
+			switch c {
+			case '{':
+				depth++
+			case '}':
+				depth--
+			}
+			if depth == 0 {
+				break
+			}
+			if depth == 1 && c != '{' {
+				own.WriteRune(c)
+			}
+		}
+		if m := vitePort.FindStringSubmatch(own.String()); m != nil {
+			port, _ := strconv.Atoi(m[1])
+			return port
+		}
+		return 0
+	}
+	return 0
 }

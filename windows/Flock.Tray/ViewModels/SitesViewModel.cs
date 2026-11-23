@@ -219,15 +219,15 @@ public sealed partial class SiteRowViewModel : ObservableObject
     public string? Problem => Summary(Snapshot);
     public bool HasProblem => Problem is not null;
     /// <summary>A Node.js site shows its dev server's state as a dot; a PHP site is served while Flock runs.</summary>
-    public bool HasDot => Snapshot.NodeServer is not null;
-    public string Dot => Snapshot.NodeServer?.State switch
+    public bool HasDot => Snapshot.DevServerStatus is not null;
+    public string Dot => Snapshot.DevServerStatus?.State switch
     {
         Status.NodeServerState.Running => nameof(Ui.Tone.Success),
         Status.NodeServerState.Starting => nameof(Ui.Tone.Caution),
         Status.NodeServerState.Failed => nameof(Ui.Tone.Critical),
         _ => nameof(Ui.Tone.Neutral),
     };
-    public string DotTooltip => Snapshot.NodeServer?.StateLabel ?? "";
+    public string DotTooltip => Snapshot.DevServerStatus?.StateLabel ?? "";
     public bool OctaneAvailable => Snapshot.OctaneAvailable;
     public Status.SiteFrankenPhp? FrankenPhp => Snapshot.FrankenPhp;
     public string Boost => Snapshot.Boost;
@@ -368,7 +368,8 @@ public sealed partial class SiteRowViewModel : ObservableObject
                || previous.Branch != current.Branch
                || !WorktreeEqual(previous.Worktree, current.Worktree)
                || previous.Type != current.Type
-               || !NodeServerEqual(previous.NodeServer, current.NodeServer);
+               || !NodeServerEqual(previous.NodeServer, current.NodeServer)
+               || !NodeServerEqual(previous.DevServer, current.DevServer);
     }
 
     private static bool NodeServerEqual(Status.SiteNodeServer? previous, Status.SiteNodeServer? current)

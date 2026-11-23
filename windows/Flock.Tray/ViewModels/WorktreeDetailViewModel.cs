@@ -53,6 +53,7 @@ internal sealed partial class WorktreeDetailViewModel : DetailViewModel
         : Localization.Format(Strings.Worktrees_UsesSiteSettings, Parent);
 
     public DevServerSectionViewModel DevServer { get; }
+    public bool HasDevServer => worktree.DevServerStatus is not null;
 
     // Database: the site's or its own, and a picker that switches it.
     private Status.WorktreeSetup? Setup => worktree.Worktree;
@@ -96,7 +97,7 @@ internal sealed partial class WorktreeDetailViewModel : DetailViewModel
     public bool HasLog => Setup is { Log.Length: > 0 };
     public bool CanRunAgain => Setup is { IsBusy: false };
 
-    public OutputSource? Output => worktree.IsNode ? DevServer.Output : null;
+    public OutputSource? Output => worktree.DevServerStatus is not null ? DevServer.Output : null;
 
     public void Hide()
     {

@@ -60,13 +60,19 @@ See [Per-project versions](project-versions.md).
 
 ## Node.js apps
 
-A Next.js, Nuxt, Vite, Astro or SvelteKit app is a site of its own, like a PHP project. A project with a `package.json` that has a `dev` script, and nothing of PHP's (no `composer.json`, `artisan` or `index.php`), is a Node.js app: in a project folder it's served as one right away. A Laravel app with Vite stays a PHP site.
+A Next.js, Nuxt, Vite, Astro or SvelteKit app is a site of its own, like a PHP project. A project with a `package.json` that has a `dev` script, and nothing of PHP's (no `composer.json`, `artisan` or `index.php`), is a Node.js app: in a project folder it's served as one right away. A Laravel app with Vite stays a PHP site, and still gets its dev server (see below).
 
 Flock runs the app's dev server for you. The first visit to `http://my-app.test` starts `npm run dev` in the project with the project's Node.js version, and shows a page that switches to the app once it answers. The dev server gets a port of its own (as `--port` and `PORT`), the same one every time while it's free, so nothing in the project needs to name a port. After 30 minutes without visits it stops again, until the next one: a tab with the app open keeps it running, since hot reload keeps a connection open.
 
 :::app
 In **Settings → Sites**, a Node.js app's **Type** is **Node.js**. Change it there to serve a project the other way. Its **Dev server** section shows whether it runs, with **Start**, **Stop** and **Restart**, and the dev server's output below.
 :::
+
+### Vite in a PHP site
+
+A PHP site whose `package.json` has a `dev` script that is just `vite` (Laravel's default, with `laravel-vite-plugin`; flags such as `vite --host` are fine) gets that dev server too, beside PHP. The first visit to the site starts `npm run dev` with the project's Node.js version and waits for Vite (up to 15 seconds) before PHP answers, so `@vite` finds its `public/hot` without a second terminal. Other dev scripts (`concurrently …`, `mix`, `vite build`) are left alone.
+
+Flock picks the port (`--port`), unless the `server` options of `vite.config` set `port`: then that port stays. After 30 minutes without visits it stops, as long as no browser tab is connected to it, and starts again with the next visit. A Vite you already run yourself (`composer run dev`) is left alone: Flock sees it in `public/hot` and starts nothing. A Vite you already run yourself is recognised by its answer on that port, so a stale `public/hot` doesn't count. In the app, the site's **Dev server** section (state, **Start**, **Stop**, **Restart** and its output) appears for it like for a Node.js app, and `flock sites` adds "+ Vite" to the site's row.
 
 :::cli
 ```bash

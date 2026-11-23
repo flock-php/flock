@@ -6,12 +6,14 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/http/httptest"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"reflect"
-	"slices"
 	"runtime"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -19,6 +21,7 @@ import (
 
 	"flock/internal/api"
 	"flock/internal/config"
+	"flock/internal/supervisor"
 )
 
 // fakeNpm puts an npm into Flock's bin folder (first on the dev server's PATH) that logs its
@@ -329,11 +332,11 @@ func TestNextJSListensOnLoopbackAndANewNodeVersionRestarts(t *testing.T) {
 	d := &daemon{root: t.TempDir(), restarts: map[string]int{}}
 	cfg := config.Default()
 	site := config.Site{Name: "web", Path: dir, Type: config.TypeNode}
-	spec := d.nodeSpec(cfg, site, 22001, "22")
+	spec := d.nodeSpec(cfg, site, 22001, "22", false)
 	if !strings.HasSuffix(spec.Shell, "--port 22001 --hostname 127.0.0.1") {
 		t.Errorf("next dev isn't bound to loopback: %q", spec.Shell)
 	}
-	if other := d.nodeSpec(cfg, site, 22001, "24"); reflect.DeepEqual(spec.Env, other.Env) {
+	if other := d.nodeSpec(cfg, site, 22001, "24", false); reflect.DeepEqual(spec.Env, other.Env) {
 		t.Error("another Node.js version gives the same spec, so the server wouldn't restart")
 	}
 	// Only the site's own domain: Vite before 8 takes the variable as one name.
@@ -348,5 +351,178 @@ func TestPreferredNodePortsAreStableAndInRange(t *testing.T) {
 		if p != preferredNodePort(name) || p < firstNodePort || p >= firstNodePort+nodePorts {
 			t.Fatalf("%s: %d", name, p)
 		}
+	}
+}
+
+func TestPHPSiteDevServerRunningOutsideFlockIsLeftAlone(t *testing.T) {
+	dir := t.TempDir()
+	if runsOutsideFlock(dir, 22000) {
+		t.Fatal("no public/hot, yet a dev server of its own")
+	}
+	vite := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/@vite/client" {
+			http.NotFound(w, r)
+		}
+	}))
+	defer vite.Close()
+	other := httptest.NewServer(http.NotFoundHandler())
+	defer other.Close()
+	if err := os.Mkdir(filepath.Join(dir, "public"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	hot := filepath.Join(dir, "public", "hot")
+	writeFile(t, hot, vite.URL+"\n")
+	if !runsOutsideFlock(dir, 22000) {
+		t.Fatal("a Vite in public/hot isn't seen")
+	}
+	// Flock's own server writes the same file: it isn't someone else's.
+	u, _ := url.Parse(vite.URL)
+	port, _ := strconv.Atoi(u.Port())
+	if runsOutsideFlock(dir, port) {
+		t.Fatal("Flock's own dev server taken for another one")
+	}
+	// A stale public/hot, with another program on its port, isn't a Vite.
+	writeFile(t, hot, other.URL+"\n")
+	if runsOutsideFlock(dir, 22000) {
+		t.Fatal("a server that isn't Vite taken for one")
+	}
+}
+
+func TestOnlyAPlainViteDevScriptGetsADevServerBesidePHP(t *testing.T) {
+	for script, want := range map[string]bool{
+		"vite": true, "vite --host": true, "npx vite": true, "vite --port=3000": true,
+		"": false, "vite build": false, "mix": false, "webpack --watch": false,
+		"concurrently \"php artisan serve\" vite": false, "npm run vite": false, "vite && php artisan queue:work": false,
+	} {
+		if got := isViteDev(script); got != want {
+			t.Errorf("%q: got %v, want %v", script, got, want)
+		}
+	}
+}
+
+func TestAViteConfigsFixedPortIsRespected(t *testing.T) {
+	dir := t.TempDir()
+	if got := viteConfigPort(dir); got != 0 {
+		t.Fatalf("no config, port %d", got)
+	}
+	for config, want := range map[string]int{
+		"export default { server: { host: true, port: 5199 } }":                     5199,
+		"export default { server: { hmr: { port: 24678 }, port: 5200 } }":           5200,
+		"export default { server: { hmr: { port: 24678 } } }":                       0,
+		"export default { preview: { port: 4173 } }":                                0,
+		"export default { server: { host: true } } // port: 3000":                   0,
+		"export default { server: {\n // port: 3000\n port: 5201 /* port: 1 */ } }": 5201,
+	} {
+		writeFile(t, filepath.Join(dir, "vite.config.ts"), config)
+		if got := viteConfigPort(dir); got != want {
+			t.Errorf("%q: got port %d, want %d", config, got, want)
+		}
+	}
+
+	writeFile(t, filepath.Join(dir, "vite.config.ts"), "export default { server: { host: true, port: 5199 } }")
+	writeFile(t, filepath.Join(dir, "package.json"), `{"scripts": {"dev": "vite"}}`)
+	d := &daemon{root: t.TempDir(), restarts: map[string]int{}}
+	site := config.Site{Name: "web", Path: dir}
+	taken := map[int]bool{}
+	spec, port, ok := d.phpDevServer(config.Default(), site, "22", taken)
+	if !ok || port != 5199 || spec.Shell != "npm run dev" || !taken[5199] {
+		t.Fatalf("ok %v, port %d, command %q: Flock passed its own port", ok, port, spec.Shell)
+	}
+	// A second project fixing the same port gets a port of Flock's.
+	spec, port, ok = d.phpDevServer(config.Default(), config.Site{Name: "other", Path: dir}, "22", taken)
+	if !ok || port == 5199 || spec.Shell != "npm run dev -- --port "+strconv.Itoa(port) {
+		t.Fatalf("a taken port: ok %v, port %d, command %q", ok, port, spec.Shell)
+	}
+
+	if err := os.Remove(filepath.Join(dir, "vite.config.ts")); err != nil {
+		t.Fatal(err)
+	}
+	spec, port, ok = d.phpDevServer(config.Default(), site, "22", map[int]bool{})
+	if !ok || spec.Shell != "npm run dev -- --port "+strconv.Itoa(port) {
+		t.Fatalf("ok %v, port %d, command %q", ok, port, spec.Shell)
+	}
+	writeFile(t, filepath.Join(dir, "package.json"), `{"scripts": {"dev": "mix"}}`)
+	if _, _, ok := d.phpDevServer(config.Default(), site, "22", map[int]bool{}); ok {
+		t.Fatal("a dev script that isn't Vite got a dev server")
+	}
+}
+
+func TestARequestWaitsForTheDevServerOfAPHPSiteToAnswer(t *testing.T) {
+	srv := httptest.NewServer(http.NotFoundHandler())
+	defer srv.Close()
+	u, _ := url.Parse(srv.URL)
+	port, _ := strconv.Atoi(u.Port())
+	d := &daemon{}
+	d.node.ports = map[string]int{"app": port}
+	d.node.specs = map[string]supervisor.Spec{"app": {Dir: t.TempDir()}}
+	d.node.woke = map[string]time.Time{"app": time.Now()}
+	start := time.Now()
+	d.awaitDevServer("app")
+	if time.Since(start) > time.Second {
+		t.Fatal("waited for a server that answers")
+	}
+
+	// A server that doesn't answer is waited for no longer than devWait after it was woken.
+	srv.Close()
+	old := devWait
+	devWait = 200 * time.Millisecond
+	defer func() { devWait = old }()
+	d.node.woke["app"] = time.Now().Add(-time.Second)
+	start = time.Now()
+	d.awaitDevServer("app")
+	if time.Since(start) > 100*time.Millisecond {
+		t.Fatal("waited past the window")
+	}
+}
+
+func TestAPHPSitesViteStartsOnTheFirstRequestAndSleepsOnceNoTabIsOpen(t *testing.T) {
+	root := shortTempDir(t)
+	fakeNpm(t, root, "flock-test-server")
+	if err := os.MkdirAll(filepath.Join(root, "log"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	dir := t.TempDir()
+	writeFile(t, filepath.Join(dir, "package.json"), `{"scripts": {"dev": "vite"}}`)
+	d := &daemon{root: root, procs: supervisor.New(), restarts: map[string]int{}}
+	t.Cleanup(func() { d.procs.Retain(map[string]bool{}) })
+
+	spec, port, ok := d.phpDevServer(config.Default(), config.Site{Name: "app", Path: dir}, "22", map[int]bool{})
+	if !ok {
+		t.Fatal("no dev server for a Vite project")
+	}
+	d.node.keep(map[string]supervisor.Spec{"app": spec}, map[string]int{"app": port}, map[string]bool{"app": true})
+
+	// The first request starts Vite and waits for it: PHP renders @vite once public/hot exists.
+	_, _, done := d.wakeNode("app")
+	if done == nil {
+		t.Fatal("the request wasn't taken for a site with a dev server")
+	}
+	if !answers("http://localhost:" + strconv.Itoa(port)) {
+		t.Fatalf("the request returned before the dev server answered:\n%s", readLog(t, root, "node-app"))
+	}
+	done()
+
+	// An open tab (a connection straight to Vite) keeps it awake past the idle time.
+	conn, err := net.Dial("tcp", "127.0.0.1:"+strconv.Itoa(port))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Close()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go d.sleepNodeSites(ctx, 50*time.Millisecond, 20*time.Millisecond)
+	time.Sleep(500 * time.Millisecond)
+	if !d.node.isAwake("app") {
+		t.Fatal("slept with a browser connected to it")
+	}
+
+	// Once it's closed, the server sleeps.
+	conn.Close()
+	deadline := time.Now().Add(5 * time.Second)
+	for d.node.isAwake("app") {
+		if time.Now().After(deadline) {
+			t.Fatal("still awake without a connection")
+		}
+		time.Sleep(50 * time.Millisecond)
 	}
 }

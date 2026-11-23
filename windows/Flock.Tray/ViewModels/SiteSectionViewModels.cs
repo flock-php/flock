@@ -328,7 +328,7 @@ internal sealed partial class ReverbSectionViewModel(ISiteDetailHost host, Outpu
 }
 
 /// <summary>
-///     A Node.js site's dev server (started on the site's first visit, asleep after 30 idle minutes):
+///     A Node.js site's dev server, or a PHP site's Vite (started on the site's first visit, asleep after 30 idle minutes):
 ///     its state, Start, Stop and Restart, the command and its output.
 /// </summary>
 internal sealed partial class DevServerSectionViewModel(ISiteDetailHost host, OutputViewModel output) : DetailViewModel
@@ -361,7 +361,7 @@ internal sealed partial class DevServerSectionViewModel(ISiteDetailHost host, Ou
     public void Update(Status.Site value)
     {
         site = value;
-        server = value.IsNode ? value.NodeServer : null;
+        server = value.DevServerStatus;
         Refresh();
     }
 

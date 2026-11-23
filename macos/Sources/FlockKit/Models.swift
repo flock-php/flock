@@ -237,11 +237,16 @@ public struct Status: Decodable, Sendable, Equatable {
         /// A PHP site or a Node.js app; a Node.js app has `nodeServer` instead of the PHP settings.
         public var type: SiteType
         public var nodeServer: SiteNodeServer?
+        /// The Vite dev server a PHP site runs beside PHP, when its dev script is Vite's.
+        public var devServer: SiteNodeServer?
 
         public var id: String { name }
 
         /// A Node.js app, served by its dev server.
         public var isNode: Bool { type == .node }
+
+        /// The dev server Flock runs for the site: a Node.js app's, or a PHP site's Vite; nil when it has none.
+        public var devServerStatus: SiteNodeServer? { isNode ? nodeServer : devServer }
 
         /// The site is reachable at a public share URL right now.
         public var shared: Bool { share?.state == .running }
@@ -280,7 +285,7 @@ public struct Status: Decodable, Sendable, Equatable {
             case name, domain, path, php, phpSource, phpPinned, phpFile, node, nodeSource, nodePinned, nodeFile, nodeShadowed
             case secured, parked, url, problem, notice, root, rootSource, rootPinned, rootFile, rootState, rootSuggestions
             case domains, debugging, server, worker, octaneAvailable, reverbAvailable, reverb, boost, share, parent, branch, worktree
-            case type, nodeServer
+            case type, nodeServer, devServer
             case frankenPHP = "frankenphp"
         }
 
@@ -324,6 +329,7 @@ public struct Status: Decodable, Sendable, Equatable {
             worktree = try c.decodeIfPresent(WorktreeSetup.self, forKey: .worktree)
             type = try c.decodeIfPresent(SiteType.self, forKey: .type) ?? .php
             nodeServer = try c.decodeIfPresent(SiteNodeServer.self, forKey: .nodeServer)
+            devServer = try c.decodeIfPresent(SiteNodeServer.self, forKey: .devServer)
         }
     }
 

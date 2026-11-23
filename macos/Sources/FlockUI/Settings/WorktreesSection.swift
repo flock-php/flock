@@ -109,7 +109,7 @@ struct WorktreeDetail: View {
                     .font(.caption).foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
-            if worktree.isNode {
+            if worktree.devServerStatus != nil {
                 NodeDevServerSection(site: worktree)
             }
             section("worktrees.new.database") {
