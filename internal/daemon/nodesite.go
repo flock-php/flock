@@ -392,19 +392,51 @@ func nodeSiteProblem(site config.Site) string {
 	return ""
 }
 
-// runsOutsideFlock reports whether a PHP site's dev server already runs without Flock: public/hot
-// (written by laravel-vite-plugin) names a Vite that answers on a port other than the one Flock
-// would give it. Flock then leaves it alone, so two servers don't fight for the port.
+// runsOutsideFlock reports whether a PHP site's dev server already runs without Flock: a Vite
+// that answers on a port other than the one Flock would give it, found where Vite's plugins say
+// where it listens (see devServerOrigins). Flock then leaves it alone, so two servers don't fight
+// for the port.
 func runsOutsideFlock(dir string, flockPort int) bool {
-	data, err := os.ReadFile(filepath.Join(dir, "public", "hot"))
-	if err != nil {
-		return false
+	for _, origin := range devServerOrigins(dir) {
+		u, err := url.Parse(origin)
+		if err != nil || u.Port() == "" || u.Port() == strconv.Itoa(flockPort) {
+			continue
+		}
+		if isVite(u.Port()) {
+			return true
+		}
 	}
-	u, err := url.Parse(strings.TrimSpace(string(data)))
-	if err != nil || u.Port() == "" || u.Port() == strconv.Itoa(flockPort) {
-		return false
+	return false
+}
+
+// devServerOrigins are the addresses a project's Vite plugin says its dev server listens at:
+// public/hot, which laravel-vite-plugin writes, and the viteServer origin in the entrypoints.json
+// vite-plugin-symfony writes in its build directory (public/<build>/ or public/<build>/.vite/).
+// They can be stale, so what listens there is checked.
+func devServerOrigins(dir string) []string {
+	var origins []string
+	if data, err := os.ReadFile(filepath.Join(dir, "public", "hot")); err == nil {
+		origins = append(origins, strings.TrimSpace(string(data)))
 	}
-	return isVite(u.Port())
+	for _, pattern := range []string{"entrypoints.json", filepath.Join(".vite", "entrypoints.json")} {
+		files, _ := filepath.Glob(filepath.Join(dir, "public", "*", pattern))
+		for _, file := range files {
+			data, err := os.ReadFile(file)
+			if err != nil {
+				continue
+			}
+			// viteServer is false once the files are built.
+			var entrypoints struct {
+				ViteServer struct {
+					Origin string `json:"origin"`
+				} `json:"viteServer"`
+			}
+			if json.Unmarshal(data, &entrypoints) == nil && entrypoints.ViteServer.Origin != "" {
+				origins = append(origins, entrypoints.ViteServer.Origin)
+			}
+		}
+	}
+	return origins
 }
 
 // isVite reports whether Vite's dev server answers on a loopback port: it serves its client script

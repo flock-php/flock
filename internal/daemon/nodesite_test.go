@@ -386,6 +386,31 @@ func TestPHPSiteDevServerRunningOutsideFlockIsLeftAlone(t *testing.T) {
 	if runsOutsideFlock(dir, 22000) {
 		t.Fatal("a server that isn't Vite taken for one")
 	}
+
+	// vite-plugin-symfony says where Vite listens in its build directory's entrypoints.json.
+	if err := os.Remove(hot); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(dir, "public", "build", ".vite"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	entrypoints := filepath.Join(dir, "public", "build", "entrypoints.json")
+	writeFile(t, entrypoints, `{"base":"/build/","isProd":false,"viteServer":{"origin":"`+vite.URL+`"},"entryPoints":{}}`)
+	if !runsOutsideFlock(dir, 22000) {
+		t.Fatal("a Vite in entrypoints.json isn't seen")
+	}
+	if runsOutsideFlock(dir, port) {
+		t.Fatal("Flock's own dev server in entrypoints.json taken for another one")
+	}
+	// Built files (viteServer is false), or a stale origin of another program, aren't a dev server.
+	writeFile(t, entrypoints, `{"isProd":true,"viteServer":false,"entryPoints":{}}`)
+	if runsOutsideFlock(dir, 22000) {
+		t.Fatal("built files taken for a dev server")
+	}
+	writeFile(t, entrypoints, `{"viteServer":{"origin":"`+other.URL+`"}}`)
+	if runsOutsideFlock(dir, 22000) {
+		t.Fatal("a server that isn't Vite taken for one")
+	}
 }
 
 func TestOnlyAPlainViteDevScriptGetsADevServerBesidePHP(t *testing.T) {
