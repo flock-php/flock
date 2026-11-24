@@ -15,6 +15,7 @@ internal sealed partial class SetupWindow : FlockWindow
     private readonly RuntimeService model;
     private List<ConflictingApp> conflicts = [];
     private string defaultPhp = "", defaultNode = "";
+    private string? dnsWarning;
     private string output = "";
     private bool sawDefaults;
     private Stage stage;
@@ -29,7 +30,38 @@ internal sealed partial class SetupWindow : FlockWindow
         ShowLinks(StarText, Strings.Setup_Star);
         model.Changed += ShowDefaults;
         Closed += (_, _) => model.Changed -= ShowDefaults;
+        Closed += (_, _) => SkipWslSetup();
+        if (model.Installation.Backend.WslDistro is { } distro)
+        {
+            ShowWslSetup(distro);
+        }
         Render(Stage.Intro);
+    }
+
+    /// <summary>
+    ///     A daemon in WSL is set up in its distro: here, setup is only what Windows needs to open its
+    ///     sites. The app isn't registered to open at sign-in, where it would look for a daemon on Windows.
+    /// </summary>
+    private void ShowWslSetup(string distro)
+    {
+        IntroLead.Text = Localization.Format(Strings.Setup_WslIntro, distro);
+        DaemonCard.Visibility = Visibility.Collapsed;
+        TerminalCard.Visibility = Visibility.Collapsed;
+        TrustTitle.Text = Strings.Setup_WslTrustedHttpsTitle;
+        TrustDetail.Text = Localization.Format(Strings.Setup_WslTrustedHttpsDescription, distro);
+        Startup.Visibility = Visibility.Collapsed;
+        NextStepsTitle.Visibility = Visibility.Collapsed;
+        NextSteps.Visibility = Visibility.Collapsed;
+    }
+
+    /// <summary>Closing the window without setting up ("Not now") leaves it until the next start.</summary>
+    private void SkipWslSetup()
+    {
+        if (model.NeedsSetup && !model.Installation.IsInstalling && model.Installation.SkipSetup())
+        {
+            model.NeedsSetup = false;
+            model.NotifyChanged();
+        }
     }
 
     /// <summary>A text with Markdown links, [label](url), as the translations write them (the macOS
@@ -60,23 +92,27 @@ internal sealed partial class SetupWindow : FlockWindow
         RunningStage.Visibility = value == Stage.Running ? Visibility.Visible : Visibility.Collapsed;
         DoneStage.Visibility = value == Stage.Done ? Visibility.Visible : Visibility.Collapsed;
         FailedStage.Visibility = value == Stage.Failed ? Visibility.Visible : Visibility.Collapsed;
-        if (value == Stage.Conflicts)
+        switch (value)
         {
-            ConflictsItems.ItemsSource = conflicts;
-        }
-        if (value == Stage.Failed)
-        {
-            var declined = output.Contains("administrator permission was declined", StringComparison.Ordinal);
-            FailedMessage.Text = declined
-                ? Strings.Setup_Declined
-                : Strings.Setup_Failed;
-            FailedLogText.Text = output;
-        }
-        if (value == Stage.Done)
-        {
-            StartupProblem.Text = startupProblem ?? "";
-            StartupProblem.Visibility = startupProblem is null ? Visibility.Collapsed : Visibility.Visible;
-            ShowDefaults();
+            case Stage.Conflicts:
+                ConflictsItems.ItemsSource = conflicts;
+                break;
+            case Stage.Failed:
+            {
+                var declined = output.Contains("administrator permission was declined", StringComparison.Ordinal);
+                FailedMessage.Text = declined
+                    ? Strings.Setup_Declined
+                    : Strings.Setup_Failed;
+                FailedLogText.Text = output;
+                break;
+            }
+            case Stage.Done:
+                StartupProblem.Text = startupProblem ?? "";
+                StartupProblem.Visibility = startupProblem is null ? Visibility.Collapsed : Visibility.Visible;
+                DnsWarning.Message = dnsWarning ?? string.Empty;
+                DnsWarning.IsOpen = dnsWarning is not null;
+                ShowDefaults();
+                break;
         }
     }
 
@@ -102,7 +138,10 @@ internal sealed partial class SetupWindow : FlockWindow
         LogText.Text = output;
 
         model.NeedsSetup = !await model.Installation.IsSetUpAsync();
-        if (result.Ok)
+        // Success hides the running log. The Group Policy line is the only signal that Windows
+        // ignores the DNS rule, so the done stage has to show it.
+        dnsWarning = result.Ok ? DnsWarningText(output) : null;
+        if (result.Ok && !model.Installation.Backend.IsWsl)
         {
             try
             {
@@ -116,6 +155,29 @@ internal sealed partial class SetupWindow : FlockWindow
         model.NotifyChanged();
         Render(result.Ok ? Stage.Done : Stage.Failed);
         await model.RefreshAsync();
+    }
+
+    /// <summary>
+    ///     The Group Policy warning from setup output, as a sentence, or null. The <c>!</c> is a log
+    ///     marker, not something to show on the done stage.
+    /// </summary>
+    internal static string? DnsWarningText(string output)
+    {
+        foreach (var raw in output.Split('\n'))
+        {
+            var line = raw.TrimEnd('\r').Trim();
+            if (line.StartsWith('!'))
+            {
+                line = line[1..].TrimStart();
+            }
+            if (!line.Contains("Group Policy", StringComparison.Ordinal) || line.Length == 0)
+            {
+                continue;
+            }
+            var sentence = char.ToUpperInvariant(line[0]) + line[1..];
+            return sentence.EndsWith('.') ? sentence : sentence + ".";
+        }
+        return null;
     }
 
     private void ShowDefaults()

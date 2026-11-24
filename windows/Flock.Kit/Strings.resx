@@ -1580,6 +1580,9 @@ Details are in %LocalAppData%\Flock\tray.log.</value>
     <data name="Setup_DidNotFinish" xml:space="preserve">
         <value>Setup didn't finish</value>
     </data>
+    <data name="Setup_DnsWarningTitle" xml:space="preserve">
+        <value>Site names may not resolve</value>
+    </data>
     <data name="Setup_Failed" xml:space="preserve">
         <value>Something went wrong. The output below says what; you can try again.</value>
     </data>
@@ -1686,6 +1689,17 @@ Details are in %LocalAppData%\Flock\tray.log.</value>
     </data>
     <data name="Setup_Welcome" xml:space="preserve">
         <value>Welcome to Flock</value>
+    </data>
+    <data name="Setup_WslIntro" xml:space="preserve">
+        <value>Flock runs in WSL ({0}). Windows needs one more step to open its sites:</value>
+        <comment>{0}: the WSL distribution, e.g. Ubuntu</comment>
+    </data>
+    <data name="Setup_WslTrustedHttpsDescription" xml:space="preserve">
+        <value>Windows asks once for administrator permission: to send the sites' names to Flock, and to trust the certificate of Flock in WSL ({0}).</value>
+        <comment>{0}: the WSL distribution, e.g. Ubuntu</comment>
+    </data>
+    <data name="Setup_WslTrustedHttpsTitle" xml:space="preserve">
+        <value>Sites with trusted HTTPS on Windows</value>
     </data>
     <data name="Sites_AddDomain" xml:space="preserve">
         <value>Add Domain…</value>
