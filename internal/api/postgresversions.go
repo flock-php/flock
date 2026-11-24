@@ -88,6 +88,34 @@ func registerPostgresVersions(mux *http.ServeMux, b Backend) {
 		deleteData := r.URL.Query().Get("delete_data")
 		return m.Uninstall(ctx, r.PathValue("major"), deleteData == "1" || deleteData == "true")
 	}))
+	// Enable a non-active installed major to also run, on its own port.
+	mux.HandleFunc("POST /v1/postgres/versions/{major}/enable", func(w http.ResponseWriter, r *http.Request) {
+		m := manager(w)
+		if m == nil {
+			return
+		}
+		var body struct {
+			Port int `json:"port"`
+		}
+		if r.ContentLength != 0 {
+			if err := decodeBody(r, &body); err != nil {
+				writeError(w, http.StatusBadRequest, err)
+				return
+			}
+		}
+		ctx, cancel := context.WithTimeout(context.WithoutCancel(r.Context()), 2*time.Minute)
+		defer cancel()
+		err := m.EnableMajor(ctx, r.PathValue("major"), body.Port)
+		if err != nil {
+			writeError(w, postgresStatus(err), err)
+			return
+		}
+		writeJSON(w, http.StatusOK, m.Versions())
+	})
+	// Disable a running non-active major.
+	mux.HandleFunc("POST /v1/postgres/versions/{major}/disable", operation(2*time.Minute, func(ctx context.Context, m *postgres.Manager, r *http.Request) error {
+		return m.DisableMajor(ctx, r.PathValue("major"))
+	}))
 
 	// The extensions of one major. The custom folder is created on the first look, so the apps
 	// can open it.
@@ -180,6 +208,21 @@ func (c *Client) UpdatePostgres(ctx context.Context, major string) (PostgresVers
 func (c *Client) ActivatePostgres(ctx context.Context, major string) (PostgresVersions, error) {
 	var out PostgresVersions
 	err := c.timeout(2*time.Minute).do(ctx, http.MethodPost, "/v1/postgres/versions/"+url.PathEscape(major)+"/activate", &out)
+	return out, err
+}
+
+// EnablePostgres enables a non-active installed major to also run on its own port.
+func (c *Client) EnablePostgres(ctx context.Context, major string, port int) (PostgresVersions, error) {
+	var out PostgresVersions
+	err := c.timeout(2*time.Minute).send(ctx, http.MethodPost, "/v1/postgres/versions/"+url.PathEscape(major)+"/enable",
+		map[string]any{"port": port}, &out)
+	return out, err
+}
+
+// DisablePostgres stops a running non-active major.
+func (c *Client) DisablePostgres(ctx context.Context, major string) (PostgresVersions, error) {
+	var out PostgresVersions
+	err := c.timeout(2*time.Minute).do(ctx, http.MethodPost, "/v1/postgres/versions/"+url.PathEscape(major)+"/disable", &out)
 	return out, err
 }
 

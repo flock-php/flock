@@ -63,9 +63,14 @@ type Ports struct {
 type Services struct {
 	Postgres string `json:"postgres,omitempty"` // the active build, e.g. "18.6-build1"
 
+	// PostgresExtra lists non-active PostgreSQL majors that also run, each on its own port.
+	// The active major (Postgres) runs on Ports.Postgres as before; these run alongside it.
+	PostgresExtra map[string]PGLineRun `json:"postgres_extra,omitempty"`
+
 	// Extras are the services of the catalog (MySQL, Redis, Meilisearch, ...) that are installed,
 	// by id, with the active version: the one that runs, on the service's port. Other versions can
-	// be installed next to it (see internal/catalog).
+	// be installed next to it (see internal/catalog). Extra.Lines lists additional version lines
+	// that also run, each on its own port.
 	Extras map[string]Extra `json:"extras,omitempty"`
 
 	// Stopped lists installed services the user switched off ("postgres", "valkey", "mysql").
@@ -77,6 +82,23 @@ type Extra struct {
 	Version string `json:"version"`         // e.g. "8.4.6"
 	Build   int    `json:"build,omitempty"` // the manifest build installed (0 when unknown)
 	Port    int    `json:"port"`
+
+	// Lines lists version lines that run alongside the active one, each on its own port.
+	// For example, MySQL 8.4 can be active on port 3306 while MySQL 9.1 also runs on port 3307.
+	Lines map[string]LineRun `json:"lines,omitempty"`
+}
+
+// LineRun is a version line configured to run alongside the active one.
+type LineRun struct {
+	Version string `json:"version"`
+	Build   int    `json:"build,omitempty"`
+	Port    int    `json:"port"`
+}
+
+// PGLineRun is a non-active PostgreSQL major configured to run on its own port.
+type PGLineRun struct {
+	ID   string `json:"id"`   // build ID, e.g. "17.4-build1"
+	Port int    `json:"port"`
 }
 
 // Extra returns the installed catalog service id.
@@ -100,6 +122,54 @@ func (s *Services) RemoveExtra(id string) {
 		s.Extras = nil
 	}
 	s.SetRunning(id, true)
+}
+
+// SetLine adds or replaces a running line for a catalog service.
+func (s *Services) SetLine(id, line string, lr LineRun) {
+	x, ok := s.Extras[id]
+	if !ok {
+		return
+	}
+	if x.Lines == nil {
+		x.Lines = map[string]LineRun{}
+	}
+	x.Lines[line] = lr
+	s.Extras[id] = x
+}
+
+// RemoveLine removes a running line from a catalog service.
+func (s *Services) RemoveLine(id, line string) {
+	x, ok := s.Extras[id]
+	if !ok {
+		return
+	}
+	delete(x.Lines, line)
+	if len(x.Lines) == 0 {
+		x.Lines = nil
+	}
+	s.Extras[id] = x
+}
+
+// PGLine returns the running config of a non-active PostgreSQL major.
+func (s Services) PGLine(major string) (PGLineRun, bool) {
+	r, ok := s.PostgresExtra[major]
+	return r, ok
+}
+
+// SetPGLine adds or replaces a running non-active PostgreSQL major.
+func (s *Services) SetPGLine(major string, r PGLineRun) {
+	if s.PostgresExtra == nil {
+		s.PostgresExtra = map[string]PGLineRun{}
+	}
+	s.PostgresExtra[major] = r
+}
+
+// RemovePGLine removes a running non-active PostgreSQL major.
+func (s *Services) RemovePGLine(major string) {
+	delete(s.PostgresExtra, major)
+	if len(s.PostgresExtra) == 0 {
+		s.PostgresExtra = nil
+	}
 }
 
 // Running reports whether an installed service should run.
@@ -280,9 +350,20 @@ func (c *Config) UsedPorts(except string) map[int]string {
 	if c.Services.Postgres != "" {
 		used[c.Ports.Postgres] = "postgres"
 	}
+	for major, r := range c.Services.PostgresExtra {
+		if "postgres-"+major != except {
+			used[r.Port] = "postgres-" + major
+		}
+	}
 	for id, x := range c.Services.Extras {
 		if id != except && x.Version != "" {
 			used[x.Port] = id
+		}
+		for line, lr := range x.Lines {
+			lineID := id + "-" + line
+			if lineID != except {
+				used[lr.Port] = lineID
+			}
 		}
 	}
 	for _, s := range c.Sites {

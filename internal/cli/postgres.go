@@ -114,8 +114,11 @@ func printPostgresVersions(out io.Writer, v postgres.Versions) {
 	fmt.Fprintln(tw, "  VERSION\tINSTALLED\tLATEST\tDATA\tEND OF LIFE\t")
 	for _, m := range v.Majors {
 		marker := " "
-		if m.Active {
+		switch {
+		case m.Active:
 			marker = "*"
+		case m.Running:
+			marker = "+"
 		}
 		installed, latest, data := dash(m.Installed), dash(m.Latest), "-"
 		if m.Update {
@@ -126,6 +129,9 @@ func printPostgresVersions(out io.Writer, v postgres.Versions) {
 		}
 		if m.Busy != "" {
 			installed += " (" + m.Busy + ")"
+		}
+		if m.Running && !m.Active && m.RunPort != 0 {
+			installed += fmt.Sprintf(" (port %d)", m.RunPort)
 		}
 		fmt.Fprintf(tw, "%s %s\t%s\t%s\t%s\t%s\t\n", marker, m.Major, installed, latest, data, dash(m.EOL))
 	}
@@ -163,6 +169,8 @@ type pgOps interface {
 	Extensions(ctx context.Context, major string) (postgres.MajorExtensions, error)
 	// Extension installs, updates or uninstalls (action) an extension of major.
 	Extension(ctx context.Context, action, major, name string) error
+	EnableMajor(ctx context.Context, major string, port int) error
+	DisableMajor(ctx context.Context, major string) error
 }
 
 func postgresOps(ctx context.Context, s *state) (pgOps, error) {
@@ -213,6 +221,14 @@ func (d daemonPG) Uninstall(ctx context.Context, major string, deleteData bool) 
 	_, err := d.c.UninstallPostgres(ctx, major, deleteData)
 	return err
 }
+func (d daemonPG) EnableMajor(ctx context.Context, major string, port int) error {
+	_, err := d.c.EnablePostgres(ctx, major, port)
+	return err
+}
+func (d daemonPG) DisableMajor(ctx context.Context, major string) error {
+	_, err := d.c.DisablePostgres(ctx, major)
+	return err
+}
 
 type directPG struct{ m *postgres.Manager }
 
@@ -251,6 +267,12 @@ func (d directPG) Activate(ctx context.Context, major string) error {
 }
 func (d directPG) Uninstall(ctx context.Context, major string, deleteData bool) error {
 	return d.m.Uninstall(ctx, major, deleteData)
+}
+func (d directPG) EnableMajor(ctx context.Context, major string, port int) error {
+	return d.m.EnableMajor(ctx, major, port)
+}
+func (d directPG) DisableMajor(ctx context.Context, major string) error {
+	return d.m.DisableMajor(ctx, major)
 }
 
 // cliPGService edits config.json while the daemon doesn't run; it applies it when it starts.

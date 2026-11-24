@@ -89,6 +89,29 @@ func registerCatalog(mux *http.ServeMux, b Backend) {
 		return m.Uninstall(r.PathValue("id"), r.URL.Query().Get("line"), deleteData)
 	}))
 
+	// Enable a non-active installed line to also run, on its own port.
+	// Body: {"port": 3307} (0 for a suggested one).
+	mux.HandleFunc("POST /v1/catalog/{id}/lines/{line}/enable", func(w http.ResponseWriter, r *http.Request) {
+		m := manager(w)
+		if m == nil {
+			return
+		}
+		var body struct {
+			Port int `json:"port"`
+		}
+		if r.ContentLength != 0 {
+			if err := decodeBody(r, &body); err != nil {
+				writeError(w, http.StatusBadRequest, err)
+				return
+			}
+		}
+		respond(w, m, m.EnableLine(r.PathValue("id"), r.PathValue("line"), body.Port))
+	})
+	// Disable a running non-active line.
+	mux.HandleFunc("POST /v1/catalog/{id}/lines/{line}/disable", action(func(m *catalog.Manager, r *http.Request) error {
+		return m.DisableLine(r.PathValue("id"), r.PathValue("line"))
+	}))
+
 	mux.HandleFunc("GET /v1/catalog/{id}/log", func(w http.ResponseWriter, r *http.Request) {
 		m := manager(w)
 		if m == nil {
@@ -157,6 +180,21 @@ func (c *Client) UninstallService(ctx context.Context, id, line string, deleteDa
 	}
 	var out Catalog
 	err := c.slow().do(ctx, http.MethodDelete, path, &out)
+	return out, err
+}
+
+// EnableServiceLine starts a non-active installed line on its own port.
+func (c *Client) EnableServiceLine(ctx context.Context, id, line string, port int) (Catalog, error) {
+	var out Catalog
+	err := c.slow().send(ctx, http.MethodPost, "/v1/catalog/"+url.PathEscape(id)+"/lines/"+url.PathEscape(line)+"/enable",
+		map[string]any{"port": port}, &out)
+	return out, err
+}
+
+// DisableServiceLine stops a running non-active line.
+func (c *Client) DisableServiceLine(ctx context.Context, id, line string) (Catalog, error) {
+	var out Catalog
+	err := c.slow().do(ctx, http.MethodPost, "/v1/catalog/"+url.PathEscape(id)+"/lines/"+url.PathEscape(line)+"/disable", &out)
 	return out, err
 }
 

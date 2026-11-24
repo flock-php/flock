@@ -171,6 +171,8 @@ type LineState struct {
 	Installed  bool   `json:"installed"`
 	Version    string `json:"version"` // the installed version, "" when not installed
 	Active     bool   `json:"active"`  // the installed version is the one that runs
+	Running    bool   `json:"running"` // this line is configured to run (active or enabled)
+	RunPort    int    `json:"run_port,omitempty"` // the port this line runs on, when running
 	Update     bool   `json:"update"`  // Latest (or a newer build of it) can replace Version
 	Yanked     string `json:"yanked"`  // why the installed build was withdrawn, "" when it wasn't
 	HasData    bool   `json:"has_data"`
@@ -334,12 +336,25 @@ func (m *Manager) entry(manifest *binaries.Manifest, k *Kind, cfg *config.Config
 		ids = append(ids, line)
 	}
 	sort.Slice(ids, func(i, j int) bool { return binaries.CompareVersions(ids[i], ids[j]) > 0 })
+	extraLines := map[string]config.LineRun{}
+	if x, ok := cfg.Services.Extra(k.ID); ok {
+		for l, lr := range x.Lines {
+			extraLines[l] = lr
+		}
+	}
 	for _, line := range ids {
 		offer := offers[line]
 		version := versions[line]
 		state := LineState{
 			ID: line, Label: line, Latest: offer.Version, Prerelease: offer.Prerelease, Installed: version != "", Version: version,
 			Active: e.Installed != "" && e.Line == line, HasData: hasData(DataDir(m.root, k.ID, line)),
+		}
+		if state.Active {
+			state.Running = true
+			state.RunPort = e.Port
+		} else if lr, ok := extraLines[line]; ok {
+			state.Running = true
+			state.RunPort = lr.Port
 		}
 		if version != "" {
 			build := buildOf(m.root, k.ID, version, cfg)
@@ -798,7 +813,16 @@ func (m *Manager) use(cfg *config.Config, k *Kind, version string) {
 	if port == 0 {
 		port = SuggestPort(cfg, k.ID, k.DefaultPort)
 	}
-	cfg.Services.SetExtra(k.ID, config.Extra{Version: version, Build: buildOf(m.root, k.ID, version, cfg), Port: port})
+	x, _ := cfg.Services.Extra(k.ID)
+	lines := x.Lines
+	newLine := k.LineOf(version)
+	if lines != nil {
+		delete(lines, newLine)
+		if len(lines) == 0 {
+			lines = nil
+		}
+	}
+	cfg.Services.SetExtra(k.ID, config.Extra{Version: version, Build: buildOf(m.root, k.ID, version, cfg), Port: port, Lines: lines})
 	cfg.Services.SetRunning(k.ID, true)
 }
 
@@ -829,6 +853,7 @@ func (m *Manager) Uninstall(id, line string, deleteData bool) error {
 	}
 	// Stop it first (Windows locks the files of a running server).
 	err = m.mutate(func(cfg *config.Config) error {
+		cfg.Services.RemoveLine(id, line)
 		x, ok := cfg.Services.Extra(id)
 		if !ok || k.LineOf(x.Version) != line {
 			return nil
@@ -879,6 +904,72 @@ func Spec(root string, k *Kind, x config.Extra) (supervisor.Spec, error) {
 	}
 	spec.Name, spec.LogFile = k.ID, p.Log
 	return spec, nil
+}
+
+// LineSpec describes the server of a non-active line of service k on its own port. The process
+// name includes the line so the daemon can run it alongside the active one.
+func LineSpec(root string, k *Kind, lr config.LineRun) (supervisor.Spec, error) {
+	if !installed(root, k.ID, lr.Version) {
+		return supervisor.Spec{}, fmt.Errorf("version %s is not installed", lr.Version)
+	}
+	p := PathsOf(root, k, lr.Version)
+	if p.Line == "" {
+		return supervisor.Spec{}, fmt.Errorf("version %s is not one Flock offers", lr.Version)
+	}
+	if err := os.MkdirAll(p.Data, 0o700); err != nil {
+		return supervisor.Spec{}, err
+	}
+	spec, err := k.Spec(p, lr.Port)
+	if err != nil {
+		return supervisor.Spec{}, err
+	}
+	spec.Name = k.ID + "-" + p.Line
+	spec.LogFile = LogFile(root, k.ID+"-"+p.Line)
+	return spec, nil
+}
+
+// EnableLine makes an installed line run on its own port alongside the active line. The daemon
+// starts it on the next config reload. This is the multi-version abstraction: any catalog service
+// (MySQL, MariaDB, MongoDB, ...) can run several lines at once through this method.
+func (m *Manager) EnableLine(id, line string, port int) error {
+	k, err := m.idle(id)
+	if err != nil {
+		return err
+	}
+	version := installedLines(m.root, k)[line]
+	if version == "" {
+		return fmt.Errorf("%w: %s %s is not installed", ErrInvalid, k.Name, line)
+	}
+	return m.mutate(func(cfg *config.Config) error {
+		x, ok := cfg.Services.Extra(id)
+		if !ok {
+			return fmt.Errorf("%w: %s is not installed", ErrInvalid, k.Name)
+		}
+		if k.LineOf(x.Version) == line {
+			return nil // already the active line
+		}
+		if port == 0 {
+			port = SuggestPort(cfg, id+"-"+line, k.DefaultPort)
+		}
+		if err := CheckPort(cfg, id+"-"+line, port); err != nil {
+			return err
+		}
+		build := buildOf(m.root, k.ID, version, cfg)
+		cfg.Services.SetLine(id, line, config.LineRun{Version: version, Build: build, Port: port})
+		cfg.Services.SetRunning(id, true)
+		return nil
+	})
+}
+
+// DisableLine stops a running non-active line. Its install and data stay.
+func (m *Manager) DisableLine(id, line string) error {
+	if _, err := m.Kind(id); err != nil {
+		return err
+	}
+	return m.mutate(func(cfg *config.Config) error {
+		cfg.Services.RemoveLine(id, line)
+		return nil
+	})
 }
 
 // HTTPClient downloads the packages (tests replace it).
