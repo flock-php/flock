@@ -10,6 +10,7 @@ import (
 	"crypto/elliptic"
 	"crypto/rand"
 	"crypto/sha1"
+	"crypto/tls"
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/pem"
@@ -37,12 +38,15 @@ type CA struct {
 	key  *ecdsa.PrivateKey
 }
 
-// Ensure loads the CA from dir, creating it on first use.
+// Ensure loads the CA from dir, creating it on first use and again when the TLD changed,
+// as the root is only valid for the TLD it was created for.
 func Ensure(dir, tld string) (*CA, error) {
 	ca := &CA{dir: dir}
 
 	if err := ca.load(); err == nil {
-		return ca, nil
+		if slices.Contains(ca.cert.PermittedDNSDomains, tld) {
+			return ca, nil
+		}
 	} else if !errors.Is(err, os.ErrNotExist) {
 		return nil, err
 	}
@@ -90,6 +94,9 @@ func (ca *CA) load() error {
 	key, err := x509.ParseECPrivateKey(block.Bytes)
 	if err != nil {
 		return fmt.Errorf("%s: %w", ca.keyPath(), err)
+	}
+	if !key.PublicKey.Equal(cert.PublicKey) {
+		return fmt.Errorf("CA certificate and private key do not match: %w", os.ErrNotExist)
 	}
 
 	ca.cert, ca.key = cert, key
@@ -152,7 +159,7 @@ func (ca *CA) SiteCert(domain string) (certPath, keyPath string, err error) {
 	dir := filepath.Dir(certPath)
 
 	if ca.leafIsCurrent(certPath, domain) {
-		if _, err := os.Stat(keyPath); err == nil {
+		if _, err := tls.LoadX509KeyPair(certPath, keyPath); err == nil {
 			return certPath, keyPath, nil
 		}
 	}
@@ -250,7 +257,23 @@ func writeKey(path string, key *ecdsa.PrivateKey) error {
 }
 
 func writePEM(path, typ string, der []byte, mode os.FileMode) error {
-	return os.WriteFile(path, pem.EncodeToMemory(&pem.Block{Type: typ, Bytes: der}), mode)
+	f, err := os.CreateTemp(filepath.Dir(path), "."+filepath.Base(path)+"-*")
+	if err != nil {
+		return err
+	}
+	defer os.Remove(f.Name())
+	if err := f.Chmod(mode); err != nil {
+		f.Close()
+		return err
+	}
+	_, err = f.Write(pem.EncodeToMemory(&pem.Block{Type: typ, Bytes: der}))
+	if closeErr := f.Close(); err == nil {
+		err = closeErr
+	}
+	if err != nil {
+		return err
+	}
+	return os.Rename(f.Name(), path)
 }
 
 func randomSerial() *big.Int {
