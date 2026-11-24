@@ -195,7 +195,7 @@ public sealed class RuntimeService
             var result = await processRunner.RunAsync(fileName, arguments, TimeSpan.FromMinutes(2), token);
             if (!result.Succeeded)
             {
-                throw new FlockException(result.Output.Length == 0 ? Localization.Format(Strings.App_CouldNotRestart, string.Join(' ', [fileName, .. arguments])) : result.Output);
+                throw new FlockException(result.Output.Length == 0 ? Localization.Format(Strings.App_CouldNotRestart, string.Join(' ', arguments.Prepend(fileName))) : result.Output);
             }
         }, CancellationToken.None);
         ActionError = outcome switch

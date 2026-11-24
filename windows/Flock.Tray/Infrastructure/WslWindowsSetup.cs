@@ -151,7 +151,7 @@ public sealed partial class WslWindowsSetup(FlockBackend backend, string root, F
             }
             // --source is the hosts helper's file, checked even though --no-helper leaves the helper out.
             var code = await elevate(exe,
-                ["privileged-setup", "--tld", tld, "--ca", ca, "--source", Path.Combine(WindowsRoot, "hosts.txt"), "--no-helper", "--result-file", result],
+                new[] { "privileged-setup", "--tld", tld, "--ca", ca, "--source", Path.Combine(WindowsRoot, "hosts.txt"), "--no-helper", "--result-file", result },
                 cancellationToken);
             _ = caLock;
             if (code is null)
@@ -205,7 +205,7 @@ public sealed partial class WslWindowsSetup(FlockBackend backend, string root, F
         string[] own = [tld, "." + tld, "localhost"];
         if (!permitted.Any(name => name == tld || name == "." + tld) || permitted.Except(own, StringComparer.OrdinalIgnoreCase).Any())
         {
-            return $"was made for {string.Join(", ", permitted.Except(["localhost"]).Select(name => "*." + name.TrimStart('.')).Distinct())}, not for *.{tld}";
+            return $"was made for {string.Join(", ", permitted.Except(new[] { "localhost" }).Select(name => "*." + name.TrimStart('.')).Distinct())}, not for *.{tld}";
         }
         return null;
     }

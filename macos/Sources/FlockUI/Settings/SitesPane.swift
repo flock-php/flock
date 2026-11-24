@@ -35,6 +35,12 @@ struct SitesPane: View {
         get { restartingState.wrappedValue }
         nonmutating set { restartingState.wrappedValue = newValue }
     }
+    /// The site whose Reverb server is restarting.
+    private let restartingReverbState = State<String?>(initialValue: nil)
+    private var restartingReverb: String? {
+        get { restartingReverbState.wrappedValue }
+        nonmutating set { restartingReverbState.wrappedValue = newValue }
+    }
     /// The site the Share sheet is open for.
     private let sharingState = State<String?>(initialValue: nil)
     private var sharing: String? {
@@ -487,7 +493,8 @@ struct SitesPane: View {
         .help(worktree.path)
     }
 
-    /// What a site's list row warns about: the site, its document root, one of its domains, or its FrankenPHP.
+    /// What a site's list row warns about: the site, its document root, one of its domains, its FrankenPHP
+    /// or its Reverb server.
     private func problem(_ site: Status.Site) -> String? {
         if let problem = site.problem {
             return problem
@@ -501,6 +508,9 @@ struct SitesPane: View {
         if !site.isNode, site.server == .frankenphp, let franken = site.frankenPHP, franken.state == .failed || franken.state == .unavailable,
            !franken.problem.isEmpty {
             return franken.problem
+        }
+        if !site.isNode, let reverb = site.reverb, reverb.state == .failed || reverb.state == .unavailable, !reverb.problem.isEmpty {
+            return reverb.problem
         }
         return nil
     }
@@ -651,6 +661,9 @@ struct SitesPane: View {
             } else {
                 section("sites.server") {
                     serverFields(site)
+                }
+                section("sites.reverb.title") {
+                    reverbFields(site)
                 }
             }
 
@@ -940,6 +953,110 @@ struct SitesPane: View {
             return log
         }
         return "frankenphp-\(site.name)"
+    }
+
+    /// Laravel Reverb for the site: Run Reverb, then its state, the .env lines the app needs, Restart
+    /// and its output.
+    @ViewBuilder
+    private func reverbFields(_ site: Status.Site) -> some View {
+        let store = model.settings
+        let address = reverbAddress(site)
+        field("sites.reverb.run") {
+            Toggle("sites.reverb.run", isOn: Binding(
+                get: { site.reverb != nil },
+                set: { on in Task { await store.perform { _ = try await $0.updateSite(site.name, SiteChange(reverb: on)) } } }
+            ))
+            .labelsHidden()
+            .toggleStyle(.switch)
+            .controlSize(.small)
+            .disabled(!site.reverbAvailable && site.reverb == nil)
+        }
+
+        if let reverb = site.reverb {
+            reverbState(reverb, address: address)
+
+            if !reverb.env.isEmpty {
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack(spacing: 8) {
+                        Text("sites.reverb.env_needs")
+                            .font(.caption).foregroundStyle(.secondary)
+                        Button("common.copy") {
+                            NSPasteboard.general.clearContents()
+                            NSPasteboard.general.setString(reverb.env.joined(separator: "\n"), forType: .string)
+                        }
+                        .controlSize(.small)
+                    }
+                    Text(reverb.env.joined(separator: "\n"))
+                        .font(.callout.monospaced())
+                        .textSelection(.enabled)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+
+            HStack(spacing: 8) {
+                Button("menu.restart") {
+                    restartingReverb = site.name
+                    Task {
+                        await store.perform { _ = try await $0.restartReverb(site.name) }
+                        restartingReverb = nil
+                    }
+                }
+                .disabled(reverb.state != .running || restartingReverb == site.name)
+                .help("sites.reverb.restart_tooltip")
+                if restartingReverb == site.name {
+                    ProgressView().controlSize(.mini)
+                }
+            }
+            .controlSize(.small)
+
+            ServerOutput(log: reverb.log.isEmpty ? "reverb-\(site.name)" : reverb.log, live: reverb.state == .running)
+
+            Text("sites.reverb.footnote")
+                .font(.caption).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        } else {
+            (site.reverbAvailable ? Text("sites.reverb.explanation \(address)") : Text("sites.reverb.install"))
+                .font(.caption).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    /// Where browsers reach the site's Reverb server: the site's address as a WebSocket one,
+    /// wss://acme.test/app (with its port when Flock serves another than 443), ws:// without HTTPS.
+    private func reverbAddress(_ site: Status.Site) -> String {
+        if let url = site.url {
+            if url.hasPrefix("https://") { return "wss://\(url.dropFirst(8))/app" }
+            if url.hasPrefix("http://") { return "ws://\(url.dropFirst(7))/app" }
+        }
+        return "\(site.secured ? "wss" : "ws")://\(site.domain)/app"
+    }
+
+    /// The Reverb server: running at its address, why it stopped, or why it can't run.
+    @ViewBuilder
+    private func reverbState(_ reverb: Status.SiteReverb, address: String) -> some View {
+        switch reverb.state {
+        case .running:
+            HStack(spacing: 6) {
+                StateDot(color: StateDot.running)
+                Text("sites.reverb.running_at \(address)").textSelection(.enabled)
+            }
+        case .failed:
+            HStack(spacing: 6) {
+                StateDot(color: StateDot.failed)
+                Text(reverb.problem.isEmpty ? String(localized: "sites.server.failed") : reverb.problem)
+                    .textSelection(.enabled)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        case .unavailable:
+            if !reverb.problem.isEmpty {
+                Label(reverb.problem, systemImage: "exclamationmark.triangle.fill")
+                    .font(.caption).foregroundStyle(.orange)
+                    .textSelection(.enabled)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        case .unknown:
+            EmptyView()
+        }
     }
 
     /// Notes when versions disagree: an isolation over the project's pin, .flockrc over .nvmrc.

@@ -67,7 +67,7 @@ public sealed class InstallationService(CliProcessRunner processRunner, Preferen
         }
         else
         {
-            result = await processRunner.RunAsync(bundled, ["install"], cancellationToken: cancellationToken);
+            result = await processRunner.RunAsync(bundled, new[] { "install" }, cancellationToken: cancellationToken);
             await RecordInstalledAsync(cancellationToken);
         }
         if (result.Output.Length > 0)
@@ -108,7 +108,7 @@ public sealed class InstallationService(CliProcessRunner processRunner, Preferen
                 return true;
             }
         }
-        var result = await processRunner.RunAsync("schtasks", ["/Query", "/TN", "Flock Daemon"], TimeSpan.FromSeconds(10), cancellationToken);
+        var result = await processRunner.RunAsync("schtasks", new[] { "/Query", "/TN", "Flock Daemon" }, TimeSpan.FromSeconds(10), cancellationToken);
         return result.Succeeded;
     }
 

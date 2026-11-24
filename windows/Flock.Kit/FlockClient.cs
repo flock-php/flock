@@ -78,13 +78,16 @@ public sealed class FlockClient : IDisposable
     public Task<Status> LinkSiteAsync(string path, string? name = null, string? php = null, bool secured = false, CancellationToken cancellationToken = default) =>
         Send<Status>(HttpMethod.Post, "/v1/sites", new { path, name, php, secured }, cancellationToken: cancellationToken);
 
-    /// <summary>Switching the server or worker mode reloads the web server and may start FrankenPHP, so it gets longer.</summary>
+    /// <summary>Switching the server or worker mode, or turning Reverb on or off, reloads the web server and may start a process, so it gets longer.</summary>
     public Task<Status> UpdateSiteAsync(string name, SiteChange change, CancellationToken cancellationToken = default) =>
         Send<Status>(HttpMethod.Patch, $"/v1/sites/{Escape(name)}", change,
-            timeout: change.Server is not null || change.Worker is not null ? ServerSwitchTimeout : null, cancellationToken: cancellationToken);
+            timeout: change.Server is not null || change.Worker is not null || change.Reverb is not null ? ServerSwitchTimeout : null, cancellationToken: cancellationToken);
 
     /// <summary>Restarts a FrankenPHP site's process, e.g. so Octane's workers load changed code, or a Node.js site's dev server (starting it when it sleeps).</summary>
     public Task<Status> RestartSiteAsync(string name, CancellationToken cancellationToken = default) => Send<Status>(HttpMethod.Post, $"/v1/sites/{Escape(name)}/restart", timeout: ServerSwitchTimeout, cancellationToken: cancellationToken);
+
+    /// <summary>Restarts only a site's Reverb server, e.g. so it loads changed code.</summary>
+    public Task<Status> RestartReverbAsync(string name, CancellationToken cancellationToken = default) => Send<Status>(HttpMethod.Post, $"/v1/sites/{Escape(name)}/reverb/restart", timeout: ServerSwitchTimeout, cancellationToken: cancellationToken);
 
     /// <summary>Puts a Node.js site's dev server to sleep until the site's next request.</summary>
     public Task<Status> StopSiteAsync(string name, CancellationToken cancellationToken = default) => Send<Status>(HttpMethod.Post, $"/v1/sites/{Escape(name)}/stop", timeout: ServerSwitchTimeout, cancellationToken: cancellationToken);

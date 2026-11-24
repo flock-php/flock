@@ -14041,6 +14041,187 @@
         }
       }
     },
+    "sites.reverb.env_needs" : {
+      "comment" : "Above the lines to add to the project's .env file",
+      "localizations" : {
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Soubor .env aplikace potřebuje:"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The app's .env needs:"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "El .env de la app necesita:"
+          }
+        }
+      }
+    },
+    "sites.reverb.explanation %@" : {
+      "comment" : "{address}: the WebSocket address, e.g. wss://app.test/app",
+      "localizations" : {
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Flock pro web spouští php artisan reverb:start. Prohlížeče se k němu připojí na %@, bez vlastního portu či certifikátu."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Flock runs php artisan reverb:start for the site. Browsers reach it at %@, with no port or certificate of its own."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Flock ejecuta php artisan reverb:start para el sitio. Los navegadores lo alcanzan en %@, sin puerto ni certificado propios."
+          }
+        }
+      }
+    },
+    "sites.reverb.footnote" : {
+      "comment" : "/app and /apps are paths of the site's address",
+      "localizations" : {
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Spojení WebSocket pod /app a broadcasty Laravelu pod /apps jdou do Reverbu; všechny ostatní požadavky zůstávají aplikaci. Flock soubor .env projektu nemění. Po jeho změně znovu sestavte front-end."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "WebSocket connections under /app and Laravel's broadcasts under /apps go to Reverb; every other request stays the app's. Flock doesn't change the project's .env. Rebuild the front end after changing it."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Las conexiones WebSocket bajo /app y las difusiones de Laravel bajo /apps van a Reverb; el resto de solicitudes siguen yendo a la app. Flock no cambia el .env del proyecto. Vuelve a compilar el front-end después de cambiarlo."
+          }
+        }
+      }
+    },
+    "sites.reverb.install" : {
+      "localizations" : {
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pro spouštění nainstalujte do projektu Laravel Reverb (php artisan install:broadcasting --reverb)."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Install Laravel Reverb in the project (php artisan install:broadcasting --reverb) to run it."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Instala Laravel Reverb en el proyecto (php artisan install:broadcasting --reverb) para ejecutarlo."
+          }
+        }
+      }
+    },
+    "sites.reverb.restart_tooltip" : {
+      "localizations" : {
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Restartovat Reverb, např. aby načetl změněný kód"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Restart Reverb, e.g. so it loads changed code"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Reiniciar Reverb, p. ej. para que cargue el código modificado"
+          }
+        }
+      }
+    },
+    "sites.reverb.run" : {
+      "comment" : "A switch: Flock runs the site's Laravel Reverb server",
+      "localizations" : {
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Spouštět Reverb"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Run Reverb"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ejecutar Reverb"
+          }
+        }
+      }
+    },
+    "sites.reverb.running_at %@" : {
+      "comment" : "{address}: the WebSocket address, e.g. wss://app.test/app",
+      "localizations" : {
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Běží na %@"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Running at %@"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "En ejecución en %@"
+          }
+        }
+      }
+    },
+    "sites.reverb.title" : {
+      "localizations" : {
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Reverb"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Reverb"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Reverb"
+          }
+        }
+      }
+    },
     "sites.root" : {
       "comment" : "The document root",
       "localizations" : {

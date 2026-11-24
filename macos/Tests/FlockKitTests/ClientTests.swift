@@ -210,6 +210,23 @@ struct ClientTests {
         #expect(requests[0].body == #"{"type":"node"}"#)
     }
 
+    @Test func talksToTheReverbEndpoints() async throws {
+        StubProtocol.reset { _ in (200, #"{"version":"dev","pid":1,"started_at":"2026-10-13T14:10:01Z"}"#) }
+        let client = client(try apiJSON(token: "t"))
+
+        _ = try await client.updateSite("chat", SiteChange(reverb: true))
+        _ = try await client.updateSite("chat", SiteChange(reverb: false))
+        _ = try await client.restartReverb("chat")
+
+        let requests = StubProtocol.requests
+        #expect(requests.map(\.method) == ["PATCH", "PATCH", "POST"])
+        #expect(requests.map { URL(string: $0.url)?.path ?? "" } == ["/v1/sites/chat", "/v1/sites/chat", "/v1/sites/chat/reverb/restart"])
+        #expect(requests[0].body == #"{"reverb":true}"#)
+        #expect(requests[1].body == #"{"reverb":false}"#)
+        // Restarting waits for the server to come back.
+        #expect(requests[2].timeout == 60)
+    }
+
     @Test func givesSlowEndpointsLongerThanTheDefault() async throws {
         StubProtocol.reset { request in
             request.url.contains("/php/") ? (200, #"{"versions":[]}"#) : request.url.contains("/node/") ? (200, #"{"versions":[]}"#)

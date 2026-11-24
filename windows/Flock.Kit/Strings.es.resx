@@ -1644,6 +1644,9 @@ Encontrarás los detalles en %LocalAppData%\Flock\tray.log.</value>
     <data name="Sites_DownloadingFrankenphp" xml:space="preserve">
         <value>Descargando FrankenPHP para PHP {0}…</value>
     </data>
+    <data name="Sites_DownloadingFrankenphpForPhp" xml:space="preserve">
+        <value>Descargando FrankenPHP para PHP {0}… {1} %</value>
+    </data>
     <data name="Sites_ExtensionCanceled" xml:space="preserve">
         <value>Se canceló la solicitud de la extensión.</value>
     </data>
@@ -1824,6 +1827,30 @@ Encontrarás los detalles en %LocalAppData%\Flock\tray.log.</value>
     <data name="Sites_RestartFrankenphpTooltip" xml:space="preserve">
         <value>Reiniciar FrankenPHP, p. ej. para que los workers de Octane carguen el código modificado</value>
     </data>
+    <data name="Sites_Reverb_CantRun" xml:space="preserve">
+        <value>Reverb no puede ejecutarse.</value>
+    </data>
+    <data name="Sites_Reverb_EnvNeeds" xml:space="preserve">
+        <value>El .env de la app necesita:</value>
+    </data>
+    <data name="Sites_Reverb_Explanation" xml:space="preserve">
+        <value>Flock ejecuta php artisan reverb:start para el sitio. Los navegadores lo alcanzan en {0}, sin puerto ni certificado propios.</value>
+    </data>
+    <data name="Sites_Reverb_Footnote" xml:space="preserve">
+        <value>Las conexiones WebSocket bajo /app y las difusiones de Laravel bajo /apps van a Reverb; el resto de solicitudes siguen yendo a la app. Flock no cambia el .env del proyecto. Vuelve a compilar el front-end después de cambiarlo.</value>
+    </data>
+    <data name="Sites_Reverb_Install" xml:space="preserve">
+        <value>Instala Laravel Reverb en el proyecto (php artisan install:broadcasting --reverb) para ejecutarlo.</value>
+    </data>
+    <data name="Sites_Reverb_RestartTooltip" xml:space="preserve">
+        <value>Reiniciar Reverb, p. ej. para que cargue el código modificado</value>
+    </data>
+    <data name="Sites_Reverb_Run" xml:space="preserve">
+        <value>Ejecutar Reverb</value>
+    </data>
+    <data name="Sites_Reverb_RunningAt" xml:space="preserve">
+        <value>En ejecución en {0}</value>
+    </data>
     <data name="Sites_Root" xml:space="preserve">
         <value>Raíz</value>
     </data>
@@ -1895,6 +1922,9 @@ Encontrarás los detalles en %LocalAppData%\Flock\tray.log.</value>
     </data>
     <data name="Sites_Server_Stopping" xml:space="preserve">
         <value>Deteniendo…</value>
+    </data>
+    <data name="Sites_ShareSection" xml:space="preserve">
+        <value>Compartir</value>
     </data>
     <data name="Sites_Share_AllowExplanation" xml:space="preserve">
         <value>Cualquiera con el enlace puede abrir el sitio, salvo que indiques direcciones de correo: en ese caso Cloudflare les envía un código por correo. El enlace deja de funcionar a las 8 horas o cuando dejes de compartir.</value>
@@ -2039,6 +2069,9 @@ Encontrarás los detalles en %LocalAppData%\Flock\tray.log.</value>
     </data>
     <data name="Sites_UpstreamPortMeans" xml:space="preserve">
         <value>Un puerto solo significa 127.0.0.1.</value>
+    </data>
+    <data name="Sites_Url" xml:space="preserve">
+        <value>URL</value>
     </data>
     <data name="Sites_UseFile" xml:space="preserve">
         <value>Usar {0}</value>

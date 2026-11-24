@@ -1668,6 +1668,9 @@ Podrobnosti najdete v %LocalAppData%\Flock\tray.log.</value>
     <data name="Sites_DownloadingFrankenphp" xml:space="preserve">
         <value>Stahuje se FrankenPHP pro PHP {0}…</value>
     </data>
+    <data name="Sites_DownloadingFrankenphpForPhp" xml:space="preserve">
+        <value>Stahuje se FrankenPHP pro PHP {0}… {1} %</value>
+    </data>
     <data name="Sites_ExtensionCanceled" xml:space="preserve">
         <value>Požadavek na rozšíření byl zrušen.</value>
     </data>
@@ -1848,6 +1851,30 @@ Podrobnosti najdete v %LocalAppData%\Flock\tray.log.</value>
     <data name="Sites_RestartFrankenphpTooltip" xml:space="preserve">
         <value>Restartovat FrankenPHP, např. aby workery Octane načetly změněný kód</value>
     </data>
+    <data name="Sites_Reverb_CantRun" xml:space="preserve">
+        <value>Reverb nelze spustit.</value>
+    </data>
+    <data name="Sites_Reverb_EnvNeeds" xml:space="preserve">
+        <value>Soubor .env aplikace potřebuje:</value>
+    </data>
+    <data name="Sites_Reverb_Explanation" xml:space="preserve">
+        <value>Flock pro web spouští php artisan reverb:start. Prohlížeče se k němu připojí na {0}, bez vlastního portu či certifikátu.</value>
+    </data>
+    <data name="Sites_Reverb_Footnote" xml:space="preserve">
+        <value>Spojení WebSocket pod /app a broadcasty Laravelu pod /apps jdou do Reverbu; všechny ostatní požadavky zůstávají aplikaci. Flock soubor .env projektu nemění. Po jeho změně znovu sestavte front-end.</value>
+    </data>
+    <data name="Sites_Reverb_Install" xml:space="preserve">
+        <value>Pro spouštění nainstalujte do projektu Laravel Reverb (php artisan install:broadcasting --reverb).</value>
+    </data>
+    <data name="Sites_Reverb_RestartTooltip" xml:space="preserve">
+        <value>Restartovat Reverb, např. aby načetl změněný kód</value>
+    </data>
+    <data name="Sites_Reverb_Run" xml:space="preserve">
+        <value>Spouštět Reverb</value>
+    </data>
+    <data name="Sites_Reverb_RunningAt" xml:space="preserve">
+        <value>Běží na {0}</value>
+    </data>
     <data name="Sites_Root" xml:space="preserve">
         <value>Kořen</value>
     </data>
@@ -1919,6 +1946,9 @@ Podrobnosti najdete v %LocalAppData%\Flock\tray.log.</value>
     </data>
     <data name="Sites_Server_Stopping" xml:space="preserve">
         <value>Zastavuje se…</value>
+    </data>
+    <data name="Sites_ShareSection" xml:space="preserve">
+        <value>Sdílení</value>
     </data>
     <data name="Sites_Share_AllowExplanation" xml:space="preserve">
         <value>Web může otevřít kdokoli s odkazem, pokud neuvedete e-mailové adresy — Cloudflare jim pak pošle kód e-mailem. Odkaz přestane fungovat po 8 hodinách nebo po ukončení sdílení.</value>
@@ -2063,6 +2093,9 @@ Podrobnosti najdete v %LocalAppData%\Flock\tray.log.</value>
     </data>
     <data name="Sites_UpstreamPortMeans" xml:space="preserve">
         <value>Samotný port znamená 127.0.0.1.</value>
+    </data>
+    <data name="Sites_Url" xml:space="preserve">
+        <value>URL</value>
     </data>
     <data name="Sites_UseFile" xml:space="preserve">
         <value>Použít {0}</value>
