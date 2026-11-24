@@ -1,0 +1,127 @@
+# Scans the code with CodeQL: only the languages a pull request touches, all of them on main and weekly.
+name: CodeQL
+
+on:
+    push:
+        branches: [ "main" ]
+    pull_request:
+        branches: [ "main" ]
+    schedule:
+        -   cron: "23 4 * * 1"
+
+permissions:
+    contents: read
+
+concurrency:
+    group: codeql-${{ github.event.pull_request.number || github.run_id }}
+    cancel-in-progress: true
+
+jobs:
+    changes:
+        runs-on: ubuntu-24.04
+        permissions:
+            contents: read
+            pull-requests: read
+        outputs:
+            matrix: ${{ steps.changes.outputs.matrix }}
+            has-languages: ${{ steps.changes.outputs.has-languages }}
+        steps:
+            - name: Filter changed paths
+              if: github.event_name == 'pull_request'
+              id: filter
+              uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d
+              with:
+                  filters: |
+                      config: &config
+                        - '.github/workflows/ci-codeql.yml'
+                        - '.github/codeql/**'
+                        - '.github/codeql.yml'
+                        - '.github/codeql.yaml'
+                      go:
+                        - *config
+                        - 'cmd/**'
+                        - 'internal/**'
+                        - 'tools/**'
+                        - 'go.mod'
+                        - 'go.sum'
+                        - 'Makefile'
+                      rust:
+                        - *config
+                        - 'linux/**'
+                      swift:
+                        - *config
+                        - 'macos/**'
+                      csharp:
+                        - *config
+                        - 'windows/**'
+                        - 'design/icongen/**'
+                      actions:
+                        - *config
+                        - '.github/workflows/**'
+                        - '**/action.yml'
+                        - '**/action.yaml'
+
+            - name: Select Languages
+              id: changes
+              env:
+                  EVENT: ${{ github.event_name }}
+                  CHANGES: ${{ steps.filter.outputs.changes }}
+              shell: bash
+              #language=bash
+              run: |
+                  set -euo pipefail
+                  if [ "$EVENT" != pull_request ]; then
+                    CHANGES='["actions","csharp","go","rust","swift"]'
+                  fi
+                  matrix=$(jq -cn --argjson changes "$CHANGES" '
+                    [
+                      {language: "actions", build_mode: "none", os: "ubuntu-24.04"},
+                      {language: "csharp", build_mode: "none", os: "ubuntu-24.04"},
+                      {language: "go", build_mode: "autobuild", os: "ubuntu-24.04"},
+                      {language: "rust", build_mode: "none", os: "ubuntu-24.04"},
+                      {language: "swift", build_mode: "manual", os: "macos-26"}
+                    ] | map(select(.language as $language | $changes | index($language)))')
+                  echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
+                  echo "has-languages=$(jq -r 'length > 0' <<< "$matrix")" >> "$GITHUB_OUTPUT"
+
+    analyze:
+        needs: changes
+        if: needs.changes.outputs.has-languages == 'true'
+        name: Analyze (${{ matrix.language }})
+        runs-on: ${{ matrix.os }}
+        permissions:
+            contents: read
+            security-events: write
+
+        strategy:
+            fail-fast: false
+            matrix:
+                include: ${{ fromJSON(needs.changes.outputs.matrix) }}
+        steps:
+            - name: Checkout Repository
+              uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+
+            - name: Setup Go
+              if: matrix.language == 'go'
+              uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5
+              with:
+                  go-version-file: go.mod
+
+            - name: Install Rust System Dependencies
+              if: matrix.language == 'rust'
+              run: sudo apt-get update -qq && sudo apt-get install -y --no-install-recommends libgtk-4-dev libadwaita-1-dev libwebkitgtk-6.0-dev
+
+            - name: Initialize CodeQL
+              uses: github/codeql-action/init@52cf1852265d99e9bea071b03366fc777a602909
+              with:
+                  languages: ${{ matrix.language }}
+                  build-mode: ${{ matrix.build_mode }}
+
+            - name: Build Swift Package
+              if: matrix.language == 'swift'
+              run: swift build --package-path macos
+
+            - name: Perform CodeQL Analysis
+              uses: github/codeql-action/analyze@52cf1852265d99e9bea071b03366fc777a602909
+              with:
+                  category: "/language:${{matrix.language}}"
