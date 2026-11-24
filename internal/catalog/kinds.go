@@ -204,6 +204,15 @@ func mariadb(goos string) *Kind {
 	}
 }
 
+// SQLClient is a command-line client (mysql, mysqldump) of an installed MySQL or MariaDB version.
+// MariaDB's are called mariadb and mariadb-dump: the mysql names aren't in every package.
+func SQLClient(root, id, version, tool string) string {
+	if id == "mariadb" {
+		tool = map[string]string{"mysql": "mariadb", "mysqldump": "mariadb-dump"}[tool]
+	}
+	return filepath.Join(Dir(root, id, version), "bin", exe(runtime.GOOS, tool))
+}
+
 // ---------------------------------------------------------------------------------------------
 // MongoDB: MongoDB Inc.'s builds, as published.
 
