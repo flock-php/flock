@@ -283,6 +283,22 @@ private func decode<T: Decodable>(_ type: T.Type, _ json: String) throws -> T {
     #expect(status.sites[3].type == .php && !status.sites[3].isNode)
 }
 
+@Test func decodesAPHPSitesViteDevServer() throws {
+    let status = try decode(Status.self, """
+    {"version":"dev","pid":1,"started_at":"2026-10-13T14:10:01Z",
+     "sites":[{"name":"app","domain":"app.test","path":"/code/app","php":"8.4","type":"php",
+               "dev_server":{"state":"running","port":22080,"command":"npm run dev -- --port 22080","log":"node-app"}},
+              {"name":"blog","domain":"blog.test","path":"/code/blog","php":"8.4","type":"php"}]}
+    """)
+
+    let app = status.sites[0]
+    #expect(!app.isNode && app.nodeServer == nil)
+    let server = try #require(app.devServer)
+    #expect(server.state == .running && server.port == 22080 && server.log == "node-app")
+    #expect(app.devServerStatus == server)
+    #expect(status.sites[1].devServer == nil && status.sites[1].devServerStatus == nil)
+}
+
 @Test func decodesAProxysCommand() throws {
     let status = try decode(Status.self, """
     {"version":"dev","pid":1,"started_at":"2026-10-13T14:10:01Z",

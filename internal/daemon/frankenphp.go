@@ -88,9 +88,9 @@ func (d *daemon) RestartSite(name string) error {
 	if !ok {
 		return fmt.Errorf("no site named %s", name)
 	}
-	node := site.Kind() == config.TypeNode
+	node := site.Kind() == config.TypeNode || d.node.hasDevServer(name)
 	if !site.FrankenPHP() && !node {
-		return fmt.Errorf("%s doesn't run on FrankenPHP", name)
+		return fmt.Errorf("%s doesn't run on FrankenPHP and has no dev server", name)
 	}
 	d.mu.Lock()
 	d.restarts[name]++

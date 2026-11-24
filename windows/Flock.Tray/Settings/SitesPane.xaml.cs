@@ -27,8 +27,10 @@ internal sealed partial class SitesPane : UserControl, ISettingsPane, ISiteDetai
     private readonly SiteDetailViewModel siteDetail;
     private readonly WorktreeDetailViewModel worktreeDetail;
     private readonly ProxyDetailViewModel proxyDetail;
-    // The output of the selected Node.js site's dev server, site's Reverb or proxy's command.
+    // The output of the selected site's Reverb or proxy's command, and the one of a site's dev server
+    // (a Node.js app's, or a PHP site's Vite), so a PHP site's Reverb and Vite each have theirs.
     private readonly OutputViewModel output;
+    private readonly OutputViewModel devOutput;
     private bool active;
     private CancellationTokenSource? activeLifetime;
     private Task pendingSecure = Task.CompletedTask;
@@ -39,8 +41,9 @@ internal sealed partial class SitesPane : UserControl, ISettingsPane, ISiteDetai
         Model = model;
         viewModel = new SitesViewModel(model.Sites);
         output = new OutputViewModel(model.Sites, log => App.Current.OpenLog(new LogsViewModel.ServiceSource(log)));
-        siteDetail = new SiteDetailViewModel(this, output);
-        worktreeDetail = new WorktreeDetailViewModel(this, output);
+        devOutput = new OutputViewModel(model.Sites, log => App.Current.OpenLog(new LogsViewModel.ServiceSource(log)));
+        siteDetail = new SiteDetailViewModel(this, output, devOutput);
+        worktreeDetail = new WorktreeDetailViewModel(this, output, devOutput);
         proxyDetail = new ProxyDetailViewModel(this, output);
         this.deepLinks = deepLinks;
         InitializeComponent();
@@ -77,6 +80,7 @@ internal sealed partial class SitesPane : UserControl, ISettingsPane, ISiteDetai
     {
         active = false;
         output.Stop();
+        devOutput.Stop();
         activeLifetime?.Cancel();
         Model.Changed -= StateChanged;
         viewModel.SelectionChanged -= RefreshDetail;
@@ -87,6 +91,7 @@ internal sealed partial class SitesPane : UserControl, ISettingsPane, ISiteDetai
     {
         active = false;
         output.Stop();
+        devOutput.Stop();
         activeLifetime?.Cancel();
     }
 
@@ -246,22 +251,30 @@ internal sealed partial class SitesPane : UserControl, ISettingsPane, ISiteDetai
     /// <summary>Shows the selection's details again, and reads the output they show (or stops reading).</summary>
     private void RefreshDetail()
     {
-        if (ShowDetail() is { } shown)
+        var (shown, devShown) = ShowDetail();
+        ShowOutput(output, shown);
+        ShowOutput(devOutput, devShown);
+    }
+
+    /// <summary>Reads the log an output shows (or stops reading).</summary>
+    private void ShowOutput(OutputViewModel target, OutputSource? source)
+    {
+        if (source is { } shown)
         {
-            output.Show(shown.Log, shown.Live && active);
+            target.Show(shown.Log, shown.Live && active);
         }
         else
         {
-            output.Stop();
+            target.Stop();
         }
     }
 
-    /// <summary>Shows the selected site's, worktree's or proxy's details; the output they show, if any.</summary>
-    private OutputSource? ShowDetail()
+    /// <summary>Shows the selected site's, worktree's or proxy's details; the outputs they show, if any: Reverb's or the proxy's, and the dev server's.</summary>
+    private (OutputSource? Output, OutputSource? DevOutput) ShowDetail()
     {
         if (!loaded)
         {
-            return null;
+            return (null, null);
         }
         // A proxy: the site list has no selection, and the other way round.
         if (viewModel.SelectedProxy is { } proxy)
@@ -274,7 +287,7 @@ internal sealed partial class SitesPane : UserControl, ISettingsPane, ISiteDetai
             siteDetail.Hide();
             worktreeDetail.Hide();
             proxyDetail.Update(proxy.Snapshot);
-            return proxyDetail.Output;
+            return (proxyDetail.Output, null);
         }
         proxyDetail.Hide();
         // No sites: the pane shows its empty state instead (HasSites).
@@ -282,7 +295,7 @@ internal sealed partial class SitesPane : UserControl, ISettingsPane, ISiteDetai
         {
             siteDetail.Hide();
             worktreeDetail.Hide();
-            return null;
+            return (null, null);
         }
         ProxyList.SelectedItem = null;
         if (!ReferenceEquals(SiteList.SelectedItem, row))
@@ -293,11 +306,11 @@ internal sealed partial class SitesPane : UserControl, ISettingsPane, ISiteDetai
         {
             siteDetail.Hide();
             worktreeDetail.Update(row.Snapshot, Model.Status);
-            return worktreeDetail.Output;
+            return (worktreeDetail.Output, worktreeDetail.DevOutput);
         }
         worktreeDetail.Hide();
         siteDetail.Update(row.Snapshot, row, Model.Configuration.Current, Model.Status, restarting.Contains(row.Name), restartingReverb.Contains(row.Name));
-        return siteDetail.Output;
+        return (siteDetail.Output, siteDetail.DevOutput);
     }
 
     private void AddSiteClicked(object sender, RoutedEventArgs args)

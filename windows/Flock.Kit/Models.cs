@@ -330,9 +330,14 @@ public sealed class Status
         public string Type { get; init; } = SiteType.Php;
         /// <summary>A Node.js site's dev server.</summary>
         public SiteNodeServer? NodeServer { get; init; }
+        /// <summary>The Vite dev server a PHP site runs beside PHP, when its dev script is Vite's.</summary>
+        public SiteNodeServer? DevServer { get; init; }
 
         [JsonIgnore]
         public bool IsNode => Type == SiteType.Node;
+        /// <summary>The dev server Flock runs for the site: a Node.js app's, or a PHP site's Vite.</summary>
+        [JsonIgnore]
+        public SiteNodeServer? DevServerStatus => IsNode ? NodeServer : DevServer;
         /// <summary>Whether the project uses Laravel Boost and has Flock's guideline: "" (no Boost) or one of BoostState.</summary>
         public string Boost { get; init; } = "";
         /// <summary>The site's tunnel (`flock share`), while there is one.</summary>

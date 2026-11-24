@@ -45,6 +45,10 @@ type Site struct {
 	// Node is set on a Node.js site: its name, which every request passes to Config.Wake first
 	// (starting its dev server, at Proxy, when it isn't running).
 	Node string
+	// DevServer is set on a PHP site that has a dev server of its own (Vite's, for an app that
+	// needs its assets): its name, which every request passes to Config.Wake first so the server
+	// starts, without waiting for it. Requests are still served by PHP.
+	DevServer string
 	// Reverb is the loopback address of the site's Laravel Reverb server, which gets the site's
 	// WebSocket connections and broadcasts (see reverbRequest).
 	Reverb string
@@ -312,21 +316,29 @@ func root(s Site, indent string) string {
 }
 
 func dispatch(s Site, indent string) string {
-	serve := func(indent string) string { return php(s.FPM, indent) }
+	if s.DevServer == "" {
+		return serve(s, indent)
+	}
+	return fmt.Sprintf("%sflock_wake %s\n", indent, quote(s.DevServer)) + serve(s, indent)
+}
+
+// serve passes a request to PHP, or to the site's proxy.
+func serve(s Site, indent string) string {
+	pass := func(indent string) string { return php(s.FPM, indent) }
 	if s.Proxy != "" {
-		serve = func(indent string) string { return proxy(s.Proxy, indent) }
+		pass = func(indent string) string { return proxy(s.Proxy, indent) }
 	}
 	if s.Node != "" {
 		return fmt.Sprintf("%sflock_wake %s\n", indent, quote(s.Node)) + proxy(s.Proxy, indent)
 	}
 	switch {
 	case len(s.DebugFPM) == 0:
-		return serve(indent)
+		return pass(indent)
 	case s.Debugging:
 		return php(s.DebugFPM, indent)
 	}
 	return fmt.Sprintf("%[1]s@xdebug expression `%[2]s`\n%[1]shandle @xdebug {\n%[3]s%[1]s}\n%[1]shandle {\n%[4]s%[1]s}\n",
-		indent, xdebugRequest, php(s.DebugFPM, indent+"\t"), serve(indent+"\t"))
+		indent, xdebugRequest, php(s.DebugFPM, indent+"\t"), pass(indent+"\t"))
 }
 
 func handlers(caddy, indent string) string {

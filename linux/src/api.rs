@@ -1189,6 +1189,8 @@ pub struct SiteStatus {
     pub kind: String,
     /// A Node.js site's dev server.
     pub node_server: Option<SiteNodeServer>,
+    /// The Vite dev server a PHP site runs beside PHP, when its dev script is Vite's.
+    pub dev_server: Option<SiteNodeServer>,
     /// "", missing, current, outdated or custom.
     pub boost: String,
     pub share: Option<ShareStatus>,
@@ -1198,6 +1200,11 @@ impl SiteStatus {
     /// A Node.js app whose dev server Flock runs, rather than a PHP site.
     pub fn is_node(&self) -> bool {
         self.kind == "node"
+    }
+
+    /// The dev server Flock runs for the site: a Node.js app's, or a PHP site's Vite.
+    pub fn dev_server_status(&self) -> Option<&SiteNodeServer> {
+        if self.is_node() { self.node_server.as_ref() } else { self.dev_server.as_ref() }
     }
 
     pub fn shared(&self) -> bool {
@@ -1732,8 +1739,22 @@ mod tests {
         // An older daemon's site has no type: PHP.
         assert!(!status.sites[2].is_node());
         assert!(status.sites[2].node_server.is_none());
+        assert!(status.sites[2].dev_server_status().is_none());
         let change = SiteChange { kind: Some("node".to_owned()), ..Default::default() };
         assert_eq!(serde_json::to_value(change).unwrap(), serde_json::json!({ "type": "node" }));
+    }
+
+    #[test]
+    fn decodes_a_php_sites_vite_dev_server() {
+        let json = r#"{"sites":[
+            {"name":"app","domain":"app.test","path":"/home/a/app","php":"8.4","type":"php",
+              "dev_server":{"state":"running","port":22080,"command":"npm run dev -- --port 22080","log":"node-app"}}]}"#;
+        let status: Status = serde_json::from_str(json).unwrap();
+        let app = &status.sites[0];
+        assert!(!app.is_node() && app.node_server.is_none());
+        let server = app.dev_server_status().unwrap();
+        assert_eq!(server.text(), "Running on port 22080");
+        assert_eq!(server.log, "node-app");
     }
 
     #[test]

@@ -356,10 +356,10 @@ public sealed class PanelSiteRow(PanelSiteValue value) : ObservableObject
     public Visibility FrankenPhpVisibility => IsFrankenPhp ? Visibility.Visible : Visibility.Collapsed;
     public Visibility SharedVisibility => IsShared ? Visibility.Visible : Visibility.Collapsed;
     public Brush SecurityBrush => (Brush)Application.Current.Resources[Secured ? "SystemFillColorSuccessBrush" : "TextFillColorSecondaryBrush"];
-    /// <summary>A Node.js site's dev server as a dot: sleeping, starting, running or failed.</summary>
-    public Visibility DotVisibility => current.NodeServer is not null ? Visibility.Visible : Visibility.Collapsed;
-    public string DotTooltip => current.NodeServer?.StateLabel ?? "";
-    public Brush DotBrush => (Brush)Application.Current.Resources[current.NodeServer?.State switch
+    /// <summary>A site's dev server (a Node.js app's, or a PHP site's Vite) as a dot: sleeping, starting, running or failed.</summary>
+    public Visibility DotVisibility => current.DevServerStatus is not null ? Visibility.Visible : Visibility.Collapsed;
+    public string DotTooltip => current.DevServerStatus?.StateLabel ?? string.Empty;
+    public Brush DotBrush => (Brush)Application.Current.Resources[current.DevServerStatus?.State switch
     {
         Status.NodeServerState.Running => "SystemFillColorSuccessBrush",
         Status.NodeServerState.Starting => "SystemFillColorCautionBrush",

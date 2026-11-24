@@ -67,7 +67,7 @@ struct ServerOutput: View {
     }
 }
 
-/// A Node.js site's (or worktree's) dev server: its state, Start, Stop and Restart, the command it
+/// A Node.js site's (or worktree's) dev server, or a PHP site's Vite: its state, Start, Stop and Restart, the command it
 /// runs, and its output.
 struct NodeDevServerSection: View {
     @Environment(AppModel.self) private var model
@@ -80,7 +80,7 @@ struct NodeDevServerSection: View {
         VStack(alignment: .leading, spacing: 20) {
             VStack(alignment: .leading, spacing: 10) {
                 Text("sites.dev_server").font(.subheadline.weight(.semibold))
-                if let server = site.nodeServer {
+                if let server = site.devServerStatus {
                     let state = Self.state(server)
                     row("general.status") {
                         VStack(alignment: .leading, spacing: 4) {
@@ -120,7 +120,7 @@ struct NodeDevServerSection: View {
                     .font(.caption).foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
-            if let server = site.nodeServer {
+            if let server = site.devServerStatus {
                 ServerOutput(log: server.log, live: server.state == .starting || server.state == .running)
             }
         }
@@ -165,11 +165,11 @@ struct NodeDevServerSection: View {
 }
 
 /// The state of what Flock runs for a row (Settings → Sites, the panel): a Node.js site's dev server,
-/// a proxy's server. PHP sites have none.
+/// a PHP site's Vite, a proxy's server.
 extension Status.Site {
-    /// The dev server's dot and its state as help; nil for a PHP site.
+    /// The dev server's dot and its state as help; nil for a site without one.
     var stateDot: (color: Color, help: String)? {
-        guard isNode, let server = nodeServer else { return nil }
+        guard let server = devServerStatus else { return nil }
         let state = NodeDevServerSection.state(server)
         return (state.color, state.text)
     }

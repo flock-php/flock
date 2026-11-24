@@ -663,7 +663,7 @@ func (d *daemon) reload() error {
 	sites := cfg.AllSites()
 	extras := cfg.DomainsBySite(sites)
 	// The Node.js sites' dev servers and ports; takenPorts are Flock's own and those given out.
-	nodeSpecs, nodePorts := map[string]supervisor.Spec{}, map[string]int{}
+	nodeSpecs, nodePorts, devOnly := map[string]supervisor.Spec{}, map[string]int{}, map[string]bool{}
 	takenPorts := map[int]bool{}
 	for port := range cfg.UsedPorts("") {
 		takenPorts[port] = true
@@ -706,14 +706,11 @@ func (d *daemon) reload() error {
 			// Served by its dev server, which the first request starts (see wakeNode).
 			port := d.nodePort(site.Name, takenPorts)
 			takenPorts[port] = true
-			spec := d.nodeSpec(cfg, site, port, nodeVersion.Version)
+			spec := d.nodeSpec(cfg, site, port, nodeVersion.Version, false)
 			nodeSpecs[site.Name], nodePorts[site.Name] = spec, port
 			status.Server, status.Worker, status.OctaneAvailable, status.ReverbAvailable, status.PHP = "", "", false, false, ""
 			status.NodeServer = &api.SiteNodeServer{State: api.NodeSleeping, Port: port, Command: spec.Shell, Log: spec.Name, Problem: nodeSiteProblem(site)}
-			if d.node.isAwake(site.Name) && !runningAsRoot() {
-				d.procs.Ensure(spec)
-				keep[spec.Name] = true
-			}
+			d.ensureIfAwake(site.Name, spec, false, keep)
 			ws := web.Site{Domain: domain, Aliases: aliases, Proxy: "localhost:" + strconv.Itoa(port), Node: site.Name}
 			if site.Secured {
 				if ws.CertFile, ws.KeyFile, err = ca.SiteCert(domain); err != nil {
@@ -768,6 +765,14 @@ func (d *daemon) reload() error {
 		}
 
 		ws := web.Site{Domain: domain, Aliases: aliases, Root: root.Dir}
+		if spec, port, ok := d.phpDevServer(cfg, site, nodeVersion.Version, takenPorts); ok {
+			// The site's own dev server (Vite's, for its assets) runs beside PHP, started by the
+			// site's first request like a Node.js app's (see wakeNode).
+			nodeSpecs[site.Name], nodePorts[site.Name], devOnly[site.Name] = spec, port, true
+			ws.DevServer = site.Name
+			status.DevServer = &api.SiteNodeServer{State: api.NodeSleeping, Port: port, Command: spec.Shell, Log: spec.Name, Problem: nodeSiteProblem(site)}
+			d.ensureIfAwake(site.Name, spec, true, keep)
+		}
 		if cfg.Xdebug {
 			ws.DebugFPM = debugPool(version)
 		}
@@ -841,7 +846,7 @@ func (d *daemon) reload() error {
 		statuses = append(statuses, status)
 	}
 
-	d.node.keep(nodeSpecs, nodePorts)
+	d.node.keep(nodeSpecs, nodePorts, devOnly)
 
 	// Proxied names pass every request to their own server. A site's name wins over a proxy's: they
 	// can only clash through a parked directory or a config edited by hand.

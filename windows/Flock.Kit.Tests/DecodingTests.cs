@@ -270,7 +270,8 @@ public class DecodingTests
                        "node":"22","node_server":{"state":"running","port":22417,"command":"npm run dev -- --port 22417","log":"node-web"}},
                       {"name":"docs","domain":"docs.test","path":"C:\\code\\docs","php":"","secured":false,"parked":true,"type":"node",
                        "node_server":{"state":"failed","port":22418,"command":"npm run dev -- --port 22418","problem":"node_modules is missing: run npm install in the project","log":"node-docs"}},
-                      {"name":"shop","domain":"shop.test","path":"C:\\code\\shop","php":"8.4","secured":false,"parked":true}],
+                      {"name":"shop","domain":"shop.test","path":"C:\\code\\shop","php":"8.4","secured":false,"parked":true,
+                       "dev_server":{"state":"running","port":22419,"command":"npm run dev -- --port 22419","log":"node-shop"}}],
              "proxies":[{"name":"s3","domain":"s3.test","upstream":"http://127.0.0.1:9000","secured":false,"running":false,
                          "command":{"command":"docker compose up -d","dir":"C:\\code\\s3","stop_command":"docker compose stop","state":"starting","log":"proxy-s3"}},
                         {"name":"api","domain":"api.test","upstream":"http://127.0.0.1:8000","secured":false,"running":false}]}
@@ -284,6 +285,10 @@ public class DecodingTests
         // A site an older daemon sends without a type is a PHP site.
         Assert.Equal((false, Status.SiteType.Php), (status.Sites[2].IsNode, status.Sites[2].Type));
         Assert.Null(status.Sites[2].NodeServer);
+        // A PHP site's Vite is its dev server too.
+        var shop = status.Sites[2];
+        Assert.Equal(("Running on port 22419", "node-shop"), (shop.DevServerStatus!.StateLabel, shop.DevServerStatus.Log));
+        Assert.Same(web.NodeServer, web.DevServerStatus);
 
         var s3 = status.Proxies[0].Command!;
         Assert.Equal(("docker compose stop", "Starting…", false, true, "proxy-s3"), (s3.StopCommand, s3.StateLabel, s3.CanStart, s3.CanStop, s3.Log));

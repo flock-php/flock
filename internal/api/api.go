@@ -204,6 +204,8 @@ type SiteStatus struct {
 	// NodeServer instead of the PHP settings (PHP, Root, Server, FrankenPHP, Reverb).
 	Type       string          `json:"type"`
 	NodeServer *SiteNodeServer `json:"node_server,omitempty"`
+	// DevServer is the dev server (Vite's) a PHP site runs beside PHP, when its dev script is Vite's.
+	DevServer *SiteNodeServer `json:"dev_server,omitempty"`
 	// Boost is whether the project uses Laravel Boost and has Flock's guideline (see package boost):
 	// "" (no Boost), "missing", "current", "outdated" or "custom".
 	Boost string `json:"boost,omitempty"`
@@ -219,7 +221,7 @@ const (
 	FrankenPHPUnavailable = "unavailable" // no build for this platform or PHP version; see Problem
 )
 
-// SiteNodeServer is the dev server of a Node.js site. Flock starts it on the site's first request.
+// SiteNodeServer is the dev server of a Node.js site, or a PHP site's Vite. Flock starts it on the site's first request.
 type SiteNodeServer struct {
 	State   string `json:"state"` // NodeSleeping, NodeStarting, NodeRunning or NodeFailed
 	Port    int    `json:"port"`  // the loopback port it gets (PORT and --port), "localhost" for both IPv4 and IPv6
@@ -325,7 +327,7 @@ type Backend interface {
 	// loads changed code; RestartReverb does the same for a site's Reverb server.
 	RestartSite(name string) error
 	RestartReverb(name string) error
-	// StopSite puts a Node.js site's dev server to sleep until the site's next request.
+	// StopSite puts a site's dev server to sleep until the site's next request.
 	StopSite(name string) error
 	// StartProxy and StopProxy run a proxy's command and stop its server (see config.Proxy.Command).
 	StartProxy(name string) error
