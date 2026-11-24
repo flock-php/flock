@@ -105,8 +105,7 @@ func bypassesGate(pullRequest *contribution.PullRequest) bool {
 	if pullRequest == nil {
 		return true
 	}
-	return pullRequest.Author.Type == "Bot" || pullRequest.AuthorAssociation == "OWNER" ||
-		pullRequest.AuthorAssociation == "MEMBER" || pullRequest.AuthorAssociation == "COLLABORATOR"
+	return !contribution.IsOutsideContributor(pullRequest.Author.Type, pullRequest.AuthorAssociation)
 }
 
 func exemptFilesOnly(files []contribution.File) bool {

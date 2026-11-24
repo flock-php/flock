@@ -16,11 +16,12 @@ import (
 	"flock/tools/github/merge"
 	"flock/tools/github/pr"
 	"flock/tools/github/releasesync"
+	"flock/tools/github/slo"
 )
 
 func main() {
 	if !validCommand(os.Args[1:]) {
-		fail(errors.New("usage: github pr | issue triage|assignment | merge | release-sync <pr-number> <milestone-number>"))
+		fail(errors.New("usage: github pr | issue triage|assignment | merge | release-sync <pr-number> <milestone-number> | slo"))
 	}
 	owner, repo, err := parseRepository(os.Getenv("GITHUB_REPOSITORY"))
 	if err != nil {
@@ -41,6 +42,12 @@ func main() {
 			err = releasesync.Run(ctx, client, owner, repo, number, milestone, os.Stdout)
 		}
 		if err != nil {
+			fail(err)
+		}
+		return
+	}
+	if os.Args[1] == "slo" {
+		if err := slo.Run(ctx, client, owner, repo); err != nil {
 			fail(err)
 		}
 		return
@@ -72,7 +79,7 @@ func validCommand(args []string) bool {
 		return err == nil
 	}
 	if len(args) == 1 {
-		return args[0] == "pr" || args[0] == "merge"
+		return args[0] == "pr" || args[0] == "merge" || args[0] == "slo"
 	}
 	return len(args) == 2 && args[0] == "issue" && (args[1] == "triage" || args[1] == "assignment")
 }

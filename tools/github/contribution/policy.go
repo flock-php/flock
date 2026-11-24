@@ -12,6 +12,10 @@ func IsNotFound(err error) bool {
 	return errors.As(err, &response) && response.Response != nil && response.Response.StatusCode == http.StatusNotFound
 }
 
+func IsOutsideContributor(userType, authorAssociation string) bool {
+	return userType != "Bot" && authorAssociation != "OWNER" && authorAssociation != "MEMBER" && authorAssociation != "COLLABORATOR"
+}
+
 func HasAssignedClaimAuthor(item *Issue, claims []Claim) bool {
 	if item == nil {
 		return false

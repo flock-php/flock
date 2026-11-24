@@ -2,6 +2,28 @@ package contribution
 
 import "testing"
 
+func TestIsOutsideContributor(t *testing.T) {
+	for _, test := range []struct {
+		name              string
+		userType          string
+		authorAssociation string
+		want              bool
+	}{
+		{name: "outside contributor", userType: "User", authorAssociation: "CONTRIBUTOR", want: true},
+		{name: "first-time contributor", userType: "User", authorAssociation: "FIRST_TIME_CONTRIBUTOR", want: true},
+		{name: "bot", userType: "Bot", authorAssociation: "CONTRIBUTOR"},
+		{name: "owner", userType: "User", authorAssociation: "OWNER"},
+		{name: "member", userType: "User", authorAssociation: "MEMBER"},
+		{name: "collaborator", userType: "User", authorAssociation: "COLLABORATOR"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			if got := IsOutsideContributor(test.userType, test.authorAssociation); got != test.want {
+				t.Fatalf("IsOutsideContributor(%q, %q) = %v, want %v", test.userType, test.authorAssociation, got, test.want)
+			}
+		})
+	}
+}
+
 func TestIssueApprovalFor(t *testing.T) {
 	author := "contributor"
 	tests := []struct {
