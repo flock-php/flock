@@ -20,7 +20,7 @@ type marker struct {
 
 var markerPattern = regexp.MustCompile(`(?m)^<!-- slo:reminder objective=([a-z-]+) start=([^ ]+) threshold=([^ ]+) target=([^ ]*) -->$`)
 
-func (s *state) planReminder(objective string, number int, start time.Time, target string, markers []marker) {
+func (s *state) planReminder(objective string, number int, start time.Time, target, approver string, markers []marker) {
 	if start.IsZero() || !start.Before(s.now) {
 		return
 	}
@@ -34,7 +34,7 @@ func (s *state) planReminder(objective string, number int, start time.Time, targ
 			start:     start,
 			threshold: threshold,
 			target:    target,
-			body:      reminderBody(objective, start, threshold, target),
+			body:      reminderBody(objective, start, threshold, target, approver),
 		})
 		return
 	}
@@ -72,7 +72,7 @@ func reminded(markers []marker, objective string, start time.Time, threshold tim
 	})
 }
 
-func reminderBody(objective string, start time.Time, threshold time.Duration, target string) string {
+func reminderBody(objective string, start time.Time, threshold time.Duration, target, approver string) string {
 	var text string
 	switch objective {
 	case issueTriageObjective:
@@ -80,7 +80,10 @@ func reminderBody(objective string, start time.Time, threshold time.Duration, ta
 	case prReviewObjective:
 		text = "A contributor is waiting for a maintainer review on this pull request. Could a maintainer please review it or leave feedback when possible?"
 	case mergeReviewObjective:
-		text = fmt.Sprintf("@%s, a maintainer approved this pull request and requested your merge-maintainer review. Could you please review or approve it when possible?", target)
+		text = fmt.Sprintf("@%s, this pull request was approved and your merge-maintainer review was requested. Could you please review or approve it when possible?", target)
+		if approver != "" {
+			text = fmt.Sprintf("@%s, %s approved this pull request and requested your merge-maintainer review. Could you please review or approve it when possible?", target, approver)
+		}
 	case changesObjective:
 		text = fmt.Sprintf("@%s, this pull request has requested changes. When you are ready, please push the updates and request another review.", target)
 	}

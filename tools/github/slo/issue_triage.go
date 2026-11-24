@@ -39,7 +39,7 @@ func (s *state) planIssueTriage(ctx context.Context, issue *github.Issue) error 
 		return fmt.Errorf("check triage for issue #%d: %w", issue.GetNumber(), err)
 	}
 	if !triaged {
-		s.planReminder(issueTriageObjective, issue.GetNumber(), issue.GetCreatedAt().Time, "", remindersFrom(comments))
+		s.planReminder(issueTriageObjective, issue.GetNumber(), issue.GetCreatedAt().Time, "", "", remindersFrom(comments))
 	}
 	return nil
 }

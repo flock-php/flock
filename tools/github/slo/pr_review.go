@@ -53,6 +53,9 @@ func (s *state) planPullRequestTargets(ctx context.Context, pull *github.PullReq
 }
 
 func (s *state) planPRReview(ctx context.Context, pull *github.PullRequest, reviews []*github.PullRequestReview, markers []marker) error {
+	if pull.GetDraft() {
+		return nil
+	}
 	for _, review := range reviews {
 		if !submittedReview(review) {
 			continue
@@ -65,8 +68,28 @@ func (s *state) planPRReview(ctx context.Context, pull *github.PullRequest, revi
 			return nil
 		}
 	}
-	s.planReminder(prReviewObjective, pull.GetNumber(), pull.GetCreatedAt().Time, "", markers)
+	timeline, err := listIssueTimeline(ctx, s.client, s.owner, s.repository, pull.GetNumber())
+	if err != nil {
+		return fmt.Errorf("list timeline for pull request #%d: %w", pull.GetNumber(), err)
+	}
+	s.planReminder(prReviewObjective, pull.GetNumber(), prReviewStart(pull, timeline), "", "", markers)
 	return nil
+}
+
+func prReviewStart(pull *github.PullRequest, timeline []*github.Timeline) time.Time {
+	var ready time.Time
+	for _, event := range timeline {
+		if event.GetEvent() != "ready_for_review" {
+			continue
+		}
+		if created := event.GetCreatedAt().Time; !created.IsZero() && created.After(ready) {
+			ready = created
+		}
+	}
+	if ready.IsZero() {
+		return pull.GetCreatedAt().Time
+	}
+	return ready
 }
 
 func submittedReview(review *github.PullRequestReview) bool {
@@ -97,13 +120,13 @@ func (s *state) planMergeReview(ctx context.Context, pull *github.PullRequest, r
 			if !eligible || reviewRequestResolved(target, event.GetCreatedAt().Time, reviews, events) {
 				continue
 			}
-			s.planReminder(mergeReviewObjective, pull.GetNumber(), event.GetCreatedAt().Time, target, markers)
+			s.planReminder(mergeReviewObjective, pull.GetNumber(), event.GetCreatedAt().Time, target, approver, markers)
 		}
 	}
 	return nil
 }
 
-func latestApprovals(reviews []*github.PullRequestReview) []*github.PullRequestReview {
+func latestSubmittedByUser(reviews []*github.PullRequestReview) map[string]*github.PullRequestReview {
 	latest := map[string]*github.PullRequestReview{}
 	for _, review := range reviews {
 		if !submittedReview(review) {
@@ -114,8 +137,12 @@ func latestApprovals(reviews []*github.PullRequestReview) []*github.PullRequestR
 			latest[login] = review
 		}
 	}
+	return latest
+}
+
+func latestApprovals(reviews []*github.PullRequestReview) []*github.PullRequestReview {
 	var approvals []*github.PullRequestReview
-	for _, review := range latest {
+	for _, review := range latestSubmittedByUser(reviews) {
 		if review.GetState() == "APPROVED" {
 			approvals = append(approvals, review)
 		}

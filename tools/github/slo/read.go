@@ -70,6 +70,22 @@ func listIssueEvents(ctx context.Context, client *github.Client, owner, reposito
 	}
 }
 
+func listIssueTimeline(ctx context.Context, client *github.Client, owner, repository string, number int) ([]*github.Timeline, error) {
+	options := &github.ListOptions{PerPage: 100}
+	var result []*github.Timeline
+	for {
+		items, response, err := client.Issues.ListIssueTimeline(ctx, owner, repository, number, options)
+		if err != nil {
+			return nil, err
+		}
+		result = append(result, items...)
+		if response == nil || response.NextPage == 0 {
+			return result, nil
+		}
+		options.Page = response.NextPage
+	}
+}
+
 func listReviews(ctx context.Context, client *github.Client, owner, repository string, number int) ([]*github.PullRequestReview, error) {
 	options := &github.ListOptions{PerPage: 100}
 	var result []*github.PullRequestReview

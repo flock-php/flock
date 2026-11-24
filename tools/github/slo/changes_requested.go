@@ -9,16 +9,9 @@ import (
 )
 
 func (s *state) planRequestedChanges(ctx context.Context, pull *github.PullRequest, reviews []*github.PullRequestReview, events []*github.IssueEvent, markers []marker) error {
-	change := latestChangesRequest(reviews)
-	if change == nil {
-		return nil
-	}
-	maintainer, err := s.isMaintainer(ctx, change.GetUser().GetLogin())
-	if err != nil {
+	change, err := s.outstandingChangesRequest(ctx, reviews)
+	if err != nil || change == nil {
 		return err
-	}
-	if !maintainer {
-		return nil
 	}
 	commits, err := listCommits(ctx, s.client, s.owner, s.repository, pull.GetNumber())
 	if err != nil {
@@ -28,25 +21,34 @@ func (s *state) planRequestedChanges(ctx context.Context, pull *github.PullReque
 	if !fixedAt.IsZero() && contributorRequestedReview(events, pull.GetUser().GetLogin(), fixedAt) {
 		return nil
 	}
-	s.planReminder(changesObjective, pull.GetNumber(), change.GetSubmittedAt().Time, pull.GetUser().GetLogin(), markers)
+	s.planReminder(changesObjective, pull.GetNumber(), change.GetSubmittedAt().Time, pull.GetUser().GetLogin(), "", markers)
 	return nil
 }
 
-func latestChangesRequest(reviews []*github.PullRequestReview) *github.PullRequestReview {
+func (s *state) outstandingChangesRequest(ctx context.Context, reviews []*github.PullRequestReview) (*github.PullRequestReview, error) {
 	var latest *github.PullRequestReview
-	for _, review := range reviews {
-		if review.GetState() == "CHANGES_REQUESTED" && !review.GetSubmittedAt().Time.IsZero() &&
-			(latest == nil || review.GetSubmittedAt().After(latest.GetSubmittedAt().Time)) {
+	for _, review := range latestSubmittedByUser(reviews) {
+		if review.GetState() != "CHANGES_REQUESTED" {
+			continue
+		}
+		maintainer, err := s.isMaintainer(ctx, review.GetUser().GetLogin())
+		if err != nil {
+			return nil, err
+		}
+		if !maintainer {
+			continue
+		}
+		if latest == nil || review.GetSubmittedAt().After(latest.GetSubmittedAt().Time) {
 			latest = review
 		}
 	}
-	return latest
+	return latest, nil
 }
 
 func contributorFixTime(commits []*github.RepositoryCommit, contributor string, after time.Time) time.Time {
 	var latest time.Time
 	for _, commit := range commits {
-		date := commit.GetCommit().GetAuthor().GetDate().Time
+		date := commit.GetCommit().GetCommitter().GetDate().Time
 		if commit.GetAuthor().GetLogin() == contributor && date.After(after) && date.After(latest) {
 			latest = date
 		}

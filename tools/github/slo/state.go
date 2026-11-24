@@ -6,6 +6,8 @@ import (
 	"time"
 
 	"github.com/google/go-github/v93/github"
+
+	"flock/tools/github/contribution"
 )
 
 const reminderUser = "github-actions[bot]"
@@ -36,6 +38,10 @@ func (s *state) isMaintainer(ctx context.Context, login string) (bool, error) {
 		return role == "admin" || role == "maintain", nil
 	}
 	permission, _, err := s.client.Repositories.GetPermissionLevel(ctx, s.owner, s.repository, login)
+	if contribution.IsNotFound(err) {
+		s.roles[login] = ""
+		return false, nil
+	}
 	if err != nil {
 		return false, fmt.Errorf("read repository role for @%s: %w", login, err)
 	}
