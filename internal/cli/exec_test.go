@@ -86,11 +86,32 @@ func TestResolveToolExplainsMissingVersions(t *testing.T) {
 
 func TestNodeGetsTheSiteCertificateForViteWhenSecured(t *testing.T) {
 	root := t.TempDir()
-	binDir := filepath.Join(root, "node", "22.1.0", "bin")
+	nodeDir := filepath.Join(root, "node", "22.1.0")
+	binDir := filepath.Join(nodeDir, "bin")
+	if runtime.GOOS == "windows" {
+		binDir = nodeDir
+	}
 	if err := os.MkdirAll(binDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(binDir, "node"), nil, 0o755); err != nil {
+	nodeName := "node"
+	if runtime.GOOS == "windows" {
+		nodeName = "node.exe"
+	}
+	if err := os.WriteFile(filepath.Join(binDir, nodeName), nil, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	npmDir := filepath.Join(nodeDir, "lib", "node_modules", "npm")
+	if runtime.GOOS == "windows" {
+		npmDir = filepath.Join(nodeDir, "node_modules", "npm")
+	}
+	if err := os.MkdirAll(filepath.Join(npmDir, "bin"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(npmDir, "package.json"), []byte(`{"version":"11.0.0"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(npmDir, "bin", "npm-cli.js"), nil, 0o644); err != nil {
 		t.Fatal(err)
 	}
 
