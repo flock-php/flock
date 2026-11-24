@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"hash/fnv"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
@@ -202,8 +203,9 @@ func (d *daemon) wakeNode(site string) (string, string, func()) {
 	}
 	if asleep && devOnly {
 		// PHP renders @vite as soon as it runs, and needs the server's public/hot by then.
-		d.startNode(site)
-		d.awaitDevServer(site)
+		if !d.startNode(site) {
+			d.awaitDevServer(site)
+		}
 		return api.NodeStarting, "", done
 	}
 	if asleep {
@@ -211,7 +213,14 @@ func (d *daemon) wakeNode(site string) (string, string, func()) {
 		return api.NodeStarting, "", done
 	}
 	if devOnly {
-		d.awaitDevServer(site)
+		// The server of the project may have stopped since the wake left it to it: Flock's takes over.
+		outside := false
+		if !d.procUp(nodeProcess(site)) {
+			outside = d.startNode(site)
+		}
+		if !outside {
+			d.awaitDevServer(site)
+		}
 	}
 	state, problem := d.nodeState(site, false)
 	return state, problem, done
@@ -308,8 +317,9 @@ func (d *daemon) StopSite(name string) error {
 	return nil
 }
 
-// startNode starts an awake site's dev server, unless a reload did already.
-func (d *daemon) startNode(site string) {
+// startNode starts an awake site's dev server, unless a reload did already. It reports whether a
+// PHP site's Vite runs without Flock, which then does the work.
+func (d *daemon) startNode(site string) (outside bool) {
 	d.reloadMu.Lock()
 	defer d.reloadMu.Unlock()
 	r := &d.node
@@ -317,9 +327,16 @@ func (d *daemon) startNode(site string) {
 	spec, ok := r.specs[site]
 	awake, devOnly := r.awake[site], r.devOnly[site]
 	r.mu.Unlock()
-	if ok && awake && !(devOnly && d.outsideDevServer(site, spec.Dir) != 0) && d.procs.Ensure(spec) {
+	if !ok || !awake {
+		return false
+	}
+	if devOnly && d.outsideDevServer(site, spec.Dir) != 0 {
+		return true
+	}
+	if d.procs.Ensure(spec) {
 		r.started(site)
 	}
+	return false
 }
 
 // nodeState is the state of a site's dev server; answering is whether its port answers (only
@@ -397,15 +414,16 @@ func nodeSiteProblem(site config.Site) string {
 	return ""
 }
 
-// devOrigin is where a Vite plugin says its dev server listens: the port, and the base path the
-// server serves under ("/" unless the project sets one).
-type devOrigin struct{ port, base string }
+// devOrigin is where a Vite plugin says its dev server listens: the scheme and host it advertises
+// (an HTTPS certificate is checked against that name), the port, and the base path the server
+// serves under ("/" unless the project sets one).
+type devOrigin struct{ scheme, host, port, base string }
 
 // externalDevServer is the port of a PHP site's Vite that runs without Flock: one that answers where
 // the project's Vite plugin says it listens (see devServerOrigins). 0 when there is none.
 func externalDevServer(dir string) int {
 	for _, o := range devServerOrigins(dir) {
-		if isVite(o.port, o.base) {
+		if isVite(o) {
 			port, _ := strconv.Atoi(o.port)
 			return port
 		}
@@ -431,7 +449,7 @@ func devServerOrigins(dir string) []devOrigin {
 	var origins []devOrigin
 	add := func(origin, base string) {
 		u, err := url.Parse(strings.TrimSpace(origin))
-		if err != nil || u.Port() == "" {
+		if err != nil || u.Port() == "" || (u.Scheme != "http" && u.Scheme != "https") {
 			return
 		}
 		if base == "" {
@@ -441,7 +459,7 @@ func devServerOrigins(dir string) []devOrigin {
 		if base != "/" {
 			base += "/"
 		}
-		origins = append(origins, devOrigin{port: u.Port(), base: base})
+		origins = append(origins, devOrigin{scheme: u.Scheme, host: u.Hostname(), port: u.Port(), base: base})
 	}
 	if data, err := os.ReadFile(filepath.Join(dir, "public", "hot")); err == nil {
 		add(string(data), "/")
@@ -453,30 +471,49 @@ func devServerOrigins(dir string) []devOrigin {
 			if err != nil {
 				continue
 			}
-			// viteServer is false once the files are built.
+			// viteServer is false once the files are built; while Vite runs, a URL string in the
+			// plugin's newer versions and an object holding the origin in older ones.
 			var entrypoints struct {
-				Base       string `json:"base"`
-				ViteServer struct {
-					Origin string `json:"origin"`
-				} `json:"viteServer"`
+				Base       string          `json:"base"`
+				ViteServer json.RawMessage `json:"viteServer"`
 			}
-			if json.Unmarshal(data, &entrypoints) == nil && entrypoints.ViteServer.Origin != "" {
-				add(entrypoints.ViteServer.Origin, entrypoints.Base)
+			if json.Unmarshal(data, &entrypoints) != nil {
+				continue
+			}
+			var origin string
+			if json.Unmarshal(entrypoints.ViteServer, &origin) != nil {
+				var object struct {
+					Origin string `json:"origin"`
+				}
+				if json.Unmarshal(entrypoints.ViteServer, &object) != nil {
+					continue
+				}
+				origin = object.Origin
+			}
+			if origin != "" {
+				add(origin, entrypoints.Base)
 			}
 		}
 	}
 	return origins
 }
 
-// isVite reports whether Vite's dev server answers on a loopback port, under its base path: it
-// serves its client script at <base>@vite/client, a script that logs "[vite]". A stale public/hot,
-// with some other program on its port, doesn't count, even one that answers 200 to everything.
-func isVite(port, base string) bool {
-	if !answers("http://localhost:" + port) {
+// isVite reports whether Vite's dev server answers where its plugin says (over the scheme and host
+// it advertises, with an HTTPS certificate checked), under its base path: it serves its client
+// script at <base>@vite/client, a script that logs "[vite]". A stale public/hot, with some other
+// program on its port, doesn't count, even one that answers 200 to everything.
+func isVite(o devOrigin) bool {
+	host := net.JoinHostPort(o.host, o.port)
+	if !answers("http://" + host) {
 		return false
 	}
-	client := http.Client{Timeout: time.Second}
-	resp, err := client.Get("http://localhost:" + port + base + "@vite/client")
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, o.scheme+"://"+host+o.base+"@vite/client", nil)
+	if err != nil {
+		return false
+	}
+	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return false
 	}
@@ -536,9 +573,12 @@ func (d *daemon) phpDevServer(cfg *config.Config, site config.Site, node string,
 	if !isViteDev(devScript(site.Path)) {
 		return spec, 0, false
 	}
-	// A port another site already fixed or got isn't taken twice: Flock gives this one its own.
+	// A port another site already fixed or got isn't taken twice, nor one another program listens
+	// on (Vite would move to the next one, and PHP find public/hot elsewhere): Flock gives this one
+	// its own. Its own process there is no other program.
 	port = viteConfigPort(site.Path)
-	ownPort := port != 0 && !takenPorts[port]
+	ownPort := port != 0 && !takenPorts[port] &&
+		(d.procUp(nodeProcess(site.Name)) || ports.Free("127.0.0.1", port))
 	if !ownPort {
 		port = d.nodePort(site.Name, takenPorts)
 	}
@@ -563,13 +603,14 @@ func isViteDev(script string) bool {
 var devWait = 15 * time.Second
 
 // awaitDevServer holds a request to a PHP site until its dev server answers (so public/hot exists
-// when PHP renders @vite), it fails, or devWait has passed since it was woken.
+// when PHP renders @vite), it fails, or devWait has passed since it was woken. Callers skip it when
+// the project's own Vite runs (see startNode): it isn't Flock's to wait for.
 func (d *daemon) awaitDevServer(site string) {
 	r := &d.node
 	r.mu.Lock()
-	port, woke, specDir := r.ports[site], r.woke[site], r.specs[site].Dir
+	port, woke := r.ports[site], r.woke[site]
 	r.mu.Unlock()
-	if port == 0 || d.outsideDevServer(site, specDir) != 0 {
+	if port == 0 {
 		return
 	}
 	for time.Since(woke) < devWait {

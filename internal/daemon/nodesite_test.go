@@ -420,6 +420,11 @@ func TestPHPSiteDevServerRunningWithoutFlockIsFound(t *testing.T) {
 	if got := externalDevServer(dir); got != basedPort {
 		t.Fatalf("a Vite under /build/: port %d, want %d", got, basedPort)
 	}
+	// The plugin's newer versions write viteServer as a URL string, with base at the top.
+	writeFile(t, entrypoints, `{"base":"/build/","isProd":false,"viteServer":"`+based.URL+`","entryPoints":{}}`)
+	if got := externalDevServer(dir); got != basedPort {
+		t.Fatalf("a Vite as a viteServer URL string: port %d, want %d", got, basedPort)
+	}
 	// Built files (viteServer is false), or the origin of another program, aren't a dev server.
 	writeFile(t, entrypoints, `{"isProd":true,"viteServer":false,"entryPoints":{}}`)
 	if externalDevServer(dir) != 0 {
@@ -504,7 +509,7 @@ func TestAViteConfigsFixedPortIsRespected(t *testing.T) {
 
 	writeFile(t, filepath.Join(dir, "vite.config.ts"), "export default { server: { host: true, port: 5199 } }")
 	writeFile(t, filepath.Join(dir, "package.json"), `{"scripts": {"dev": "vite"}}`)
-	d := &daemon{root: t.TempDir(), restarts: map[string]int{}}
+	d := &daemon{root: t.TempDir(), restarts: map[string]int{}, procs: supervisor.New()}
 	site := config.Site{Name: "web", Path: dir}
 	taken := map[int]bool{}
 	spec, port, ok := d.phpDevServer(config.Default(), site, "22", taken)
@@ -515,6 +520,19 @@ func TestAViteConfigsFixedPortIsRespected(t *testing.T) {
 	spec, port, ok = d.phpDevServer(config.Default(), config.Site{Name: "other", Path: dir}, "22", taken)
 	if !ok || port == 5199 || spec.Shell != "npm run dev -- --port "+strconv.Itoa(port) {
 		t.Fatalf("a taken port: ok %v, port %d, command %q", ok, port, spec.Shell)
+	}
+
+	// A fixed port another program listens on isn't taken: Vite would move to the next one.
+	busy, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer busy.Close()
+	busyPort := busy.Addr().(*net.TCPAddr).Port
+	writeFile(t, filepath.Join(dir, "vite.config.ts"), "export default { server: { port: "+strconv.Itoa(busyPort)+" } }")
+	spec, port, ok = d.phpDevServer(config.Default(), site, "22", map[int]bool{})
+	if !ok || port == busyPort || spec.Shell != "npm run dev -- --port "+strconv.Itoa(port) {
+		t.Fatalf("a busy fixed port: ok %v, port %d, command %q", ok, port, spec.Shell)
 	}
 
 	if err := os.Remove(filepath.Join(dir, "vite.config.ts")); err != nil {
@@ -623,5 +641,30 @@ func TestAPHPSitesViteStartsOnTheFirstRequestAndSleepsOnceNoTabIsOpen(t *testing
 			t.Fatal("still awake without a connection")
 		}
 		time.Sleep(50 * time.Millisecond)
+	}
+}
+
+func TestAViteAdvertisedOverHTTPSIsProbedOverHTTPS(t *testing.T) {
+	dir := t.TempDir()
+	vite := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/@vite/client" {
+			_, _ = io.WriteString(w, "console.debug('[vite] connecting...')")
+			return
+		}
+		http.NotFound(w, r)
+	}))
+	defer vite.Close()
+	if err := os.Mkdir(filepath.Join(dir, "public"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeFile(t, filepath.Join(dir, "public", "hot"), vite.URL+"\n")
+	origins := devServerOrigins(dir)
+	if len(origins) != 1 || origins[0].scheme != "https" || origins[0].host != "127.0.0.1" {
+		t.Fatalf("origins = %+v, want one over https on the advertised host", origins)
+	}
+	// The test server's certificate isn't trusted, so the check, which validates it, finds no Vite;
+	// what matters is that it speaks TLS to the listener rather than plain HTTP.
+	if isVite(devOrigin{scheme: "http", host: origins[0].host, port: origins[0].port, base: "/"}) {
+		t.Fatal("plain HTTP to a TLS listener taken for a Vite")
 	}
 }

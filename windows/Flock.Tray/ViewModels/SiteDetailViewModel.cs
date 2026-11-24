@@ -181,7 +181,15 @@ internal sealed partial class SiteDetailViewModel : DetailViewModel
     public string WorktreesNote => Localization.Format(Strings.Worktrees_Explanation, site.Domain);
 
     /// <summary>The output shown: the dev server's of a Node.js site, else Reverb's, else a PHP site's Vite. With a dev output of its own, only Reverb's.</summary>
-    public OutputSource? Output => separateDevOutput ? Reverb.Output : site.IsNode ? DevServer.Output : Reverb.Output ?? DevServer.Output;
+    public OutputSource? Output
+    {
+        get
+        {
+            if (separateDevOutput) return Reverb.Output;
+            if (site.IsNode) return DevServer.Output;
+            return Reverb.Output ?? DevServer.Output;
+        }
+    }
 
     /// <summary>The dev server's output, in the dev output it has of its own (null without one).</summary>
     public OutputSource? DevOutput => separateDevOutput ? DevServer.Output : null;
