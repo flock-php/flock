@@ -1,0 +1,23 @@
+name: PR Review Signal
+
+on:
+    pull_request_review:
+        types: [ submitted ]
+
+permissions:
+    contents: read
+
+jobs:
+    signal:
+        name: Upload Review Signal
+        if: github.event.review.state == 'changes_requested'
+        runs-on: ubuntu-latest
+        steps:
+            -   name: Copy Review Event
+                run: cp "$GITHUB_EVENT_PATH" pr-review-event.json
+
+            -   uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+                with:
+                    name: pr-review-event
+                    path: pr-review-event.json
+                    if-no-files-found: error

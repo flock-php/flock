@@ -116,12 +116,12 @@ func (s *state) plan() {
 	if s.observed.pullRequest == nil || s.observed.pullRequest.Merged {
 		return
 	}
-	if bypassesGate(s.observed.pullRequest) {
+	if contribution.BypassesGate(s.observed.pullRequest) {
 		s.status("PR #%d bypasses contributor gate enforcement.", s.event.number)
 		s.resolve()
 	}
 	s.planRelease()
-	if !bypassesGate(s.observed.pullRequest) {
+	if !contribution.BypassesGate(s.observed.pullRequest) {
 		s.planGate()
 		s.planRelease()
 	}

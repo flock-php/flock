@@ -85,7 +85,7 @@ func (s *state) collectGate(ctx context.Context) error {
 		return err
 	}
 	pullRequest := s.observed.pullRequest
-	if pullRequest == nil || bypassesGate(pullRequest) || pullRequest.Merged {
+	if pullRequest == nil || contribution.BypassesGate(pullRequest) || pullRequest.Merged {
 		return nil
 	}
 	if pullRequest.State == "closed" {
