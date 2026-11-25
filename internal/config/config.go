@@ -353,6 +353,9 @@ func (c *Config) AllSites() []Site {
 				continue
 			}
 			name := SiteName(e.Name())
+			if !ValidSiteName(name) {
+				continue // the folder's name makes no site name (see Upsert)
+			}
 			if _, proxied := c.FindProxy(name); proxied {
 				continue
 			}
@@ -412,12 +415,16 @@ func siteForDir(sites []Site, dir string, pathOf func(Site) string) (Site, bool)
 	return best, found
 }
 
-// Upsert adds or replaces a linked site by name. A site without a type gets the one its folder
-// suggests (see DetectType). A worktree has no settings of its own to store: it follows its
-// parent site.
+// Upsert adds or replaces a linked site by name. The name must be a DNS label (see ValidSiteName):
+// a folder whose name can't be made into one needs a name passed (flock link <name>). A site
+// without a type gets the one its folder suggests (see DetectType). A worktree has no settings of
+// its own to store: it follows its parent site.
 func (c *Config) Upsert(site Site) error {
 	if site.IsWorktree() {
 		return fmt.Errorf("%s is a git worktree of %s and uses its settings — change them on %s", site.Name, site.Parent, site.Parent)
+	}
+	if !ValidSiteName(site.Name) {
+		return fmt.Errorf("%q is not a valid site name: a site name is 1-63 characters of a-z, 0-9 and inner hyphens", site.Name)
 	}
 	switch site.Type {
 	case "":
@@ -463,3 +470,7 @@ func SiteName(dir string) string {
 	}
 	return strings.Trim(b.String(), "-")
 }
+
+// ValidSiteName reports whether name can be a site's name: a DNS label, like a proxy's name
+// (see UpsertProxy).
+func ValidSiteName(name string) bool { return hostLabel.MatchString(name) }
