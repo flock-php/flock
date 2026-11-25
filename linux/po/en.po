@@ -413,6 +413,10 @@ msgstr "Check for Updates…"
 msgid "general.could_not_change_startup"
 msgstr "Could not change the startup setting: {error}"
 
+#. {error}: the error
+msgid "general.could_not_change_tray_setting"
+msgstr "Could not change the tray setting: {error}"
+
 msgid "general.could_not_open_program_error"
 msgstr "Could not open {program}: {error}"
 
@@ -436,6 +440,12 @@ msgstr "Flock's DNS server isn't running"
 
 msgid "general.folder"
 msgstr "Folder"
+
+msgid "general.hide_sites_in_tray_menu"
+msgstr "Hide sites in the tray menu"
+
+msgid "general.hide_sites_in_tray_menu_description"
+msgstr "The Sites page still lists them."
 
 msgid "general.language"
 msgstr "Language"
@@ -516,6 +526,9 @@ msgstr "General"
 
 msgid "general.tld_doesnt_resolve_problem_linux"
 msgstr "*.{tld} doesn't resolve: {problem}. Linux has no hosts-file fallback, so sites don't open until it does; `flock install` sets it up again."
+
+msgid "general.tray"
+msgstr "Tray"
 
 #. {version}: the version
 msgid "general.update_to"

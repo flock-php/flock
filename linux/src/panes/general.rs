@@ -1,5 +1,5 @@
-//! General: the daemon, the domain, the data folder, opening at login, the language, updates and
-//! the project folders.
+//! General: the daemon, the domain, the data folder, opening at login, the tray menu, the language,
+//! updates, and the project folders.
 
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -93,6 +93,29 @@ impl GeneralPane {
                 report(&banner, Some(tr!("general.could_not_change_startup", error = e)));
             }
         }));
+        group
+    }
+
+    fn tray(&self) -> adw::PreferencesGroup {
+        let group = group(tr!("general.tray"), "");
+        let row = adw::SwitchRow::builder()
+            .title(tr!("general.hide_sites_in_tray_menu"))
+            .subtitle(tr!("general.hide_sites_in_tray_menu_description"))
+            .active(self.model.hides_sites())
+            .build();
+        let (model, banner) = (self.model.clone(), self.banner.clone());
+        row.connect_active_notify(move |row| {
+            let on = row.is_active();
+            // Also the switch going back after a failed save.
+            if on == model.hides_sites() {
+                return;
+            }
+            if let Err(e) = model.set_hides_sites(on) {
+                report(&banner, Some(tr!("general.could_not_change_tray_setting", error = e)));
+                row.set_active(!on);
+            }
+        });
+        group.add(&row);
         group
     }
 
@@ -233,6 +256,7 @@ impl Pane for GeneralPane {
             groups.push(self.network(config, &status).upcast());
             groups.push(self.data(config).upcast());
             groups.push(self.startup().upcast());
+            groups.push(self.tray().upcast());
         }
         groups.push(language().upcast());
         if let Some(config) = &data.config {
