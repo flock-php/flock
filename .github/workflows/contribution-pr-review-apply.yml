@@ -11,12 +11,12 @@ permissions:
     pull-requests: read
     issues: write
 
-# Queue label writes for one pull request, and do not cancel an apply that is already running.
+# Queue every label write for one pull request. A later run must not replace a pending review request.
 # workflow_run has no pull request number for forks, so the key is the head repository and branch.
 # Both review-label workflows include those fields.
 concurrency:
     group: pr-review-${{ github.event.pull_request.head.repo.owner.login || github.event.workflow_run.head_repository.owner.login }}-${{ github.event.pull_request.head.ref || github.event.workflow_run.head_branch }}
-    cancel-in-progress: false
+    queue: max
 
 jobs:
     apply:

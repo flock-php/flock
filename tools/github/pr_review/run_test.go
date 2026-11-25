@@ -789,3 +789,60 @@ func TestRunCreatesMissingLabelOnce(t *testing.T) {
 		t.Fatalf("label reads = %d, want 2; logs=%v", count, logs)
 	}
 }
+
+func TestRunContinuesWhenLabelAppearsAfterCreateFailure(t *testing.T) {
+	var logs []requestLog
+	client, closeServer := testClient(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		logs = append(logs, requestLog{r.Method, r.URL.Path})
+		switch r.Method + " " + r.URL.Path {
+		case "GET /repos/owner/repo/pulls/1":
+			writeTestJSON(t, w, `{"number":1,"state":"open","merged":false,"base":{"ref":"main"},"user":{"login":"author","type":"User"},"author_association":"CONTRIBUTOR","labels":[]}`)
+		case "GET /repos/owner/repo/labels/pr: review requested":
+			if countLog(logs, "POST", "/repos/owner/repo/labels") == 0 {
+				http.Error(w, `{"message":"Not Found"}`, http.StatusNotFound)
+				return
+			}
+			writeTestJSON(t, w, `{"name":"pr: review requested"}`)
+		case "POST /repos/owner/repo/labels":
+			http.Error(w, `{"message":"label already exists"}`, http.StatusUnprocessableEntity)
+		case "POST /repos/owner/repo/issues/1/labels":
+			writeTestJSON(t, w, `[]`)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer closeServer()
+
+	err := Run(context.Background(), client, "owner", "repo", testReviewEvent("opened", "author"), "")
+	if err != nil {
+		t.Fatalf("Run() error = %v, want success after the label appears", err)
+	}
+	if count := countLog(logs, "GET", "/repos/owner/repo/labels/pr: review requested"); count != 2 {
+		t.Fatalf("label reads = %d, want 2; logs=%v", count, logs)
+	}
+	if !containsLog(logs, "POST", "/repos/owner/repo/issues/1/labels") {
+		t.Fatalf("requests = %v, want the pull request label added", logs)
+	}
+}
+
+func TestRunReturnsOriginalCreateErrorWhenLabelIsStillMissing(t *testing.T) {
+	client, closeServer := testClient(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method + " " + r.URL.Path {
+		case "GET /repos/owner/repo/pulls/1":
+			writeTestJSON(t, w, `{"number":1,"state":"open","merged":false,"base":{"ref":"main"},"user":{"login":"author","type":"User"},"author_association":"CONTRIBUTOR","labels":[]}`)
+		case "GET /repos/owner/repo/labels/pr: review requested":
+			http.Error(w, `{"message":"label read failed"}`, http.StatusNotFound)
+		case "POST /repos/owner/repo/labels":
+			http.Error(w, `{"message":"label create failed"}`, http.StatusInternalServerError)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer closeServer()
+
+	err := Run(context.Background(), client, "owner", "repo", testReviewEvent("opened", "author"), "")
+	if err == nil || !strings.Contains(err.Error(), `create "pr: review requested" label in repository owner/repo`) ||
+		!strings.Contains(err.Error(), "label create failed") || strings.Contains(err.Error(), "label read failed") {
+		t.Fatalf("Run() error = %v, want the original create error", err)
+	}
+}

@@ -52,13 +52,18 @@ func (s *state) ensureLabel(ctx context.Context, name string) error {
 		return fmt.Errorf("read %q label in repository %s/%s: %w", name, s.owner, s.repository, err)
 	}
 	color, description := reviewLabelPresentation(name)
-	_, _, err = s.client.Issues.CreateLabel(ctx, s.owner, s.repository, github.CreateIssueLabelRequest{
+	_, _, createErr := s.client.Issues.CreateLabel(ctx, s.owner, s.repository, github.CreateIssueLabelRequest{
 		Name: name, Color: &color, Description: &description,
 	})
-	if err != nil {
-		return fmt.Errorf("create %q label in repository %s/%s: %w", name, s.owner, s.repository, err)
+	if createErr == nil {
+		return nil
 	}
-	return nil
+	// A concurrent run can create the label after the not-found read and before this create.
+	_, _, err = s.client.Issues.GetLabel(ctx, s.owner, s.repository, name)
+	if err == nil {
+		return nil
+	}
+	return fmt.Errorf("create %q label in repository %s/%s: %w", name, s.owner, s.repository, createErr)
 }
 
 func reviewLabelPresentation(name string) (string, string) {
