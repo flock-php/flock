@@ -264,8 +264,15 @@ func registerConfig(mux *http.ServeMux, b Backend) {
 				return invalid("%s is not a directory", body.Path)
 			}
 			name := body.Name
-			if name == "" {
+			fromFolder := name == ""
+			if fromFolder {
 				name = filepath.Base(body.Path)
+			}
+			if !config.ValidSiteName(config.SiteName(name)) {
+				if fromFolder {
+					return invalid("%q can't be made into a site name — pass one: `flock link <name>`", name)
+				}
+				return invalid("%q can't be a site name: a site name is 1-63 characters of a-z, 0-9 and inner hyphens", name)
 			}
 			if err := cfg.Upsert(config.Site{Name: config.SiteName(name), Path: filepath.Clean(body.Path), PHP: body.PHP, Secured: body.Secured}); err != nil {
 				return invalid("%v", err)

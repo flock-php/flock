@@ -332,6 +332,22 @@ func TestSiteAndParkedEndpoints(t *testing.T) {
 		t.Fatalf("relative path must be rejected, got %d", resp.StatusCode)
 	}
 
+	unnameable := filepath.Join(t.TempDir(), "我的项目")
+	if err := os.Mkdir(unnameable, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if resp, body := call(t, "POST", srv.URL+"/v1/sites", "", `{"path":`+jsonString(unnameable)+`}`); resp.StatusCode != http.StatusBadRequest || !strings.Contains(body, "我的项目") || !strings.Contains(body, "pass one: `flock link ") {
+		t.Fatalf("a folder whose name makes no site name must be rejected with an actionable message, got %d %s", resp.StatusCode, body)
+	}
+	for _, site := range b.config(t).Sites {
+		if site.Path == unnameable {
+			t.Fatalf("the unusable folder was linked: %+v", site)
+		}
+	}
+	if resp, body := call(t, "POST", srv.URL+"/v1/sites", "", `{"path":`+jsonString(project)+`,"name":"!!!"}`); resp.StatusCode != http.StatusBadRequest || !strings.Contains(body, "1-63") {
+		t.Fatalf("an unusable explicit name must be rejected with the rule, got %d %s", resp.StatusCode, body)
+	}
+
 	parent := filepath.Dir(project)
 	if resp, body := call(t, "POST", srv.URL+"/v1/parked", "", `{"path":`+jsonString(parent)+`}`); resp.StatusCode != http.StatusOK {
 		t.Fatalf("park: %d %s", resp.StatusCode, body)
