@@ -59,7 +59,7 @@ func newLinkCommand() *cobra.Command {
 			}
 			if !config.ValidSiteName(name) {
 				if len(args) > 0 {
-					return fmt.Errorf("%q can't be a site name — it may only contain a-z, 0-9 and inner hyphens", args[0])
+					return fmt.Errorf("%q can't be a site name: a site name is 1-63 characters of a-z, 0-9 and inner hyphens", args[0])
 				}
 				return fmt.Errorf("%q can't be made into a site name — pass one: `flock link <name>`", filepath.Base(cwd))
 			}

@@ -150,10 +150,14 @@ func TestSetServerAssignsStablePortsAndValidates(t *testing.T) {
 
 func TestUpsertRejectsUnusableSiteNames(t *testing.T) {
 	cfg := Default()
-	for _, name := range []string{"", "我们的项目", "My App", "-app", "app-", strings.Repeat("a", 64)} {
+	for _, name := range []string{"", "我们的项目", "My App", "-app", "app-"} {
 		if err := cfg.Upsert(Site{Name: name, Path: "/srv/app"}); err == nil || !strings.Contains(err.Error(), "not a valid site name") {
 			t.Errorf("Upsert(%q) = %v; want an error that says it is not a site name", name, err)
 		}
+	}
+	long := strings.Repeat("a", 64)
+	if err := cfg.Upsert(Site{Name: long, Path: "/srv/app"}); err == nil || !strings.Contains(err.Error(), "1-63") {
+		t.Errorf("Upsert(<64 characters>) = %v; want an error that states the length limit", err)
 	}
 	if len(cfg.Sites) != 0 {
 		t.Fatalf("unusable sites were stored: %+v", cfg.Sites)

@@ -59,6 +59,9 @@ func TestLinkRejectsNamesThatAreNotHostnames(t *testing.T) {
 			t.Errorf("flock link %q: err = %v", name, err)
 		}
 	}
+	if _, err := link(t, root, dir, strings.Repeat("a", 64)); err == nil || !strings.Contains(err.Error(), "1-63") {
+		t.Errorf("flock link <64 characters>: err = %v; want an error that states the length limit", err)
+	}
 
 	cfg, err := config.Load(root)
 	if err != nil {

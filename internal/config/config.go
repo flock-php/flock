@@ -424,7 +424,7 @@ func (c *Config) Upsert(site Site) error {
 		return fmt.Errorf("%s is a git worktree of %s and uses its settings — change them on %s", site.Name, site.Parent, site.Parent)
 	}
 	if !ValidSiteName(site.Name) {
-		return fmt.Errorf("%q is not a valid site name: it may only contain a-z, 0-9 and inner hyphens", site.Name)
+		return fmt.Errorf("%q is not a valid site name: a site name is 1-63 characters of a-z, 0-9 and inner hyphens", site.Name)
 	}
 	switch site.Type {
 	case "":
