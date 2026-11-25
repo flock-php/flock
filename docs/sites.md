@@ -35,7 +35,7 @@ flock unpark ~/Work
 
 ## Linking a project
 
-A linked site is a single project folder, wherever it lives. The site name defaults to the folder name.
+A linked site is a single project folder, wherever it lives. The site name defaults to the folder name — if that can't be a hostname, pass one: `flock link my-project`.
 
 :::app
 In **Settings → Sites**, click **Add Site…** and choose the project folder. Then select the site to set its HTTPS in the **Site** section and its PHP version under **Versions**.

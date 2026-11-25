@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -144,5 +145,41 @@ func TestSetServerAssignsStablePortsAndValidates(t *testing.T) {
 	}
 	if err := cfg.SetServer(&a, ServerFrankenPHP, "roadrunner"); err == nil {
 		t.Error("unknown worker mode accepted")
+	}
+}
+
+func TestUpsertRejectsUnusableSiteNames(t *testing.T) {
+	cfg := Default()
+	for _, name := range []string{"", "我们的项目", "My App", "-app", "app-", strings.Repeat("a", 64)} {
+		if err := cfg.Upsert(Site{Name: name, Path: "/srv/app"}); err == nil || !strings.Contains(err.Error(), "not a valid site name") {
+			t.Errorf("Upsert(%q) = %v; want an error that says it is not a site name", name, err)
+		}
+	}
+	if len(cfg.Sites) != 0 {
+		t.Fatalf("unusable sites were stored: %+v", cfg.Sites)
+	}
+
+	if err := cfg.Upsert(Site{Name: "my-project-2", Path: "/srv/app"}); err != nil {
+		t.Fatalf("usable name rejected: %v", err)
+	}
+	if len(cfg.Sites) != 1 || cfg.Sites[0].Name != "my-project-2" {
+		t.Fatalf("site not stored: %+v", cfg.Sites)
+	}
+}
+
+func TestAllSitesSkipsParkedFoldersWithoutASiteName(t *testing.T) {
+	parked := t.TempDir()
+	for _, d := range []string{"blog", "My_App", "我们的项目", "---", strings.Repeat("a", 64)} {
+		if err := os.Mkdir(filepath.Join(parked, d), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	cfg := Default()
+	cfg.Parked = []string{parked}
+
+	sites := cfg.AllSites()
+	if len(sites) != 2 || sites[0].Name != "blog" || sites[1].Name != "my-app" {
+		t.Fatalf("unexpected sites: %+v", sites)
 	}
 }
