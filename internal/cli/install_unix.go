@@ -45,3 +45,31 @@ func shellQuote(s string) string {
 
 // removeAfterExit is never needed: unix deletes running programs.
 func removeAfterExit(string) bool { return false }
+
+// profilePath is where the shell profile name lives: zsh reads .zshrc from $ZDOTDIR when that is
+// set, and every other profile is in home. A relative ZDOTDIR is ignored, as appDirs ignores a
+// relative XDG_* dir, and so is one that is not an existing directory, so that install does not
+// fail where it used to write ~/.zshrc.
+func profilePath(home, name string) string {
+	if dir := os.Getenv("ZDOTDIR"); name == ".zshrc" && filepath.IsAbs(dir) {
+		if fi, err := os.Stat(dir); err == nil && fi.IsDir() {
+			return filepath.Join(dir, name)
+		}
+	}
+	return filepath.Join(home, name)
+}
+
+// profileFiles is every file removeFromShellProfiles cleans for the profiles names: each one's
+// profilePath, and ~/.zshrc too when $ZDOTDIR moves .zshrc, where Flock wrote before it followed
+// ZDOTDIR.
+func profileFiles(home string, names []string) []string {
+	var paths []string
+	for _, name := range names {
+		path := profilePath(home, name)
+		paths = append(paths, path)
+		if legacy := filepath.Join(home, name); legacy != path {
+			paths = append(paths, legacy)
+		}
+	}
+	return paths
+}

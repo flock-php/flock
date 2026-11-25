@@ -29,10 +29,11 @@ const (
 	appExecutable = "FlockBar"
 )
 
-// shellProfiles are the profiles addToShellPath writes to (~/.zshrc always, ~/.bash_profile if present).
+// shellProfiles are the profiles addToShellPath writes to (.zshrc always, in $ZDOTDIR if that is
+// set, and ~/.bash_profile if present).
 var shellProfiles = []string{".zshrc", ".bash_profile"}
 
-// addToShellPath prepends dirs, in this order, in ~/.zshrc (and ~/.bash_profile if present): a
+// addToShellPath prepends dirs, in this order, in .zshrc (and ~/.bash_profile if present): a
 // marked export line, appended once and rewritten when the directories change.
 func addToShellPath(dirs ...string) error {
 	home, err := os.UserHomeDir()
@@ -46,7 +47,7 @@ func addToShellPath(dirs ...string) error {
 	}
 	export := fmt.Sprintf("export PATH=%s:\"$PATH\"", strings.Join(quoted, ":"))
 	for _, name := range shellProfiles {
-		path := filepath.Join(home, name)
+		path := profilePath(home, name)
 		data, err := os.ReadFile(path)
 		if err != nil && name != ".zshrc" {
 			continue
@@ -87,8 +88,7 @@ func removeFromShellProfiles() (bool, error) {
 		return false, err
 	}
 	removed := false
-	for _, name := range shellProfiles {
-		path := filepath.Join(home, name)
+	for _, path := range profileFiles(home, shellProfiles) {
 		data, err := os.ReadFile(path)
 		if err != nil {
 			continue
