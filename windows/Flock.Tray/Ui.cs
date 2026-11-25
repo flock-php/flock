@@ -383,27 +383,20 @@ internal static class Ui
     /// extra control (such as an "Also delete…" check box) goes under the consequence.
     /// </summary>
     /// <summary>
-    ///     A dialog's form in a scroll area as tall as the window leaves it (its title and buttons
+    ///     Makes a dialog form's scroll area as tall as the window leaves it (its title and buttons
     ///     aside), so the form stays usable in the smallest window: it scrolls instead of running
     ///     under the buttons. Follows the window's size while the dialog is open.
     /// </summary>
-    public static ScrollViewer DialogForm(XamlRoot root, UIElement form)
+    public static void FitDialog(XamlRoot root, ScrollViewer scroller)
     {
         // The dialog's title, buttons and margins.
         const double chrome = 230;
-        var scroller = new ScrollViewer
-        {
-            Content = form,
-            VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
-            HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
-            // Room for the scrollbar, so it doesn't cover the fields.
-            Padding = new Thickness(0, 0, 16, 0),
-        };
+        // Room for the scrollbar, so it doesn't cover the fields.
+        scroller.Padding = new Thickness(0, 0, 16, 0);
         void Fit(XamlRoot sender, XamlRootChangedEventArgs args) => scroller.MaxHeight = Math.Max(120, sender.Size.Height - chrome);
         Fit(root, null!);
         root.Changed += Fit;
         scroller.Unloaded += (_, _) => root.Changed -= Fit;
-        return scroller;
     }
 
     public static async Task<bool> Confirm(XamlRoot root, string question, string details, string action, bool destructive = false, UIElement? extra = null)
@@ -424,18 +417,26 @@ internal static class Ui
         };
         if (destructive)
         {
-            // The accent button style, recolored through the resources its template looks up (the
-            // same red in both themes, so white text stays readable).
-            dialog.PrimaryButtonStyle = Resource<Style>("AccentButtonStyle");
-            var white = new SolidColorBrush(Colors.White);
-            foreach (var (state, red) in new[] { ("", Rgb(196, 43, 28)), ("PointerOver", Rgb(178, 38, 25)), ("Pressed", Rgb(160, 34, 22)) })
-            {
-                dialog.Resources["AccentButtonBackground" + state] = new SolidColorBrush(red);
-                dialog.Resources["AccentButtonBorderBrush" + state] = new SolidColorBrush(red);
-                dialog.Resources["AccentButtonForeground" + state] = white;
-            }
+            Destructive(dialog);
         }
         return await dialog.ShowAsync() == ContentDialogResult.Primary;
+    }
+
+    /// <summary>Makes a dialog's primary button red, for an action that removes something.</summary>
+    public static void Destructive(ContentDialog dialog)
+    {
+        // The accent button style, recolored through the resources its template looks up (the
+        // same red in both themes, so white text stays readable). A default button takes the
+        // accent style too and would turn red with it, so the dialog has none.
+        dialog.DefaultButton = ContentDialogButton.None;
+        dialog.PrimaryButtonStyle = Resource<Style>("AccentButtonStyle");
+        var white = new SolidColorBrush(Colors.White);
+        foreach (var (state, red) in new[] { ("", Rgb(196, 43, 28)), ("PointerOver", Rgb(178, 38, 25)), ("Pressed", Rgb(160, 34, 22)) })
+        {
+            dialog.Resources["AccentButtonBackground" + state] = new SolidColorBrush(red);
+            dialog.Resources["AccentButtonBorderBrush" + state] = new SolidColorBrush(red);
+            dialog.Resources["AccentButtonForeground" + state] = white;
+        }
     }
 
     /// <summary>Tells the user something that needs no decision: a title, a sentence and OK.</summary>

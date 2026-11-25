@@ -322,6 +322,10 @@ public sealed class Status
         /// <summary>The site's FrankenPHP process, when Server is FrankenPHP.</summary>
         [JsonPropertyName("frankenphp")]
         public SiteFrankenPhp? FrankenPhp { get; init; }
+        /// <summary>The project has Laravel Reverb installed, so Flock can run it.</summary>
+        public bool ReverbAvailable { get; init; }
+        /// <summary>The site's Reverb server, while it is turned on.</summary>
+        public SiteReverb? Reverb { get; init; }
         /// <summary>What the site is: SiteType.Php (also when an older daemon leaves it out) or SiteType.Node.</summary>
         public string Type { get; init; } = SiteType.Php;
         /// <summary>A Node.js site's dev server.</summary>
@@ -445,6 +449,34 @@ public sealed class Status
 
         [JsonIgnore]
         public bool HasProgress => Progress is >= 0 and <= 1;
+    }
+
+    /// <summary>
+    /// A site's Laravel Reverb server (php artisan reverb:start), which browsers reach at
+    /// wss://&lt;domain&gt;/app. Problem says why it isn't running.
+    /// </summary>
+    public sealed class SiteReverb
+    {
+        /// <summary>One of ReverbState; "" when unknown.</summary>
+        public string State { get; init; } = "";
+        public int Port { get; init; }
+        /// <summary>What the app's .env needs, e.g. "REVERB_HOST=app.test".</summary>
+        public List<string> Env { get; init; } = [];
+        public string Problem { get; init; } = "";
+        /// <summary>Name for /v1/logs/services/{name}: its output.</summary>
+        public string Log { get; init; } = "";
+
+        [JsonIgnore]
+        public bool IsRunning => State == ReverbState.Running;
+    }
+
+    /// <summary>Values of SiteReverb.State.</summary>
+    public static class ReverbState
+    {
+        public const string Running = "running";
+        public const string Failed = "failed";
+        /// <summary>It can't run, e.g. the project no longer has Reverb.</summary>
+        public const string Unavailable = "unavailable";
     }
 
     /// <summary>

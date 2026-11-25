@@ -1619,6 +1619,30 @@ msgstr "Ejecuta composer require ext-{name}:* en {path}, lo que cambia composer.
 msgid "sites.restart_frankenphp_tooltip"
 msgstr "Reiniciar FrankenPHP, p. ej. para que los workers de Octane carguen el código modificado"
 
+msgid "sites.reverb.env_needs"
+msgstr "El .env de la app necesita:"
+
+msgid "sites.reverb.explanation"
+msgstr "Flock ejecuta php artisan reverb:start para el sitio. Los navegadores lo alcanzan en {address}, sin puerto ni certificado propios."
+
+msgid "sites.reverb.footnote"
+msgstr "Las conexiones WebSocket bajo /app y las difusiones de Laravel bajo /apps van a Reverb; el resto de solicitudes siguen yendo a la app. Flock no cambia el .env del proyecto. Vuelve a compilar el front-end después de cambiarlo."
+
+msgid "sites.reverb.install"
+msgstr "Instala Laravel Reverb en el proyecto (php artisan install:broadcasting --reverb) para ejecutarlo."
+
+msgid "sites.reverb.restart_tooltip"
+msgstr "Reiniciar Reverb, p. ej. para que cargue el código modificado"
+
+msgid "sites.reverb.run"
+msgstr "Ejecutar Reverb"
+
+msgid "sites.reverb.running_at"
+msgstr "En ejecución en {address}"
+
+msgid "sites.reverb.title"
+msgstr "Reverb"
+
 msgid "sites.root_automatic"
 msgstr "Automática"
 

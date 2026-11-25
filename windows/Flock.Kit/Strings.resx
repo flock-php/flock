@@ -257,8 +257,14 @@ Details are in %LocalAppData%\Flock\tray.log.</value>
     <data name="Common_FlockNotRunning" xml:space="preserve">
         <value>Flock is not running</value>
     </data>
+    <data name="Common_Frankenphp" xml:space="preserve">
+        <value>FrankenPHP</value>
+    </data>
     <data name="Common_Hide" xml:space="preserve">
         <value>Hide</value>
+    </data>
+    <data name="Common_Https" xml:space="preserve">
+        <value>HTTPS</value>
     </data>
     <data name="Common_Install" xml:space="preserve">
         <value>Install</value>
@@ -268,6 +274,12 @@ Details are in %LocalAppData%\Flock\tray.log.</value>
     </data>
     <data name="Common_Installing" xml:space="preserve">
         <value>Installing…</value>
+    </data>
+    <data name="Common_LaravelBoost" xml:space="preserve">
+        <value>Laravel Boost</value>
+    </data>
+    <data name="Common_LaravelOctane" xml:space="preserve">
+        <value>Laravel Octane</value>
     </data>
     <data name="Common_List_And" xml:space="preserve">
         <value>{0} and {1}</value>
@@ -282,6 +294,12 @@ Details are in %LocalAppData%\Flock\tray.log.</value>
     </data>
     <data name="Common_MoreActions" xml:space="preserve">
         <value>More actions</value>
+    </data>
+    <data name="Common_Node" xml:space="preserve">
+        <value>Node</value>
+    </data>
+    <data name="Common_Nodejs" xml:space="preserve">
+        <value>Node.js</value>
     </data>
     <data name="Common_NotInstalled" xml:space="preserve">
         <value>Not installed</value>
@@ -298,6 +316,9 @@ Details are in %LocalAppData%\Flock\tray.log.</value>
     <data name="Common_OpenTarget" xml:space="preserve">
         <value>Open {0}</value>
         <comment>{0}: a URL or domain</comment>
+    </data>
+    <data name="Common_Php" xml:space="preserve">
+        <value>PHP</value>
     </data>
     <data name="Common_Remove" xml:space="preserve">
         <value>Remove</value>
@@ -1814,6 +1835,9 @@ Details are in %LocalAppData%\Flock\tray.log.</value>
         <value>Downloading FrankenPHP for PHP {0}…</value>
         <comment>{0}: PHP version</comment>
     </data>
+    <data name="Sites_DownloadingFrankenphpForPhp" xml:space="preserve">
+        <value>Downloading FrankenPHP for PHP {0}… {1}%</value>
+    </data>
     <data name="Sites_ExtensionCanceled" xml:space="preserve">
         <value>Extension request canceled.</value>
     </data>
@@ -2026,6 +2050,38 @@ Details are in %LocalAppData%\Flock\tray.log.</value>
     <data name="Sites_RestartFrankenphpTooltip" xml:space="preserve">
         <value>Restart FrankenPHP, e.g. so Octane's workers load changed code</value>
     </data>
+    <data name="Sites_Reverb_CantRun" xml:space="preserve">
+        <value>Reverb can't run.</value>
+    </data>
+    <data name="Sites_Reverb_EnvNeeds" xml:space="preserve">
+        <value>The app's .env needs:</value>
+        <comment>Above the lines to add to the project's .env file</comment>
+    </data>
+    <data name="Sites_Reverb_Explanation" xml:space="preserve">
+        <value>Flock runs php artisan reverb:start for the site. Browsers reach it at {0}, with no port or certificate of its own.</value>
+        <comment>{0}: the WebSocket address, e.g. wss://app.test/app</comment>
+    </data>
+    <data name="Sites_Reverb_Footnote" xml:space="preserve">
+        <value>WebSocket connections under /app and Laravel's broadcasts under /apps go to Reverb; every other request stays the app's. Flock doesn't change the project's .env. Rebuild the front end after changing it.</value>
+        <comment>/app and /apps are paths of the site's address</comment>
+    </data>
+    <data name="Sites_Reverb_Install" xml:space="preserve">
+        <value>Install Laravel Reverb in the project (php artisan install:broadcasting --reverb) to run it.</value>
+    </data>
+    <data name="Sites_Reverb_RestartTooltip" xml:space="preserve">
+        <value>Restart Reverb, e.g. so it loads changed code</value>
+    </data>
+    <data name="Sites_Reverb_Run" xml:space="preserve">
+        <value>Run Reverb</value>
+        <comment>A switch: Flock runs the site's Laravel Reverb server</comment>
+    </data>
+    <data name="Sites_Reverb_RunningAt" xml:space="preserve">
+        <value>Running at {0}</value>
+        <comment>{0}: the WebSocket address, e.g. wss://app.test/app</comment>
+    </data>
+    <data name="Sites_Reverb_Title" xml:space="preserve">
+        <value>Reverb</value>
+    </data>
     <data name="Sites_Root" xml:space="preserve">
         <value>Root</value>
         <comment>The document root</comment>
@@ -2110,6 +2166,10 @@ Details are in %LocalAppData%\Flock\tray.log.</value>
     <data name="Sites_Server_Stopping" xml:space="preserve">
         <value>Stopping…</value>
         <comment>A server's state</comment>
+    </data>
+    <data name="Sites_ShareSection" xml:space="preserve">
+        <value>Share</value>
+        <comment>The heading of a site's sharing settings.</comment>
     </data>
     <data name="Sites_Share_AllowExplanation" xml:space="preserve">
         <value>Anyone with the link can open the site unless you list email addresses — Cloudflare then emails them a code. The link stops working after 8 hours or when you stop sharing.</value>
@@ -2270,6 +2330,9 @@ Details are in %LocalAppData%\Flock\tray.log.</value>
     </data>
     <data name="Sites_UpstreamPortMeans" xml:space="preserve">
         <value>A port means 127.0.0.1.</value>
+    </data>
+    <data name="Sites_Url" xml:space="preserve">
+        <value>URL</value>
     </data>
     <data name="Sites_UseFile" xml:space="preserve">
         <value>Use {0}</value>

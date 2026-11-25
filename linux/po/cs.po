@@ -1630,6 +1630,30 @@ msgstr "Spustí composer require ext-{name}:* ve složce {path}, což změní co
 msgid "sites.restart_frankenphp_tooltip"
 msgstr "Restartovat FrankenPHP, např. aby workery Octane načetly změněný kód"
 
+msgid "sites.reverb.env_needs"
+msgstr "Soubor .env aplikace potřebuje:"
+
+msgid "sites.reverb.explanation"
+msgstr "Flock pro web spouští php artisan reverb:start. Prohlížeče se k němu připojí na {address}, bez vlastního portu či certifikátu."
+
+msgid "sites.reverb.footnote"
+msgstr "Spojení WebSocket pod /app a broadcasty Laravelu pod /apps jdou do Reverbu; všechny ostatní požadavky zůstávají aplikaci. Flock soubor .env projektu nemění. Po jeho změně znovu sestavte front-end."
+
+msgid "sites.reverb.install"
+msgstr "Pro spouštění nainstalujte do projektu Laravel Reverb (php artisan install:broadcasting --reverb)."
+
+msgid "sites.reverb.restart_tooltip"
+msgstr "Restartovat Reverb, např. aby načetl změněný kód"
+
+msgid "sites.reverb.run"
+msgstr "Spouštět Reverb"
+
+msgid "sites.reverb.running_at"
+msgstr "Běží na {address}"
+
+msgid "sites.reverb.title"
+msgstr "Reverb"
+
 msgid "sites.root_automatic"
 msgstr "Automaticky"
 

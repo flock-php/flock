@@ -1709,6 +1709,35 @@ msgstr "Runs composer require ext-{name}:* in {path}, which changes composer.jso
 msgid "sites.restart_frankenphp_tooltip"
 msgstr "Restart FrankenPHP, e.g. so Octane's workers load changed code"
 
+#. Above the lines to add to the project's .env file
+msgid "sites.reverb.env_needs"
+msgstr "The app's .env needs:"
+
+#. {address}: the WebSocket address, e.g. wss://app.test/app
+msgid "sites.reverb.explanation"
+msgstr "Flock runs php artisan reverb:start for the site. Browsers reach it at {address}, with no port or certificate of its own."
+
+#. /app and /apps are paths of the site's address
+msgid "sites.reverb.footnote"
+msgstr "WebSocket connections under /app and Laravel's broadcasts under /apps go to Reverb; every other request stays the app's. Flock doesn't change the project's .env. Rebuild the front end after changing it."
+
+msgid "sites.reverb.install"
+msgstr "Install Laravel Reverb in the project (php artisan install:broadcasting --reverb) to run it."
+
+msgid "sites.reverb.restart_tooltip"
+msgstr "Restart Reverb, e.g. so it loads changed code"
+
+#. A switch: Flock runs the site's Laravel Reverb server
+msgid "sites.reverb.run"
+msgstr "Run Reverb"
+
+#. {address}: the WebSocket address, e.g. wss://app.test/app
+msgid "sites.reverb.running_at"
+msgstr "Running at {address}"
+
+msgid "sites.reverb.title"
+msgstr "Reverb"
+
 msgid "sites.root_automatic"
 msgstr "Automatic"
 

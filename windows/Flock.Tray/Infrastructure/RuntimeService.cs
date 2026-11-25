@@ -199,7 +199,7 @@ public sealed class RuntimeService
         NotifyChanged();
         var outcome = await operations.RunMutationAsync("lifecycle", operationErrors, async token =>
         {
-            var result = await processRunner.RunAsync(FlockPaths.FlockBinary, [command], TimeSpan.FromMinutes(2), token);
+            var result = await processRunner.RunAsync(FlockPaths.FlockBinary, new[] { command }, TimeSpan.FromMinutes(2), token);
             if (!result.Succeeded)
             {
                 throw new FlockException(result.Output.Length == 0 ? Localization.Format(error, FlockPaths.FlockBinary) : result.Output);
