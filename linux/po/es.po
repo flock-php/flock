@@ -223,6 +223,9 @@ msgstr "Guardar"
 msgid "common.time.just_now"
 msgstr "ahora mismo"
 
+msgid "common.turn_flock_on_or_off"
+msgstr "Activar o desactivar Flock"
+
 msgid "common.uninstall"
 msgstr "Desinstalar"
 
@@ -758,6 +761,9 @@ msgstr "Requiere atención"
 
 msgid "menu.status.not_set_up"
 msgstr "Sin configurar"
+
+msgid "menu.stop_flock"
+msgstr "Detener Flock"
 
 msgid "node.downloads_node_js_new_then"
 msgstr "Descarga Node.js {new} y después quita {old}. Los paquetes globales se conservan."

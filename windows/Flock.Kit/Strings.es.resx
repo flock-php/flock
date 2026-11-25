@@ -183,6 +183,9 @@
 
 Encontrarás los detalles en %LocalAppData%\Flock\tray.log.</value>
     </data>
+    <data name="App_CouldNotStop" xml:space="preserve">
+        <value>No se pudo detener Flock ({0}).</value>
+    </data>
     <data name="App_DidNotStart" xml:space="preserve">
         <value>El proceso no se inició.</value>
     </data>
@@ -329,6 +332,9 @@ Encontrarás los detalles en %LocalAppData%\Flock\tray.log.</value>
     </data>
     <data name="Common_TryAgain" xml:space="preserve">
         <value>Volver a intentarlo</value>
+    </data>
+    <data name="Common_TurnFlockOnOrOff" xml:space="preserve">
+        <value>Activar o desactivar Flock</value>
     </data>
     <data name="Common_Uninstall" xml:space="preserve">
         <value>Desinstalar</value>
@@ -917,6 +923,9 @@ Encontrarás los detalles en %LocalAppData%\Flock\tray.log.</value>
     </data>
     <data name="Menu_Status_Updating" xml:space="preserve">
         <value>Actualizando…</value>
+    </data>
+    <data name="Menu_StopFlock" xml:space="preserve">
+        <value>Detener Flock</value>
     </data>
     <data name="Menu_Stopped" xml:space="preserve">
         <value>detenido</value>

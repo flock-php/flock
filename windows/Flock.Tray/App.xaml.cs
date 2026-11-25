@@ -291,10 +291,15 @@ public sealed partial class App : Application
         var update = State.UpdateService.Available is { } available && !State.UpdateService.IsBusy
             ? Localization.Format(Strings.Menu_UpdateTo, available.Version) : null;
         // Before the setup there is nothing to open yet: Mail, Dumps, Logs and Settings all need the daemon.
+        var running = State.IsRunning;
         List<string?> items = State.NeedsSetup
             ? [Strings.Menu_SetUpFlock, null, Strings.Menu_QuitFlock]
             : [Strings.Menu_OpenFlock, null, Strings.Menu_Mail, Strings.Menu_Dumps, Strings.Menu_Logs, Strings.Menu_Settings, null,
-                State.IsRunning ? Strings.Menu_RestartFlock : Strings.Menu_StartFlock, Strings.Menu_QuitFlock];
+                running ? Strings.Menu_RestartFlock : Strings.Menu_StartFlock, Strings.Menu_QuitFlock];
+        if (running && !State.NeedsSetup)
+        {
+            items.Insert(8, Strings.Menu_StopFlock);
+        }
         if (update is not null)
         {
             items.Insert(1, update);
@@ -325,8 +330,9 @@ public sealed partial class App : Application
             case 3: Open(WindowKind.Dumps); break;
             case 4: Open(WindowKind.Logs); break;
             case 5: Open(WindowKind.Settings); break;
-            case 7: _ = State.RestartAsync(); break;
-            case 8: Quit(); break;
+            case 7: _ = running ? State.RestartAsync() : State.StartAsync(); break;
+            case 8 when running: _ = State.StopAsync(); break;
+            case 8 or 9: Quit(); break;
         }
     }
 

@@ -162,11 +162,28 @@ impl AppModel {
 
     /// Runs `flock restart`, which also starts a stopped daemon.
     pub fn restart(self: &Rc<Self>) {
-        self.restarting.set(true);
+        self.lifecycle("restart");
+    }
+
+    /// Runs `flock start` after `stop`.
+    pub fn start(self: &Rc<Self>) {
+        self.lifecycle("start");
+    }
+
+    /// Runs `flock stop`: the daemon and everything it runs stop until `start` or the next login.
+    pub fn stop(self: &Rc<Self>) {
+        self.lifecycle("stop");
+    }
+
+    /// Runs one command at a time, like the Windows tray: one that comes while another runs is ignored.
+    fn lifecycle(self: &Rc<Self>, command: &'static str) {
+        if self.restarting.replace(true) {
+            return;
+        }
         self.changed();
         let this = self.clone();
         glib::spawn_future_local(async move {
-            let out = gio::spawn_blocking(|| installation::run(&["restart"])).await.expect("flock restart");
+            let out = gio::spawn_blocking(move || installation::run(&[command])).await.expect("flock command");
             this.restarting.set(false);
             this.action_error.replace(if out.ok { None } else { Some(out.text) });
             this.changed();

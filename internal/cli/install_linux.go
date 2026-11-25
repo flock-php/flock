@@ -339,6 +339,11 @@ func uninstallService() error {
 	return systemctl("stop", unitName(name))
 }
 
+// stopDaemon makes systemd stop the daemon until restartService or the next boot starts it.
+func stopDaemon() error {
+	return uninstallService()
+}
+
 // restartService makes systemd stop and start the daemon.
 func restartService() error {
 	name, err := serviceUser()

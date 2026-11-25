@@ -232,6 +232,10 @@ msgstr "Save"
 msgid "common.time.just_now"
 msgstr "just now"
 
+#. Tooltip of the switch that stops or starts the daemon and its services
+msgid "common.turn_flock_on_or_off"
+msgstr "Turn Flock on or off"
+
 msgid "common.uninstall"
 msgstr "Uninstall"
 
@@ -790,6 +794,10 @@ msgstr "Needs attention"
 
 msgid "menu.status.not_set_up"
 msgstr "Not set up"
+
+#. Stops the daemon and its services until Flock is started again
+msgid "menu.stop_flock"
+msgstr "Stop Flock"
 
 msgid "node.downloads_node_js_new_then"
 msgstr "Downloads Node.js {new}, then removes {old}. Global packages stay."
