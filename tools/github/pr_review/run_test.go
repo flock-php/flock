@@ -198,6 +198,24 @@ func TestRunReturnsContextualRemoveError(t *testing.T) {
 	}
 }
 
+func TestRunTreatsAlreadyRemovedLabelAsSuccess(t *testing.T) {
+	client, closeServer := testClient(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method + " " + r.URL.Path {
+		case "GET /repos/owner/repo/pulls/1":
+			writeTestJSON(t, w, `{"number":1,"state":"open","merged":false,"base":{"ref":"main"},"user":{"login":"author","type":"User"},"author_association":"CONTRIBUTOR","labels":[{"name":"pr: review requested"},{"name":"pr: changes requested"}]}`)
+		case "DELETE /repos/owner/repo/issues/1/labels/pr: changes requested":
+			http.Error(w, `{"message":"Not Found"}`, http.StatusNotFound)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer closeServer()
+
+	if err := Run(context.Background(), client, "owner", "repo", testReviewEvent("review_requested", "author"), ""); err != nil {
+		t.Fatalf("Run() error = %v, want success when the label is already gone", err)
+	}
+}
+
 func TestRunRetryAfterRemovalFailureConvergesFromLiveLabels(t *testing.T) {
 	var logs []requestLog
 	added := false
@@ -270,6 +288,8 @@ func TestRunAppliesChangesRequestedForMaintainerReviews(t *testing.T) {
 					writeTestJSON(t, w, `{"id":99,"state":"CHANGES_REQUESTED","commit_id":"sha","user":{"login":"reviewer"},"submitted_at":"2026-11-21T10:00:00Z"}`)
 				case "GET /repos/owner/repo/collaborators/reviewer/permission":
 					writeTestJSON(t, w, `{"role_name":"`+role+`"}`)
+				case "GET /repos/owner/repo/pulls/1/reviews":
+					writeTestJSON(t, w, `[]`)
 				case "GET /repos/owner/repo/issues/1/events":
 					writeTestJSON(t, w, `[]`)
 				case "POST /repos/owner/repo/issues/1/labels":
@@ -292,6 +312,7 @@ func TestRunAppliesChangesRequestedForMaintainerReviews(t *testing.T) {
 				{"GET", "/repos/owner/repo/pulls/1"},
 				{"GET", "/repos/owner/repo/pulls/1/reviews/99"},
 				{"GET", "/repos/owner/repo/collaborators/reviewer/permission"},
+				{"GET", "/repos/owner/repo/pulls/1/reviews"},
 				{"GET", "/repos/owner/repo/issues/1/events"},
 				{"GET", "/repos/owner/repo/labels/pr: changes requested"},
 				{"POST", "/repos/owner/repo/issues/1/labels"},
@@ -353,10 +374,10 @@ func TestRunRejectsInvalidReviewHandoffsWithoutWriting(t *testing.T) {
 			pullRequest: `{"state":"open","merged":false,"base":{"ref":"main"},"head":{"sha":"sha"},"labels":[{"name":"pr: review requested"}]}`,
 		},
 		{
-			name:          "api review commit differs",
+			name:          "empty review commit",
 			event:         testWorkflowRunEvent("success", "pull_request_review", signalWorkflowName, "sha", 1),
 			pullRequest:   `{"state":"open","merged":false,"base":{"ref":"main"},"head":{"sha":"sha"},"labels":[{"name":"pr: review requested"}]}`,
-			review:        `{"id":99,"state":"changes_requested","commit_id":"other","user":{"login":"reviewer"},"submitted_at":"2026-11-21T10:00:00Z"}`,
+			review:        `{"id":99,"state":"changes_requested","commit_id":"","user":{"login":"reviewer"},"submitted_at":"2026-11-21T10:00:00Z"}`,
 			permission:    `{"role_name":"admin"}`,
 			issueEvents:   `[]`,
 			wantReadCount: 2,
@@ -395,13 +416,22 @@ func TestRunRejectsInvalidReviewHandoffsWithoutWriting(t *testing.T) {
 			pullRequest: `{"state":"open","merged":false,"base":{"ref":"main"},"head":{"sha":"sha"},"labels":[{"name":"pr: review requested"}]}`,
 		},
 		{
-			name:          "later bot transition",
+			name:          "later author review request",
 			event:         testWorkflowRunEvent("success", "pull_request_review", signalWorkflowName, "sha", 1),
-			pullRequest:   `{"state":"open","merged":false,"base":{"ref":"main"},"head":{"sha":"sha"},"labels":[{"name":"pr: review requested"}]}`,
+			pullRequest:   `{"state":"open","merged":false,"base":{"ref":"main"},"head":{"sha":"sha"},"user":{"login":"author","type":"User"},"author_association":"CONTRIBUTOR","labels":[{"name":"pr: review requested"}]}`,
 			review:        `{"id":99,"state":"changes_requested","commit_id":"sha","user":{"login":"reviewer"},"submitted_at":"2026-11-21T10:00:00Z"}`,
 			permission:    `{"role_name":"admin"}`,
-			issueEvents:   `[{"event":"labeled","actor":{"login":"github-actions[bot]"},"label":{"name":"pr: review requested"},"created_at":"2026-11-21T11:00:00Z"}]`,
-			wantReadCount: 4,
+			issueEvents:   `[{"event":"review_requested","actor":{"login":"author"},"created_at":"2026-11-21T11:00:00Z"}]`,
+			wantReadCount: 5,
+		},
+		{
+			name:          "later review request on bypassing pull request",
+			event:         testWorkflowRunEvent("success", "pull_request_review", signalWorkflowName, "sha", 1),
+			pullRequest:   `{"state":"open","merged":false,"base":{"ref":"main"},"head":{"sha":"sha"},"user":{"login":"owner","type":"User"},"author_association":"OWNER","labels":[{"name":"pr: review requested"}]}`,
+			review:        `{"id":99,"state":"changes_requested","commit_id":"sha","user":{"login":"reviewer"},"submitted_at":"2026-11-21T10:00:00Z"}`,
+			permission:    `{"role_name":"admin"}`,
+			issueEvents:   `[{"event":"review_requested","actor":{"login":"maintainer"},"created_at":"2026-11-21T11:00:00Z"}]`,
+			wantReadCount: 5,
 		},
 	}
 	for _, test := range tests {
@@ -416,6 +446,8 @@ func TestRunRejectsInvalidReviewHandoffsWithoutWriting(t *testing.T) {
 					writeTestJSON(t, w, `{"number":2,`+strings.TrimPrefix(test.pullRequest, "{"))
 				case "GET /repos/owner/repo/pulls/1/reviews/99":
 					writeTestJSON(t, w, test.review)
+				case "GET /repos/owner/repo/pulls/1/reviews":
+					writeTestJSON(t, w, `[]`)
 				case "GET /repos/owner/repo/collaborators/reviewer/permission":
 					writeTestJSON(t, w, test.permission)
 				case "GET /repos/owner/repo/issues/1/events":
@@ -469,7 +501,13 @@ func TestRunRetryAfterRequestedChangesRemovalFailureConverges(t *testing.T) {
 			writeTestJSON(t, w, `{"id":99,"state":"changes_requested","commit_id":"sha","user":{"login":"reviewer"},"submitted_at":"2026-11-21T10:00:00Z"}`)
 		case "GET /repos/owner/repo/collaborators/reviewer/permission":
 			writeTestJSON(t, w, `{"role_name":"admin"}`)
+		case "GET /repos/owner/repo/pulls/1/reviews":
+			writeTestJSON(t, w, `[]`)
 		case "GET /repos/owner/repo/issues/1/events":
+			if added {
+				writeTestJSON(t, w, `[{"event":"labeled","actor":{"login":"github-actions[bot]"},"label":{"name":"pr: changes requested"},"created_at":"2026-11-21T11:00:00Z"}]`)
+				return
+			}
 			writeTestJSON(t, w, `[]`)
 		case "POST /repos/owner/repo/issues/1/labels":
 			added = true
@@ -546,6 +584,8 @@ func TestRunAppliesChangesRequestedWhenWorkflowHeadIsMergeCommit(t *testing.T) {
 			writeTestJSON(t, w, `{"id":99,"state":"CHANGES_REQUESTED","commit_id":"sha","user":{"login":"reviewer"},"submitted_at":"2026-11-21T10:00:00Z"}`)
 		case "GET /repos/owner/repo/collaborators/reviewer/permission":
 			writeTestJSON(t, w, `{"role_name":"admin"}`)
+		case "GET /repos/owner/repo/pulls/1/reviews":
+			writeTestJSON(t, w, `[]`)
 		case "GET /repos/owner/repo/issues/1/events":
 			writeTestJSON(t, w, `[]`)
 		case "POST /repos/owner/repo/issues/1/labels":
@@ -567,6 +607,99 @@ func TestRunAppliesChangesRequestedWhenWorkflowHeadIsMergeCommit(t *testing.T) {
 	if !containsLog(logs, "POST", "/repos/owner/repo/issues/1/labels") ||
 		!containsLog(logs, "DELETE", "/repos/owner/repo/issues/1/labels/pr: review requested") {
 		t.Fatalf("requests = %v, want label writes despite the merge commit and artifact commit", logs)
+	}
+}
+
+func TestRunAppliesChangesRequestedWhenReviewCommitDiffersFromHead(t *testing.T) {
+	var logs []requestLog
+	client, closeServer := testClient(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		logs = append(logs, requestLog{r.Method, r.URL.Path})
+		if respondPresentLabel(t, w, r) {
+			return
+		}
+		switch r.Method + " " + r.URL.Path {
+		case "GET /repos/owner/repo/pulls/1":
+			writeTestJSON(t, w, `{"number":1,"state":"open","merged":false,"base":{"ref":"main"},"head":{"sha":"sha"},"user":{"login":"author","type":"User"},"author_association":"CONTRIBUTOR","labels":[{"name":"pr: review requested"}]}`)
+		case "GET /repos/owner/repo/pulls/1/reviews/99":
+			writeTestJSON(t, w, `{"id":99,"state":"changes_requested","commit_id":"other","user":{"login":"reviewer"},"submitted_at":"2026-11-21T10:00:00Z"}`)
+		case "GET /repos/owner/repo/collaborators/reviewer/permission":
+			writeTestJSON(t, w, `{"role_name":"admin"}`)
+		case "GET /repos/owner/repo/pulls/1/reviews":
+			writeTestJSON(t, w, `[
+				{"id":98,"state":"APPROVED","submitted_at":"2026-11-21T09:00:00Z"},
+				{"id":99,"state":"changes_requested","commit_id":"other","submitted_at":"2026-11-21T10:00:00Z"},
+				{"id":100,"state":"CHANGES_REQUESTED","submitted_at":"2026-11-21T10:30:00Z"},
+				{"id":101,"state":"COMMENTED","submitted_at":"2026-11-21T10:45:00Z"}
+			]`)
+		case "GET /repos/owner/repo/issues/1/events":
+			writeTestJSON(t, w, `[{"event":"labeled","actor":{"login":"github-actions[bot]"},"label":{"name":"pr: changes requested"},"created_at":"2026-11-21T10:20:00Z"},{"event":"review_requested","actor":{"login":"maintainer"},"created_at":"2026-11-21T10:40:00Z"}]`)
+		case "POST /repos/owner/repo/issues/1/labels":
+			writeTestJSON(t, w, `[]`)
+		case "DELETE /repos/owner/repo/issues/1/labels/pr: review requested":
+			writeTestJSON(t, w, `{}`)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer closeServer()
+
+	signalPath := writeReviewSignal(t, "submitted", 1, 99, "changes_requested", "artifact-sha")
+	err := Run(context.Background(), client, "owner", "repo",
+		testWorkflowRunEvent("success", "pull_request_review", signalWorkflowName, "merge-sha", 1), signalPath)
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if !containsLog(logs, "POST", "/repos/owner/repo/issues/1/labels") ||
+		!containsLog(logs, "DELETE", "/repos/owner/repo/issues/1/labels/pr: review requested") {
+		t.Fatalf("requests = %v, want label writes when the review commit differs and no later decisive review exists", logs)
+	}
+}
+
+func TestRunSkipsChangesRequestedAfterLaterApproval(t *testing.T) {
+	for _, state := range []string{"APPROVED", "DISMISSED"} {
+		t.Run(state, func(t *testing.T) {
+			var logs []requestLog
+			client, closeServer := testClient(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				logs = append(logs, requestLog{r.Method, r.URL.Path})
+				if respondPresentLabel(t, w, r) {
+					return
+				}
+				switch r.Method + " " + r.URL.Path {
+				case "GET /repos/owner/repo/pulls/1":
+					writeTestJSON(t, w, `{"number":1,"state":"open","merged":false,"base":{"ref":"main"},"head":{"sha":"sha"},"labels":[{"name":"pr: review requested"}]}`)
+				case "GET /repos/owner/repo/pulls/1/reviews/99":
+					writeTestJSON(t, w, `{"id":99,"state":"changes_requested","commit_id":"sha","user":{"login":"reviewer"},"submitted_at":"2026-11-21T10:00:00Z"}`)
+				case "GET /repos/owner/repo/collaborators/reviewer/permission":
+					writeTestJSON(t, w, `{"role_name":"admin"}`)
+				case "GET /repos/owner/repo/pulls/1/reviews":
+					writeTestJSON(t, w, `[{"id":100,"state":"`+state+`","submitted_at":"2026-11-21T11:00:00Z"}]`)
+				case "GET /repos/owner/repo/issues/1/events":
+					writeTestJSON(t, w, `[]`)
+				case "POST /repos/owner/repo/issues/1/labels":
+					writeTestJSON(t, w, `[]`)
+				case "DELETE /repos/owner/repo/issues/1/labels/pr: review requested":
+					writeTestJSON(t, w, `{}`)
+				default:
+					http.NotFound(w, r)
+				}
+			}))
+			defer closeServer()
+
+			signalPath := writeReviewSignal(t, "submitted", 1, 99, "changes_requested", "sha")
+			err := Run(context.Background(), client, "owner", "repo",
+				testWorkflowRunEvent("success", "pull_request_review", signalWorkflowName, "sha", 1), signalPath)
+			if err != nil {
+				t.Fatalf("Run() error = %v", err)
+			}
+			for _, log := range logs {
+				if log.method == "POST" || log.method == "DELETE" {
+					t.Fatalf("unexpected write request: %v; logs=%v", log, logs)
+				}
+			}
+			if !containsLog(logs, "GET", "/repos/owner/repo/pulls/1/reviews") {
+				t.Fatalf("reviews were not listed; logs=%v", logs)
+			}
+		})
 	}
 }
 
@@ -592,6 +725,8 @@ func TestRunAppliesChangesRequestedForForkHead(t *testing.T) {
 			writeTestJSON(t, w, `{"id":99,"state":"CHANGES_REQUESTED","commit_id":"sha","user":{"login":"reviewer"},"submitted_at":"2026-11-21T10:00:00Z"}`)
 		case "GET /repos/owner/repo/collaborators/reviewer/permission":
 			writeTestJSON(t, w, `{"role_name":"maintain"}`)
+		case "GET /repos/owner/repo/pulls/7/reviews":
+			writeTestJSON(t, w, `[]`)
 		case "GET /repos/owner/repo/issues/7/events":
 			writeTestJSON(t, w, `[]`)
 		case "POST /repos/owner/repo/issues/7/labels":

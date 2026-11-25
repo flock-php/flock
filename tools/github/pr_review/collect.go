@@ -56,11 +56,11 @@ func (s *state) collectRequestedChanges(ctx context.Context, pullRequest *github
 	if err != nil {
 		return fmt.Errorf("read review %d for pull request #%d: %w", s.event.review.reviewID, s.event.number, err)
 	}
-	// workflow_run.head_sha is the merge commit, not the pull request head. The artifact commit id is untrusted.
+	// A push during this workflow does not rerun it, so do not drop the review when its commit is no longer the head.
 	if review == nil || review.GetID() != s.event.review.reviewID ||
 		!strings.EqualFold(review.GetState(), "changes_requested") ||
 		review.GetSubmittedAt().IsZero() || review.GetUser().GetLogin() == "" ||
-		review.GetCommitID() == "" || review.GetCommitID() != pullRequest.GetHead().GetSHA() {
+		review.GetCommitID() == "" {
 		return nil
 	}
 	permission, _, err := s.client.Repositories.GetPermissionLevel(ctx, s.owner, s.repository, review.GetUser().GetLogin())
@@ -73,7 +73,14 @@ func (s *state) collectRequestedChanges(ctx context.Context, pullRequest *github
 	if permission == nil || (permission.GetRoleName() != "admin" && permission.GetRoleName() != "maintain") {
 		return nil
 	}
-	stale, err := s.hasLaterBotLabelTransition(ctx, review.GetSubmittedAt().Time)
+	superseded, err := s.hasLaterDecisiveReview(ctx, review)
+	if err != nil {
+		return err
+	}
+	if superseded {
+		return nil
+	}
+	stale, err := s.hasLaterReviewRequest(ctx, review.GetSubmittedAt().Time)
 	if err != nil {
 		return err
 	}
@@ -130,20 +137,21 @@ func (s *state) pullRequestForHead(ctx context.Context) (int, error) {
 	return matches[0], nil
 }
 
-func (s *state) hasLaterBotLabelTransition(ctx context.Context, submittedAt time.Time) (bool, error) {
+func (s *state) hasLaterDecisiveReview(ctx context.Context, review *github.PullRequestReview) (bool, error) {
+	submittedAt := review.GetSubmittedAt().Time
 	options := &github.ListOptions{PerPage: 100}
 	for {
-		events, response, err := s.client.Issues.ListIssueEvents(ctx, s.owner, s.repository, s.event.number, options)
+		reviews, response, err := s.client.PullRequests.ListReviews(ctx, s.owner, s.repository, s.event.number, options)
 		if err != nil {
-			return false, fmt.Errorf("list label events for pull request #%d: %w", s.event.number, err)
+			return false, fmt.Errorf("list reviews for pull request #%d: %w", s.event.number, err)
 		}
-		for _, event := range events {
-			if event.GetEvent() != "labeled" || event.GetActor().GetLogin() != "github-actions[bot]" ||
-				event.GetCreatedAt().Time.IsZero() || !event.GetCreatedAt().Time.After(submittedAt) {
+		for _, candidate := range reviews {
+			if candidate.GetID() == review.GetID() || candidate.GetSubmittedAt().Time.IsZero() ||
+				!candidate.GetSubmittedAt().Time.After(submittedAt) {
 				continue
 			}
-			label := event.GetLabel().GetName()
-			if label == reviewRequestedLabel || label == changesRequestedLabel {
+			state := candidate.GetState()
+			if strings.EqualFold(state, "approved") || strings.EqualFold(state, "dismissed") {
 				return true, nil
 			}
 		}
@@ -151,7 +159,39 @@ func (s *state) hasLaterBotLabelTransition(ctx context.Context, submittedAt time
 			return false, nil
 		}
 		if options.Page == response.NextPage {
-			return false, fmt.Errorf("list label events for pull request #%d: page did not advance", s.event.number)
+			return false, fmt.Errorf("list reviews for pull request #%d: page did not advance", s.event.number)
+		}
+		options.Page = response.NextPage
+	}
+}
+
+func (s *state) hasLaterReviewRequest(ctx context.Context, submittedAt time.Time) (bool, error) {
+	bypass := contribution.BypassesGate(s.observed.pullRequest)
+	author := ""
+	if s.observed.pullRequest != nil {
+		author = s.observed.pullRequest.Author.Login
+	}
+	options := &github.ListOptions{PerPage: 100}
+	for {
+		events, response, err := s.client.Issues.ListIssueEvents(ctx, s.owner, s.repository, s.event.number, options)
+		if err != nil {
+			return false, fmt.Errorf("list events for pull request #%d: %w", s.event.number, err)
+		}
+		for _, event := range events {
+			if event.GetEvent() != "review_requested" || event.GetCreatedAt().Time.IsZero() ||
+				!event.GetCreatedAt().Time.After(submittedAt) {
+				continue
+			}
+			requester := event.GetActor().GetLogin()
+			if bypass || (author != "" && strings.EqualFold(requester, author)) {
+				return true, nil
+			}
+		}
+		if response == nil || response.NextPage == 0 {
+			return false, nil
+		}
+		if options.Page == response.NextPage {
+			return false, fmt.Errorf("list events for pull request #%d: page did not advance", s.event.number)
 		}
 		options.Page = response.NextPage
 	}

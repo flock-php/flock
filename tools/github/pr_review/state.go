@@ -13,7 +13,6 @@ const (
 	reviewRequestedLabel  = "pr: review requested"
 	changesRequestedLabel = "pr: changes requested"
 	signalWorkflowName    = "PR Review Signal"
-	signalArtifactName    = "pr-review-event"
 )
 
 type state struct {

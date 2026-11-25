@@ -32,7 +32,8 @@ func (s *state) apply(ctx context.Context) error {
 				return fmt.Errorf("add %q label to pull request #%d: %w", change.label, s.event.number, err)
 			}
 		case removeLabel:
-			if _, err := s.client.Issues.RemoveLabelForIssue(ctx, s.owner, s.repository, s.event.number, change.label); err != nil {
+			if _, err := s.client.Issues.RemoveLabelForIssue(ctx, s.owner, s.repository, s.event.number, change.label); err != nil &&
+				!contribution.IsNotFound(err) {
 				return fmt.Errorf("remove %q label from pull request #%d: %w", change.label, s.event.number, err)
 			}
 		default:
