@@ -1,0 +1,2052 @@
+# Turkish texts of the Flock Linux app (linux/src), by key.
+# Generated from lang/ by tools/i18n: edit lang/*/app.json, then run make i18n.
+msgid ""
+msgstr ""
+"Project-Id-Version: flock-app\n"
+"Language: tr\n"
+"X-Language-Name: Türkçe\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+
+msgid "about.also_delete_data"
+msgstr "Sitelerimin ayarlarını ve veritabanlarını da sil"
+
+msgid "about.app_version"
+msgstr "Uygulama {version}"
+
+msgid "about.daemon_not_running"
+msgstr "çalışmıyor"
+
+msgid "about.daemon_version"
+msgstr "Daemon {version}"
+
+msgid "about.data_folder_title_case"
+msgstr "Veri Klasörü"
+
+msgid "about.flock_docs"
+msgstr "Flock Belgeleri"
+
+msgid "about.found_a_bug_report_an"
+msgstr "Hata mı buldunuz? Sorun bildirin"
+
+msgid "about.license"
+msgstr "Lisans"
+
+msgid "about.license_description"
+msgstr "Telif hakkı © Guava s.r.o. AGPL-3.0 ile lisanslanmıştır."
+
+msgid "about.password_prompt_was_cancelled_so"
+msgstr "Parola istemi iptal edildi, bu yüzden DNS kurulumu ve sertifika yerinde duruyor."
+
+msgid "about.sponsor"
+msgstr "Sponsor Ol"
+
+msgid "about.star_on_github"
+msgstr "GitHub'da yıldızla"
+
+msgid "about.stops_flock_and_removes_it_from"
+msgstr "Flock'u durdurur ve bu bilgisayardan kaldırır. Siteleriniz, veritabanlarınız ve ayarlarınız korunur."
+
+msgid "about.support_description"
+msgstr "Flock sonsuza dek ücretsiz ve açık kaynaklıdır. Sponsorluk, bakımının sürmesine yardımcı olur."
+
+msgid "about.tagline"
+msgstr "Laravel için native bir yerel geliştirme ortamı."
+
+msgid "about.uninstall_flock"
+msgstr "Flock'u kaldır"
+
+msgid "about.uninstall_flock_ellipsis"
+msgstr "Flock'u Kaldır…"
+
+msgid "about.uninstall_question"
+msgstr "Flock kaldırılsın mı?"
+
+msgid "about.uninstalling_flock"
+msgstr "Flock kaldırılıyor…"
+
+msgid "ai.add_to_settings"
+msgstr "Bunu istemcinin MCP ayarlarına ekleyin."
+
+msgid "ai.added_once"
+msgstr "Bir kez eklenince Flock her projede çalışır. Flock'u ekledikten sonra istemciyi yeniden başlatın veya MCP sunucularını yeniden yükleyin."
+
+msgid "ai.clients"
+msgstr "Yapay zeka istemcileri"
+
+msgid "ai.flock_added"
+msgstr "Flock eklendi"
+
+msgid "ai.other_clients"
+msgstr "Diğer istemciler"
+
+msgid "ai.subtitle"
+msgstr "Claude Code ve Cursor gibi yapay zeka ajanlarının Flock ile çalışmasına izin verin: sitelerinizin URL'leri ve PHP sürümleri, loglar, dump'lar ve e-postalar, ayrıca sürümlerin ve servislerin yüklenmesi."
+
+msgid "app.conflict.port"
+msgstr "{port} portunu ({service})"
+
+msgid "app.conflict.quit"
+msgstr "{app} uygulamasından çıkın"
+
+msgid "app.copy_database"
+msgstr "kopya"
+
+msgid "app.could_not_relaunch"
+msgstr "Flock yeniden başlatılamadı: {error}"
+
+msgid "app.flock_is_not_installed_for_this"
+msgstr "Flock bu kullanıcı için yüklü değil ({path} eksik). `flk install` komutunu bir kez çalıştırın."
+
+msgid "app.flock_isnt_installed_install_the"
+msgstr "Flock yüklü değil: önce flockphp paketini yükleyin."
+
+msgid "app.fresh_database"
+msgstr "yeni"
+
+msgid "app.http_status"
+msgstr "Flock HTTP {status} ile yanıt verdi"
+
+msgid "app.n_events"
+msgid_plural "app.n_events"
+msgstr[0] "{n} olay"
+msgstr[1] "{n} olay"
+
+msgid "app.needs_attention_version"
+msgstr "Dikkat gerekiyor · {version}"
+
+msgid "app.not_running"
+msgstr "Flock çalışmıyor"
+
+msgid "app.program_uses_ports"
+msgstr "{program}, {ports} kullanıyor."
+
+msgid "app.running_version"
+msgstr "Çalışıyor · {version}"
+
+msgid "app.shared_database"
+msgstr "paylaşılan"
+
+msgid "app.unexpected_answer_from_flock_error"
+msgstr "Flock'tan beklenmeyen yanıt: {error}"
+
+msgid "common.add"
+msgstr "Ekle"
+
+msgid "common.cancel"
+msgstr "İptal"
+
+msgid "common.choose"
+msgstr "Seç…"
+
+msgid "common.close"
+msgstr "Kapat"
+
+msgid "common.copy"
+msgstr "Kopyala"
+
+msgid "common.done"
+msgstr "Bitti"
+
+msgid "common.downloading"
+msgstr "İndiriliyor…"
+
+msgid "common.e_b"
+msgstr "%e %b"
+
+msgid "common.e_b_y_h_m"
+msgstr "%e %b %Y, %H:%M:%S"
+
+msgid "common.empty_parenthesized"
+msgstr "(boş)"
+
+msgid "common.hide"
+msgstr "Gizle"
+
+msgid "common.install"
+msgstr "Yükle"
+
+msgid "common.installed"
+msgstr "Yüklü"
+
+msgid "common.installing"
+msgstr "Yükleniyor…"
+
+msgid "common.list.and"
+msgstr "{first} ve {second}"
+
+msgid "common.loading"
+msgstr "Yükleniyor…"
+
+msgid "common.n_hours_ago"
+msgid_plural "common.n_hours_ago"
+msgstr[0] "1 saat önce"
+msgstr[1] "{n} saat önce"
+
+msgid "common.n_minutes_ago"
+msgid_plural "common.n_minutes_ago"
+msgstr[0] "1 dakika önce"
+msgstr[1] "{n} dakika önce"
+
+msgid "common.not_installed"
+msgstr "Yüklü değil"
+
+msgid "common.ok"
+msgstr "Tamam"
+
+msgid "common.open"
+msgstr "Aç"
+
+msgid "common.open_in_browser"
+msgstr "Tarayıcıda Aç"
+
+msgid "common.open_target"
+msgstr "{site} adresini aç"
+
+msgid "common.remove"
+msgstr "Kaldır"
+
+msgid "common.remove_question"
+msgstr "{name} kaldırılsın mı?"
+
+msgid "common.remove_target"
+msgstr "{domain} domain'ini kaldır"
+
+msgid "common.retry"
+msgstr "Yeniden Dene"
+
+msgid "common.save"
+msgstr "Kaydet"
+
+msgid "common.time.just_now"
+msgstr "az önce"
+
+msgid "common.uninstall"
+msgstr "Kaldır"
+
+msgid "common.uninstall_ellipsis"
+msgstr "Kaldır…"
+
+msgid "common.uninstalling"
+msgstr "Kaldırılıyor…"
+
+msgid "common.update"
+msgstr "Güncelle"
+
+msgid "common.updating"
+msgstr "Güncelleniyor…"
+
+msgid "debugger.availability"
+msgstr "Kullanılabilirlik"
+
+msgid "debugger.available"
+msgstr "Kullanılabilir"
+
+msgid "debugger.client_port"
+msgstr "İstemci portu"
+
+msgid "debugger.connect_ide"
+msgstr "IDE'nizi bağlayın"
+
+msgid "debugger.debugging_now"
+msgstr "Şu an debug ediliyor"
+
+msgid "debugger.detect_breakpoints"
+msgstr "PhpStorm breakpoint'lerini algıla"
+
+msgid "debugger.detect_requests"
+msgstr "Xdebug isteklerini algıla"
+
+msgid "debugger.mode"
+msgstr "Mod"
+
+msgid "debugger.not_in_build"
+msgstr "Bu derlemede yok"
+
+msgid "debugger.start_session"
+msgstr "Oturum başlat"
+
+msgid "debugger.start_session_description"
+msgstr "PhpStorm'da bir breakpoint koyup debug bağlantılarını dinleyin, Xdebug tarayıcı eklentisini kullanın veya URL'ye ?XDEBUG_TRIGGER=1 ekleyin. Komut satırında `flock debug artisan …` komutunu çalıştırın."
+
+msgid "debugger.subtitle"
+msgstr "İstekleri ve komutları Xdebug ile adım adım izleyin."
+
+msgid "debugger.xdebug_loads_only_for_requests"
+msgstr "Xdebug yalnızca talep edildiği isteklerde yüklenir; böylece geri kalan her şey hızlı kalır. Bir projenin PhpStorm'da breakpoint'leri varken, sitesine yapılan her istek debug edilir."
+
+msgid "dumps.capture_description"
+msgstr "Dump'ları yeniden sayfada görmek için kapatın."
+
+msgid "dumps.capture_dumps"
+msgstr "Dump'ları Yakala"
+
+msgid "dumps.capture_dumps_queries_logs_views"
+msgstr "Dump'ları, query'leri, logları, view'ları ve job'ları yakala"
+
+msgid "dumps.capture_is_off_turn_it_on"
+msgstr "Yakalama kapalı: dump'ları, query'leri, logları, view'ları ve job'ları burada toplamak için kayıt düğmesiyle açın."
+
+msgid "dumps.capture_options_and_editor"
+msgstr "Yakalama seçenekleri ve düzenleyici"
+
+msgid "dumps.capture_short"
+msgstr "Yakala"
+
+msgid "dumps.captured"
+msgstr "Yakalananlar"
+
+msgid "dumps.clear_everything_captured"
+msgstr "Yakalanan her şey temizlensin mi?"
+
+msgid "dumps.dd_always_shows_in_the"
+msgstr "dd() isteği sonlandırdığı için her zaman sayfada da görünür."
+
+msgid "dumps.empty_capturing"
+msgstr "Sitelerinizin ve artisan komutlarınızın dump() ve dd() çıktısı, query'leri, logları, view'ları ve job'ları burada görünür."
+
+msgid "dumps.event_kind.jobs"
+msgstr "Job'lar"
+
+msgid "dumps.event_kind.logs"
+msgstr "Loglar"
+
+msgid "dumps.event_kind.queries"
+msgstr "Query'ler"
+
+msgid "dumps.event_kind.requests"
+msgstr "İstekler"
+
+msgid "dumps.event_kind.views"
+msgstr "View'lar"
+
+msgid "dumps.every_captured_dump_query_log"
+msgstr "Yakalanan tüm dump'lar, query'ler, loglar, view'lar ve job'lar tüm isteklerden ve komutlardan silinir."
+
+msgid "dumps.latest_request_only"
+msgstr "Yalnızca son istek"
+
+msgid "dumps.n_dumps"
+msgid_plural "dumps.n_dumps"
+msgstr[0] "{n} dump"
+msgstr[1] "{n} dump"
+
+msgid "dumps.n_entries"
+msgid_plural "dumps.n_entries"
+msgstr[0] "{n} kayıt"
+msgstr[1] "{n} kayıt"
+
+msgid "dumps.nothing_captured_yet"
+msgstr "Henüz Bir Şey Yakalanmadı"
+
+msgid "dumps.nothing_matches"
+msgstr "Eşleşen Yok"
+
+msgid "dumps.open"
+msgstr "Dump'ları Aç"
+
+msgid "dumps.open_files_in"
+msgstr "Dosyaları şurada aç"
+
+msgid "dumps.open_sources_in_sentence_case"
+msgstr "Kaynakları şurada aç"
+
+msgid "dumps.php_versions_only_capture_dumps"
+msgid_plural "dumps.php_versions_only_capture_dumps"
+msgstr[0] "PHP {versions} yalnızca dump'ları yakalar: bu sürümün derlemesinde henüz ajan eklentisi olmadığından query'ler, loglar, view'lar ve job'lar yakalanmaz."
+msgstr[1] "PHP {versions} yalnızca dump'ları yakalar: bu sürümlerin derlemelerinde henüz ajan eklentisi olmadığından query'ler, loglar, view'lar ve job'lar yakalanmaz."
+
+msgid "dumps.php_versions_only_capture_dumps_their"
+msgid_plural "dumps.php_versions_only_capture_dumps_their"
+msgstr[0] "PHP {versions} yalnızca dump'ları yakalar: bu sürümün derlemesinde henüz ajan eklentisi yok."
+msgstr[1] "PHP {versions} yalnızca dump'ları yakalar: bu sürümlerin derlemelerinde henüz ajan eklentisi yok."
+
+msgid "dumps.search_dumps_queries_logs"
+msgstr "Dump'larda, query'lerde, loglarda ara"
+
+msgid "dumps.send_dump_and_dd_output"
+msgstr "dump() ve dd() çıktısını, query'leri, logları, view'ları ve job'ları sayfa veya terminal yerine Flock'a gönderin. Projelerinizde değişiklik gerekmez."
+
+msgid "dumps.show_dump_in_the_page"
+msgstr "dump() sayfada da gösterilsin"
+
+msgid "dumps.show_dump_output_in_the"
+msgstr "dump() çıktısı sayfada da gösterilsin"
+
+msgid "dumps.sources"
+msgstr "Kaynaklar"
+
+msgid "dumps.timeline.context"
+msgstr "bağlam"
+
+msgid "dumps.timeline.queue_name"
+msgstr "{name} kuyruğu"
+
+msgid "dumps.while_capturing"
+msgstr "Yakalama sırasında"
+
+msgid "general.add_project_folders_title"
+msgstr "Proje Klasörleri Ekle"
+
+msgid "general.beta"
+msgstr "Beta sürümler"
+
+msgid "general.beta_description"
+msgstr "Flock'un, PHP'nin ve servislerin yeni sürümlerini, ön sürümler dahil, daha erken alın. Henüz çalışmayabilirler."
+
+msgid "general.check_for_updates_linux"
+msgstr "Güncellemeleri Denetle…"
+
+msgid "general.could_not_change_startup"
+msgstr "Başlangıç ayarı değiştirilemedi: {error}"
+
+msgid "general.could_not_open_program_error"
+msgstr "{program} açılamadı: {error}"
+
+msgid "general.daemon"
+msgstr "Daemon"
+
+msgid "general.data"
+msgstr "Veri"
+
+msgid "general.domain"
+msgstr "Domain"
+
+msgid "general.every_name_any_subdomain_included_is"
+msgstr "Her ad, subdomain'ler dahil, Flock'un DNS sunucusu tarafından systemd-resolved üzerinden çözümlenir."
+
+msgid "general.experimental_channel_packages_that_arent"
+msgstr "Deneysel kanal: henüz yayımlanmamış paketler sunulur. `flock channel stable` komutu kararlı kanala geri döner."
+
+msgid "general.flocks_dns_server_isnt_running"
+msgstr "Flock'un DNS sunucusu çalışmıyor"
+
+msgid "general.folder"
+msgstr "Klasör"
+
+msgid "general.language"
+msgstr "Dil"
+
+msgid "general.language_restart_note"
+msgstr "Yeni dil, Flock yeniden başlatıldıktan sonra kullanılır."
+
+msgid "general.language_system"
+msgstr "Sistem varsayılanı"
+
+msgid "general.network"
+msgstr "Ağ"
+
+msgid "general.new_versions_come_from_the"
+msgstr "Yeni sürümler {package} AUR paketinden gelir: AUR yardımcınızla güncelleyin, ör. `yay -Syu`."
+
+msgid "general.new_versions_come_with_your"
+msgstr "Yeni sürümler sisteminizin güncellemeleriyle gelir. `flock update` yeni sürümü hemen yükler."
+
+msgid "general.no_project_folders"
+msgstr "Proje klasörü yok"
+
+msgid "general.opens_name"
+msgstr "{name} uygulamasını açar"
+
+msgid "general.pid"
+msgstr "pid {pid}"
+
+msgid "general.ports"
+msgstr "Siteler, config.json içinde ayarlanan {http} (HTTP) ve {https} (HTTPS) portlarını kullanır, bu yüzden adreslerinde port bulunur."
+
+msgid "general.process"
+msgstr "İşlem"
+
+msgid "general.project_folders"
+msgstr "Proje klasörleri"
+
+msgid "general.project_folders_description"
+msgstr "Bir proje klasörünün içindeki her klasör <klasör>.{tld} olarak sunulur; `flock park` ile aynıdır."
+
+msgid "general.relaunch_flock"
+msgstr "Flock'u Yeniden Başlat"
+
+msgid "general.remove_project_folder_question"
+msgstr "{name} proje klasörlerinden kaldırılsın mı?"
+
+msgid "general.restart_daemon"
+msgstr "Daemon'ı Yeniden Başlat"
+
+msgid "general.restarting"
+msgstr "Yeniden başlatılıyor…"
+
+msgid "general.shows_the_flock_icon_in"
+msgstr "Oturum açtığınızda Flock simgesini sistem tepsisinde gösterir. Daemon'ın kendisi her zaman bilgisayarınızla birlikte başlar."
+
+msgid "general.sites_in_path_are_no"
+msgstr "{path} içindeki siteler artık sunulmaz. Klasöre ve içindeki projelere dokunulmaz."
+
+msgid "general.software_updater"
+msgstr "Yazılım Güncelleyici"
+
+msgid "general.startup"
+msgstr "Başlangıç"
+
+msgid "general.status"
+msgstr "Durum"
+
+msgid "general.subtitle"
+msgstr "Flock daemon'ı sitelerinizi, PHP'yi ve servisleri arka planda çalıştırır."
+
+msgid "general.title"
+msgstr "Genel"
+
+msgid "general.tld_doesnt_resolve_problem_linux"
+msgstr "*.{tld} çözümlenmiyor: {problem}. Linux'ta yedek çözüm olarak hosts dosyası kullanılmaz, bu yüzden çözümlenene kadar siteler açılmaz; `flock install` çözümlemeyi yeniden ayarlar."
+
+msgid "general.update_to"
+msgstr "{version} sürümüne güncelle"
+
+msgid "general.updates"
+msgstr "Güncellemeler"
+
+msgid "general.version"
+msgstr "Sürüm"
+
+msgid "links.install.already_installed_message"
+msgstr "Ayarlar → {pane} bölümünde bulabilirsiniz."
+
+msgid "links.install.already_installed_title"
+msgstr "{name} zaten yüklü"
+
+msgid "links.install.flock_doesnt_offer_name_version"
+msgstr "Flock {name} {version} sürümünü sunmuyor"
+
+msgid "links.install.install_message"
+msgstr "Bir bağlantı Flock'tan {name} {version} yüklemesini istedi. {purpose}"
+
+msgid "links.install.install_title"
+msgstr "{name} {version} yüklensin mi?"
+
+msgid "links.install.installing_message"
+msgstr "Ne kadarının tamamlandığını Ayarlar → {pane} bölümünde görebilirsiniz."
+
+msgid "links.install.installing_title"
+msgstr "{name} zaten yükleniyor"
+
+msgid "links.install.newer_flock"
+msgstr "Bağlantı daha yeni bir Flock için hazırlanmış olabilir. Flock'u güncelleyip yeniden deneyin."
+
+msgid "links.install.no_build"
+msgstr "Bu bilgisayar için bir derlemesi yok veya bağlantı daha yeni bir Flock için hazırlanmış."
+
+msgid "links.install.purpose_node"
+msgstr "Onu kullanan projeler, yüklenir yüklenmez node, npm ve npx'e erişir."
+
+msgid "links.install.purpose_php"
+msgstr "Onu kullanan siteler, yüklenir yüklenmez sunulur."
+
+msgid "links.install.purpose_service"
+msgstr "Siteleriniz için 127.0.0.1 üzerinde çalışır."
+
+msgid "links.install.unavailable_message"
+msgstr "Flock bunu bu platformda çalıştıramaz."
+
+msgid "links.install.unavailable_title"
+msgstr "{name} bu bilgisayarda kullanılamıyor"
+
+msgid "links.install.unknown_title"
+msgstr "Flock {name} sunmuyor"
+
+msgid "links.secure.already_secured_message"
+msgstr "https://{domain} adresinde sunuluyor."
+
+msgid "links.secure.already_secured_title"
+msgstr "{site} zaten güvenli"
+
+msgid "links.secure.secure_message"
+msgstr "Bir bağlantı, Flock'tan {domain} domain'ini güvenli hale getirmesini istedi. Site, bu bilgisayarın zaten güvendiği bir sertifika alır."
+
+msgid "links.secure.secure_title"
+msgstr "{site} HTTPS üzerinden sunulsun mu?"
+
+msgid "links.secure.unknown_message"
+msgstr "Önce Ayarlar → Siteler bölümünden siteyi ekleyin."
+
+msgid "links.secure.unknown_title"
+msgstr "Flock'ta {site} adlı bir site yok"
+
+msgid "logs.all_levels"
+msgstr "Tüm düzeyler"
+
+msgid "logs.clear"
+msgstr "Temizle"
+
+msgid "logs.clear_question"
+msgstr "{site} sitesinin logu temizlensin mi?"
+
+msgid "logs.clear_the_sites_log"
+msgstr "Sitenin logunu temizle"
+
+msgid "logs.deletes_the_laravel_log_files"
+msgstr "{site} sitesinin storage/logs klasöründeki Laravel log dosyalarını siler. Bu işlem geri alınamaz."
+
+msgid "logs.details"
+msgstr "Ayrıntılar"
+
+msgid "logs.error_and_above"
+msgstr "Hata ve üzeri"
+
+msgid "logs.info_and_above"
+msgstr "Bilgi ve üzeri"
+
+msgid "logs.laravel_log"
+msgstr "Laravel logu"
+
+msgid "logs.no_entry_matches_the_search"
+msgstr "Aramayla veya düzeyle eşleşen kayıt yok."
+
+msgid "logs.no_log_entries"
+msgstr "Log Kaydı Yok"
+
+msgid "logs.no_results"
+msgstr "Sonuç Yok"
+
+msgid "logs.pick_a_log"
+msgstr "Bir Log Seçin"
+
+msgid "logs.reload_the_log_every_2"
+msgstr "Logu her 2 saniyede bir yenile"
+
+msgid "logs.search_logs"
+msgstr "Loglarda ara"
+
+msgid "logs.service_log"
+msgstr "Servis logu"
+
+msgid "logs.show_only_entries_of_this"
+msgstr "Yalnızca bu düzeydeki ve üzerindeki kayıtları göster (site logları)"
+
+msgid "logs.storage_logs_of_site_is"
+msgstr "{site} sitesinin storage/logs klasörü boş."
+
+msgid "logs.warning_and_above"
+msgstr "Uyarı ve üzeri"
+
+msgid "mail.add_these_lines_to_your"
+msgstr "Bu satırları projenizin .env dosyasına ekleyin. MAIL_USERNAME gelen kutusunu belirler, böylece her projenin kendi gelen kutusu olur."
+
+msgid "mail.catch_your_apps_mail"
+msgstr "Uygulamanızın E-postalarını Yakalayın"
+
+msgid "mail.caught"
+msgstr "Yakalanan e-postalar"
+
+msgid "mail.could_not_load_message"
+msgstr "Mesaj Yüklenemedi"
+
+msgid "mail.could_not_load_the_raw"
+msgstr "Ham Mesaj Yüklenemedi"
+
+msgid "mail.delete_all"
+msgstr "Tümünü Sil"
+
+msgid "mail.delete_all_question"
+msgstr "Yakalanan tüm e-postalar silinsin mi?"
+
+msgid "mail.detail.cc"
+msgstr "Bilgi"
+
+msgid "mail.detail.date"
+msgstr "Tarih"
+
+msgid "mail.detail.from"
+msgstr "Kimden"
+
+msgid "mail.detail.headers"
+msgstr "Başlıklar"
+
+msgid "mail.detail.inbox"
+msgstr "Gelen kutusu"
+
+msgid "mail.detail.raw"
+msgstr "Ham"
+
+msgid "mail.detail.text"
+msgstr "Metin"
+
+msgid "mail.detail.to"
+msgstr "Kime"
+
+msgid "mail.environment_variables_title_case"
+msgstr "Ortam Değişkenleri"
+
+msgid "mail.flock_catches_every_email_your_apps"
+msgstr "Flock, uygulamalarınızın gönderdiği tüm e-postaları yakalar - hiçbiri bilgisayarınızdan dışarı çıkmaz."
+
+msgid "mail.host"
+msgstr "Sunucu"
+
+msgid "mail.message"
+msgstr "Mesaj"
+
+msgid "mail.no_html_part_title_case"
+msgstr "HTML Bölümü Yok"
+
+msgid "mail.no_mail_title_case"
+msgstr "E-posta Yok"
+
+msgid "mail.no_message_selected_title_case"
+msgstr "Mesaj Seçilmedi"
+
+msgid "mail.no_subject"
+msgstr "(konu yok)"
+
+msgid "mail.no_text_part"
+msgstr "(metin bölümü yok)"
+
+msgid "mail.open"
+msgstr "E-postaları Aç"
+
+msgid "mail.port"
+msgstr "Port"
+
+msgid "mail.refresh"
+msgstr "Yenile"
+
+msgid "mail.save_attachment"
+msgstr "Kaydet…"
+
+msgid "mail.smtp_server"
+msgstr "SMTP sunucusu"
+
+msgid "mail.username_inbox"
+msgstr "MAIL_USERNAME gelen kutusunu belirler, böylece her projenin kendi gelen kutusu olur."
+
+msgid "menu.down"
+msgstr "çalışmıyor"
+
+msgid "menu.dumps"
+msgstr "Dump'lar"
+
+msgid "menu.manage_sites"
+msgstr "Siteleri Yönet…"
+
+msgid "menu.no_sites_yet"
+msgstr "Henüz site yok"
+
+msgid "menu.open_flock"
+msgstr "Flock'u Aç"
+
+msgid "menu.quit_flock"
+msgstr "Flock'tan Çık"
+
+msgid "menu.restart"
+msgstr "Yeniden Başlat"
+
+msgid "menu.restart_flock"
+msgstr "Flock'u Yeniden Başlat"
+
+msgid "menu.set_up_flock"
+msgstr "Flock'u Kur…"
+
+msgid "menu.settings"
+msgstr "Ayarlar…"
+
+msgid "menu.start_flock"
+msgstr "Flock'u Başlat"
+
+msgid "menu.status.needs_attention"
+msgstr "Dikkat gerekiyor"
+
+msgid "menu.status.not_set_up"
+msgstr "Kurulmadı"
+
+msgid "node.downloads_node_js_new_then"
+msgstr "Node.js {new} sürümünü indirir, ardından {old} sürümünü kaldırır. Global paketler korunur."
+
+msgid "node.loading_node_js_versions"
+msgstr "Node.js sürümleri yükleniyor…"
+
+msgid "node.make_default"
+msgstr "Varsayılan Yap"
+
+msgid "node.making_node_version_the_default"
+msgstr "Node {version} varsayılan yapılıyor…"
+
+msgid "node.no_versions"
+msgstr "Gösterilecek Node.js sürümü henüz yok."
+
+msgid "node.npm_version_available"
+msgstr " (npm {version} kullanılabilir)"
+
+msgid "node.official_node_js_builds_the"
+msgstr "Resmi Node.js derlemeleri, her ana sürümün en yenisi. .nvmrc dosyasında sürüm sabitleyen bir projede node, npm veya npx çalıştırdığınızda o ana sürüm önerilir. Global paketler (npm install -g) bir Node ana sürümüne aittir ve o sürümün güncellemelerinde korunur; varsayılan sürümün global paketleri PATH'inizdedir."
+
+msgid "node.subtitle"
+msgstr "node, npm ve npx önce projenin .nvmrc / .node-version dosyasına, sonra sitenin sürümüne, sonra varsayılan sürüme uyar."
+
+msgid "node.uninstall_details"
+msgstr "Global npm paketleri de kaldırılır. Node {version} kullanan projeler ve siteler, yeniden yükleyene kadar varsayılan sürüme döner."
+
+msgid "node.uninstall_node_version"
+msgstr "Node {version} kaldırılsın mı?"
+
+msgid "node.update_npm"
+msgstr "npm'i Güncelle"
+
+msgid "node.updating_npm_to_version"
+msgstr "npm {version} sürümüne güncelleniyor…"
+
+msgid "php.downloading_percent"
+msgstr "İndiriliyor… %{percent}"
+
+msgid "php.downloads_php_version_size_mb"
+msgstr "PHP {version} sürümünü indirir ({size} MB)"
+
+msgid "php.every_installed_version_runs_its"
+msgstr "Yüklü her sürüm kendi PHP-FPM havuzunu çalıştırır. Siteler, bir sürüme sabitlenmedikçe varsayılanı kullanır."
+
+msgid "php.loading_php_versions"
+msgstr "PHP sürümleri yükleniyor…"
+
+msgid "php.no_install_log_yet"
+msgstr "Henüz yükleme logu yok."
+
+msgid "php.open_ini"
+msgstr "php.ini'yi Aç"
+
+msgid "php.php_version_install_log"
+msgstr "PHP {version} yükleme logu"
+
+msgid "php.php_version_isnt_released_yet"
+msgstr "PHP {version} henüz yayımlanmadı; çalışmayabilir. Beta kanalında sunuluyor."
+
+msgid "php.sites_that_run_on_frankenphp"
+msgstr "Bu sürümle FrankenPHP üzerinde çalışan siteler, FrankenPHP kendiliğinden yeniden indirilene kadar PHP-FPM ile sunulur."
+
+msgid "php.uninstall_details"
+msgstr "php.ini dosyası da kaldırılır. PHP {version} sürümüne sabitlenmiş siteler, başka bir sürüm seçene kadar çalışmaz."
+
+msgid "php.uninstall_franken_question"
+msgstr "PHP {version} için FrankenPHP kaldırılsın mı?"
+
+msgid "php.uninstall_php_version"
+msgstr "PHP {version} kaldırılsın mı?"
+
+msgid "php.update_to_php_version"
+msgstr "PHP {version} sürümüne güncelle"
+
+msgid "services.active"
+msgstr "Etkin"
+
+msgid "services.all"
+msgstr "Tümü"
+
+msgid "services.catalog.downloading_name"
+msgstr "{name} indiriliyor…"
+
+msgid "services.catalog.name_version_starts_with_empty"
+msgstr "{name} {version} veri olmadan başlar."
+
+msgid "services.catalog.name_version_stops_and_name"
+msgstr "{name} {version} durur ve {name} {next} etkin sürüm olur."
+
+msgid "services.catalog.name_version_stops_your_sites"
+msgstr "{name} {version} durur; bir sürüm yükleyene kadar siteleriniz {name} kullanamaz."
+
+msgid "services.catalog.name_version_uses_its_own"
+msgstr "{name} {version} kendi verilerini kullanır."
+
+msgid "services.catalog.not_available"
+msgstr "Kullanılamıyor"
+
+msgid "services.catalog.switch_to_name_version"
+msgstr "{name} {version} sürümüne geçilsin mi?"
+
+msgid "services.catalog.uninstall_and_delete_data"
+msgstr "Kaldır ve Verileri Sil"
+
+msgid "services.catalog.uninstall_keep_data"
+msgstr "Kaldır, Verileri Koru"
+
+msgid "services.catalog.uninstall_name_version"
+msgstr "{name} {version} kaldırılsın mı?"
+
+msgid "services.category.cache_queue"
+msgstr "Cache ve Kuyruk"
+
+msgid "services.category.core"
+msgstr "Çekirdek"
+
+msgid "services.category.database"
+msgstr "Veritabanı"
+
+msgid "services.category.debugging"
+msgstr "Debug"
+
+msgid "services.category.mail"
+msgstr "E-posta"
+
+msgid "services.category.search"
+msgstr "Arama"
+
+msgid "services.category.storage"
+msgstr "Depolama"
+
+msgid "services.change_port"
+msgstr "Portu Değiştir"
+
+msgid "services.connection"
+msgstr "Bağlantı"
+
+msgid "services.dns_server_isnt_running"
+msgstr "DNS sunucusu çalışmıyor"
+
+msgid "services.every_service_flock_offers_mysql"
+msgstr "Flock'un sunduğu tüm servisler: MySQL, Redis, Meilisearch ve daha fazlası"
+
+msgid "services.extensions_folder"
+msgstr "Eklentiler klasörü"
+
+msgid "services.flock_cant_run_this_service"
+msgstr "Flock bu servisi burada çalıştıramaz."
+
+msgid "services.install_failed"
+msgstr "Yükleme başarısız"
+
+msgid "services.install_log"
+msgstr "{name} yükleme logu"
+
+msgid "services.installing_failed"
+msgstr "{name} yüklenemedi"
+
+msgid "services.installing_name"
+msgstr "{name} yükleniyor…"
+
+msgid "services.keep_its_data_to_pick"
+msgstr "Yeniden yüklediğinizde kaldığınız yerden devam etmek için verilerini koruyun."
+
+msgid "services.log"
+msgstr "Log"
+
+msgid "services.more"
+msgstr "Daha fazla"
+
+msgid "services.more_services_count"
+msgstr "Diğer Servisler ({count})…"
+
+msgid "services.name_version_stops_its_data"
+msgstr "{name} {version} durur; verileri korunur ancak geri dönene kadar kullanılmaz. {then}"
+
+msgid "services.no_data"
+msgstr "Hiç veri içermiyor."
+
+msgid "services.not_available_on_linux"
+msgstr "Linux'ta kullanılamıyor"
+
+msgid "services.not_installed_its_data_is"
+msgstr "Yüklü değil · verileri korunuyor · {version}"
+
+msgid "services.not_installed_size_of_databases"
+msgstr "Yüklü değil · {size} veritabanı korunuyor"
+
+msgid "services.not_installed_version"
+msgstr "Yüklü değil · {version}"
+
+msgid "services.not_offered"
+msgstr "Sunulmuyor"
+
+msgid "services.old_to_new_available"
+msgstr "{old} → {new} kullanılabilir"
+
+msgid "services.port_between_1024_and_65535"
+msgstr "1024 ile 65535 arasında, başka bir programın kullanmadığı bir port."
+
+msgid "services.port_number"
+msgstr "Port {port}"
+
+msgid "services.port_set_by_flock_install"
+msgstr "{port} · `flock install` ile ayarlandı"
+
+msgid "services.postgres.after_installing_one_run_create"
+msgstr "Bir eklenti yükledikten sonra, onu kullanan her veritabanında CREATE EXTENSION komutunu çalıştırın."
+
+msgid "services.postgres.also_install_the_extensions_of"
+msgstr "PostgreSQL {version} eklentileri de yüklensin mi?"
+
+msgid "services.postgres.couldnt_check_for_new_releases"
+msgstr "Yeni sürümler denetlenemedi: {error}"
+
+msgid "services.postgres.extensions_for_postgresql_version_where"
+msgstr "PostgreSQL {version} için {extensions} (bu sürüm için sunulanlar). Bunu daha sonra Eklentiler… bölümünden değiştirebilirsiniz."
+
+msgid "services.postgres.extensions_of_postgresql_version_postgis"
+msgstr "PostgreSQL {version} eklentileri: PostGIS, pgRouting, pgvector, TimescaleDB ve kendi eklentileriniz"
+
+msgid "services.postgres.install_with_extensions"
+msgstr "Eklentilerle Yükle"
+
+msgid "services.postgres.installing_postgresql_version"
+msgstr "PostgreSQL {version} yükleniyor…"
+
+msgid "services.postgres.license_license"
+msgstr "Lisans: {license}"
+
+msgid "services.postgres.no_longer_updated_for_postgresql"
+msgstr "PostgreSQL {version} için artık güncellenmiyor"
+
+msgid "services.postgres.not_available_for_postgresql_version"
+msgstr "PostgreSQL {version} için kullanılamıyor"
+
+msgid "services.postgres.postgresql_only"
+msgstr "Yalnızca PostgreSQL"
+
+msgid "services.postgres.postgresql_version_extensions"
+msgstr "PostgreSQL {version} Eklentileri"
+
+msgid "services.postgres.postgresql_version_restarts_to_load"
+msgstr "Devreye girmesi için PostgreSQL {version} yeniden başlatılır"
+
+msgid "services.postgres.postgresql_version_starts_with_a"
+msgstr "PostgreSQL {version} yeni, boş bir veritabanı kümesiyle başlar."
+
+msgid "services.postgres.postgresql_version_stops_and_flock"
+msgstr "PostgreSQL {version} durur ve Flock, kendi veritabanlarına sahip PostgreSQL {next} sürümüne geçer."
+
+msgid "services.postgres.postgresql_version_stops_and_your"
+msgstr "PostgreSQL {version} durur; bir sürüm yükleyene kadar siteleriniz PostgreSQL kullanamaz."
+
+msgid "services.postgres.postgresql_version_uses_its_own"
+msgstr "PostgreSQL {version} kendi veritabanlarını kullanır."
+
+msgid "services.postgres.removes_the_postgresql_version_server"
+msgstr "PostgreSQL {version} sunucusunu kaldırır."
+
+msgid "services.postgres.side_by_side"
+msgstr "Yüklü sürümler yan yana durur. Aynı anda yalnızca biri çalışır; her biri kendi veritabanlarını korur ve bir sürüm içindeki güncellemeler de bunları korur."
+
+msgid "services.postgres.stopped"
+msgstr "Durduruldu"
+
+msgid "services.postgres.switch_to_postgresql_version"
+msgstr "PostgreSQL {version} sürümüne geçilsin mi?"
+
+msgid "services.postgres.switching_to_postgresql_version"
+msgstr "PostgreSQL {version} sürümüne geçiliyor…"
+
+msgid "services.postgres.uninstall_name"
+msgstr "{name} Eklentisini Kaldır"
+
+msgid "services.postgres.uninstall_postgresql_version"
+msgstr "PostgreSQL {version} kaldırılsın mı?"
+
+msgid "services.postgres.uninstalling_postgresql_version"
+msgstr "PostgreSQL {version} kaldırılıyor…"
+
+msgid "services.postgres.updating_postgresql_version"
+msgstr "PostgreSQL {version} güncelleniyor…"
+
+msgid "services.postgres.waiting"
+msgstr "Bekleniyor…"
+
+msgid "services.postgres.yours"
+msgstr "Sizin"
+
+msgid "services.postgresql_version_stops_its_databases"
+msgstr "PostgreSQL {version} durur; veritabanları korunur ancak geri dönene kadar kullanılamaz. {then}"
+
+msgid "services.put_a_library_in_lib"
+msgstr "Library dosyasını lib/ klasörüne, .control ve .sql dosyalarını extension/ klasörüne koyun. Flock bunları PostgreSQL {version} güncellemelerinde korur."
+
+msgid "services.reinstall"
+msgstr "{version} Sürümünü Yeniden Yükle"
+
+msgid "services.service_port"
+msgstr "{service} Portu"
+
+msgid "services.show_last_log"
+msgstr "Son Logu Göster"
+
+msgid "services.side_by_side"
+msgstr "Yüklü sürümler yan yana durur. Aynı anda yalnızca biri çalışır; her biri kendi verilerini korur ve bir sürüm içindeki güncellemeler de bunları korur."
+
+msgid "services.start"
+msgstr "Başlat"
+
+msgid "services.stop_question"
+msgstr "{service} durdurulsun mu?"
+
+msgid "services.subtitle"
+msgstr "Veritabanları, cache'ler, arama ve sitelerinizin çevresindeki araçlar. Hepsi yalnızca 127.0.0.1 üzerinde dinler."
+
+msgid "services.switch_ellipsis"
+msgstr "Buna Geç…"
+
+msgid "services.systemd_resolved_sends_every_name"
+msgstr "systemd-resolved, .{tld} altındaki tüm adları buraya yönlendirir (`flock install` ile ayarlanır); böylece bir sitenin her subdomain'i (tenant1.app.{tld}, a.b.app.{tld}) eklenmeden çalışır."
+
+msgid "services.this_flock_daemon_doesnt_know"
+msgstr "Bu Flock daemon'ı bu servisi tanımıyor. Flock'u güncelleyip yeniden deneyin."
+
+msgid "services.uninstall_and_delete_databases_size"
+msgstr "Kaldır ve Veritabanlarını Sil ({size})"
+
+msgid "services.uninstall_keep_databases"
+msgstr "Kaldır, Veritabanlarını Koru"
+
+msgid "services.update_noun"
+msgstr "Güncelleme"
+
+msgid "services.updates_keep_data"
+msgstr "Güncellemeler verilerinizi korur."
+
+msgid "services.web_down"
+msgstr "Web sunucusu kapalıyken siteler açılmaz. Nedeni logunda yazıyor olabilir; `flock restart` onu yeniden başlatır."
+
+msgid "services.web_running"
+msgstr "Caddy, her siteyi Flock'un yerel sertifika yetkilisinin sertifikalarıyla HTTPS üzerinden (https://app.{tld}) sunar; `flock install` bu yetkiliyi güvenilir olarak tanıtır."
+
+msgid "services.withdrawn"
+msgstr "Geri çekildi: {reason}"
+
+msgid "services.withdrawn_update"
+msgstr "Geri çekildi: {reason} - yenisiyle değiştirmek için güncelleyin"
+
+msgid "services.your_own_extensions"
+msgstr "Kendi eklentileriniz"
+
+msgid "services.your_sites_cant_use_service"
+msgstr "Yeniden başlatana kadar siteleriniz {service} kullanamaz; yeniden başlatmalardan sonra da durmuş kalır."
+
+msgid "settings.editor.none"
+msgstr "Bağlantı verme"
+
+msgid "settings.flock_is_not_running"
+msgstr "Flock Çalışmıyor"
+
+msgid "settings.pane.about"
+msgstr "Hakkında"
+
+msgid "settings.pane.ai"
+msgstr "Yapay Zeka"
+
+msgid "settings.pane.debugger"
+msgstr "Debugger"
+
+msgid "settings.pane.services"
+msgstr "Servisler"
+
+msgid "settings.pane.sites"
+msgstr "Siteler"
+
+msgid "settings.start_daemon_to_change"
+msgstr "Ayarlarını değiştirmek için daemon'ı başlatın."
+
+msgid "setup.as_soon_as_flock_can"
+msgid_plural "setup.as_soon_as_flock_can"
+msgstr[0] "Flock indirebilir indirmez."
+msgstr[1] "Flock indirebilir indirmez."
+
+msgid "setup.back"
+msgstr "Geri"
+
+msgid "setup.background"
+msgstr "Arka planda çalışır"
+
+msgid "setup.check_again_title_case"
+msgstr "Yeniden Denetle"
+
+msgid "setup.checking_ports"
+msgstr "Flock'un portları denetleniyor…"
+
+msgid "setup.could_not_change_the_startup"
+msgstr "Başlangıç ayarı değiştirilemedi: {error}."
+
+msgid "setup.did_not_finish"
+msgstr "Kurulum tamamlanmadı"
+
+msgid "setup.error_try_again_in_settings"
+msgstr "{error}Ayarlar → {pane} bölümünden yeniden deneyin."
+
+msgid "setup.failed"
+msgstr "Bir sorun oluştu. Ayrıntılar aşağıdaki çıktıda; yeniden deneyebilirsiniz."
+
+msgid "setup.flock_daemon_serves_your_sites_and"
+msgstr "Flock daemon'ı sitelerinizi ve servislerinizi sunar, bilgisayarınızla birlikte başlar."
+
+msgid "setup.flock_makes_them_the_default"
+msgid_plural "setup.flock_makes_them_the_default"
+msgstr[0] "Flock bunu sitelerinizin ve terminalin varsayılanı yapar."
+msgstr[1] "Flock bunları sitelerinizin ve terminalin varsayılanı yapar."
+
+msgid "setup.flock_needs_these_ports_and"
+msgstr "Flock'un bu portları ve *.{tld} domain'lerini tek başına kullanması gerekir, ancak şu anda başka programlar kullanıyor. Birlikte çalıştırılırlarsa ikisi de çalışmaz."
+
+msgid "setup.flock_runs_your_laravel_sites_php"
+msgstr "Flock; Laravel sitelerinizi, PHP'yi, e-posta ve veritabanı servislerini bu bilgisayarda çalıştırır. Kurulum kısa sürer:"
+
+msgid "setup.flock_stops_and_is_removed"
+msgstr "Flock durdurulur ve PATH'inizden kaldırılır; PHP ve Node.js sürümleri, sertifikaları, logları ve cache'leri de silinir. Linux, *.test DNS kurulumunu ve Flock'un güvenilen sertifikasını kaldırmak için parolanızı ister.\n\nSitelerinizin ayarları ve veritabanları {folder} içinde kalır; onları da silmediğiniz sürece, yeniden yüklediğinizde kaldığınız yerden devam edersiniz."
+
+msgid "setup.flock_was_uninstalled_remove_the"
+msgstr "Flock kaldırıldı. Uygulamayı paket yöneticinizle kaldırın (sudo apt remove flockphp veya sudo dnf remove flockphp). Yeni bir terminal açın: Flock artık PATH'inizde değil."
+
+msgid "setup.flock_wont_open_at_login"
+msgstr "Flock oturum açılırken açılmayacak"
+
+msgid "setup.installing"
+msgstr "{names} yükleniyor…"
+
+msgid "setup.link_project"
+msgstr "Bir proje bağlayın"
+
+msgid "setup.link_project_description"
+msgstr "Bir Laravel projesinde `flock link` çalıştırın: site http://<klasör>.test adresinde açılır. `flock secure` HTTPS ekler."
+
+msgid "setup.linux_asks_for_your_password"
+msgstr "Linux birazdan parolanızı isteyecek."
+
+msgid "setup.linux_asks_for_your_password_once"
+msgstr "Linux parolanızı bir kez ister: arka plan hizmetini başlatmak, *.test adreslerini Flock üzerinden çözümlemek ve Flock'un sertifikasına sistemde ve tarayıcılarınızda güvenmek için."
+
+msgid "setup.name_couldnt_be_installed"
+msgstr "{name} yüklenemedi"
+
+msgid "setup.names_are_installed"
+msgstr "{names} yüklü"
+
+msgid "setup.new_terminal"
+msgstr "Yeni bir terminal açın"
+
+msgid "setup.new_terminal_description"
+msgstr "Önceden açık olan terminallerde eski PATH hâlâ geçerlidir."
+
+msgid "setup.next_steps"
+msgstr "Sonraki adımlar"
+
+msgid "setup.open_flock_at_login"
+msgstr "Oturum açılırken Flock'u aç"
+
+msgid "setup.open_flock_when_i_log"
+msgstr "Oturum açtığımda Flock'u aç"
+
+msgid "setup.open_settings"
+msgstr "Ayarlar'ı Aç"
+
+msgid "setup.password_prompt_was_cancelled_flock"
+msgstr "Parola istemi iptal edildi. Flock çalışır, ancak siz izin verene kadar *.test siteleri çözümlenmez ve HTTPS'e güvenilmez."
+
+msgid "setup.problem_settings_to_general_has"
+msgstr "{problem} Ayarlar → Genel'den de değiştirebilirsiniz."
+
+msgid "setup.ready"
+msgstr "Flock hazır"
+
+msgid "setup.setting_up"
+msgstr "Flock kuruluyor…"
+
+msgid "setup.star"
+msgstr "Flock ücretsiz ve açık kaynaklıdır. Beğendiyseniz [GitHub'da vereceğiniz bir yıldız](https://github.com/flock-php/flock) başkalarının da Flock'u bulmasına yardımcı olur."
+
+msgid "setup.stop_other_web_servers_first"
+msgstr "Önce diğer web sunucularını durdurun"
+
+msgid "setup.terminal_description"
+msgstr "Flock'un sürümleri PATH'inizde ilk sırada yer alır. Kurulumdan sonra yeni bir terminal açın."
+
+msgid "setup.terminal_title"
+msgstr "Terminalinizde php, composer ve node"
+
+msgid "setup.theyre_the_defaults_for_your"
+msgstr "Sitelerinizin ve terminalin varsayılanlarıdır."
+
+msgid "setup.trusted_https_title"
+msgstr "Güvenilir HTTPS'li *.test siteleri"
+
+msgid "setup.try_again"
+msgstr "Yeniden Dene"
+
+msgid "setup.uninstalling_didnt_finish_the_output"
+msgstr "Kaldırma tamamlanmadı. Ayrıntılar aşağıdaki çıktıda; yeniden deneyebilirsiniz."
+
+msgid "setup.waiting_to_install_names"
+msgstr "{names} yüklenmeyi bekliyor"
+
+msgid "setup.welcome"
+msgstr "Flock'a Hoş Geldiniz"
+
+msgid "setup.window_title"
+msgstr "Flock'u Kur"
+
+msgid "sites.add_domain"
+msgstr "Domain Ekle…"
+
+msgid "sites.add_domain_title"
+msgstr "{site} sitesine domain ekle"
+
+msgid "sites.add_proxy"
+msgstr "Proxy Ekle…"
+
+msgid "sites.add_proxy_title"
+msgstr "Proxy ekle"
+
+msgid "sites.add_site"
+msgstr "Site Ekle…"
+
+msgid "sites.add_site_linux"
+msgstr "Site Ekle"
+
+msgid "sites.add_to_composer_json"
+msgstr "composer.json'a Ekle"
+
+msgid "sites.adding"
+msgstr "Ekleniyor…"
+
+msgid "sites.alias"
+msgstr "{domain} (takma ad)"
+
+msgid "sites.boost_add"
+msgstr "Flock'u yönergelerine ekle…"
+
+msgid "sites.boost_add_question"
+msgstr "Flock, {site} sitesinin Boost yönergelerine eklensin mi?"
+
+msgid "sites.boost_missing"
+msgstr "Proje Laravel Boost kullanıyor. Flock'u yönergelerine eklemek, yapay zeka ajanlarına uygulamayı Flock'un sunduğunu ve PHP sürümünü onun seçtiğini bildirir."
+
+msgid "sites.boost_outdated"
+msgstr "Projenin Boost yönergelerindeki Flock yönergesi güncel değil."
+
+msgid "sites.boost_update"
+msgstr "Güncelle…"
+
+msgid "sites.boost_update_question"
+msgstr "{site} sitesindeki Flock yönergesi güncellensin mi?"
+
+msgid "sites.branch_pins_it_in_file"
+msgstr "Branch bunu {file} dosyasında sabitler"
+
+msgid "sites.change"
+msgstr "Değiştir…"
+
+msgid "sites.change_action"
+msgstr "Değiştir"
+
+msgid "sites.change_its_php_and_node"
+msgstr "PHP ve Node.js sürümlerini, HTTPS'i ve belge kök dizinini sitede değiştirin."
+
+msgid "sites.change_upstream_details"
+msgstr "Yalnızca port verilirse 127.0.0.1 kullanılır; diğer durumlar için host ve port (localhost:5173) veya bir URL (https://127.0.0.1:8443) girin."
+
+msgid "sites.change_upstream_title"
+msgstr "{proxy} proxy'sinin upstream'ini değiştir"
+
+msgid "sites.choose_folder"
+msgstr "Klasör Seç…"
+
+msgid "sites.choose_folder_in_project_details"
+msgstr "{folder}, {project} içinde değil. Belge kök dizini projedeki bir klasör olmalıdır."
+
+msgid "sites.choose_folder_linux"
+msgstr "Klasör Seç"
+
+msgid "sites.choose_the_folder_with_the_apps"
+msgstr "{site} içinde uygulamanın index.php dosyasının bulunduğu klasörü seçin"
+
+msgid "sites.classic"
+msgstr "Klasik"
+
+msgid "sites.command"
+msgstr "Komut"
+
+msgid "sites.create_one_here_with_git"
+msgstr "Burada git ile veya ajan uygulamanızla bir tane oluşturun."
+
+msgid "sites.database_of_its_own_gets"
+msgstr "Kendine ait bir veritabanında branch'in migration'ları çalıştırılır."
+
+msgid "sites.default"
+msgstr "Varsayılan"
+
+msgid "sites.default_tool_version"
+msgstr "Varsayılan ({tool} {version})"
+
+msgid "sites.dev_server"
+msgstr "Geliştirme sunucusu"
+
+msgid "sites.document_root"
+msgstr "Belge kök dizini"
+
+msgid "sites.document_root_is_the_folder"
+msgstr "Belge kök dizini, Flock'un siteyi sunduğu klasördür. Burada seçilen yalnızca bu makinede geçerlidir; herkes için .flockrc dosyasına yazmak üzere sabitleyin."
+
+msgid "sites.domain_is_no_longer_served"
+msgstr "{domain} artık {site} tarafından sunulmuyor."
+
+msgid "sites.downloading_frankenphp"
+msgstr "PHP {version} için FrankenPHP indiriliyor…"
+
+msgid "sites.e_g_my_app_to"
+msgstr "ör. my-app → my-app.{tld}"
+
+msgid "sites.each_git_worktree_of_site"
+msgstr "{site} sitesinin her git worktree'si, kendi bağımlılıkları ve .env dosyasıyla <branch>.{domain} adresinde sunulur."
+
+msgid "sites.every_request_passes_to_the"
+msgstr "Her istek, Host başlığıyla birlikte upstream'e iletilir; WebSocket yükseltmeleri (hot reload) dahil. Sunucu yanıt verene kadar {domain} bunu belirten bir sayfa gösterir."
+
+msgid "sites.every_subdomain_up_to_n"
+msgid_plural "sites.every_subdomain_up_to_n"
+msgstr[0] "Sitenin altındaki {n} düzeye kadar her subdomain zaten çalışır. Takma ad için {site}-2.{tld} gibi tam bir ad ekleyin; veya burada listelenmesi ve wildcard DNS olmayan Windows makinelerinde de çözümlenmesi için bir subdomain (tenant1, a.b) ekleyin."
+msgstr[1] "Sitenin altındaki {n} düzeye kadar her subdomain zaten çalışır. Takma ad için {site}-2.{tld} gibi tam bir ad ekleyin; veya burada listelenmesi ve wildcard DNS olmayan Windows makinelerinde de çözümlenmesi için bir subdomain (tenant1, a.b) ekleyin."
+
+msgid "sites.extension_required_by"
+msgstr "{packages} gerektiriyor"
+
+msgid "sites.extension_used"
+msgstr "Gerekli değil, ancak kullanılıyor: {hint}"
+
+msgid "sites.extensions_footnote"
+msgstr "Bir eklentiyi composer.json'da zorunlu kılarsanız, eklentinin bulunmadığı bir sunucuda uygulamanın hata vermesi yerine composer install çalışmayı reddeder."
+
+msgid "sites.extensions_laravel"
+msgstr "PHP {version} · Laravel uygulaması"
+
+msgid "sites.extensions_none"
+msgstr "Proje hiçbir PHP eklentisi gerektirmiyor."
+
+msgid "sites.extensions_title"
+msgstr "{site} sitesinin PHP eklentileri"
+
+msgid "sites.extra_domains_subdomains_and_aliases"
+msgstr "Ek domain'ler: subdomain'ler ve takma adlar"
+
+msgid "sites.flock_copies_site_s_database"
+msgstr "Flock, {site} sitesinin veritabanını kopyalar ve branch'in migration'larını üzerinde çalıştırır."
+
+msgid "sites.flock_hasnt_set_this_worktree"
+msgstr "Flock bu worktree'yi kurmadı"
+
+msgid "sites.flock_runs_the_projects_dev"
+msgstr "Flock, site ziyaret edildiğinde projenin dev betiğini çalıştırır ve 30 dakika ziyaret olmazsa durdurur."
+
+msgid "sites.flock_stops_serving_domain_the"
+msgstr "Flock {domain} domain'ini sunmayı bırakır. {path} içindeki projeye dokunulmaz."
+
+msgid "sites.flocks_php_version_doesnt_include"
+msgstr " - Flock'un PHP {version} sürümünde yok"
+
+msgid "sites.frankenphp_needs_php_8_2"
+msgstr "FrankenPHP, PHP 8.2 veya daha yenisini gerektirir. Xdebug isteyen istekler yine PHP-FPM'e gider."
+
+msgid "sites.frankenphp_needs_php_8_2_or"
+msgstr "FrankenPHP, PHP 8.2 veya daha yenisini gerektirir. Xdebug isteyen istekler yine PHP-FPM'e gider. Worker modu için projeye Laravel Octane yükleyin (composer require laravel/octane)."
+
+msgid "sites.frankenphp_running"
+msgstr "FrankenPHP {version}, PHP {php} ile çalışıyor"
+
+msgid "sites.give_flock_the_commands_that"
+msgstr "Flock'a sunucuyu başlatan ve durduran komutları verin; böylece buradan başlatabilirsiniz."
+
+msgid "sites.give_worktree_a_copy_of"
+msgstr "{worktree} için veritabanının bir kopyası oluşturulsun mu?"
+
+msgid "sites.give_worktree_a_fresh_database"
+msgstr "{worktree} için yeni bir veritabanı oluşturulsun mu?"
+
+msgid "sites.n3000_host_port_or_url"
+msgstr "3000, host:port veya URL. Yalnızca port verilirse 127.0.0.1 kullanılır."
+
+msgid "sites.n_worktrees"
+msgid_plural "sites.n_worktrees"
+msgstr[0] "{n} worktree"
+msgstr[1] "{n} worktree"
+
+msgid "sites.no_public_www_web_or"
+msgstr "index.php içeren public/, www/, web/ veya webroot/ bulunamadı; bu yüzden Flock site yerine bir sayfa gösterir. Uygulamanın index.php dosyasının bulunduğu klasörü seçin."
+
+msgid "sites.no_sites"
+msgstr "Site yok"
+
+msgid "sites.no_sites_description"
+msgstr "Buradan tek bir site ekleyin veya Genel'den bir proje klasörü ekleyin."
+
+msgid "sites.no_worktrees"
+msgstr "Worktree yok"
+
+msgid "sites.node_version_is_isolated_here"
+msgstr "Node {version} burada izole edildi; proje {file} dosyasında {pinned} sürümünü sabitliyor."
+
+msgid "sites.node_wins"
+msgstr ".flockrc'deki Node {pinned}, {other} değerine üstün gelir."
+
+msgid "sites.nothing_answers_yet"
+msgstr "{upstream} adresinde henüz yanıt veren yok."
+
+msgid "sites.open_in_the_browser"
+msgstr "Tarayıcıda aç"
+
+msgid "sites.open_log"
+msgstr "Logu Aç"
+
+msgid "sites.open_the_folder"
+msgstr "Klasörü aç"
+
+msgid "sites.open_the_project_folder"
+msgstr "Proje klasörünü aç"
+
+msgid "sites.output"
+msgstr "Çıktı"
+
+msgid "sites.percent"
+msgstr "%{percent}"
+
+msgid "sites.php_extensions"
+msgstr "PHP eklentileri"
+
+msgid "sites.php_fpm_serves_the_site"
+msgstr "Bu sırada site PHP-FPM ile sunulur."
+
+msgid "sites.php_fpm_serves_the_site_until"
+msgstr "Hazır olana kadar site PHP-FPM ile sunulur."
+
+msgid "sites.php_version_is_isolated_here"
+msgstr "PHP {version} burada izole edildi; proje {file} dosyasında {pinned} sürümünü sabitliyor."
+
+msgid "sites.pin"
+msgstr "Sabitle"
+
+msgid "sites.pin_menu_tooltip"
+msgstr "Sürümleri ve belge kök dizinini projeye sabitle"
+
+msgid "sites.pin_node_item"
+msgstr "Node {version} Sürümünü Projeye Sabitle…"
+
+msgid "sites.pin_node_question"
+msgstr "Node {version} sürümü {site} sitesine sabitlensin mi?"
+
+msgid "sites.pin_php_item"
+msgstr "PHP {version} Sürümünü Projeye Sabitle…"
+
+msgid "sites.pin_php_question"
+msgstr "PHP {version} sürümü {site} sitesine sabitlensin mi?"
+
+msgid "sites.pin_root_item"
+msgstr "Belge Kök Dizinini ({root}) Projeye Sabitle…"
+
+msgid "sites.pin_root_question"
+msgstr "Belge kök dizini {root}, {site} sitesine sabitlensin mi?"
+
+msgid "sites.project_folder_badge"
+msgstr "Proje klasörü"
+
+msgid "sites.project_pins_tool_version_in"
+msgstr "Proje, {file} dosyasında {tool} {version} sürümünü sabitliyor."
+
+msgid "sites.proxies"
+msgstr "Proxy'ler"
+
+msgid "sites.proxy"
+msgstr "Proxy"
+
+msgid "sites.proxy.add_commands"
+msgstr "Komut Ekle…"
+
+msgid "sites.proxy.commands"
+msgstr "Komutlar"
+
+msgid "sites.proxy.commands_optional"
+msgstr "Komutlar (isteğe bağlı)"
+
+msgid "sites.proxy.commands_title"
+msgstr "{proxy} komutları"
+
+msgid "sites.proxy.not_running"
+msgstr "Çalışmıyor"
+
+msgid "sites.proxy.remove_commands"
+msgstr "Komutları Kaldır"
+
+msgid "sites.proxy.running"
+msgstr "Çalışıyor"
+
+msgid "sites.proxy.stop_command_hint"
+msgstr "Yalnızca arka planda çalışan sunucular için (docker compose up -d gibi)."
+
+msgid "sites.proxy_footnote_no_commands"
+msgstr "Her istek, Host başlığıyla birlikte upstream'e iletilir; WebSocket yükseltmeleri (hot reload) dahil. Flock sunucuyu başlatmaz; her zamanki gibi başlatın ya da aşağıdan komut verin. Upstream yanıt verene kadar {domain} bunu belirten bir sayfa gösterir."
+
+msgid "sites.proxy_name"
+msgstr "Ad"
+
+msgid "sites.qr_code_of_url"
+msgstr "{url} adresinin QR kodu"
+
+msgid "sites.rebuild_assets"
+msgstr "Asset'leri Yeniden Derle"
+
+msgid "sites.remove_proxy"
+msgstr "Proxy'yi kaldır"
+
+msgid "sites.remove_proxy_details"
+msgstr "Flock {domain} domain'ini sunmayı bırakır. {upstream} adresindeki sunucu çalışmaya devam eder."
+
+msgid "sites.remove_site"
+msgstr "Siteyi kaldır"
+
+msgid "sites.removes_root_from_flockrc_in"
+msgstr "{path} içindeki .flockrc dosyasından root= satırını kaldırır. Flock bundan sonra belge kök dizinini kendisi bulur. Bu işlem projenizdeki dosyaları değiştirir."
+
+msgid "sites.removes_the_node_js_version"
+msgstr "Node.js sürümünü .flockrc dosyasından kaldırır ve {path} içindeki .nvmrc / .node-version dosyasını siler. Site bundan sonra Flock'un varsayılan Node.js sürümünü kullanır. Bu işlem projenizdeki dosyaları değiştirir."
+
+msgid "sites.removes_the_php_version_from"
+msgstr "PHP sürümünü {file} dosyasından kaldırır. Site bundan sonra Flock'un varsayılan PHP sürümünü kullanır. Bu işlem projenizdeki dosyaları değiştirir."
+
+msgid "sites.require"
+msgstr "Zorunlu Kıl"
+
+msgid "sites.require_ext_name_in_composer"
+msgstr "ext-{name}, composer.json'da zorunlu kılınsın mı?"
+
+msgid "sites.require_tooltip"
+msgstr "{path} içinde composer require ext-{name}:* komutunu çalıştırır; bu, composer.json ve composer.lock dosyalarını değiştirir. Bunları projeyle birlikte commit edin."
+
+msgid "sites.restart_frankenphp_tooltip"
+msgstr "FrankenPHP'yi yeniden başlat, örneğin Octane worker'ları değişen kodu yüklesin diye"
+
+msgid "sites.reverb.env_needs"
+msgstr "Uygulamanın .env dosyasında şunlar gerekli:"
+
+msgid "sites.reverb.explanation"
+msgstr "Flock, site için php artisan reverb:start komutunu çalıştırır. Tarayıcılar ona {address} adresinden, kendine ait bir port veya sertifika olmadan ulaşır."
+
+msgid "sites.reverb.footnote"
+msgstr "/app altındaki WebSocket bağlantıları ve /apps altındaki Laravel yayınları Reverb'e gider; diğer tüm istekler uygulamada kalır. Flock projenin .env dosyasını değiştirmez. Değiştirdikten sonra ön yüzü yeniden derleyin."
+
+msgid "sites.reverb.install"
+msgstr "Çalıştırmak için Laravel Reverb'i projeye yükleyin (php artisan install:broadcasting --reverb)."
+
+msgid "sites.reverb.restart_tooltip"
+msgstr "Reverb'i yeniden başlat, örneğin değişen kodu yüklesin diye"
+
+msgid "sites.reverb.run"
+msgstr "Çalıştır"
+
+msgid "sites.reverb.running_at"
+msgstr "{address} adresinde çalışıyor"
+
+msgid "sites.reverb.title"
+msgstr "Reverb"
+
+msgid "sites.root_automatic"
+msgstr "Otomatik"
+
+msgid "sites.root_automatic_found"
+msgstr "Otomatik ({root})"
+
+msgid "sites.root_automatic_none"
+msgstr "Otomatik (bulunamadı)"
+
+msgid "sites.root_missing"
+msgstr "Uygulamanın index.php dosyasının bulunduğu klasörü seçin veya {root} klasörünü oluşturun."
+
+msgid "sites.root_no_index"
+msgstr "{root} içinde index.php veya index.html yok; olana kadar Flock site yerine bir sayfa gösterir."
+
+msgid "sites.root_shadowed"
+msgstr "{root} burada ayarlandı; proje .flockrc dosyasında {pinned} değerini ayarlıyor."
+
+msgid "sites.runs_npm_run_build_again"
+msgstr "npm run build komutunu yeniden çalıştırır; böylece ziyaretçiler sayfayı yenilediklerinde son değişikliklerinizi görür"
+
+msgid "sites.runs_on"
+msgstr "Çalıştıran"
+
+msgid "sites.secure"
+msgstr "Güvenli Hale Getir"
+
+msgid "sites.serve_a_server_of_its"
+msgstr "Kendi başına çalışan bir sunucuyu (ör. bir panel, nesne deposu, Docker konteyneri veya Go ya da Python uygulaması) bir .{tld} domain'inde sun"
+
+msgid "sites.served_over_https"
+msgstr "HTTPS üzerinden sunuluyor"
+
+msgid "sites.server"
+msgstr "Sunucu"
+
+msgid "sites.server.choose"
+msgstr "Seç"
+
+msgid "sites.server.failed"
+msgstr "Başarısız"
+
+msgid "sites.server.failed_because"
+msgstr "Başarısız: {problem}"
+
+msgid "sites.server.running_on_port"
+msgstr "{port} portunda çalışıyor"
+
+msgid "sites.server.sleeping"
+msgstr "Uyuyor · sonraki ziyarette başlar"
+
+msgid "sites.server.stopped_because"
+msgstr "Durdu: {problem}"
+
+msgid "sites.server.stopping"
+msgstr "Durduruluyor…"
+
+msgid "sites.setting_it_up_copies_dependencies"
+msgstr "Kurulum, bağımlılıkları ve .env dosyasını kopyalar, yüklemeleri yapar ve projenin hook'larını çalıştırır."
+
+msgid "sites.share.allow_explanation"
+msgstr "E-posta adresi listelemezseniz bağlantıya sahip herkes siteyi açabilir; listelerseniz Cloudflare bu adreslere e-postayla bir kod gönderir. Bağlantı 8 saat sonra veya paylaşımı durdurduğunuzda çalışmayı bırakır."
+
+msgid "sites.share.allow_header"
+msgstr "Yalnızca bu kişiler (isteğe bağlı)"
+
+msgid "sites.share.building"
+msgstr "Asset'ler derleniyor…"
+
+msgid "sites.share.debug_on"
+msgstr "Debug modu açık: ziyaretçiler stack trace'leri görür"
+
+msgid "sites.share.dismiss"
+msgstr "Kapat"
+
+msgid "sites.share.ends_at"
+msgstr "Bitiş: {time}"
+
+msgid "sites.share.explanation"
+msgstr "Devam eden işi önizlemek için siteyi herkese açık geçici bir adreste gösterir; asla canlı ortam için kullanmayın. Ziyaretçiler debug sayfalarını, dump'ları veya geliştirici araçlarını görmez."
+
+msgid "sites.share.only_for"
+msgstr "Yalnızca: {emails}"
+
+msgid "sites.share.rebuilding"
+msgstr "Yeniden derleniyor…"
+
+msgid "sites.share.share"
+msgstr "Paylaş"
+
+msgid "sites.share.share_ellipsis"
+msgstr "Paylaş…"
+
+msgid "sites.share.show_errors"
+msgstr "Hata ayrıntılarını ziyaretçilere göster"
+
+msgid "sites.share.show_errors_explanation"
+msgstr "Bu paylaşım için uygulamanın debug modunu açar; ziyaretçiler stack trace'leri görür. Yalnızca güvendiğiniz kişiler için."
+
+msgid "sites.share.starting"
+msgstr "Tünel başlatılıyor…"
+
+msgid "sites.share.stop"
+msgstr "Durdur"
+
+msgid "sites.share.title"
+msgstr "{site} sitesini paylaş"
+
+msgid "sites.shared"
+msgstr "Paylaşılıyor"
+
+msgid "sites.sharing_failed"
+msgstr "Paylaşım başarısız oldu."
+
+msgid "sites.show_log"
+msgstr "Logu Göster"
+
+msgid "sites.site"
+msgstr "Site"
+
+msgid "sites.stop_sharing"
+msgstr "Paylaşımı Durdur"
+
+msgid "sites.subdomains_only_here"
+msgstr "Subdomain'ler yalnızca burada eklediğinizde çalışır: {problem}."
+
+msgid "sites.subtitle"
+msgstr "Tek tek eklediğiniz siteler ve proje klasörlerinizin içindeki her klasör."
+
+msgid "sites.tenant1_a_b_or_site"
+msgstr "tenant1, a.b veya {site}-2.{tld}"
+
+msgid "sites.tool_version_is_set_for"
+msgstr "{tool} {version}, bu site için bu makinede ayarlandı (izole)."
+
+msgid "sites.type"
+msgstr "Tür"
+
+msgid "sites.unpin"
+msgstr "Sabitlemeyi Kaldır"
+
+msgid "sites.unpin_node_item"
+msgstr "Node Sabitlemesini Kaldır ({file})…"
+
+msgid "sites.unpin_node_question"
+msgstr "{site} sitesinden Node sabitlemesi kaldırılsın mı?"
+
+msgid "sites.unpin_php_item"
+msgstr "PHP Sabitlemesini Kaldır ({file})…"
+
+msgid "sites.unpin_php_question"
+msgstr "{site} sitesinden PHP sabitlemesi kaldırılsın mı?"
+
+msgid "sites.unpin_root_item"
+msgstr "Belge Kök Dizini Sabitlemesini Kaldır (.flockrc)…"
+
+msgid "sites.unpin_root_question"
+msgstr "{site} sitesinden belge kök dizini sabitlemesi kaldırılsın mı?"
+
+msgid "sites.upstream"
+msgstr "Upstream"
+
+msgid "sites.upstream_placeholder"
+msgstr "Port, host:port veya URL"
+
+msgid "sites.url"
+msgstr "URL"
+
+msgid "sites.use_file"
+msgstr "{file} kullan"
+
+msgid "sites.use_file_tool_version"
+msgstr "{file} kullan ({tool} {version})"
+
+msgid "sites.use_flockrc"
+msgstr ".flockrc kullan"
+
+msgid "sites.use_flockrc_root"
+msgstr ".flockrc kullan ({root})"
+
+msgid "sites.uses_site_s_settings"
+msgstr "{site} sitesinin ayarlarını kullanır"
+
+msgid "sites.version_default"
+msgstr "Site, Flock'un varsayılan {tool} sürümünü kullanır."
+
+msgid "sites.version_picked_here_applies_on_this_machine"
+msgstr "Burada seçilen sürüm yalnızca bu makinede geçerlidir. Projede çalışan herkes için ayarlamak üzere sabitleyin: PHP .flockrc dosyasına, Node.js .nvmrc dosyasına yazılır."
+
+msgid "sites.wildcard_subdomains_dont_work_here"
+msgstr "Wildcard subdomain'ler burada çalışmıyor ({problem}); bu yüzden kullandığınız her subdomain'i ekleyin (tenant1, a.b). Tam bir ad yazarsanız takma ad eklenir."
+
+msgid "sites.worker_mode"
+msgstr " · worker modu"
+
+msgid "sites.worktree_then_uses_site_s"
+msgstr "{worktree} bundan sonra {site} sitesinin veritabanını kullanır."
+
+msgid "sites.writes_ai_guidelines_flock_md"
+msgstr "{path} içine .ai/guidelines/flock.md dosyasını yazar ve php artisan boost:update komutunu çalıştırır; böylece yapay zeka ajanları uygulamayı Flock'un sunduğunu ve PHP sürümünü onun seçtiğini bilir. Dosyayı .ai/guidelines içindeki diğerleriyle birlikte commit edin. Bu işlem projenizdeki dosyaları değiştirir."
+
+msgid "sites.writes_php_version_to_flockrc"
+msgstr "{path} içindeki .flockrc dosyasına php={version} yazar. Dosyayı commit edin; bu projede Flock kullanan herkes PHP {version} kullanır. Bu işlem projenizdeki bir dosyayı değiştirir."
+
+msgid "sites.writes_root_value_to_flockrc"
+msgstr "{path} içindeki .flockrc dosyasına root={value} yazar. Dosyayı commit edin; bu projede Flock kullanan herkes siteyi {root} klasöründen sunar. Bu işlem projenizdeki bir dosyayı değiştirir."
+
+msgid "sites.writes_version_to_file_in"
+msgstr "{path} içindeki {file} dosyasına {version} yazar. Dosyayı commit edin; Flock, nvm ve diğer Node araçları bu proje için Node {version} kullanır. Bu işlem projenizdeki bir dosyayı değiştirir."
+
+msgid "versions.check_now"
+msgstr "Şimdi denetle"
+
+msgid "versions.checked_just_now"
+msgstr "Az önce denetlendi"
+
+msgid "versions.checked_n_days_ago"
+msgid_plural "versions.checked_n_days_ago"
+msgstr[0] "{n} gün önce denetlendi"
+msgstr[1] "{n} gün önce denetlendi"
+
+msgid "versions.checked_n_hours_ago"
+msgid_plural "versions.checked_n_hours_ago"
+msgstr[0] "Bir saat önce denetlendi"
+msgstr[1] "{n} saat önce denetlendi"
+
+msgid "versions.checked_n_minutes_ago"
+msgid_plural "versions.checked_n_minutes_ago"
+msgstr[0] "Bir dakika önce denetlendi"
+msgstr[1] "{n} dakika önce denetlendi"
+
+msgid "versions.checking"
+msgstr "Denetleniyor…"
+
+msgid "versions.could_not_check_updates"
+msgstr "Güncellemeler denetlenemedi: {error}"
+
+msgid "versions.download_failed"
+msgstr "İndirme başarısız oldu."
+
+msgid "versions.downloading_node"
+msgstr "Node.js {version} indiriliyor…"
+
+msgid "versions.franken_not_installed"
+msgstr "Yüklü değil · bir site kullandığında kendiliğinden indirilir"
+
+msgid "versions.new_build"
+msgstr "Yeni bir derleme var"
+
+msgid "versions.not_checked"
+msgstr "Henüz denetlenmedi"
+
+msgid "versions.prerelease"
+msgstr "Ön sürüm"
+
+msgid "versions.show_last_install_log"
+msgstr "Son Yükleme Logunu Göster"
+
+msgid "versions.up_to_date"
+msgstr "Güncel"
+
+msgid "versions.update_available"
+msgstr "Güncelleme var"
+
+msgid "versions.versions"
+msgstr "Sürümler"
+
+msgid "worktrees.branch_stays"
+msgstr "{branch} branch'i kalır."
+
+msgid "worktrees.could_not_remove"
+msgstr "{name} kaldırılamadı"
+
+msgid "worktrees.create"
+msgstr "Oluştur"
+
+msgid "worktrees.database_copy"
+msgstr "Sitenin veritabanının kopyası"
+
+msgid "worktrees.database_fresh"
+msgstr "Yeni, boş bir veritabanı"
+
+msgid "worktrees.database_shared"
+msgstr "Sitenin veritabanı"
+
+msgid "worktrees.detached_head"
+msgstr "Yok (detached HEAD)"
+
+msgid "worktrees.drop_question"
+msgstr "{database} silinsin mi?"
+
+msgid "worktrees.give_fresh_details"
+msgstr "Flock boş bir veritabanı oluşturur ve migration'ları çalıştırır."
+
+msgid "worktrees.its_database_database_is_dropped"
+msgstr "{database} veritabanı silinir."
+
+msgid "worktrees.job.ready"
+msgstr "Hazır"
+
+msgid "worktrees.job.ready_at"
+msgstr "Hazır: {url}"
+
+msgid "worktrees.job.see_log"
+msgstr "logu gör"
+
+msgid "worktrees.job.setup_failed"
+msgstr "Kurulum başarısız: {error}"
+
+msgid "worktrees.job.starting"
+msgstr "Başlatılıyor…"
+
+msgid "worktrees.new"
+msgstr "Yeni Worktree…"
+
+msgid "worktrees.new.branch"
+msgstr "Branch"
+
+msgid "worktrees.new.branch_placeholder"
+msgstr "brave-otter gibi bir ad"
+
+msgid "worktrees.new.current_branch"
+msgstr "{name} (geçerli)"
+
+msgid "worktrees.new.current_commit"
+msgstr "Geçerli commit"
+
+msgid "worktrees.new.database"
+msgstr "Veritabanı"
+
+msgid "worktrees.new.default_branch"
+msgstr "{name} (varsayılan)"
+
+msgid "worktrees.new.explain_existing"
+msgstr "{branch} branch'i zaten var, bu yüzden worktree bu branch'i checkout eder. Flock worktree'yi {site} sitesinin yanında oluşturur, kurar ve {address} adresinde sunar."
+
+msgid "worktrees.new.explain_new"
+msgstr "Flock worktree'yi {site} sitesinin yanında, yeni {branch} branch'i üzerinde oluşturur, kurar ve {address} adresinde sunar."
+
+msgid "worktrees.new.explain_unnamed"
+msgstr "Flock worktree'yi {site} sitesinin yanında, adını kendisinin verdiği yeni bir branch üzerinde oluşturur, kurar ve kendi adresinde sunar."
+
+msgid "worktrees.new.start_from"
+msgstr "Başlangıç noktası"
+
+msgid "worktrees.new_title"
+msgstr "{site} için Yeni Worktree"
+
+msgid "worktrees.own_database"
+msgstr "kendi veritabanı"
+
+msgid "worktrees.own_database_tooltip"
+msgstr "Kendi veritabanı: {database}"
+
+msgid "worktrees.project_default"
+msgstr "Proje varsayılanı"
+
+msgid "worktrees.remove"
+msgstr "Worktree'yi kaldır"
+
+msgid "worktrees.remove_anyway"
+msgstr "Yine de Kaldır"
+
+msgid "worktrees.remove_details"
+msgstr "Flock before_delete hook'unu çalıştırır ve {path} klasörünü siler."
+
+msgid "worktrees.remove_details_database"
+msgstr "Flock before_delete hook'unu çalıştırır; {path} klasörünü ve {database} veritabanını siler."
+
+msgid "worktrees.run_again"
+msgstr "Kurulumu Yeniden Çalıştır"
+
+msgid "worktrees.see_log"
+msgstr "logunu gör"
+
+msgid "worktrees.set_up_action"
+msgstr "Kur"
+
+msgid "worktrees.setting_up"
+msgstr "Kuruluyor…"
+
+msgid "worktrees.setting_up_title"
+msgstr "{worktree} Kuruluyor"
+
+msgid "worktrees.setup"
+msgstr "Kurulum"
+
+msgid "worktrees.setup_failed"
+msgstr "Kurulum başarısız"
+
+msgid "worktrees.setup_failed_sentence"
+msgstr "Kurulum başarısız oldu."
+
+msgid "worktrees.setup_failed_title"
+msgstr "{worktree} kurulamadı"
+
+msgid "worktrees.setup_goes_on_flock_tells"
+msgstr "Kurulum devam eder; başarısız olursa Flock size bildirir"
+
+msgid "worktrees.switch"
+msgstr "Değiştir"
+
+msgid "worktrees.switching_database"
+msgstr "{worktree} Veritabanı Değiştiriliyor"
+
+msgid "worktrees.use_site_s_database"
+msgstr "{site} sitesinin veritabanı kullanılsın mı?"
+
+msgid "worktrees.worktree"
+msgstr "Worktree"
+
+msgid "worktrees.worktrees"
+msgstr "Worktree'ler"

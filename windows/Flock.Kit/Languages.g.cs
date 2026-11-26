@@ -5,7 +5,7 @@ namespace Flock.Kit;
 public static partial class Localization
 {
     /// <summary>The languages the app is translated to, English first (the fallback).</summary>
-    public static IReadOnlyList<string> Languages { get; } = ["en", "cs", "es"];
+    public static IReadOnlyList<string> Languages { get; } = ["en", "cs", "es", "tr"];
 
     /// <summary>Each language's name in that language, for the language picker.</summary>
     public static IReadOnlyDictionary<string, string> LanguageNames { get; } = new Dictionary<string, string>
@@ -13,6 +13,7 @@ public static partial class Localization
         ["en"] = "English",
         ["cs"] = "Čeština",
         ["es"] = "Español",
+        ["tr"] = "Türkçe",
     };
 
     /// <summary>The CLDR plural category of a whole number in a language: gettext's Plural-Forms.</summary>
@@ -20,6 +21,7 @@ public static partial class Localization
     {
         "cs" => new[] { "one", "few", "other" }[Index((n==1) ? 0 : (n>=2 && n<=4) ? 1 : 2)],
         "es" => new[] { "one", "other" }[Index((n != 1))],
+        "tr" => new[] { "one", "other" }[Index((n != 1))],
         _ => n == 1 ? "one" : "other",
     };
 

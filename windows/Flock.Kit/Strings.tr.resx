@@ -1,0 +1,2443 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Generated from lang/ by tools/i18n: edit lang/*/app.json, then run make i18n. -->
+<root>
+    <xsd:schema id="root" xmlns="" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:msdata="urn:schemas-microsoft-com:xml-msdata">
+        <xsd:element name="root" msdata:IsDataSet="true">
+            <xsd:complexType>
+                <xsd:choice maxOccurs="unbounded">
+                    <xsd:element name="data">
+                        <xsd:complexType>
+                            <xsd:sequence>
+                                <xsd:element name="value" type="xsd:string" minOccurs="0" msdata:Ordinal="1" />
+                                <xsd:element name="comment" type="xsd:string" minOccurs="0" msdata:Ordinal="2" />
+                            </xsd:sequence>
+                            <xsd:attribute name="name" type="xsd:string" msdata:Ordinal="1" />
+                            <xsd:attribute name="type" type="xsd:string" msdata:Ordinal="3" />
+                            <xsd:attribute name="mimetype" type="xsd:string" msdata:Ordinal="4" />
+                        </xsd:complexType>
+                    </xsd:element>
+                    <xsd:element name="resheader">
+                        <xsd:complexType>
+                            <xsd:sequence>
+                                <xsd:element name="value" type="xsd:string" minOccurs="0" msdata:Ordinal="1" />
+                            </xsd:sequence>
+                            <xsd:attribute name="name" type="xsd:string" use="required" />
+                        </xsd:complexType>
+                    </xsd:element>
+                </xsd:choice>
+            </xsd:complexType>
+        </xsd:element>
+    </xsd:schema>
+    <resheader name="resmimetype">
+        <value>text/microsoft-resx</value>
+    </resheader>
+    <resheader name="version">
+        <value>2.0</value>
+    </resheader>
+    <resheader name="reader">
+        <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+    </resheader>
+    <resheader name="writer">
+        <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+    </resheader>
+    <data name="About_AlsoDeleteData" xml:space="preserve">
+        <value>Sitelerimin ayarlarını ve veritabanlarını da sil</value>
+    </data>
+    <data name="About_App" xml:space="preserve">
+        <value>Uygulama</value>
+    </data>
+    <data name="About_DaemonNotRunning" xml:space="preserve">
+        <value>çalışmıyor</value>
+    </data>
+    <data name="About_DataFolder" xml:space="preserve">
+        <value>Veri klasörü</value>
+    </data>
+    <data name="About_DiscordDescription" xml:space="preserve">
+        <value>Soru sorun, geri bildirim paylaşın ve sırada neler olduğunu görün.</value>
+    </data>
+    <data name="About_Documentation" xml:space="preserve">
+        <value>Flock belgeleri</value>
+    </data>
+    <data name="About_FoundBug" xml:space="preserve">
+        <value>Hata mı buldunuz?</value>
+    </data>
+    <data name="About_FoundBugDescription" xml:space="preserve">
+        <value>Sürüm bilgileriniz doldurulmuş yeni bir GitHub issue'su açar.</value>
+    </data>
+    <data name="About_Join" xml:space="preserve">
+        <value>Katıl</value>
+    </data>
+    <data name="About_License" xml:space="preserve">
+        <value>Lisans</value>
+    </data>
+    <data name="About_LicenseDescription" xml:space="preserve">
+        <value>Telif hakkı © Guava s.r.o. AGPL-3.0 ile lisanslanmıştır.</value>
+    </data>
+    <data name="About_NotInstalledWithSetup" xml:space="preserve">
+        <value>Bu Flock derlemesi Flock-Setup.exe ile yüklenmemiş. Bir terminalde `flock uninstall` komutunu çalıştırın ve uygulamanın klasörünü silin.</value>
+    </data>
+    <data name="About_ReportIssue" xml:space="preserve">
+        <value>Sorun bildir</value>
+    </data>
+    <data name="About_Sponsor" xml:space="preserve">
+        <value>Sponsor Ol</value>
+    </data>
+    <data name="About_StarOnGithub" xml:space="preserve">
+        <value>GitHub'da yıldızla</value>
+    </data>
+    <data name="About_Support" xml:space="preserve">
+        <value>Flock'u destekleyin</value>
+    </data>
+    <data name="About_SupportDescription" xml:space="preserve">
+        <value>Flock sonsuza dek ücretsiz ve açık kaynaklıdır. Sponsorluk, bakımının sürmesine yardımcı olur.</value>
+    </data>
+    <data name="About_Tagline" xml:space="preserve">
+        <value>Laravel için native bir yerel geliştirme ortamı.</value>
+    </data>
+    <data name="About_Uninstall" xml:space="preserve">
+        <value>Kaldır</value>
+    </data>
+    <data name="About_UninstallDescription" xml:space="preserve">
+        <value>Flock'u durdurur ve bu bilgisayardan kaldırır. Siteleriniz, veritabanlarınız ve ayarlarınız korunur.</value>
+    </data>
+    <data name="About_UninstallDetails" xml:space="preserve">
+        <value>Flock durdurulur ve PATH'inizden kaldırılır; PHP ve Node.js sürümleri, sertifikaları, logları ve cache'leri de silinir. Windows, hosts yardımcısını ve Flock'un güvenilen sertifikasını kaldırmak için izin ister.</value>
+    </data>
+    <data name="About_UninstallFlock" xml:space="preserve">
+        <value>Flock'u kaldır</value>
+    </data>
+    <data name="About_UninstallFlockEllipsis" xml:space="preserve">
+        <value>Flock'u Kaldır…</value>
+    </data>
+    <data name="About_UninstallKeeps" xml:space="preserve">
+        <value>Sitelerinizin ayarları ile PostgreSQL ve Redis veritabanlarınız {0} içinde kalır; böylece yeniden yüklediğinizde kaldığınız yerden devam edersiniz. İsterseniz bunları da silebilirsiniz:</value>
+    </data>
+    <data name="About_UninstallQuestion" xml:space="preserve">
+        <value>Flock kaldırılsın mı?</value>
+    </data>
+    <data name="Ai_AddToSettings" xml:space="preserve">
+        <value>Bunu istemcinin MCP ayarlarına ekleyin.</value>
+    </data>
+    <data name="Ai_AddedOnce" xml:space="preserve">
+        <value>Bir kez eklenince Flock her projede çalışır. Flock'u ekledikten sonra istemciyi yeniden başlatın veya MCP sunucularını yeniden yükleyin.</value>
+    </data>
+    <data name="Ai_Clients" xml:space="preserve">
+        <value>Yapay zeka istemcileri</value>
+    </data>
+    <data name="Ai_FlockAdded" xml:space="preserve">
+        <value>Flock eklendi</value>
+    </data>
+    <data name="Ai_OtherClients" xml:space="preserve">
+        <value>Diğer istemciler</value>
+    </data>
+    <data name="Ai_Subtitle" xml:space="preserve">
+        <value>Claude Code ve Cursor gibi yapay zeka ajanlarının Flock ile çalışmasına izin verin: sitelerinizin URL'leri ve PHP sürümleri, loglar, dump'lar ve e-postalar, ayrıca sürümlerin ve servislerin yüklenmesi.</value>
+    </data>
+    <data name="App_CannotShowMessage" xml:space="preserve">
+        <value>Bu mesaj gösterilemiyor.</value>
+    </data>
+    <data name="App_Conflict_AnswersFor" xml:space="preserve">
+        <value>{0} ({1}) için yanıt veriyor</value>
+    </data>
+    <data name="App_Conflict_Both" xml:space="preserve">
+        <value>{0} ve {1}</value>
+    </data>
+    <data name="App_Conflict_Detail" xml:space="preserve">
+        <value>{0} {1}.</value>
+    </data>
+    <data name="App_Conflict_Port" xml:space="preserve">
+        <value>{0} portunu ({1})</value>
+    </data>
+    <data name="App_Conflict_Quit" xml:space="preserve">
+        <value>{0} uygulamasından çıkın</value>
+    </data>
+    <data name="App_Conflict_Uses" xml:space="preserve">
+        <value>{0} kullanıyor</value>
+    </data>
+    <data name="App_CouldNotOpen" xml:space="preserve">
+        <value>Bu öğe açılamadı.</value>
+    </data>
+    <data name="App_CouldNotOpenConnection" xml:space="preserve">
+        <value>Bu veritabanı bağlantısı açılamadı.</value>
+    </data>
+    <data name="App_CouldNotOpenLink" xml:space="preserve">
+        <value>Bu bağlantı açılamadı.</value>
+    </data>
+    <data name="App_CouldNotRelaunch" xml:space="preserve">
+        <value>Flock yeniden başlatılamadı: {0}</value>
+    </data>
+    <data name="App_CouldNotRestart" xml:space="preserve">
+        <value>Flock yeniden başlatılamadı ({0}).</value>
+    </data>
+    <data name="App_CouldNotReveal" xml:space="preserve">
+        <value>Bu öğe Dosya Gezgini'nde gösterilemedi.</value>
+    </data>
+    <data name="App_CouldNotRun" xml:space="preserve">
+        <value>{0} çalıştırılamadı: {1}</value>
+    </data>
+    <data name="App_CouldNotStart" xml:space="preserve">
+        <value>Flock başlatılamadı</value>
+    </data>
+    <data name="App_CouldNotStartDetails" xml:space="preserve">
+        <value>{0}
+
+Ayrıntılar %LocalAppData%\Flock\tray.log dosyasında.</value>
+    </data>
+    <data name="App_DidNotStart" xml:space="preserve">
+        <value>İşlem başlamadı.</value>
+    </data>
+    <data name="App_EmptyAnswer" xml:space="preserve">
+        <value>{0} boş yanıt verdi</value>
+    </data>
+    <data name="App_HttpStatus" xml:space="preserve">
+        <value>Flock HTTP {0} ile yanıt verdi</value>
+    </data>
+    <data name="App_NoWebView" xml:space="preserve">
+        <value>HTML gösterilemiyor. Microsoft Edge WebView2 Runtime eksik veya başlatılamadı.</value>
+    </data>
+    <data name="App_NotRunning" xml:space="preserve">
+        <value>Flock çalışmıyor</value>
+    </data>
+    <data name="App_OutcomeUnknown" xml:space="preserve">
+        <value>Bağlantı başarısız oldu. Değişiklik tamamlanmış olabilir; yeniden denemeden önce durumunu yenileyin.</value>
+    </data>
+    <data name="App_Timeout" xml:space="preserve">
+        <value>Flock, {0} {1} isteğine zamanında yanıt vermedi</value>
+    </data>
+    <data name="App_UnexpectedAnswer" xml:space="preserve">
+        <value>{0} beklenmeyen bir yanıt verdi: {1}</value>
+    </data>
+    <data name="Common_Add" xml:space="preserve">
+        <value>Ekle</value>
+    </data>
+    <data name="Common_Cancel" xml:space="preserve">
+        <value>İptal</value>
+    </data>
+    <data name="Common_Canceled" xml:space="preserve">
+        <value>İptal edildi.</value>
+    </data>
+    <data name="Common_Choose" xml:space="preserve">
+        <value>Seç…</value>
+    </data>
+    <data name="Common_Close" xml:space="preserve">
+        <value>Kapat</value>
+    </data>
+    <data name="Common_Copy" xml:space="preserve">
+        <value>Kopyala</value>
+    </data>
+    <data name="Common_Done" xml:space="preserve">
+        <value>Bitti</value>
+    </data>
+    <data name="Common_Downloading" xml:space="preserve">
+        <value>İndiriliyor…</value>
+    </data>
+    <data name="Common_EmptyParenthesized" xml:space="preserve">
+        <value>(boş)</value>
+    </data>
+    <data name="Common_FlockNotRunning" xml:space="preserve">
+        <value>Flock çalışmıyor</value>
+    </data>
+    <data name="Common_Hide" xml:space="preserve">
+        <value>Gizle</value>
+    </data>
+    <data name="Common_Install" xml:space="preserve">
+        <value>Yükle</value>
+    </data>
+    <data name="Common_Installed" xml:space="preserve">
+        <value>Yüklü</value>
+    </data>
+    <data name="Common_Installing" xml:space="preserve">
+        <value>Yükleniyor…</value>
+    </data>
+    <data name="Common_List_And" xml:space="preserve">
+        <value>{0} ve {1}</value>
+    </data>
+    <data name="Common_List_Separator" xml:space="preserve">
+        <value>, </value>
+    </data>
+    <data name="Common_Loading" xml:space="preserve">
+        <value>Yükleniyor…</value>
+    </data>
+    <data name="Common_MoreActions" xml:space="preserve">
+        <value>Diğer eylemler</value>
+    </data>
+    <data name="Common_NotInstalled" xml:space="preserve">
+        <value>Yüklü değil</value>
+    </data>
+    <data name="Common_Ok" xml:space="preserve">
+        <value>Tamam</value>
+    </data>
+    <data name="Common_Open" xml:space="preserve">
+        <value>Aç</value>
+    </data>
+    <data name="Common_OpenInBrowser" xml:space="preserve">
+        <value>Tarayıcıda Aç</value>
+    </data>
+    <data name="Common_OpenTarget" xml:space="preserve">
+        <value>{0} adresini aç</value>
+    </data>
+    <data name="Common_Remove" xml:space="preserve">
+        <value>Kaldır</value>
+    </data>
+    <data name="Common_RemoveQuestion" xml:space="preserve">
+        <value>{0} kaldırılsın mı?</value>
+    </data>
+    <data name="Common_RemoveTarget" xml:space="preserve">
+        <value>{0} domain'ini kaldır</value>
+    </data>
+    <data name="Common_Retry" xml:space="preserve">
+        <value>Yeniden Dene</value>
+    </data>
+    <data name="Common_Save" xml:space="preserve">
+        <value>Kaydet</value>
+    </data>
+    <data name="Common_ShowInExplorer" xml:space="preserve">
+        <value>Dosya Gezgini'nde Göster</value>
+    </data>
+    <data name="Common_Size_Bytes_one" xml:space="preserve">
+        <value>{0} bayt</value>
+    </data>
+    <data name="Common_Size_Bytes_other" xml:space="preserve">
+        <value>{0} bayt</value>
+    </data>
+    <data name="Common_Switching" xml:space="preserve">
+        <value>Değiştiriliyor…</value>
+    </data>
+    <data name="Common_Time_HourAgo" xml:space="preserve">
+        <value>1 saat önce</value>
+    </data>
+    <data name="Common_Time_HoursAgo_one" xml:space="preserve">
+        <value>{0} saat önce</value>
+    </data>
+    <data name="Common_Time_HoursAgo_other" xml:space="preserve">
+        <value>{0} saat önce</value>
+    </data>
+    <data name="Common_Time_JustNow" xml:space="preserve">
+        <value>az önce</value>
+    </data>
+    <data name="Common_Time_MinuteAgo" xml:space="preserve">
+        <value>1 dakika önce</value>
+    </data>
+    <data name="Common_Time_MinutesAgo_one" xml:space="preserve">
+        <value>{0} dakika önce</value>
+    </data>
+    <data name="Common_Time_MinutesAgo_other" xml:space="preserve">
+        <value>{0} dakika önce</value>
+    </data>
+    <data name="Common_Time_Yesterday" xml:space="preserve">
+        <value>dün</value>
+    </data>
+    <data name="Common_TryAgain" xml:space="preserve">
+        <value>Yeniden dene</value>
+    </data>
+    <data name="Common_Uninstall" xml:space="preserve">
+        <value>Kaldır</value>
+    </data>
+    <data name="Common_UninstallEllipsis" xml:space="preserve">
+        <value>Kaldır…</value>
+    </data>
+    <data name="Common_Uninstalling" xml:space="preserve">
+        <value>Kaldırılıyor…</value>
+    </data>
+    <data name="Common_Update" xml:space="preserve">
+        <value>Güncelle</value>
+    </data>
+    <data name="Common_Updating" xml:space="preserve">
+        <value>Güncelleniyor…</value>
+    </data>
+    <data name="Common_View" xml:space="preserve">
+        <value>Görüntüle</value>
+    </data>
+    <data name="Common_Working" xml:space="preserve">
+        <value>İşlem sürüyor…</value>
+    </data>
+    <data name="Debugger_Availability" xml:space="preserve">
+        <value>Kullanılabilirlik</value>
+    </data>
+    <data name="Debugger_Available" xml:space="preserve">
+        <value>Kullanılabilir</value>
+    </data>
+    <data name="Debugger_BreakpointsInPhpstorm" xml:space="preserve">
+        <value>PhpStorm'daki breakpoint'ler</value>
+    </data>
+    <data name="Debugger_ClientPort" xml:space="preserve">
+        <value>İstemci portu</value>
+    </data>
+    <data name="Debugger_ConnectIde" xml:space="preserve">
+        <value>IDE'nizi bağlayın</value>
+    </data>
+    <data name="Debugger_DebuggingNow" xml:space="preserve">
+        <value>Şu an debug ediliyor</value>
+    </data>
+    <data name="Debugger_DetectBreakpoints" xml:space="preserve">
+        <value>PhpStorm breakpoint'lerini algıla</value>
+    </data>
+    <data name="Debugger_DetectBreakpointsDescription" xml:space="preserve">
+        <value>Bir projenin PhpStorm'da breakpoint'leri varken, sitesine yapılan her istek debug edilir.</value>
+    </data>
+    <data name="Debugger_DetectRequests" xml:space="preserve">
+        <value>Xdebug isteklerini algıla</value>
+    </data>
+    <data name="Debugger_DetectRequestsDescription" xml:space="preserve">
+        <value>Xdebug yalnızca talep edildiği isteklerde yüklenir; böylece geri kalan her şey hızlı kalır.</value>
+    </data>
+    <data name="Debugger_Mode" xml:space="preserve">
+        <value>Mod</value>
+    </data>
+    <data name="Debugger_NotInBuild" xml:space="preserve">
+        <value>Bu derlemede yok</value>
+    </data>
+    <data name="Debugger_StartSession" xml:space="preserve">
+        <value>Oturum başlat</value>
+    </data>
+    <data name="Debugger_StartSessionDescription" xml:space="preserve">
+        <value>PhpStorm'da bir breakpoint koyup debug bağlantılarını dinleyin, Xdebug tarayıcı eklentisini kullanın veya URL'ye ?XDEBUG_TRIGGER=1 ekleyin. Komut satırında `flock debug artisan …` komutunu çalıştırın.</value>
+    </data>
+    <data name="Debugger_Subtitle" xml:space="preserve">
+        <value>İstekleri ve komutları Xdebug ile adım adım izleyin.</value>
+    </data>
+    <data name="Dumps_Capture" xml:space="preserve">
+        <value>Dump'ları yakala</value>
+    </data>
+    <data name="Dumps_CaptureDescription" xml:space="preserve">
+        <value>Dump'ları yeniden sayfada görmek için kapatın.</value>
+    </data>
+    <data name="Dumps_CaptureDumps" xml:space="preserve">
+        <value>Dump'ları Yakala</value>
+    </data>
+    <data name="Dumps_CaptureKindsTooltip" xml:space="preserve">
+        <value>dump() ve dd() dışında nelerin yakalanacağı</value>
+    </data>
+    <data name="Dumps_CaptureShort" xml:space="preserve">
+        <value>Yakala</value>
+    </data>
+    <data name="Dumps_CaptureTooltip" xml:space="preserve">
+        <value>Sitelerinizin ve artisan komutlarınızın dump() ve dd() çıktısını yakala</value>
+    </data>
+    <data name="Dumps_CaptureUnavailable" xml:space="preserve">
+        <value>Yakalama kullanılamıyor: PHP {0}</value>
+    </data>
+    <data name="Dumps_Captured" xml:space="preserve">
+        <value>Yakalananlar</value>
+    </data>
+    <data name="Dumps_Capturing" xml:space="preserve">
+        <value>Yakalanıyor</value>
+    </data>
+    <data name="Dumps_ClearDetails" xml:space="preserve">
+        <value>Yakalanan tüm dump'lar, query'ler, loglar, view'lar ve job'lar tüm sitelerden ve komutlardan silinir.</value>
+    </data>
+    <data name="Dumps_ClearQuestion" xml:space="preserve">
+        <value>Tüm dump'lar temizlensin mi?</value>
+    </data>
+    <data name="Dumps_Editor" xml:space="preserve">
+        <value>Düzenleyici</value>
+    </data>
+    <data name="Dumps_EditorTooltip" xml:space="preserve">
+        <value>Bir dump'ın dosyasına ve satırına tıklandığında kullanılan düzenleyici</value>
+    </data>
+    <data name="Dumps_EmptyCaptureOff" xml:space="preserve">
+        <value>Yakalama kapalı: dump() ve dd() çıktısını burada toplamak için açın.</value>
+    </data>
+    <data name="Dumps_EmptyCapturing" xml:space="preserve">
+        <value>Sitelerinizin ve artisan komutlarınızın dump() ve dd() çıktısı, query'leri, logları, view'ları ve job'ları burada görünür.</value>
+    </data>
+    <data name="Dumps_EventKind_Jobs" xml:space="preserve">
+        <value>Job'lar</value>
+    </data>
+    <data name="Dumps_EventKind_Logs" xml:space="preserve">
+        <value>Loglar</value>
+    </data>
+    <data name="Dumps_EventKind_Queries" xml:space="preserve">
+        <value>Query'ler</value>
+    </data>
+    <data name="Dumps_EventKind_Requests" xml:space="preserve">
+        <value>İstekler</value>
+    </data>
+    <data name="Dumps_EventKind_Views" xml:space="preserve">
+        <value>View'lar</value>
+    </data>
+    <data name="Dumps_LatestOnly" xml:space="preserve">
+        <value>Yalnızca Son İstek</value>
+    </data>
+    <data name="Dumps_LatestOnlyTooltip" xml:space="preserve">
+        <value>Yalnızca son isteği veya komutu göster</value>
+    </data>
+    <data name="Dumps_NoneMatching" xml:space="preserve">
+        <value>Eşleşen dump yok</value>
+    </data>
+    <data name="Dumps_NoneYet" xml:space="preserve">
+        <value>Henüz dump yok</value>
+    </data>
+    <data name="Dumps_Open" xml:space="preserve">
+        <value>Dump'ları Aç</value>
+    </data>
+    <data name="Dumps_OpenFilesIn" xml:space="preserve">
+        <value>Dosyaları şurada aç</value>
+    </data>
+    <data name="Dumps_SearchPlaceholder" xml:space="preserve">
+        <value>Dump'larda ara</value>
+    </data>
+    <data name="Dumps_ShowInPageToo" xml:space="preserve">
+        <value>dump() Sayfada da Gösterilsin</value>
+    </data>
+    <data name="Dumps_Sources" xml:space="preserve">
+        <value>Kaynaklar</value>
+    </data>
+    <data name="Dumps_StartCapturing" xml:space="preserve">
+        <value>Yakalamayı Başlat</value>
+    </data>
+    <data name="Dumps_Subtitle" xml:space="preserve">
+        <value>dump() ve dd() çıktısını sayfa veya terminal yerine Flock'a gönderin. Projelerinizde değişiklik gerekmez.</value>
+    </data>
+    <data name="Dumps_Timeline_Job" xml:space="preserve">
+        <value>Job</value>
+    </data>
+    <data name="Dumps_Timeline_Query" xml:space="preserve">
+        <value>Query</value>
+    </data>
+    <data name="Dumps_Timeline_View" xml:space="preserve">
+        <value>View</value>
+    </data>
+    <data name="General_AddProjectFolders" xml:space="preserve">
+        <value>Proje klasörleri ekle…</value>
+    </data>
+    <data name="General_AddProjectFoldersTitle" xml:space="preserve">
+        <value>Proje Klasörleri Ekle</value>
+    </data>
+    <data name="General_AppLanguage" xml:space="preserve">
+        <value>Uygulama dili</value>
+    </data>
+    <data name="General_AppLanguageDescription" xml:space="preserve">
+        <value>Flock'un pencerelerinin, menülerinin ve bildirimlerinin dili.</value>
+    </data>
+    <data name="General_Beta" xml:space="preserve">
+        <value>Beta sürümler</value>
+    </data>
+    <data name="General_BetaDescription" xml:space="preserve">
+        <value>Flock'un, PHP'nin ve servislerin yeni sürümlerini, ön sürümler dahil, daha erken alın. Henüz çalışmayabilirler.</value>
+    </data>
+    <data name="General_CheckForUpdates" xml:space="preserve">
+        <value>Güncellemeleri Denetle</value>
+    </data>
+    <data name="General_CouldNotChangeStartup" xml:space="preserve">
+        <value>Başlangıç ayarı değiştirilemedi: {0}</value>
+    </data>
+    <data name="General_Daemon" xml:space="preserve">
+        <value>Daemon</value>
+    </data>
+    <data name="General_Data" xml:space="preserve">
+        <value>Veri</value>
+    </data>
+    <data name="General_Domain" xml:space="preserve">
+        <value>Domain</value>
+    </data>
+    <data name="General_DomainHostsOnly" xml:space="preserve">
+        <value>Yalnızca site domain'leri ve sitelere eklenen domain'ler çözümlenir (hosts dosyası).</value>
+    </data>
+    <data name="General_DomainHostsOnlyBecause" xml:space="preserve">
+        <value>Yalnızca site domain'leri ve sitelere eklenen domain'ler çözümlenir (hosts dosyası): {0}.</value>
+    </data>
+    <data name="General_DomainWildcard" xml:space="preserve">
+        <value>Her ad, subdomain'ler dahil, Flock'un DNS sunucusu tarafından çözümlenir. Site domain'leri ayrıca hosts dosyasında da bulunur.</value>
+    </data>
+    <data name="General_Experimental" xml:space="preserve">
+        <value>Deneysel kanal: henüz yayımlanmamış paketler sunulur. `flock channel stable` komutu kararlı kanala geri döner.</value>
+    </data>
+    <data name="General_Folder" xml:space="preserve">
+        <value>Klasör</value>
+    </data>
+    <data name="General_Language" xml:space="preserve">
+        <value>Dil</value>
+    </data>
+    <data name="General_LanguageRestartNote" xml:space="preserve">
+        <value>Yeni dil, Flock yeniden başlatıldıktan sonra kullanılır.</value>
+    </data>
+    <data name="General_LanguageSystem" xml:space="preserve">
+        <value>Sistem varsayılanı</value>
+    </data>
+    <data name="General_Network" xml:space="preserve">
+        <value>Ağ</value>
+    </data>
+    <data name="General_NoProjectFolders" xml:space="preserve">
+        <value>Proje klasörü yok</value>
+    </data>
+    <data name="General_OpenAtSignIn" xml:space="preserve">
+        <value>Oturum açılırken Flock'u aç</value>
+    </data>
+    <data name="General_OpenAtSignInDescription" xml:space="preserve">
+        <value>Oturum açtığınızda Flock simgesini bildirim alanında gösterir. Daemon'ın kendisi her zaman oturum açılırken başlar.</value>
+    </data>
+    <data name="General_Pid" xml:space="preserve">
+        <value>pid {0}</value>
+    </data>
+    <data name="General_Ports" xml:space="preserve">
+        <value>Siteler, config.json içinde ayarlanan {0} (HTTP) ve {1} (HTTPS) portlarını kullanır, bu yüzden adreslerinde port bulunur.</value>
+    </data>
+    <data name="General_Process" xml:space="preserve">
+        <value>İşlem</value>
+    </data>
+    <data name="General_ProjectFolders" xml:space="preserve">
+        <value>Proje klasörleri</value>
+    </data>
+    <data name="General_ProjectFoldersDescription" xml:space="preserve">
+        <value>Bir proje klasörünün içindeki her klasör &lt;klasör&gt;.{0} olarak sunulur; `flock park` ile aynıdır.</value>
+    </data>
+    <data name="General_RelaunchFlock" xml:space="preserve">
+        <value>Flock'u Yeniden Başlat</value>
+    </data>
+    <data name="General_ReleaseNotes" xml:space="preserve">
+        <value>Sürüm Notları</value>
+    </data>
+    <data name="General_RemoveProjectFolderDetails" xml:space="preserve">
+        <value>İçindeki klasörler artık site olarak sunulmaz. Diskten hiçbir şey silinmez.</value>
+    </data>
+    <data name="General_RemoveProjectFolderQuestion" xml:space="preserve">
+        <value>{0} proje klasörlerinden kaldırılsın mı?</value>
+    </data>
+    <data name="General_Restart" xml:space="preserve">
+        <value>Yeniden Başlat</value>
+    </data>
+    <data name="General_RestartDaemon" xml:space="preserve">
+        <value>Daemon'ı Yeniden Başlat</value>
+    </data>
+    <data name="General_RestartDescription" xml:space="preserve">
+        <value>Daemon'ı ve çalıştırdığı tüm servisleri yeniden başlatır.</value>
+    </data>
+    <data name="General_Restarting" xml:space="preserve">
+        <value>Yeniden başlatılıyor…</value>
+    </data>
+    <data name="General_Startup" xml:space="preserve">
+        <value>Başlangıç</value>
+    </data>
+    <data name="General_Status" xml:space="preserve">
+        <value>Durum</value>
+    </data>
+    <data name="General_Subtitle" xml:space="preserve">
+        <value>Flock daemon'ı sitelerinizi, PHP'yi ve servisleri arka planda çalıştırır.</value>
+    </data>
+    <data name="General_Title" xml:space="preserve">
+        <value>Genel</value>
+    </data>
+    <data name="General_UpdateTo" xml:space="preserve">
+        <value>{0} sürümüne güncelle</value>
+    </data>
+    <data name="General_Updates" xml:space="preserve">
+        <value>Güncellemeler</value>
+    </data>
+    <data name="General_UpdatesNeedVersion" xml:space="preserve">
+        <value>Güncellemeler için 1.0.0 gibi bir sürüm gerekir. Güncellemeleri denemek için derleme sırasında InformationalVersion değerini ayarlayın.</value>
+    </data>
+    <data name="General_Version" xml:space="preserve">
+        <value>Sürüm</value>
+    </data>
+    <data name="General_VersionNumber" xml:space="preserve">
+        <value>Sürüm {0}</value>
+    </data>
+    <data name="General_ViewOnGithub" xml:space="preserve">
+        <value>GitHub'da Görüntüle</value>
+    </data>
+    <data name="Links_Install_AlreadyInstalledMessage" xml:space="preserve">
+        <value>Ayarlar → {0} bölümünde bulabilirsiniz.</value>
+    </data>
+    <data name="Links_Install_AlreadyInstalledTitle" xml:space="preserve">
+        <value>{0} zaten yüklü</value>
+    </data>
+    <data name="Links_Install_InstallMessage" xml:space="preserve">
+        <value>Bir bağlantı Flock'tan {0} {1} yüklemesini istedi. {2}</value>
+    </data>
+    <data name="Links_Install_InstallTitle" xml:space="preserve">
+        <value>{0} {1} yüklensin mi?</value>
+    </data>
+    <data name="Links_Install_InstallingMessage" xml:space="preserve">
+        <value>Ne kadarının tamamlandığını Ayarlar → {0} bölümünde görebilirsiniz.</value>
+    </data>
+    <data name="Links_Install_InstallingTitle" xml:space="preserve">
+        <value>{0} zaten yükleniyor</value>
+    </data>
+    <data name="Links_Install_NewerFlock" xml:space="preserve">
+        <value>Bağlantı daha yeni bir Flock için hazırlanmış olabilir. Flock'u güncelleyip yeniden deneyin.</value>
+    </data>
+    <data name="Links_Install_NoBuild" xml:space="preserve">
+        <value>Bu bilgisayar için bir derlemesi yok veya bağlantı daha yeni bir Flock için hazırlanmış.</value>
+    </data>
+    <data name="Links_Install_PurposeNode" xml:space="preserve">
+        <value>Onu kullanan projeler, yüklenir yüklenmez node, npm ve npx'e erişir.</value>
+    </data>
+    <data name="Links_Install_PurposePhp" xml:space="preserve">
+        <value>Onu kullanan siteler, yüklenir yüklenmez sunulur.</value>
+    </data>
+    <data name="Links_Install_PurposeService" xml:space="preserve">
+        <value>Siteleriniz için 127.0.0.1 üzerinde çalışır.</value>
+    </data>
+    <data name="Links_Install_UnavailableMessage" xml:space="preserve">
+        <value>Flock bunu bu platformda çalıştıramaz.</value>
+    </data>
+    <data name="Links_Install_UnavailableTitle" xml:space="preserve">
+        <value>{0} bu bilgisayarda kullanılamıyor</value>
+    </data>
+    <data name="Links_Install_UnknownTitle" xml:space="preserve">
+        <value>Flock {0} sunmuyor</value>
+    </data>
+    <data name="Links_Secure_AlreadySecuredMessage" xml:space="preserve">
+        <value>https://{0} adresinde sunuluyor.</value>
+    </data>
+    <data name="Links_Secure_AlreadySecuredTitle" xml:space="preserve">
+        <value>{0} zaten güvenli</value>
+    </data>
+    <data name="Links_Secure_SecureMessage" xml:space="preserve">
+        <value>Bir bağlantı, Flock'tan {0} domain'ini güvenli hale getirmesini istedi. Site, bu bilgisayarın zaten güvendiği bir sertifika alır.</value>
+    </data>
+    <data name="Links_Secure_SecureTitle" xml:space="preserve">
+        <value>{0} HTTPS üzerinden sunulsun mu?</value>
+    </data>
+    <data name="Links_Secure_UnknownMessage" xml:space="preserve">
+        <value>Önce Ayarlar → Siteler bölümünden siteyi ekleyin.</value>
+    </data>
+    <data name="Links_Secure_UnknownTitle" xml:space="preserve">
+        <value>Flock'ta {0} adlı bir site yok</value>
+    </data>
+    <data name="Logs_AutoRefresh" xml:space="preserve">
+        <value>Otomatik yenile</value>
+    </data>
+    <data name="Logs_Clear" xml:space="preserve">
+        <value>Temizle</value>
+    </data>
+    <data name="Logs_ClearDetails" xml:space="preserve">
+        <value>{0} sitesinin storage\logs klasöründeki Laravel log dosyaları boşaltılır. Bu işlem geri alınamaz.</value>
+    </data>
+    <data name="Logs_ClearQuestion" xml:space="preserve">
+        <value>{0} sitesinin logu temizlensin mi?</value>
+    </data>
+    <data name="Logs_CouldNotLoad" xml:space="preserve">
+        <value>Log yüklenemedi</value>
+    </data>
+    <data name="Logs_Details" xml:space="preserve">
+        <value>Ayrıntılar</value>
+    </data>
+    <data name="Logs_Level" xml:space="preserve">
+        <value>Düzey</value>
+    </data>
+    <data name="Logs_LevelsTooltip" xml:space="preserve">
+        <value>Sitenin Laravel logunda gösterilecek düzeyler</value>
+    </data>
+    <data name="Logs_NoEntries" xml:space="preserve">
+        <value>Log kaydı yok</value>
+    </data>
+    <data name="Logs_NoEntriesDetails" xml:space="preserve">
+        <value>{0} sitesinin storage\logs klasörü boş.</value>
+    </data>
+    <data name="Logs_NoMatching" xml:space="preserve">
+        <value>Eşleşen log kaydı yok</value>
+    </data>
+    <data name="Logs_NoMatchingDetails" xml:space="preserve">
+        <value>Son kayıtlar arasında arama ve düzeyle eşleşen bir şey yok.</value>
+    </data>
+    <data name="Logs_NoMatchingLines" xml:space="preserve">
+        <value>(eşleşen satır yok)</value>
+    </data>
+    <data name="Logs_PickLog" xml:space="preserve">
+        <value>Bir log seçin</value>
+    </data>
+    <data name="Logs_SearchPlaceholder" xml:space="preserve">
+        <value>Mesajlarda ve bağlamda ara</value>
+    </data>
+    <data name="Logs_ServicesHeading" xml:space="preserve">
+        <value>SERVİSLER</value>
+    </data>
+    <data name="Logs_SitesHeading" xml:space="preserve">
+        <value>SİTELER</value>
+    </data>
+    <data name="Mail_CatchDescription" xml:space="preserve">
+        <value>Bu satırları projenizin .env dosyasına ekleyin:</value>
+    </data>
+    <data name="Mail_CatchTitle" xml:space="preserve">
+        <value>Uygulamanızın e-postalarını yakalayın</value>
+    </data>
+    <data name="Mail_Caught" xml:space="preserve">
+        <value>Yakalanan e-postalar</value>
+    </data>
+    <data name="Mail_ClearAll" xml:space="preserve">
+        <value>Tümünü Temizle</value>
+    </data>
+    <data name="Mail_CouldNotLoad" xml:space="preserve">
+        <value>Mesaj yüklenemedi</value>
+    </data>
+    <data name="Mail_CouldNotLoadRaw" xml:space="preserve">
+        <value>Ham mesaj yüklenemedi</value>
+    </data>
+    <data name="Mail_DeleteAll" xml:space="preserve">
+        <value>Tümünü Sil</value>
+    </data>
+    <data name="Mail_DeleteAllQuestion" xml:space="preserve">
+        <value>Yakalanan tüm e-postalar silinsin mi?</value>
+    </data>
+    <data name="Mail_Detail_Cc" xml:space="preserve">
+        <value>Bilgi</value>
+    </data>
+    <data name="Mail_Detail_Date" xml:space="preserve">
+        <value>Tarih</value>
+    </data>
+    <data name="Mail_Detail_From" xml:space="preserve">
+        <value>Kimden</value>
+    </data>
+    <data name="Mail_Detail_Headers" xml:space="preserve">
+        <value>Başlıklar</value>
+    </data>
+    <data name="Mail_Detail_Inbox" xml:space="preserve">
+        <value>Gelen kutusu</value>
+    </data>
+    <data name="Mail_Detail_Raw" xml:space="preserve">
+        <value>Ham</value>
+    </data>
+    <data name="Mail_Detail_Text" xml:space="preserve">
+        <value>Metin</value>
+    </data>
+    <data name="Mail_Detail_To" xml:space="preserve">
+        <value>Kime</value>
+    </data>
+    <data name="Mail_EnvironmentVariables" xml:space="preserve">
+        <value>Ortam değişkenleri</value>
+    </data>
+    <data name="Mail_Host" xml:space="preserve">
+        <value>Sunucu</value>
+    </data>
+    <data name="Mail_NoHtmlPart" xml:space="preserve">
+        <value>HTML bölümü yok</value>
+    </data>
+    <data name="Mail_NoMail" xml:space="preserve">
+        <value>E-posta yok</value>
+    </data>
+    <data name="Mail_NoMailDescription" xml:space="preserve">
+        <value>{0} adresine e-posta gönderin. MAIL_USERNAME gelen kutusunu belirler.</value>
+    </data>
+    <data name="Mail_NoMessageSelected" xml:space="preserve">
+        <value>Mesaj seçilmedi</value>
+    </data>
+    <data name="Mail_NoSubject" xml:space="preserve">
+        <value>(konu yok)</value>
+    </data>
+    <data name="Mail_NoTextPart" xml:space="preserve">
+        <value>(metin bölümü yok)</value>
+    </data>
+    <data name="Mail_Open" xml:space="preserve">
+        <value>E-postaları Aç</value>
+    </data>
+    <data name="Mail_Port" xml:space="preserve">
+        <value>Port</value>
+    </data>
+    <data name="Mail_Refresh" xml:space="preserve">
+        <value>Yenile</value>
+    </data>
+    <data name="Mail_SaveAttachment" xml:space="preserve">
+        <value>Kaydet…</value>
+    </data>
+    <data name="Mail_SmtpServer" xml:space="preserve">
+        <value>SMTP sunucusu</value>
+    </data>
+    <data name="Mail_Subtitle" xml:space="preserve">
+        <value>Flock, uygulamalarınızın gönderdiği tüm e-postaları yakalar - hiçbiri bilgisayarınızdan dışarı çıkmaz.</value>
+    </data>
+    <data name="Mail_UsernameInbox" xml:space="preserve">
+        <value>MAIL_USERNAME gelen kutusunu belirler, böylece her projenin kendi gelen kutusu olur.</value>
+    </data>
+    <data name="Menu_CaptureDumps" xml:space="preserve">
+        <value>Dump'ları yakala</value>
+    </data>
+    <data name="Menu_Down" xml:space="preserve">
+        <value>çalışmıyor</value>
+    </data>
+    <data name="Menu_Dumps" xml:space="preserve">
+        <value>Dump'lar</value>
+    </data>
+    <data name="Menu_Failure" xml:space="preserve">
+        <value>Flock bildirim simgesi {0} işlemini tamamlayamadı.</value>
+    </data>
+    <data name="Menu_HideWorktrees" xml:space="preserve">
+        <value>Worktree'leri gizle</value>
+    </data>
+    <data name="Menu_Logs" xml:space="preserve">
+        <value>Loglar</value>
+    </data>
+    <data name="Menu_Mail" xml:space="preserve">
+        <value>E-posta</value>
+    </data>
+    <data name="Menu_NoSites" xml:space="preserve">
+        <value>Henüz site yok - `flock link` veya `flock park` komutunu çalıştırın ya da Ayarlar'dan bir site ekleyin.</value>
+    </data>
+    <data name="Menu_NotSetUp" xml:space="preserve">
+        <value>Flock bu kullanıcı için henüz kurulmadı.</value>
+    </data>
+    <data name="Menu_OpenFlock" xml:space="preserve">
+        <value>Flock'u Aç</value>
+    </data>
+    <data name="Menu_QuitFlock" xml:space="preserve">
+        <value>Flock'tan Çık</value>
+    </data>
+    <data name="Menu_Restart" xml:space="preserve">
+        <value>Yeniden Başlat</value>
+    </data>
+    <data name="Menu_RestartFlock" xml:space="preserve">
+        <value>Flock'u Yeniden Başlat</value>
+    </data>
+    <data name="Menu_Restarted" xml:space="preserve">
+        <value>({0} kez yeniden başlatıldı)</value>
+    </data>
+    <data name="Menu_SetUpFlock" xml:space="preserve">
+        <value>Flock'u Kur…</value>
+    </data>
+    <data name="Menu_Settings" xml:space="preserve">
+        <value>Ayarlar…</value>
+    </data>
+    <data name="Menu_SharedAt" xml:space="preserve">
+        <value>Paylaşılan adres: {0}</value>
+    </data>
+    <data name="Menu_ShowWorktrees_one" xml:space="preserve">
+        <value>{0} worktree göster</value>
+    </data>
+    <data name="Menu_ShowWorktrees_other" xml:space="preserve">
+        <value>{0} worktree göster</value>
+    </data>
+    <data name="Menu_SiteDomainsOnly" xml:space="preserve">
+        <value>yalnızca site domain'leri</value>
+    </data>
+    <data name="Menu_StartFlock" xml:space="preserve">
+        <value>Flock'u Başlat</value>
+    </data>
+    <data name="Menu_Status_NeedsAttention" xml:space="preserve">
+        <value>Dikkat gerekiyor</value>
+    </data>
+    <data name="Menu_Status_NotRunning" xml:space="preserve">
+        <value>Çalışmıyor</value>
+    </data>
+    <data name="Menu_Status_NotSetUp" xml:space="preserve">
+        <value>Kurulmadı</value>
+    </data>
+    <data name="Menu_Status_Running" xml:space="preserve">
+        <value>Çalışıyor</value>
+    </data>
+    <data name="Menu_Status_Updating" xml:space="preserve">
+        <value>Güncelleniyor…</value>
+    </data>
+    <data name="Menu_Stopped" xml:space="preserve">
+        <value>durduruldu</value>
+    </data>
+    <data name="Menu_Up" xml:space="preserve">
+        <value>çalışıyor</value>
+    </data>
+    <data name="Menu_UpdateAvailable" xml:space="preserve">
+        <value>Flock {0} kullanılabilir</value>
+    </data>
+    <data name="Menu_UpdateTo" xml:space="preserve">
+        <value>{0} sürümüne güncelle…</value>
+    </data>
+    <data name="Menu_Updating" xml:space="preserve">
+        <value>Flock güncelleniyor…</value>
+    </data>
+    <data name="Menu_VersionOnPort" xml:space="preserve">
+        <value>{0}, 127.0.0.1:{1} üzerinde</value>
+    </data>
+    <data name="Menu_Web" xml:space="preserve">
+        <value>Web</value>
+    </data>
+    <data name="Menu_WorkersUp" xml:space="preserve">
+        <value>{0}/{1} worker çalışıyor</value>
+    </data>
+    <data name="Node_DownloadingAndInstalling" xml:space="preserve">
+        <value>İndiriliyor ve yükleniyor…</value>
+    </data>
+    <data name="Node_Footnote" xml:space="preserve">
+        <value>Resmi Node.js derlemeleri, her ana sürümün en yenisi. .nvmrc dosyasında sürüm sabitleyen bir projede node, npm veya npx çalıştırdığınızda o ana sürüm önerilir. Global paketler bir Node ana sürümüne aittir ve o sürümün güncellemelerinde korunur; varsayılan sürümün global paketleri PATH'inizdedir.</value>
+    </data>
+    <data name="Node_NoVersions" xml:space="preserve">
+        <value>Gösterilecek Node.js sürümü henüz yok.</value>
+    </data>
+    <data name="Node_Subtitle" xml:space="preserve">
+        <value>node, npm ve npx önce projenin .nvmrc / .node-version dosyasına, sonra sitenin sürümüne, sonra varsayılan sürüme uyar.</value>
+    </data>
+    <data name="Node_UninstallDetails" xml:space="preserve">
+        <value>Global npm paketleri de kaldırılır. Node {0} kullanan projeler ve siteler, yeniden yükleyene kadar varsayılan sürüme döner.</value>
+    </data>
+    <data name="Node_Uninstalling" xml:space="preserve">
+        <value>Kaldırılıyor…</value>
+    </data>
+    <data name="Node_UpdateNpm" xml:space="preserve">
+        <value>npm'i Güncelle</value>
+    </data>
+    <data name="Node_UpdatingNpm" xml:space="preserve">
+        <value>npm güncelleniyor…</value>
+    </data>
+    <data name="Php_OpenIni" xml:space="preserve">
+        <value>php.ini'yi Aç</value>
+    </data>
+    <data name="Php_RevealIni" xml:space="preserve">
+        <value>php.ini'yi Dosya Gezgini'nde Göster</value>
+    </data>
+    <data name="Php_Subtitle" xml:space="preserve">
+        <value>Yüklü her sürüm kendi PHP worker havuzunu çalıştırır. Siteler, bir sürüme sabitlenmedikçe varsayılanı kullanır.</value>
+    </data>
+    <data name="Php_UninstallDetails" xml:space="preserve">
+        <value>php.ini dosyası da kaldırılır. PHP {0} sürümüne sabitlenmiş siteler, başka bir sürüm seçene kadar çalışmaz.</value>
+    </data>
+    <data name="Php_UninstallFrankenDetails" xml:space="preserve">
+        <value>Bu sürümle FrankenPHP üzerinde çalışan siteler, FrankenPHP kendiliğinden yeniden indirilene kadar PHP-CGI ile sunulur.</value>
+    </data>
+    <data name="Php_UninstallFrankenQuestion" xml:space="preserve">
+        <value>PHP {0} için FrankenPHP kaldırılsın mı?</value>
+    </data>
+    <data name="Services_Active" xml:space="preserve">
+        <value>Etkin</value>
+    </data>
+    <data name="Services_All" xml:space="preserve">
+        <value>Tümü</value>
+    </data>
+    <data name="Services_AlsoDeleteData" xml:space="preserve">
+        <value>Verilerini de sil</value>
+    </data>
+    <data name="Services_CannotRunOnWindows" xml:space="preserve">
+        <value>Flock, {0} servisini Windows'ta çalıştıramaz.</value>
+    </data>
+    <data name="Services_Catalog_NoLongerInstalled" xml:space="preserve">
+        <value>{0} artık yüklü değil.</value>
+    </data>
+    <data name="Services_Catalog_ServiceGone" xml:space="preserve">
+        <value>{0} servisi artık kullanılamıyor.</value>
+    </data>
+    <data name="Services_Catalog_Unavailable" xml:space="preserve">
+        <value>{0} kullanılamıyor.</value>
+    </data>
+    <data name="Services_Catalog_UpdateRejected" xml:space="preserve">
+        <value>{0} güncellemesi, başka bir işlem çalıştığı için reddedildi.</value>
+    </data>
+    <data name="Services_Catalog_UpdateUnfinished" xml:space="preserve">
+        <value>{0} güncellemesi tamamlanamadı.</value>
+    </data>
+    <data name="Services_Category_CacheQueue" xml:space="preserve">
+        <value>Cache ve Kuyruk</value>
+    </data>
+    <data name="Services_Category_Core" xml:space="preserve">
+        <value>Çekirdek</value>
+    </data>
+    <data name="Services_Category_Database" xml:space="preserve">
+        <value>Veritabanı</value>
+    </data>
+    <data name="Services_Category_Debugging" xml:space="preserve">
+        <value>Debug</value>
+    </data>
+    <data name="Services_Category_Mail" xml:space="preserve">
+        <value>E-posta</value>
+    </data>
+    <data name="Services_Category_Search" xml:space="preserve">
+        <value>Arama</value>
+    </data>
+    <data name="Services_Category_Storage" xml:space="preserve">
+        <value>Depolama</value>
+    </data>
+    <data name="Services_Connection" xml:space="preserve">
+        <value>Bağlantı</value>
+    </data>
+    <data name="Services_DaemonDoesNotOffer" xml:space="preserve">
+        <value>Bu Flock daemon'ı {0} servisini sunmuyor. Flock'u güncelleyip yeniden deneyin.</value>
+    </data>
+    <data name="Services_DataComesBack" xml:space="preserve">
+        <value>Verileri hâlâ burada ve geri gelir.</value>
+    </data>
+    <data name="Services_DataSize" xml:space="preserve">
+        <value>{0} veri</value>
+    </data>
+    <data name="Services_DataStays" xml:space="preserve">
+        <value>Aşağıdan silmediğiniz sürece verileri korunur; {0} yeniden yüklendiğinde kullanılır.</value>
+    </data>
+    <data name="Services_DeletedDataGone" xml:space="preserve">
+        <value>Silinen veriler kurtarılamaz.</value>
+    </data>
+    <data name="Services_DnsDown" xml:space="preserve">
+        <value>DNS sunucusu kapalıyken wildcard subdomain'ler çözümlenmez. Site domain'leri hosts dosyası üzerinden çalışmaya devam eder.</value>
+    </data>
+    <data name="Services_DnsRunning" xml:space="preserve">
+        <value>Windows, .{0} altındaki tüm adları buraya yönlendirir; böylece bir sitenin her subdomain'i eklenmeden çalışır.</value>
+    </data>
+    <data name="Services_Downloads" xml:space="preserve">
+        <value>{0} indirir.</value>
+    </data>
+    <data name="Services_DownloadsNewest" xml:space="preserve">
+        <value>En yeni sürümü indirir.</value>
+    </data>
+    <data name="Services_FilterTooltip" xml:space="preserve">
+        <value>Yalnızca yüklü servisleri veya Flock'un sunduğu tüm servisleri göster</value>
+    </data>
+    <data name="Services_HostsInstalled" xml:space="preserve">
+        <value>Flock hosts yardımcısı, her sitenin domain'ini ve eklenen domain'leri hosts dosyasına yazar.</value>
+    </data>
+    <data name="Services_HostsMissing" xml:space="preserve">
+        <value>Hosts yardımcısı yüklü değil, bu yüzden site domain'leri Flock'un DNS kuralını kullanır.</value>
+    </data>
+    <data name="Services_InstallEllipsis" xml:space="preserve">
+        <value>Yükle…</value>
+    </data>
+    <data name="Services_InstallLog" xml:space="preserve">
+        <value>{0} yükleme logu</value>
+    </data>
+    <data name="Services_InstallName" xml:space="preserve">
+        <value>{0} Yükle</value>
+    </data>
+    <data name="Services_InstallUpdatesQuestion_one" xml:space="preserve">
+        <value>{1} için {0} güncelleme yüklensin mi?</value>
+    </data>
+    <data name="Services_InstallUpdatesQuestion_other" xml:space="preserve">
+        <value>{1} için {0} güncelleme yüklensin mi?</value>
+    </data>
+    <data name="Services_Installed" xml:space="preserve">
+        <value>Yüklü</value>
+    </data>
+    <data name="Services_InstallingFailed" xml:space="preserve">
+        <value>{0} yüklenemedi</value>
+    </data>
+    <data name="Services_InstallingTarget" xml:space="preserve">
+        <value>{0} yükleniyor</value>
+    </data>
+    <data name="Services_KeepsRunning" xml:space="preserve">
+        <value>{0}, siz geçiş yapana kadar çalışmaya devam eder.</value>
+    </data>
+    <data name="Services_More" xml:space="preserve">
+        <value>Daha fazla</value>
+    </data>
+    <data name="Services_NewBuildAvailable" xml:space="preserve">
+        <value>{0} için yeni bir derleme var</value>
+    </data>
+    <data name="Services_NoData" xml:space="preserve">
+        <value>Hiç veri içermiyor.</value>
+    </data>
+    <data name="Services_NoDetails" xml:space="preserve">
+        <value>Flock ayrıntı bildirmedi; log daha fazla bilgi verebilir.</value>
+    </data>
+    <data name="Services_NoServices" xml:space="preserve">
+        <value>Servis yok</value>
+    </data>
+    <data name="Services_NoVersions" xml:space="preserve">
+        <value>Flock bu bilgisayar için {0} sürümü sunmuyor.</value>
+    </data>
+    <data name="Services_NotOnThisComputer" xml:space="preserve">
+        <value>{0} bu bilgisayarda kullanılamıyor.</value>
+    </data>
+    <data name="Services_NotOnWindows" xml:space="preserve">
+        <value>Windows'ta kullanılamıyor</value>
+    </data>
+    <data name="Services_PortDetails" xml:space="preserve">
+        <value>Portlar 1024-65535 arasında olabilir. Projelerinizin .env dosyalarındaki portu da güncelleyin.</value>
+    </data>
+    <data name="Services_PortEllipsis" xml:space="preserve">
+        <value>Port…</value>
+    </data>
+    <data name="Services_PortNumber" xml:space="preserve">
+        <value>Port {0}</value>
+    </data>
+    <data name="Services_PortTaken" xml:space="preserve">
+        <value>{0} portu kullanımda, bu yüzden Flock {1} öneriyor.</value>
+    </data>
+    <data name="Services_PortTitle" xml:space="preserve">
+        <value>{0} portu</value>
+    </data>
+    <data name="Services_Postgres_ActiveVersion" xml:space="preserve">
+        <value>Etkin sürüm</value>
+    </data>
+    <data name="Services_Postgres_AlsoDeleteDatabases" xml:space="preserve">
+        <value>Veritabanlarını da sil ({0})</value>
+    </data>
+    <data name="Services_Postgres_ClientTools" xml:space="preserve">
+        <value>psql, pg_dump ve diğer komut satırı araçları PostgreSQL ile birlikte gelir. Terminalde Flock, yüklü en yeni sürümün araçlarını kullanır; bunlar yukarıdaki tüm sürümlerle ve uzak sunucularla çalışır.</value>
+    </data>
+    <data name="Services_Postgres_CreatingCluster" xml:space="preserve">
+        <value>Veritabanı kümesi indiriliyor ve oluşturuluyor…</value>
+    </data>
+    <data name="Services_Postgres_DatabasesComeBack" xml:space="preserve">
+        <value>Veritabanları hâlâ burada ve geri gelir.</value>
+    </data>
+    <data name="Services_Postgres_DatabasesKept" xml:space="preserve">
+        <value>PostgreSQL {0} veritabanları hâlâ burada - bu sürümü yeniden yüklediğinizde kullanılır.</value>
+    </data>
+    <data name="Services_Postgres_DatabasesStay" xml:space="preserve">
+        <value>Aşağıdan silmediğiniz sürece veritabanları korunur; {0} yeniden yüklendiğinde kullanılır.</value>
+    </data>
+    <data name="Services_Postgres_DeletedDatabasesGone" xml:space="preserve">
+        <value>Silinen veritabanları kurtarılamaz.</value>
+    </data>
+    <data name="Services_Postgres_Description" xml:space="preserve">
+        <value>Uygulamalarınızın veritabanı. Daha sonra başka sürümler ekleyebilirsiniz; aynı anda yalnızca biri çalışır ve her sürüm kendi veritabanlarını tutar.</value>
+    </data>
+    <data name="Services_Postgres_FirstInstallDetails" xml:space="preserve">
+        <value>Sunucu indiriliyor ve veritabanı kümesi oluşturuluyor. Bu bir iki dakika sürer; bu arada bu pencereyi kapatabilirsiniz.</value>
+    </data>
+    <data name="Services_Postgres_Loading" xml:space="preserve">
+        <value>PostgreSQL sürümleri yükleniyor…</value>
+    </data>
+    <data name="Services_Postgres_NewBuildUpdateBelow" xml:space="preserve">
+        <value>{0} için yeni bir derleme var - aşağıdan güncelleyin; veritabanlarınız korunur.</value>
+    </data>
+    <data name="Services_Postgres_NoDatabases" xml:space="preserve">
+        <value>Hiç veritabanı içermiyor.</value>
+    </data>
+    <data name="Services_Postgres_NoneActive" xml:space="preserve">
+        <value>Etkin sürüm yok. PostgreSQL'i başlatmak için aşağıdan yüklü bir sürüme geçin.</value>
+    </data>
+    <data name="Services_Postgres_SideBySide" xml:space="preserve">
+        <value>Yüklü sürümler yan yana durur. Aynı anda yalnızca biri çalışır; her biri kendi veritabanlarını korur ve bir sürüm içindeki güncellemeler de bunları korur.</value>
+    </data>
+    <data name="Services_Postgres_StartsEmpty" xml:space="preserve">
+        <value>Yeni, boş bir veritabanı kümesiyle başlar.</value>
+    </data>
+    <data name="Services_Postgres_StaysActive" xml:space="preserve">
+        <value>Siz geçene kadar {0} etkin kalır.</value>
+    </data>
+    <data name="Services_Postgres_Stopped" xml:space="preserve">
+        <value>Durduruldu</value>
+    </data>
+    <data name="Services_Postgres_SwitchDetails" xml:space="preserve">
+        <value>PostgreSQL {0} durur; veritabanları korunur ancak geri dönene kadar kullanılamaz. {1} kendi veritabanlarını kullanır.</value>
+    </data>
+    <data name="Services_Postgres_UninstallLast" xml:space="preserve">
+        <value>PostgreSQL {0} durur; bir sürüm yükleyene kadar PostgreSQL çalışmaz.</value>
+    </data>
+    <data name="Services_Postgres_Uninstalling" xml:space="preserve">
+        <value>{0} kaldırılıyor…</value>
+    </data>
+    <data name="Services_Postgres_UpdateBelow" xml:space="preserve">
+        <value>{0} kullanılabilir - aşağıdan güncelleyin; veritabanlarınız korunur.</value>
+    </data>
+    <data name="Services_Postgres_UpdateTooltip" xml:space="preserve">
+        <value>{1} yerine {0} yüklenir. Veritabanlarınız korunur.</value>
+    </data>
+    <data name="Services_Postgres_UpdateTooltipRestart" xml:space="preserve">
+        <value>{1} yerine {0} yüklenir. Veritabanlarınız korunur; PostgreSQL kısa süreliğine yeniden başlatılır.</value>
+    </data>
+    <data name="Services_Postgres_Withdrawn" xml:space="preserve">
+        <value>Bu derleme geri çekildi: {0}</value>
+    </data>
+    <data name="Services_Postgres_WithdrawnTooltip" xml:space="preserve">
+        <value>Düzeltilmiş bir derleme yayımlanır yayımlanmaz Flock bunu yenisiyle değiştirir.</value>
+    </data>
+    <data name="Services_Reinstall" xml:space="preserve">
+        <value>{0} Sürümünü Yeniden Yükle</value>
+    </data>
+    <data name="Services_Releases_Available" xml:space="preserve">
+        <value>{0} kullanılabilir</value>
+    </data>
+    <data name="Services_Releases_BytesOfData_one" xml:space="preserve">
+        <value>{0} bayt veri</value>
+    </data>
+    <data name="Services_Releases_BytesOfData_other" xml:space="preserve">
+        <value>{0} bayt veri</value>
+    </data>
+    <data name="Services_Releases_DataKept" xml:space="preserve">
+        <value>veriler korundu</value>
+    </data>
+    <data name="Services_Releases_DatabasesKept_one" xml:space="preserve">
+        <value>veritabanları korundu ({0} bayt)</value>
+    </data>
+    <data name="Services_Releases_DatabasesKept_other" xml:space="preserve">
+        <value>veritabanları korundu ({0} bayt)</value>
+    </data>
+    <data name="Services_Releases_HasData" xml:space="preserve">
+        <value>verisi var</value>
+    </data>
+    <data name="Services_Releases_InstallAllUpdates" xml:space="preserve">
+        <value>Tüm güncellemeleri yükle ({0})</value>
+    </data>
+    <data name="Services_Releases_InstallUpdate" xml:space="preserve">
+        <value>Güncellemeyi yükle</value>
+    </data>
+    <data name="Services_Releases_LoadingPostgres" xml:space="preserve">
+        <value>PostgreSQL sürümleri yükleniyor…</value>
+    </data>
+    <data name="Services_Releases_LoadingServices" xml:space="preserve">
+        <value>Servis sürümleri yükleniyor…</value>
+    </data>
+    <data name="Services_Releases_NewBuildAvailable" xml:space="preserve">
+        <value>yeni derleme var</value>
+    </data>
+    <data name="Services_Releases_Prerelease" xml:space="preserve">
+        <value>{0} bir ön sürümdür</value>
+    </data>
+    <data name="Services_Releases_Unavailable" xml:space="preserve">
+        <value>Kullanılamıyor</value>
+    </data>
+    <data name="Services_Releases_UpToDate" xml:space="preserve">
+        <value>güncel</value>
+    </data>
+    <data name="Services_Releases_Withdrawn" xml:space="preserve">
+        <value>geri çekildi: {0}</value>
+    </data>
+    <data name="Services_RunsForSites" xml:space="preserve">
+        <value>Siteleriniz için 127.0.0.1 üzerinde çalışır.</value>
+    </data>
+    <data name="Services_ShowLastLog" xml:space="preserve">
+        <value>Son Logu Göster</value>
+    </data>
+    <data name="Services_SideBySide" xml:space="preserve">
+        <value>Yüklü sürümler yan yana durur. Aynı anda yalnızca biri çalışır; her biri kendi verilerini korur ve bir sürüm içindeki güncellemeler de bunları korur.</value>
+    </data>
+    <data name="Services_Start" xml:space="preserve">
+        <value>Başlat</value>
+    </data>
+    <data name="Services_Started" xml:space="preserve">
+        <value>{0} başlatıldı</value>
+    </data>
+    <data name="Services_StartsEmpty" xml:space="preserve">
+        <value>{0} veri olmadan başlar.</value>
+    </data>
+    <data name="Services_StopDetails" xml:space="preserve">
+        <value>Bunu kullanan uygulamalar, yeniden başlatana kadar bağlanamaz.</value>
+    </data>
+    <data name="Services_StopQuestion" xml:space="preserve">
+        <value>{0} durdurulsun mu?</value>
+    </data>
+    <data name="Services_Subtitle" xml:space="preserve">
+        <value>Veritabanları, cache'ler, arama ve sitelerinizin çevresindeki araçlar. Hepsi yalnızca 127.0.0.1 üzerinde dinler.</value>
+    </data>
+    <data name="Services_SwitchDetails" xml:space="preserve">
+        <value>{0} durur; verileri korunur ancak geri dönene kadar kullanılmaz.</value>
+    </data>
+    <data name="Services_SwitchEllipsis" xml:space="preserve">
+        <value>Buna Geç…</value>
+    </data>
+    <data name="Services_SwitchQuestion" xml:space="preserve">
+        <value>{0} sürümüne geçilsin mi?</value>
+    </data>
+    <data name="Services_UninstallLast" xml:space="preserve">
+        <value>{0} durur; bir sürüm yükleyene kadar siteleriniz {1} kullanamaz.</value>
+    </data>
+    <data name="Services_UninstallNext" xml:space="preserve">
+        <value>{0} durur ve {1} etkin sürüm olur.</value>
+    </data>
+    <data name="Services_UninstallQuestion" xml:space="preserve">
+        <value>{0} kaldırılsın mı?</value>
+    </data>
+    <data name="Services_UpdateTooltip" xml:space="preserve">
+        <value>{1} yerine {0} yüklenir. Verileriniz korunur.</value>
+    </data>
+    <data name="Services_UpdateTooltipRestart" xml:space="preserve">
+        <value>{1} yerine {0} yüklenir. Verileriniz korunur; {2} kısa süreliğine yeniden başlatılır.</value>
+    </data>
+    <data name="Services_UpdatesKeepData" xml:space="preserve">
+        <value>Güncellemeler verilerinizi korur.</value>
+    </data>
+    <data name="Services_UpdatingFailed" xml:space="preserve">
+        <value>{0} güncellenemedi</value>
+    </data>
+    <data name="Services_UpdatingTarget" xml:space="preserve">
+        <value>{0} güncelleniyor</value>
+    </data>
+    <data name="Services_UsesOwnData" xml:space="preserve">
+        <value>{0} kendi verilerini kullanır.</value>
+    </data>
+    <data name="Services_VersionAvailable" xml:space="preserve">
+        <value>{0} kullanılabilir</value>
+    </data>
+    <data name="Services_WebDown" xml:space="preserve">
+        <value>Web sunucusu kapalıyken siteler açılmaz. Nedeni logunda yazıyor olabilir; `flock restart` onu yeniden başlatır.</value>
+    </data>
+    <data name="Services_WebRunning" xml:space="preserve">
+        <value>Caddy, her siteyi Flock'un yerel sertifika yetkilisinin sertifikalarıyla HTTPS üzerinden (https://app.{0}) sunar; `flock install` bu yetkiliyi güvenilir olarak tanıtır.</value>
+    </data>
+    <data name="Services_Withdrawn" xml:space="preserve">
+        <value>Geri çekildi: {0}</value>
+    </data>
+    <data name="Services_WithdrawnTooltip" xml:space="preserve">
+        <value>Bu derleme geri çekildi. Düzeltilmiş bir derleme yayımlanır yayımlanmaz Flock bunu yenisiyle değiştirir.</value>
+    </data>
+    <data name="Services_WithdrawnUpdate" xml:space="preserve">
+        <value>Geri çekildi: {0} - yenisiyle değiştirmek için güncelleyin</value>
+    </data>
+    <data name="Settings_CouldNotShow" xml:space="preserve">
+        <value>Ayarlar gösterilemedi</value>
+    </data>
+    <data name="Settings_CouldNotShowDetails" xml:space="preserve">
+        <value>Yeniden deneyin veya başka bir ayarlar sayfası seçin.</value>
+    </data>
+    <data name="Settings_Editor_None" xml:space="preserve">
+        <value>Bağlantı verme</value>
+    </data>
+    <data name="Settings_Pane_About" xml:space="preserve">
+        <value>Hakkında</value>
+    </data>
+    <data name="Settings_Pane_Ai" xml:space="preserve">
+        <value>Yapay Zeka</value>
+    </data>
+    <data name="Settings_Pane_Debugger" xml:space="preserve">
+        <value>Debugger</value>
+    </data>
+    <data name="Settings_Pane_Dumps" xml:space="preserve">
+        <value>Dump'lar</value>
+    </data>
+    <data name="Settings_Pane_General" xml:space="preserve">
+        <value>Genel</value>
+    </data>
+    <data name="Settings_Pane_Mail" xml:space="preserve">
+        <value>E-posta</value>
+    </data>
+    <data name="Settings_Pane_Services" xml:space="preserve">
+        <value>Servisler</value>
+    </data>
+    <data name="Settings_Pane_Sites" xml:space="preserve">
+        <value>Siteler</value>
+    </data>
+    <data name="Settings_SaveCanceled" xml:space="preserve">
+        <value>Tercihlerin kaydedilmesi iptal edildi.</value>
+    </data>
+    <data name="Settings_StartDaemonToChange" xml:space="preserve">
+        <value>Ayarlarını değiştirmek için daemon'ı başlatın.</value>
+    </data>
+    <data name="Settings_WindowTitle" xml:space="preserve">
+        <value>Flock Ayarları</value>
+    </data>
+    <data name="Setup_AdminPrompt" xml:space="preserve">
+        <value>Windows birazdan yönetici izni isteyecek.</value>
+    </data>
+    <data name="Setup_Background" xml:space="preserve">
+        <value>Arka planda çalışır</value>
+    </data>
+    <data name="Setup_BackgroundDescription" xml:space="preserve">
+        <value>Flock daemon'ı sitelerinizi ve servislerinizi sunar, oturum açtığınızda başlar.</value>
+    </data>
+    <data name="Setup_BothInstalled" xml:space="preserve">
+        <value>{0} ve {1} yüklü</value>
+    </data>
+    <data name="Setup_CheckAgain" xml:space="preserve">
+        <value>Yeniden denetle</value>
+    </data>
+    <data name="Setup_CheckingPorts" xml:space="preserve">
+        <value>Flock'un portları denetleniyor…</value>
+    </data>
+    <data name="Setup_CouldNotChangeStartup" xml:space="preserve">
+        <value>Başlangıç ayarı değiştirilemedi: {0}. Ayarlar → Genel'den de değiştirebilirsiniz.</value>
+    </data>
+    <data name="Setup_CouldNotInstall" xml:space="preserve">
+        <value>{0} yüklenemedi. Ayarlar → {1} bölümünden yeniden deneyin.</value>
+    </data>
+    <data name="Setup_CouldNotInstallBecause" xml:space="preserve">
+        <value>{0} yüklenemedi: {1}. Ayarlar → {2} bölümünden yeniden deneyin.</value>
+    </data>
+    <data name="Setup_Declined" xml:space="preserve">
+        <value>Windows'un izin istemi reddedildi. Flock çalışır, ancak siz izin verene kadar *.test siteleri çözümlenmez ve HTTPS'e güvenilmez.</value>
+    </data>
+    <data name="Setup_DidNotFinish" xml:space="preserve">
+        <value>Kurulum tamamlanmadı</value>
+    </data>
+    <data name="Setup_Failed" xml:space="preserve">
+        <value>Bir sorun oluştu. Ayrıntılar aşağıdaki çıktıda; yeniden deneyebilirsiniz.</value>
+    </data>
+    <data name="Setup_InstalledWhenDownloadable" xml:space="preserve">
+        <value>{0}, Flock indirebilir indirmez yüklenir.</value>
+    </data>
+    <data name="Setup_InstalledWhenDownloadableBoth" xml:space="preserve">
+        <value>{0}, Flock indirebilir indirmez yüklenir.</value>
+    </data>
+    <data name="Setup_Installing" xml:space="preserve">
+        <value>{0} yükleniyor…</value>
+    </data>
+    <data name="Setup_Intro" xml:space="preserve">
+        <value>Flock; Laravel sitelerinizi, PHP'yi, e-posta ve veritabanı servislerini bu bilgisayarda çalıştırır. Kurulum kısa sürer:</value>
+    </data>
+    <data name="Setup_LinkProject" xml:space="preserve">
+        <value>Bir proje bağlayın</value>
+    </data>
+    <data name="Setup_LinkProjectDescription" xml:space="preserve">
+        <value>Bir Laravel projesinde `flock link` çalıştırın: site http://&lt;klasör&gt;.test adresinde açılır. `flock secure` HTTPS ekler.</value>
+    </data>
+    <data name="Setup_NewTerminal" xml:space="preserve">
+        <value>Yeni bir terminal açın</value>
+    </data>
+    <data name="Setup_NewTerminalDescription" xml:space="preserve">
+        <value>Önceden açık olan terminallerde eski PATH hâlâ geçerlidir.</value>
+    </data>
+    <data name="Setup_NextSteps" xml:space="preserve">
+        <value>Sonraki adımlar</value>
+    </data>
+    <data name="Setup_NoBundledCli" xml:space="preserve">
+        <value>Flock'un bu derlemesinde yerleşik CLI yok - bir terminalde `flock install` çalıştırın.</value>
+    </data>
+    <data name="Setup_NotNow" xml:space="preserve">
+        <value>Şimdi değil</value>
+    </data>
+    <data name="Setup_OpenAtSignIn" xml:space="preserve">
+        <value>Oturum açtığımda Flock'u aç</value>
+    </data>
+    <data name="Setup_OpenSettings" xml:space="preserve">
+        <value>Ayarlar'ı Aç</value>
+    </data>
+    <data name="Setup_PhpAndNode" xml:space="preserve">
+        <value>PHP ve Node.js</value>
+    </data>
+    <data name="Setup_PhpAndNodeDescription" xml:space="preserve">
+        <value>Flock, en yeni PHP ve Node.js LTS sürümlerini varsayılan olarak yükler. Ayarlar → PHP ve Node'dan başka sürümler yükleyebilirsiniz.</value>
+    </data>
+    <data name="Setup_QuitOthers" xml:space="preserve">
+        <value>Önce diğer yerel ortamları kapatın</value>
+    </data>
+    <data name="Setup_QuitOthersDescription" xml:space="preserve">
+        <value>Flock'un bu portları tek başına kullanması gerekir, ancak şu anda başka programlar kullanıyor. Birlikte çalıştırılırlarsa ikisi de çalışmaz.</value>
+    </data>
+    <data name="Setup_Ready" xml:space="preserve">
+        <value>Flock hazır</value>
+    </data>
+    <data name="Setup_SetUpFlock" xml:space="preserve">
+        <value>Flock'u kur</value>
+    </data>
+    <data name="Setup_SettingUp" xml:space="preserve">
+        <value>Flock kuruluyor…</value>
+    </data>
+    <data name="Setup_Star" xml:space="preserve">
+        <value>Flock ücretsiz ve açık kaynaklıdır. Beğendiyseniz [GitHub'da vereceğiniz bir yıldız](https://github.com/flock-php/flock) başkalarının da Flock'u bulmasına yardımcı olur.</value>
+    </data>
+    <data name="Setup_Terminal" xml:space="preserve">
+        <value>Terminal</value>
+    </data>
+    <data name="Setup_TerminalDescription" xml:space="preserve">
+        <value>Flock'un sürümleri PATH'inizde ilk sırada yer alır. Kurulumdan sonra yeni bir terminal açın.</value>
+    </data>
+    <data name="Setup_TerminalTitle" xml:space="preserve">
+        <value>Terminalinizde php, composer ve node</value>
+    </data>
+    <data name="Setup_TrustedHttps" xml:space="preserve">
+        <value>Güvenilir HTTPS</value>
+    </data>
+    <data name="Setup_TrustedHttpsDescription" xml:space="preserve">
+        <value>Windows bir kez yönetici izni ister: sitelerinizi hosts dosyasına ekleyen küçük servis için ve Flock'un sertifikasına güvenmek için.</value>
+    </data>
+    <data name="Setup_TrustedHttpsTitle" xml:space="preserve">
+        <value>Güvenilir HTTPS'li *.test siteleri</value>
+    </data>
+    <data name="Setup_TryAgain" xml:space="preserve">
+        <value>Yeniden Dene</value>
+    </data>
+    <data name="Setup_TwoNames" xml:space="preserve">
+        <value>{0} ve {1}</value>
+    </data>
+    <data name="Setup_UsedAsDefault" xml:space="preserve">
+        <value>Siteleriniz ve terminalleriniz bunu varsayılan olarak kullanır.</value>
+    </data>
+    <data name="Setup_UsedAsDefaultsBoth" xml:space="preserve">
+        <value>Siteleriniz ve terminalleriniz bunları varsayılan olarak kullanır.</value>
+    </data>
+    <data name="Setup_Warning" xml:space="preserve">
+        <value>Uyarı</value>
+    </data>
+    <data name="Setup_Welcome" xml:space="preserve">
+        <value>Flock'a Hoş Geldiniz</value>
+    </data>
+    <data name="Sites_AddDomain" xml:space="preserve">
+        <value>Domain Ekle…</value>
+    </data>
+    <data name="Sites_AddDomainNoWildcard" xml:space="preserve">
+        <value>Wildcard subdomain'ler bu bilgisayarda çalışmaz, bu yüzden kullandığınız her birini ekleyin: hosts dosyasına yazılır. {0} gibi tam bir ad ise takma ad ekler.</value>
+    </data>
+    <data name="Sites_AddDomainNoWildcardBecause" xml:space="preserve">
+        <value>Wildcard subdomain'ler bu bilgisayarda çalışmaz ({0}), bu yüzden kullandığınız her birini ekleyin: hosts dosyasına yazılır. {1} gibi tam bir ad ise takma ad ekler.</value>
+    </data>
+    <data name="Sites_AddDomainPlaceholder" xml:space="preserve">
+        <value>tenant1, a.b veya {0}</value>
+    </data>
+    <data name="Sites_AddDomainTitle" xml:space="preserve">
+        <value>{0} sitesine domain ekle</value>
+    </data>
+    <data name="Sites_AddDomainWildcard_one" xml:space="preserve">
+        <value>{1} altındaki {0} düzeye kadar her subdomain bu bilgisayarda zaten çalışır. Wildcard DNS'in çalışmadığı yerlerde de çalışması için buradan bir tane ekleyin (hosts dosyasına yazılır) veya {2} gibi bir takma ad ekleyin.</value>
+    </data>
+    <data name="Sites_AddDomainWildcard_other" xml:space="preserve">
+        <value>{1} altındaki {0} düzeye kadar her subdomain bu bilgisayarda zaten çalışır. Wildcard DNS'in çalışmadığı yerlerde de çalışması için buradan bir tane ekleyin (hosts dosyasına yazılır) veya {2} gibi bir takma ad ekleyin.</value>
+    </data>
+    <data name="Sites_AddProxy" xml:space="preserve">
+        <value>Proxy Ekle…</value>
+    </data>
+    <data name="Sites_AddProxyServerTooltip" xml:space="preserve">
+        <value>Kendi başına çalışan bir sunucuyu (ör. bir panel veya Docker konteyneri) bir .test domain'inde sun</value>
+    </data>
+    <data name="Sites_AddProxyTitle" xml:space="preserve">
+        <value>Proxy ekle</value>
+    </data>
+    <data name="Sites_AddSite" xml:space="preserve">
+        <value>Site Ekle…</value>
+    </data>
+    <data name="Sites_AddToComposer" xml:space="preserve">
+        <value>composer.json'a Ekle…</value>
+    </data>
+    <data name="Sites_Alias" xml:space="preserve">
+        <value>{0} (takma ad)</value>
+    </data>
+    <data name="Sites_BoostAdd" xml:space="preserve">
+        <value>Flock'u yönergelerine ekle…</value>
+    </data>
+    <data name="Sites_BoostAddQuestion" xml:space="preserve">
+        <value>Flock, {0} sitesinin Boost yönergelerine eklensin mi?</value>
+    </data>
+    <data name="Sites_BoostDetails" xml:space="preserve">
+        <value>{0} içine .ai\guidelines\flock.md dosyasını yazar ve php artisan boost:update komutunu çalıştırır; böylece yapay zeka ajanları uygulamayı Flock'un sunduğunu ve PHP sürümünü onun seçtiğini bilir. Dosyayı .ai\guidelines içindeki diğerleriyle birlikte commit edin. Bu işlem projenizdeki dosyaları değiştirir.</value>
+    </data>
+    <data name="Sites_BoostMissing" xml:space="preserve">
+        <value>Proje Laravel Boost kullanıyor. Flock'u yönergelerine eklemek, yapay zeka ajanlarına uygulamayı Flock'un sunduğunu ve PHP sürümünü onun seçtiğini bildirir.</value>
+    </data>
+    <data name="Sites_BoostOutdated" xml:space="preserve">
+        <value>Projenin Boost yönergelerindeki Flock yönergesi güncel değil.</value>
+    </data>
+    <data name="Sites_BoostUpdate" xml:space="preserve">
+        <value>Güncelle…</value>
+    </data>
+    <data name="Sites_BoostUpdateQuestion" xml:space="preserve">
+        <value>{0} sitesindeki Flock yönergesi güncellensin mi?</value>
+    </data>
+    <data name="Sites_Change" xml:space="preserve">
+        <value>Değiştir…</value>
+    </data>
+    <data name="Sites_ChangeAction" xml:space="preserve">
+        <value>Değiştir</value>
+    </data>
+    <data name="Sites_ChangeRunning" xml:space="preserve">
+        <value>Bu sitede başka bir değişiklik hâlâ sürüyor. Bittiğinde yeniden deneyin.</value>
+    </data>
+    <data name="Sites_ChangeUpstreamDetails" xml:space="preserve">
+        <value>Yalnızca port verilirse 127.0.0.1 kullanılır; diğer durumlar için host ve port (localhost:5173) veya bir URL (https://127.0.0.1:8443) girin.</value>
+    </data>
+    <data name="Sites_ChangeUpstreamTitle" xml:space="preserve">
+        <value>{0} proxy'sinin upstream'ini değiştir</value>
+    </data>
+    <data name="Sites_ChangesAfile" xml:space="preserve">
+        <value>Bu işlem projenizdeki bir dosyayı değiştirir.</value>
+    </data>
+    <data name="Sites_ChangesFiles" xml:space="preserve">
+        <value>Bu işlem projenizdeki dosyaları değiştirir.</value>
+    </data>
+    <data name="Sites_ChooseFolder" xml:space="preserve">
+        <value>Klasör Seç…</value>
+    </data>
+    <data name="Sites_ChooseFolderInProject" xml:space="preserve">
+        <value>Projeden bir klasör seçin</value>
+    </data>
+    <data name="Sites_ChooseFolderInProjectDetails" xml:space="preserve">
+        <value>{0}, {1} içinde değil. Belge kök dizini projedeki bir klasör olmalıdır.</value>
+    </data>
+    <data name="Sites_Classic" xml:space="preserve">
+        <value>Klasik</value>
+    </data>
+    <data name="Sites_Command" xml:space="preserve">
+        <value>Komut</value>
+    </data>
+    <data name="Sites_Default" xml:space="preserve">
+        <value>Varsayılan</value>
+    </data>
+    <data name="Sites_DefaultVersion" xml:space="preserve">
+        <value>Varsayılan ({0})</value>
+    </data>
+    <data name="Sites_DevServer" xml:space="preserve">
+        <value>Geliştirme sunucusu</value>
+    </data>
+    <data name="Sites_DevServerFirstVisit" xml:space="preserve">
+        <value>Flock, geliştirme sunucusunu site ilk kez ziyaret edildiğinde başlatır.</value>
+    </data>
+    <data name="Sites_DevServerFootnote" xml:space="preserve">
+        <value>Flock, site ziyaret edildiğinde projenin dev betiğini Node.js sürümüyle çalıştırır ve 30 dakika ziyaret olmazsa durdurur.</value>
+    </data>
+    <data name="Sites_DocumentRoot" xml:space="preserve">
+        <value>Belge kök dizini</value>
+    </data>
+    <data name="Sites_Domains" xml:space="preserve">
+        <value>Domain'ler</value>
+    </data>
+    <data name="Sites_DownloadingFrankenphp" xml:space="preserve">
+        <value>PHP {0} için FrankenPHP indiriliyor…</value>
+    </data>
+    <data name="Sites_DownloadingFrankenphpForPhp" xml:space="preserve">
+        <value>PHP {0} için FrankenPHP indiriliyor… %{1}</value>
+    </data>
+    <data name="Sites_ExtensionCanceled" xml:space="preserve">
+        <value>Eklenti isteği iptal edildi.</value>
+    </data>
+    <data name="Sites_ExtensionMissing" xml:space="preserve">
+        <value>Flock'un PHP {0} sürümünde yok</value>
+    </data>
+    <data name="Sites_ExtensionRequiredBy" xml:space="preserve">
+        <value>{0} gerektiriyor</value>
+    </data>
+    <data name="Sites_ExtensionUsed" xml:space="preserve">
+        <value>Gerekli değil, ancak kullanılıyor: {0}</value>
+    </data>
+    <data name="Sites_ExtensionsFootnote" xml:space="preserve">
+        <value>Bir eklentiyi composer.json'da zorunlu kılarsanız, eklentinin bulunmadığı bir sunucuda uygulamanın hata vermesi yerine composer install çalışmayı reddeder.</value>
+    </data>
+    <data name="Sites_ExtensionsLaravel" xml:space="preserve">
+        <value>PHP {0} · Laravel uygulaması</value>
+    </data>
+    <data name="Sites_ExtensionsNone" xml:space="preserve">
+        <value>Proje hiçbir PHP eklentisi gerektirmiyor.</value>
+    </data>
+    <data name="Sites_ExtensionsTitle" xml:space="preserve">
+        <value>{0} sitesinin PHP eklentileri</value>
+    </data>
+    <data name="Sites_FrankenphpFootnote" xml:space="preserve">
+        <value>FrankenPHP, PHP 8.2 veya daha yenisini gerektirir. Xdebug isteyen istekler yine PHP-CGI'a gider.</value>
+    </data>
+    <data name="Sites_FrankenphpFootnoteOctane" xml:space="preserve">
+        <value>FrankenPHP, PHP 8.2 veya daha yenisini gerektirir. Xdebug isteyen istekler yine PHP-CGI'a gider. Worker modu için projeye Laravel Octane yükleyin (composer require laravel/octane).</value>
+    </data>
+    <data name="Sites_FrankenphpRunning" xml:space="preserve">
+        <value>FrankenPHP {0}, PHP {1} ile çalışıyor</value>
+    </data>
+    <data name="Sites_FrankenphpRunningWorker" xml:space="preserve">
+        <value>FrankenPHP {0}, PHP {1} ile çalışıyor · worker modu</value>
+    </data>
+    <data name="Sites_NoOutputYet" xml:space="preserve">
+        <value>Henüz çıktı yok.</value>
+    </data>
+    <data name="Sites_NoSites" xml:space="preserve">
+        <value>Site yok</value>
+    </data>
+    <data name="Sites_NoSitesDescription" xml:space="preserve">
+        <value>Buradan tek bir site ekleyin veya Genel'den bir proje klasörü ekleyin.</value>
+    </data>
+    <data name="Sites_NodeWins" xml:space="preserve">
+        <value>.flockrc'deki Node {0}, {1} değerine üstün gelir.</value>
+    </data>
+    <data name="Sites_NothingAnswersYet" xml:space="preserve">
+        <value>{0} adresinde henüz yanıt veren yok.</value>
+    </data>
+    <data name="Sites_OctaneTooltip" xml:space="preserve">
+        <value>Worker modunu kullanmak için projeye Laravel Octane yükleyin (composer require laravel/octane).</value>
+    </data>
+    <data name="Sites_OpenLog" xml:space="preserve">
+        <value>Logu Aç</value>
+    </data>
+    <data name="Sites_Output" xml:space="preserve">
+        <value>Çıktı</value>
+    </data>
+    <data name="Sites_PhpCgiMeanwhile" xml:space="preserve">
+        <value>Bu sırada site PHP-CGI ile sunulur.</value>
+    </data>
+    <data name="Sites_PhpCgiUntilReady" xml:space="preserve">
+        <value>Hazır olana kadar site PHP-CGI ile sunulur.</value>
+    </data>
+    <data name="Sites_PhpExtensions" xml:space="preserve">
+        <value>PHP eklentileri</value>
+    </data>
+    <data name="Sites_Pin" xml:space="preserve">
+        <value>Sabitle</value>
+    </data>
+    <data name="Sites_PinMenuTooltip" xml:space="preserve">
+        <value>Sürümleri ve belge kök dizinini projeye sabitle</value>
+    </data>
+    <data name="Sites_PinNodeDetails" xml:space="preserve">
+        <value>{2} içindeki {1} dosyasına {0} yazar. Dosyayı commit edin; Flock, nvm ve diğer Node araçları bu proje için Node {0} kullanır.</value>
+    </data>
+    <data name="Sites_PinNodeItem" xml:space="preserve">
+        <value>Node {0} Sürümünü Projeye Sabitle…</value>
+    </data>
+    <data name="Sites_PinNodeQuestion" xml:space="preserve">
+        <value>Node {0} sürümü {1} sitesine sabitlensin mi?</value>
+    </data>
+    <data name="Sites_PinPhpDetails" xml:space="preserve">
+        <value>{1} içindeki .flockrc dosyasına php={0} yazar. Dosyayı commit edin; bu projede Flock kullanan herkes PHP {0} kullanır.</value>
+    </data>
+    <data name="Sites_PinPhpItem" xml:space="preserve">
+        <value>PHP {0} Sürümünü Projeye Sabitle…</value>
+    </data>
+    <data name="Sites_PinPhpQuestion" xml:space="preserve">
+        <value>PHP {0} sürümü {1} sitesine sabitlensin mi?</value>
+    </data>
+    <data name="Sites_PinRootDetails" xml:space="preserve">
+        <value>{1} içindeki .flockrc dosyasına root={0} yazar. Dosyayı commit edin; bu projede Flock kullanan herkes siteyi {2} klasöründen sunar.</value>
+    </data>
+    <data name="Sites_PinRootItem" xml:space="preserve">
+        <value>Belge Kök Dizinini ({0}) Projeye Sabitle…</value>
+    </data>
+    <data name="Sites_PinRootQuestion" xml:space="preserve">
+        <value>Belge kök dizini {0}, {1} sitesine sabitlensin mi?</value>
+    </data>
+    <data name="Sites_ProjectFolderBadge" xml:space="preserve">
+        <value>Proje klasörü</value>
+    </data>
+    <data name="Sites_Proxies" xml:space="preserve">
+        <value>Proxy'ler</value>
+    </data>
+    <data name="Sites_Proxy" xml:space="preserve">
+        <value>Proxy</value>
+    </data>
+    <data name="Sites_ProxyFootnoteCommands" xml:space="preserve">
+        <value>Her istek, Host başlığıyla birlikte upstream'e iletilir; WebSocket yükseltmeleri (hot reload) dahil. Upstream yanıt verene kadar {0} bunu belirten bir sayfa gösterir.</value>
+    </data>
+    <data name="Sites_ProxyFootnoteNoCommands" xml:space="preserve">
+        <value>Her istek, Host başlığıyla birlikte upstream'e iletilir; WebSocket yükseltmeleri (hot reload) dahil. Flock sunucuyu başlatmaz; her zamanki gibi başlatın ya da aşağıdan komut verin. Upstream yanıt verene kadar {0} bunu belirten bir sayfa gösterir.</value>
+    </data>
+    <data name="Sites_ProxyName" xml:space="preserve">
+        <value>Ad</value>
+    </data>
+    <data name="Sites_Proxy_AddCommands" xml:space="preserve">
+        <value>Komut Ekle…</value>
+    </data>
+    <data name="Sites_Proxy_AddCommandsTitle" xml:space="preserve">
+        <value>{0} için komut ekle</value>
+    </data>
+    <data name="Sites_Proxy_CommandHelp" xml:space="preserve">
+        <value>Flock, Başlat'a tıkladığınızda başlatma komutunu çalıştırır ve çıktısını gösterir. Sunucuyu arka planda başlatan bir komut için (docker compose up -d gibi) onu durduran komutu da ekleyin.</value>
+    </data>
+    <data name="Sites_Proxy_Commands" xml:space="preserve">
+        <value>Komutlar</value>
+    </data>
+    <data name="Sites_Proxy_CommandsOptional" xml:space="preserve">
+        <value>Komutlar (isteğe bağlı)</value>
+    </data>
+    <data name="Sites_Proxy_CommandsTitle" xml:space="preserve">
+        <value>{0} komutları</value>
+    </data>
+    <data name="Sites_Proxy_NotRunning" xml:space="preserve">
+        <value>Çalışmıyor</value>
+    </data>
+    <data name="Sites_Proxy_NothingAnswers" xml:space="preserve">
+        <value>{0} adresinde yanıt veren yok. Sunucuyu orada başlatın.</value>
+    </data>
+    <data name="Sites_Proxy_RemoveCommands" xml:space="preserve">
+        <value>Komutları Kaldır</value>
+    </data>
+    <data name="Sites_Proxy_Running" xml:space="preserve">
+        <value>Çalışıyor</value>
+    </data>
+    <data name="Sites_Proxy_StartInSettings" xml:space="preserve">
+        <value>{0}. Ayarlar → Siteler bölümünden başlatın.</value>
+    </data>
+    <data name="Sites_Proxy_StopCommandHint" xml:space="preserve">
+        <value>Yalnızca arka planda çalışan sunucular için (docker compose up -d gibi).</value>
+    </data>
+    <data name="Sites_RemoveDomainDetails" xml:space="preserve">
+        <value>{0} artık {1} sitesini açmaz.</value>
+    </data>
+    <data name="Sites_RemoveProxy" xml:space="preserve">
+        <value>Proxy'yi kaldır</value>
+    </data>
+    <data name="Sites_RemoveProxyDetails" xml:space="preserve">
+        <value>Flock {0} domain'ini sunmayı bırakır. {1} adresindeki sunucu çalışmaya devam eder.</value>
+    </data>
+    <data name="Sites_RemoveSite" xml:space="preserve">
+        <value>Siteyi kaldır</value>
+    </data>
+    <data name="Sites_RemoveSiteDetails" xml:space="preserve">
+        <value>{0} artık sunulmaz. Projenin dosyaları olduğu yerde kalır.</value>
+    </data>
+    <data name="Sites_Require" xml:space="preserve">
+        <value>Zorunlu Kıl</value>
+    </data>
+    <data name="Sites_RequireTooltip" xml:space="preserve">
+        <value>{1} içinde composer require ext-{0}:* komutunu çalıştırır; bu, composer.json ve composer.lock dosyalarını değiştirir. Bunları projeyle birlikte commit edin.</value>
+    </data>
+    <data name="Sites_RestartFrankenphpTooltip" xml:space="preserve">
+        <value>FrankenPHP'yi yeniden başlat, örneğin Octane worker'ları değişen kodu yüklesin diye</value>
+    </data>
+    <data name="Sites_Reverb_CantRun" xml:space="preserve">
+        <value>Reverb çalışamıyor.</value>
+    </data>
+    <data name="Sites_Reverb_EnvNeeds" xml:space="preserve">
+        <value>Uygulamanın .env dosyasında şunlar gerekli:</value>
+    </data>
+    <data name="Sites_Reverb_Explanation" xml:space="preserve">
+        <value>Flock, site için php artisan reverb:start komutunu çalıştırır. Tarayıcılar ona {0} adresinden, kendine ait bir port veya sertifika olmadan ulaşır.</value>
+    </data>
+    <data name="Sites_Reverb_Footnote" xml:space="preserve">
+        <value>/app altındaki WebSocket bağlantıları ve /apps altındaki Laravel yayınları Reverb'e gider; diğer tüm istekler uygulamada kalır. Flock projenin .env dosyasını değiştirmez. Değiştirdikten sonra ön yüzü yeniden derleyin.</value>
+    </data>
+    <data name="Sites_Reverb_Install" xml:space="preserve">
+        <value>Çalıştırmak için Laravel Reverb'i projeye yükleyin (php artisan install:broadcasting --reverb).</value>
+    </data>
+    <data name="Sites_Reverb_RestartTooltip" xml:space="preserve">
+        <value>Reverb'i yeniden başlat, örneğin değişen kodu yüklesin diye</value>
+    </data>
+    <data name="Sites_Reverb_Run" xml:space="preserve">
+        <value>Çalıştır</value>
+    </data>
+    <data name="Sites_Reverb_RunningAt" xml:space="preserve">
+        <value>{0} adresinde çalışıyor</value>
+    </data>
+    <data name="Sites_Root" xml:space="preserve">
+        <value>Kök dizin</value>
+    </data>
+    <data name="Sites_RootAutomatic" xml:space="preserve">
+        <value>Otomatik</value>
+    </data>
+    <data name="Sites_RootAutomaticFound" xml:space="preserve">
+        <value>Otomatik ({0})</value>
+    </data>
+    <data name="Sites_RootAutomaticNone" xml:space="preserve">
+        <value>Otomatik (bulunamadı)</value>
+    </data>
+    <data name="Sites_RootDefault" xml:space="preserve">
+        <value>Flock, public\, www\, web\ ve webroot\ klasörlerinden index.php içeren ilkini sunar; yoksa proje klasörünü sunar.</value>
+    </data>
+    <data name="Sites_RootFootnote" xml:space="preserve">
+        <value>Flock'un siteyi sunduğu klasör. Burada seçilen yalnızca bu makinede geçerlidir; herkes için .flockrc dosyasına yazmak üzere sabitleyin (…).</value>
+    </data>
+    <data name="Sites_RootIsolated" xml:space="preserve">
+        <value>{0}, bu site için bu makinede ayarlandı.</value>
+    </data>
+    <data name="Sites_RootMissing" xml:space="preserve">
+        <value>Uygulamanın index.php dosyasının bulunduğu klasörü seçin veya {0} klasörünü oluşturun.</value>
+    </data>
+    <data name="Sites_RootNoIndex" xml:space="preserve">
+        <value>{0} içinde index.php veya index.html yok; olana kadar Flock site yerine bir sayfa gösterir.</value>
+    </data>
+    <data name="Sites_RootNotFound" xml:space="preserve">
+        <value>index.php içeren public\, www\, web\ veya webroot\ bulunamadı; bu yüzden Flock site yerine bir sayfa gösterir. Uygulamanın index.php dosyasının bulunduğu klasörü seçin.</value>
+    </data>
+    <data name="Sites_RootPinned" xml:space="preserve">
+        <value>Proje, .flockrc dosyasında {0} değerini ayarlıyor.</value>
+    </data>
+    <data name="Sites_RootShadowed" xml:space="preserve">
+        <value>{0} burada ayarlandı; proje .flockrc dosyasında {1} değerini ayarlıyor.</value>
+    </data>
+    <data name="Sites_RunsOn" xml:space="preserve">
+        <value>Çalıştıran</value>
+    </data>
+    <data name="Sites_Secure" xml:space="preserve">
+        <value>Güvenli Hale Getir</value>
+    </data>
+    <data name="Sites_ServedOverHttps" xml:space="preserve">
+        <value>HTTPS üzerinden sunuluyor</value>
+    </data>
+    <data name="Sites_Server" xml:space="preserve">
+        <value>Sunucu</value>
+    </data>
+    <data name="Sites_Server_Failed" xml:space="preserve">
+        <value>Başarısız</value>
+    </data>
+    <data name="Sites_Server_FailedBecause" xml:space="preserve">
+        <value>Başarısız: {0}</value>
+    </data>
+    <data name="Sites_Server_RunningOnPort" xml:space="preserve">
+        <value>{0} portunda çalışıyor</value>
+    </data>
+    <data name="Sites_Server_Sleeping" xml:space="preserve">
+        <value>Uyuyor · sonraki ziyarette başlar</value>
+    </data>
+    <data name="Sites_Server_Starting" xml:space="preserve">
+        <value>Başlatılıyor…</value>
+    </data>
+    <data name="Sites_Server_Stopped" xml:space="preserve">
+        <value>Durduruldu</value>
+    </data>
+    <data name="Sites_Server_StoppedBecause" xml:space="preserve">
+        <value>Durdu: {0}</value>
+    </data>
+    <data name="Sites_Server_Stopping" xml:space="preserve">
+        <value>Durduruluyor…</value>
+    </data>
+    <data name="Sites_ShareSection" xml:space="preserve">
+        <value>Paylaşım</value>
+    </data>
+    <data name="Sites_Share_AllowExplanation" xml:space="preserve">
+        <value>E-posta adresi listelemezseniz bağlantıya sahip herkes siteyi açabilir; listelerseniz Cloudflare bu adreslere e-postayla bir kod gönderir. Bağlantı 8 saat sonra veya paylaşımı durdurduğunuzda çalışmayı bırakır.</value>
+    </data>
+    <data name="Sites_Share_AllowHeader" xml:space="preserve">
+        <value>Yalnızca bu kişiler (isteğe bağlı)</value>
+    </data>
+    <data name="Sites_Share_AllowPlaceholder" xml:space="preserve">
+        <value>meslektas@acme.com, *@musteri.com</value>
+    </data>
+    <data name="Sites_Share_Building" xml:space="preserve">
+        <value>Asset'ler derleniyor…</value>
+    </data>
+    <data name="Sites_Share_CopyImage" xml:space="preserve">
+        <value>Görseli kopyala</value>
+    </data>
+    <data name="Sites_Share_CouldNotSaveQr" xml:space="preserve">
+        <value>QR kodu kaydedilemedi</value>
+    </data>
+    <data name="Sites_Share_DebugOn" xml:space="preserve">
+        <value>Debug modu açık: ziyaretçiler stack trace'leri görür</value>
+    </data>
+    <data name="Sites_Share_Dismiss" xml:space="preserve">
+        <value>Kapat</value>
+    </data>
+    <data name="Sites_Share_EndsAt" xml:space="preserve">
+        <value>Bitiş: {0}</value>
+    </data>
+    <data name="Sites_Share_Explanation" xml:space="preserve">
+        <value>Devam eden işi önizlemek için siteyi herkese açık geçici bir adreste gösterir; asla canlı ortam için kullanmayın. Ziyaretçiler debug sayfalarını, dump'ları veya geliştirici araçlarını görmez.</value>
+    </data>
+    <data name="Sites_Share_OnlyFor" xml:space="preserve">
+        <value>Yalnızca: {0}</value>
+    </data>
+    <data name="Sites_Share_PngImage" xml:space="preserve">
+        <value>PNG görseli</value>
+    </data>
+    <data name="Sites_Share_QrName" xml:space="preserve">
+        <value>Paylaşım adresinin QR kodu</value>
+    </data>
+    <data name="Sites_Share_QrTooltip" xml:space="preserve">
+        <value>QR kodunu kopyalamak veya kaydetmek için sağ tıklayın ya da dışarı sürükleyin</value>
+    </data>
+    <data name="Sites_Share_Rebuild" xml:space="preserve">
+        <value>Asset'leri yeniden derle</value>
+    </data>
+    <data name="Sites_Share_RebuildTooltip" xml:space="preserve">
+        <value>Asset'leri yeniden derle (npm run build); böylece ziyaretçiler sayfayı yenilediklerinde son değişikliklerinizi görür</value>
+    </data>
+    <data name="Sites_Share_Rebuilding" xml:space="preserve">
+        <value>Yeniden derleniyor…</value>
+    </data>
+    <data name="Sites_Share_SaveImage" xml:space="preserve">
+        <value>Görseli kaydet…</value>
+    </data>
+    <data name="Sites_Share_Share" xml:space="preserve">
+        <value>Paylaş</value>
+    </data>
+    <data name="Sites_Share_ShareEllipsis" xml:space="preserve">
+        <value>Paylaş…</value>
+    </data>
+    <data name="Sites_Share_ShowErrors" xml:space="preserve">
+        <value>Hata ayrıntılarını ziyaretçilere göster</value>
+    </data>
+    <data name="Sites_Share_ShowErrorsExplanation" xml:space="preserve">
+        <value>Bu paylaşım için uygulamanın debug modunu açar; ziyaretçiler stack trace'leri görür. Yalnızca güvendiğiniz kişiler için.</value>
+    </data>
+    <data name="Sites_Share_Starting" xml:space="preserve">
+        <value>Tünel başlatılıyor…</value>
+    </data>
+    <data name="Sites_Share_Stop" xml:space="preserve">
+        <value>Durdur</value>
+    </data>
+    <data name="Sites_Share_StopSharing" xml:space="preserve">
+        <value>Paylaşımı durdur</value>
+    </data>
+    <data name="Sites_Share_Stopped" xml:space="preserve">
+        <value>Paylaşım durdu.</value>
+    </data>
+    <data name="Sites_Share_Title" xml:space="preserve">
+        <value>{0} sitesini paylaş</value>
+    </data>
+    <data name="Sites_Shared" xml:space="preserve">
+        <value>Paylaşılıyor</value>
+    </data>
+    <data name="Sites_ShowLog" xml:space="preserve">
+        <value>Logu Göster</value>
+    </data>
+    <data name="Sites_Site" xml:space="preserve">
+        <value>Site</value>
+    </data>
+    <data name="Sites_State" xml:space="preserve">
+        <value>Durum</value>
+    </data>
+    <data name="Sites_SubdomainsOnlyHere" xml:space="preserve">
+        <value>Subdomain'ler yalnızca burada eklediğinizde çalışır: {0}.</value>
+    </data>
+    <data name="Sites_Subtitle" xml:space="preserve">
+        <value>Tek tek eklediğiniz siteler ve proje klasörlerinizin içindeki her klasör.</value>
+    </data>
+    <data name="Sites_Type" xml:space="preserve">
+        <value>Tür</value>
+    </data>
+    <data name="Sites_Unpin" xml:space="preserve">
+        <value>Sabitlemeyi Kaldır</value>
+    </data>
+    <data name="Sites_UnpinNodeDetails" xml:space="preserve">
+        <value>Node.js sürümünü .flockrc dosyasından kaldırır ve {0} içindeki .nvmrc / .node-version dosyasını siler. Site bundan sonra Flock'un varsayılan Node.js sürümünü kullanır.</value>
+    </data>
+    <data name="Sites_UnpinNodeItem" xml:space="preserve">
+        <value>Node Sabitlemesini Kaldır ({0})…</value>
+    </data>
+    <data name="Sites_UnpinNodeQuestion" xml:space="preserve">
+        <value>{0} sitesinden Node sabitlemesi kaldırılsın mı?</value>
+    </data>
+    <data name="Sites_UnpinPhpDetails" xml:space="preserve">
+        <value>PHP sürümünü {0} dosyasından kaldırır. Site bundan sonra Flock'un varsayılan PHP sürümünü kullanır.</value>
+    </data>
+    <data name="Sites_UnpinPhpItem" xml:space="preserve">
+        <value>PHP Sabitlemesini Kaldır ({0})…</value>
+    </data>
+    <data name="Sites_UnpinPhpQuestion" xml:space="preserve">
+        <value>{0} sitesinden PHP sabitlemesi kaldırılsın mı?</value>
+    </data>
+    <data name="Sites_UnpinRootDetails" xml:space="preserve">
+        <value>{0} içindeki .flockrc dosyasından root= satırını kaldırır. Flock bundan sonra belge kök dizinini kendisi bulur.</value>
+    </data>
+    <data name="Sites_UnpinRootItem" xml:space="preserve">
+        <value>Belge Kök Dizini Sabitlemesini Kaldır (.flockrc)…</value>
+    </data>
+    <data name="Sites_UnpinRootQuestion" xml:space="preserve">
+        <value>{0} sitesinden belge kök dizini sabitlemesi kaldırılsın mı?</value>
+    </data>
+    <data name="Sites_Upstream" xml:space="preserve">
+        <value>Upstream</value>
+    </data>
+    <data name="Sites_UpstreamPlaceholder" xml:space="preserve">
+        <value>Port, host:port veya URL</value>
+    </data>
+    <data name="Sites_UpstreamPlaceholderShort" xml:space="preserve">
+        <value>3000, host:port veya URL</value>
+    </data>
+    <data name="Sites_UpstreamPortMeans" xml:space="preserve">
+        <value>Yalnızca port yazarsanız 127.0.0.1 kullanılır.</value>
+    </data>
+    <data name="Sites_Url" xml:space="preserve">
+        <value>URL</value>
+    </data>
+    <data name="Sites_UseFile" xml:space="preserve">
+        <value>{0} kullan</value>
+    </data>
+    <data name="Sites_UseFileVersion" xml:space="preserve">
+        <value>{0} kullan ({1})</value>
+    </data>
+    <data name="Sites_VersionDefault" xml:space="preserve">
+        <value>Site, Flock'un varsayılan {0} sürümünü kullanır.</value>
+    </data>
+    <data name="Sites_VersionIsolated" xml:space="preserve">
+        <value>{0}, bu site için bu makinede ayarlandı (izole).</value>
+    </data>
+    <data name="Sites_VersionPinned" xml:space="preserve">
+        <value>Proje, {1} dosyasında {0} sürümünü sabitliyor.</value>
+    </data>
+    <data name="Sites_VersionShadowed" xml:space="preserve">
+        <value>{0} burada izole edildi; proje {2} dosyasında {1} sürümünü sabitliyor.</value>
+    </data>
+    <data name="Sites_VersionsFootnote" xml:space="preserve">
+        <value>Burada seçilen sürüm yalnızca bu makinede geçerlidir. Projede çalışan herkes için ayarlamak üzere sabitleyin (…): PHP .flockrc dosyasına, Node.js .nvmrc dosyasına yazılır.</value>
+    </data>
+    <data name="Sites_VersionsFootnoteNode" xml:space="preserve">
+        <value>Burada seçilen sürüm yalnızca bu makinede geçerlidir. Projede çalışan herkes için ayarlamak üzere .nvmrc dosyasına sabitleyin (…).</value>
+    </data>
+    <data name="Updates_ChecksumMismatch" xml:space="preserve">
+        <value>İndirilen dosya sağlama toplamıyla eşleşmiyor.</value>
+    </data>
+    <data name="Updates_CouldNotUpdate" xml:space="preserve">
+        <value>Flock güncellenemedi</value>
+    </data>
+    <data name="Updates_CouldNotUpdateDetails" xml:space="preserve">
+        <value>{0}
+
+Bir terminalde `flock install` komutunu çalıştırabilir veya Flock'u yeniden yükleyebilirsiniz.</value>
+    </data>
+    <data name="Updates_Downloading" xml:space="preserve">
+        <value>İndiriliyor… {0}</value>
+    </data>
+    <data name="Updates_FileAccess" xml:space="preserve">
+        <value>Flock güncelleme dosyasına erişemedi.</value>
+    </data>
+    <data name="Updates_InstallerNotStarted" xml:space="preserve">
+        <value>Doğrulanmış yükleyici başlatılamadı.</value>
+    </data>
+    <data name="Updates_Installing" xml:space="preserve">
+        <value>Yükleniyor…</value>
+    </data>
+    <data name="Updates_Invalid" xml:space="preserve">
+        <value>Güncelleme akışı geçerli değil: {0}</value>
+    </data>
+    <data name="Updates_NoChecksum" xml:space="preserve">
+        <value>Güncelleme akışında bunun için sağlama toplamı yok.</value>
+    </data>
+    <data name="Updates_NoneAvailable" xml:space="preserve">
+        <value>Güncelleme yok.</value>
+    </data>
+    <data name="Updates_NotCompleted" xml:space="preserve">
+        <value>Güncelleme tamamlanamadı.</value>
+    </data>
+    <data name="Updates_ServerUnreachable" xml:space="preserve">
+        <value>Güncelleme sunucusuna ulaşılamadı.</value>
+    </data>
+    <data name="Updates_SetupExited" xml:space="preserve">
+        <value>Güncelleme yüklenmedi (kurulum {0} koduyla çıktı).</value>
+    </data>
+    <data name="Updates_TookTooLong" xml:space="preserve">
+        <value>Güncelleme isteği çok uzun sürdü.</value>
+    </data>
+    <data name="Updates_UnknownPublisher" xml:space="preserve">
+        <value>{0} tarafından değil, bilinmeyen bir yayıncı tarafından imzalanmış.</value>
+    </data>
+    <data name="Updates_UntrustedSignature" xml:space="preserve">
+        <value>İmzasına güvenilmiyor ({0}).</value>
+    </data>
+    <data name="Updates_WrongLength" xml:space="preserve">
+        <value>İndirilen dosya {1} bayt yerine {0} bayt.</value>
+    </data>
+    <data name="Updates_WrongPublisher" xml:space="preserve">
+        <value>{1} tarafından değil, {0} tarafından imzalanmış.</value>
+    </data>
+    <data name="Versions_CheckNow" xml:space="preserve">
+        <value>Şimdi denetle</value>
+    </data>
+    <data name="Versions_Checking" xml:space="preserve">
+        <value>Denetleniyor…</value>
+    </data>
+    <data name="Versions_CouldNotCheck" xml:space="preserve">
+        <value>Denetlenemedi: {0}</value>
+    </data>
+    <data name="Versions_CouldNotCheckUpdates" xml:space="preserve">
+        <value>Güncellemeler denetlenemedi: {0}</value>
+    </data>
+    <data name="Versions_Default" xml:space="preserve">
+        <value>Varsayılan</value>
+    </data>
+    <data name="Versions_DownloadFailed" xml:space="preserve">
+        <value>İndirme başarısız oldu.</value>
+    </data>
+    <data name="Versions_DownloadingNode" xml:space="preserve">
+        <value>Node.js {0} indiriliyor…</value>
+    </data>
+    <data name="Versions_FrankenNotInstalled" xml:space="preserve">
+        <value>Yüklü değil · bir site kullandığında kendiliğinden indirilir</value>
+    </data>
+    <data name="Versions_LastChecked" xml:space="preserve">
+        <value>Son denetim: {0}</value>
+    </data>
+    <data name="Versions_LogTitle" xml:space="preserve">
+        <value>{0} logu</value>
+    </data>
+    <data name="Versions_MakeDefault" xml:space="preserve">
+        <value>Varsayılan yap</value>
+    </data>
+    <data name="Versions_NewBuild" xml:space="preserve">
+        <value>Yeni bir derleme var</value>
+    </data>
+    <data name="Versions_NotChecked" xml:space="preserve">
+        <value>Henüz denetlenmedi</value>
+    </data>
+    <data name="Versions_NpmAvailable" xml:space="preserve">
+        <value>npm {0} kullanılabilir</value>
+    </data>
+    <data name="Versions_Prerelease" xml:space="preserve">
+        <value>Ön sürüm</value>
+    </data>
+    <data name="Versions_ShowLastInstallLog" xml:space="preserve">
+        <value>Son Yükleme Logunu Göster</value>
+    </data>
+    <data name="Versions_ShowLog" xml:space="preserve">
+        <value>Logu göster</value>
+    </data>
+    <data name="Versions_UpToDate" xml:space="preserve">
+        <value>Güncel</value>
+    </data>
+    <data name="Versions_UpdateAvailable" xml:space="preserve">
+        <value>Güncelleme var</value>
+    </data>
+    <data name="Versions_Versions" xml:space="preserve">
+        <value>Sürümler</value>
+    </data>
+    <data name="Worktrees_BranchStays" xml:space="preserve">
+        <value>{0} branch'i kalır.</value>
+    </data>
+    <data name="Worktrees_CouldNotRemove" xml:space="preserve">
+        <value>{0} kaldırılamadı</value>
+    </data>
+    <data name="Worktrees_Create" xml:space="preserve">
+        <value>Oluştur</value>
+    </data>
+    <data name="Worktrees_Current" xml:space="preserve">
+        <value>Geçerli</value>
+    </data>
+    <data name="Worktrees_DatabaseCopy" xml:space="preserve">
+        <value>Sitenin veritabanının kopyası</value>
+    </data>
+    <data name="Worktrees_DatabaseFresh" xml:space="preserve">
+        <value>Yeni, boş bir veritabanı</value>
+    </data>
+    <data name="Worktrees_DatabaseShared" xml:space="preserve">
+        <value>Sitenin veritabanı</value>
+    </data>
+    <data name="Worktrees_DetachedHead" xml:space="preserve">
+        <value>Yok (detached HEAD)</value>
+    </data>
+    <data name="Worktrees_DropDetailsCopy" xml:space="preserve">
+        <value>{0} bundan sonra {1} sitesinin veritabanının bir kopyasını kullanır. {2} veritabanı verileriyle birlikte silinir.</value>
+    </data>
+    <data name="Worktrees_DropDetailsFresh" xml:space="preserve">
+        <value>{0} bundan sonra boş bir veritabanı kullanır. {2} veritabanı verileriyle birlikte silinir.</value>
+    </data>
+    <data name="Worktrees_DropDetailsShared" xml:space="preserve">
+        <value>{0} bundan sonra {1} sitesinin veritabanını kullanır. {2} veritabanı verileriyle birlikte silinir.</value>
+    </data>
+    <data name="Worktrees_DropQuestion" xml:space="preserve">
+        <value>{0} silinsin mi?</value>
+    </data>
+    <data name="Worktrees_Explanation" xml:space="preserve">
+        <value>Projenin her git worktree'si kendi bağımlılıkları ve .env dosyasıyla &lt;branch&gt;.{0} adresinde sunulur.</value>
+    </data>
+    <data name="Worktrees_GiveCopyDetails" xml:space="preserve">
+        <value>Flock sitenin veritabanını kopyalar ve branch'in yeni migration'larını onun üzerinde çalıştırır.</value>
+    </data>
+    <data name="Worktrees_GiveCopyQuestion" xml:space="preserve">
+        <value>{0}, {1} sitesinin veritabanının bir kopyasını kullansın mı?</value>
+    </data>
+    <data name="Worktrees_GiveFreshDetails" xml:space="preserve">
+        <value>Flock boş bir veritabanı oluşturur ve migration'ları çalıştırır.</value>
+    </data>
+    <data name="Worktrees_GiveFreshQuestion" xml:space="preserve">
+        <value>{0} boş bir veritabanı kullansın mı?</value>
+    </data>
+    <data name="Worktrees_GiveSharedDetails" xml:space="preserve">
+        <value>Worktree'de çalıştırdığınız migration'lar bundan sonra sitenin veritabanını da değiştirir.</value>
+    </data>
+    <data name="Worktrees_GiveSharedQuestion" xml:space="preserve">
+        <value>{0}, {1} sitesinin veritabanını kullansın mı?</value>
+    </data>
+    <data name="Worktrees_IsSetUp" xml:space="preserve">
+        <value>Kuruldu</value>
+    </data>
+    <data name="Worktrees_Job_CouldNotLoad" xml:space="preserve">
+        <value>Log yüklenemedi.
+
+{0}</value>
+    </data>
+    <data name="Worktrees_Job_CouldNotLoadShort" xml:space="preserve">
+        <value>Log yüklenemedi.</value>
+    </data>
+    <data name="Worktrees_Job_NoLogYet" xml:space="preserve">
+        <value>Henüz log yok.</value>
+    </data>
+    <data name="Worktrees_Job_NoPath" xml:space="preserve">
+        <value>Flock worktree'nin nerede olduğunu bildirmedi.</value>
+    </data>
+    <data name="Worktrees_Job_Ready" xml:space="preserve">
+        <value>Hazır</value>
+    </data>
+    <data name="Worktrees_Job_ReadyAt" xml:space="preserve">
+        <value>Hazır: {0}</value>
+    </data>
+    <data name="Worktrees_Job_SeeLog" xml:space="preserve">
+        <value>logu gör</value>
+    </data>
+    <data name="Worktrees_Job_SetupFailed" xml:space="preserve">
+        <value>Kurulum başarısız: {0}</value>
+    </data>
+    <data name="Worktrees_Job_Starting" xml:space="preserve">
+        <value>Başlatılıyor…</value>
+    </data>
+    <data name="Worktrees_New" xml:space="preserve">
+        <value>Yeni Worktree…</value>
+    </data>
+    <data name="Worktrees_NewTitle" xml:space="preserve">
+        <value>{0} için Yeni Worktree</value>
+    </data>
+    <data name="Worktrees_New_Branch" xml:space="preserve">
+        <value>Branch</value>
+    </data>
+    <data name="Worktrees_New_BranchPlaceholder" xml:space="preserve">
+        <value>brave-otter gibi bir ad</value>
+    </data>
+    <data name="Worktrees_New_CurrentBranch" xml:space="preserve">
+        <value>{0} (geçerli)</value>
+    </data>
+    <data name="Worktrees_New_CurrentCommit" xml:space="preserve">
+        <value>Geçerli commit</value>
+    </data>
+    <data name="Worktrees_New_Database" xml:space="preserve">
+        <value>Veritabanı</value>
+    </data>
+    <data name="Worktrees_New_DatabaseNote" xml:space="preserve">
+        <value>Kendi veritabanı olan worktree'de migration'lar çalıştırılır. Proje varsayılanı flock.yml'de yazandır; yoksa sitenin veritabanıdır.</value>
+    </data>
+    <data name="Worktrees_New_DefaultBranch" xml:space="preserve">
+        <value>{0} (varsayılan)</value>
+    </data>
+    <data name="Worktrees_New_ExplainExisting" xml:space="preserve">
+        <value>{0} branch'i zaten var, bu yüzden worktree bu branch'i checkout eder. Flock worktree'yi {1} sitesinin yanında oluşturur, kurar ve {2} adresinde sunar.</value>
+    </data>
+    <data name="Worktrees_New_ExplainNew" xml:space="preserve">
+        <value>Flock worktree'yi {0} sitesinin yanında, yeni {1} branch'i üzerinde oluşturur, kurar ve {2} adresinde sunar.</value>
+    </data>
+    <data name="Worktrees_New_ExplainUnnamed" xml:space="preserve">
+        <value>Flock worktree'yi {0} sitesinin yanında, adını kendisinin verdiği yeni bir branch üzerinde oluşturur, kurar ve kendi adresinde sunar.</value>
+    </data>
+    <data name="Worktrees_New_StartFrom" xml:space="preserve">
+        <value>Başlangıç noktası</value>
+    </data>
+    <data name="Worktrees_None" xml:space="preserve">
+        <value>Yok</value>
+    </data>
+    <data name="Worktrees_NotSetUp" xml:space="preserve">
+        <value>Flock bu worktree'yi sunuyor ama kurmadı: bağımlılıkları, .env dosyası ve veritabanı olduğu gibi duruyor.</value>
+    </data>
+    <data name="Worktrees_Off" xml:space="preserve">
+        <value>Kapalı</value>
+    </data>
+    <data name="Worktrees_On" xml:space="preserve">
+        <value>Açık</value>
+    </data>
+    <data name="Worktrees_OwnDatabase" xml:space="preserve">
+        <value>kendi veritabanı</value>
+    </data>
+    <data name="Worktrees_OwnDatabaseTooltip" xml:space="preserve">
+        <value>Kendi veritabanı: {0}</value>
+    </data>
+    <data name="Worktrees_ProjectDefault" xml:space="preserve">
+        <value>Proje varsayılanı</value>
+    </data>
+    <data name="Worktrees_Remove" xml:space="preserve">
+        <value>Worktree'yi kaldır</value>
+    </data>
+    <data name="Worktrees_RemoveAnyway" xml:space="preserve">
+        <value>Yine de Kaldır</value>
+    </data>
+    <data name="Worktrees_RemoveDetails" xml:space="preserve">
+        <value>Flock before_delete hook'unu çalıştırır ve {0} klasörünü siler.</value>
+    </data>
+    <data name="Worktrees_RemoveDetailsDatabase" xml:space="preserve">
+        <value>Flock before_delete hook'unu çalıştırır; {0} klasörünü ve {1} veritabanını siler.</value>
+    </data>
+    <data name="Worktrees_RunAgain" xml:space="preserve">
+        <value>Kurulumu Yeniden Çalıştır</value>
+    </data>
+    <data name="Worktrees_RunAgainTooltip" xml:space="preserve">
+        <value>Eksikleri kopyalama, yükleme, veritabanı kurulumu ve hook adımlarını yeniden çalıştır</value>
+    </data>
+    <data name="Worktrees_SeeLog" xml:space="preserve">
+        <value>logunu gör</value>
+    </data>
+    <data name="Worktrees_SetUpAction" xml:space="preserve">
+        <value>Kur</value>
+    </data>
+    <data name="Worktrees_SetUpFirst" xml:space="preserve">
+        <value>Önce worktree'yi kurun.</value>
+    </data>
+    <data name="Worktrees_SettingUp" xml:space="preserve">
+        <value>Kuruluyor…</value>
+    </data>
+    <data name="Worktrees_SettingUpTitle" xml:space="preserve">
+        <value>{0} Kuruluyor</value>
+    </data>
+    <data name="Worktrees_Settings" xml:space="preserve">
+        <value>Ayarlar</value>
+    </data>
+    <data name="Worktrees_Setup" xml:space="preserve">
+        <value>Kurulum</value>
+    </data>
+    <data name="Worktrees_SetupFailed" xml:space="preserve">
+        <value>Kurulum başarısız</value>
+    </data>
+    <data name="Worktrees_SetupFailedSentence" xml:space="preserve">
+        <value>Kurulum başarısız oldu.</value>
+    </data>
+    <data name="Worktrees_SetupFailedTitle" xml:space="preserve">
+        <value>{0} kurulamadı</value>
+    </data>
+    <data name="Worktrees_SetupLogTitle" xml:space="preserve">
+        <value>{0} kurulumu</value>
+    </data>
+    <data name="Worktrees_SharedDatabaseNote" xml:space="preserve">
+        <value>Worktree sitenin veritabanını kullanırsa, worktree'de çalıştırdığınız migration'lar sitenin veritabanını da değiştirir.</value>
+    </data>
+    <data name="Worktrees_StillServed" xml:space="preserve">
+        <value>Worktree hâlâ sunuluyor.</value>
+    </data>
+    <data name="Worktrees_Switch" xml:space="preserve">
+        <value>Değiştir</value>
+    </data>
+    <data name="Worktrees_SwitchingDatabase" xml:space="preserve">
+        <value>{0} Veritabanı Değiştiriliyor</value>
+    </data>
+    <data name="Worktrees_UsesSiteSettings" xml:space="preserve">
+        <value>{0} sitesinin ayarlarını kullanır: PHP, Node.js, HTTPS ve belge kök dizini (branch'in sabitlediği sürümler de geçerlidir). Bunları {0} üzerinde değiştirin.</value>
+    </data>
+    <data name="Worktrees_UsesSiteSettingsNode" xml:space="preserve">
+        <value>{0} sitesinin ayarlarını kullanır: Node.js ve HTTPS (branch'in sabitlediği sürüm de geçerlidir). Bunları {0} üzerinde değiştirin.</value>
+    </data>
+    <data name="Worktrees_Waiting" xml:space="preserve">
+        <value>Başka bir kurulumun bitmesi bekleniyor…</value>
+    </data>
+    <data name="Worktrees_Worktree" xml:space="preserve">
+        <value>Worktree</value>
+    </data>
+    <data name="Worktrees_Worktrees" xml:space="preserve">
+        <value>Worktree'ler</value>
+    </data>
+</root>
