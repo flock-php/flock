@@ -18,7 +18,7 @@ func TestPlanPRReviewSkipsDraftsAndStartsAtReadyForReview(t *testing.T) {
 	created := time.Date(2026, time.January, 1, 0, 0, 0, 0, time.UTC)
 	firstReady := created.Add(time.Hour)
 	ready := created.Add(150 * time.Hour)
-	current := &state{now: ready.Add(time.Hour), roles: map[string]string{"maintainer": "maintain", "contributor": "read"}}
+	current := &state{now: ready.Add(time.Hour), maintainers: map[string]bool{"maintainer": true, "contributor": false}}
 	draft := &github.PullRequest{Number: github.Ptr(8), Draft: github.Ptr(true), CreatedAt: &github.Timestamp{Time: created}}
 	if err := current.planPRReview(context.Background(), draft, nil, nil, nil); err != nil {
 		t.Fatal(err)
@@ -102,7 +102,7 @@ func TestPlanRequestedChangesIgnoresALaterMaintainerReview(t *testing.T) {
 	})
 	current := &state{
 		client: client, owner: "owner", repository: "repo", now: reviewAt.Add(100 * time.Hour),
-		roles: map[string]string{"maintainer": "maintain", "other": "admin"},
+		maintainers: map[string]bool{"maintainer": true, "other": true},
 	}
 	pull := &github.PullRequest{Number: github.Ptr(4), User: &github.User{Login: github.Ptr("contributor")}}
 	for _, test := range []struct {
@@ -146,7 +146,7 @@ func TestPlanRequestedChangesCountsRebasedCommitterDate(t *testing.T) {
 	})
 	current := &state{
 		client: client, owner: "owner", repository: "repo", now: reviewAt.Add(100 * time.Hour),
-		roles: map[string]string{"maintainer": "maintain"},
+		maintainers: map[string]bool{"maintainer": true},
 	}
 	pull := &github.PullRequest{Number: github.Ptr(4), User: &github.User{Login: github.Ptr("contributor")}}
 	events := []*github.IssueEvent{{
@@ -170,10 +170,10 @@ func TestPlanMergeReviewSkipsMaintainerApprovals(t *testing.T) {
 	requestedAt := start.Add(time.Hour)
 	current := &state{
 		now: requestedAt.Add(30 * time.Hour),
-		roles: map[string]string{
-			"maintainer":  "maintain",
-			"contributor": "read",
-			"reviewer":    "admin",
+		maintainers: map[string]bool{
+			"maintainer":  true,
+			"contributor": false,
+			"reviewer":    true,
 		},
 	}
 	pull := &github.PullRequest{Number: github.Ptr(12)}
@@ -220,11 +220,11 @@ func TestPlanMergeReviewPostsOneReminderPerTarget(t *testing.T) {
 	secondRequested := start.Add(2 * time.Hour)
 	current := &state{
 		now: secondRequested.Add(30 * time.Hour),
-		roles: map[string]string{
-			"contributor": "read",
-			"other":       "read",
-			"reviewer":    "admin",
-			"maintainer":  "maintain",
+		maintainers: map[string]bool{
+			"contributor": false,
+			"other":       false,
+			"reviewer":    true,
+			"maintainer":  true,
 		},
 	}
 	pull := &github.PullRequest{Number: github.Ptr(12)}
@@ -308,6 +308,8 @@ func TestIsMaintainerTreatsNotFoundAsNonMaintainer(t *testing.T) {
 		calls++
 		w.Header().Set("Content-Type", "application/json")
 		switch {
+		case strings.HasSuffix(r.URL.Path, "/collaborators/maintainer/permission"):
+			io.WriteString(w, `{"role_name":"maintain"}`)
 		case strings.HasSuffix(r.URL.Path, "/collaborators/missing/permission"):
 			w.WriteHeader(http.StatusNotFound)
 			io.WriteString(w, `{"message":"Not Found"}`)
@@ -318,7 +320,7 @@ func TestIsMaintainerTreatsNotFoundAsNonMaintainer(t *testing.T) {
 			http.NotFound(w, r)
 		}
 	})
-	current := &state{client: client, owner: "owner", repository: "repo", roles: map[string]string{}}
+	current := &state{client: client, owner: "owner", repository: "repo", maintainers: map[string]bool{}}
 	maintainer, err := current.isMaintainer(context.Background(), "missing")
 	if err != nil || maintainer {
 		t.Fatalf("missing maintainer=%v err=%v, want false and nil", maintainer, err)
@@ -330,10 +332,18 @@ func TestIsMaintainerTreatsNotFoundAsNonMaintainer(t *testing.T) {
 	if _, err = current.isMaintainer(context.Background(), "broken"); err == nil {
 		t.Fatal("non-404 permission error was ignored")
 	}
+	maintainer, err = current.isMaintainer(context.Background(), "maintainer")
+	if err != nil || !maintainer {
+		t.Fatalf("maintainer=%v err=%v, want true and nil", maintainer, err)
+	}
+	maintainer, err = current.isMaintainer(context.Background(), "maintainer")
+	if err != nil || !maintainer || calls != 3 {
+		t.Fatalf("cached maintainer=%v err=%v calls=%d, want true, nil, 3", maintainer, err, calls)
+	}
 }
 
 func TestIssueTriaged(t *testing.T) {
-	current := &state{roles: map[string]string{"maintainer": "maintain", "contributor": "read"}}
+	current := &state{maintainers: map[string]bool{"maintainer": true, "contributor": false}}
 	label := &github.Label{Name: "needs triage"}
 	waiting := &github.Issue{Labels: []*github.Label{label}}
 	cleared := &github.Issue{}
@@ -421,6 +431,26 @@ func TestIssueTriaged(t *testing.T) {
 				t.Fatalf("issueTriaged() = %v, want %v", got, test.want)
 			}
 		})
+	}
+}
+
+func TestPlanIssueTriageSkipsCommentsAfterTriage(t *testing.T) {
+	client := githubTestClient(t, func(w http.ResponseWriter, r *http.Request) {
+		if !strings.HasSuffix(r.URL.Path, "/issues/1/events") {
+			http.Error(w, `{"message":"comments must not be read for triaged issues"}`, http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		io.WriteString(w, `[{"event":"unlabeled","actor":{"login":"maintainer"},"label":{"name":"needs triage"}}]`)
+	})
+	current := &state{
+		client: client, owner: "owner", repository: "repo",
+		maintainers: map[string]bool{"maintainer": true},
+	}
+	issue := &github.Issue{Number: github.Ptr(1)}
+
+	if err := current.planIssueTriage(context.Background(), issue); err != nil {
+		t.Fatal(err)
 	}
 }
 

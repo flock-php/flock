@@ -30,17 +30,18 @@ func (s *state) planIssueTriage(ctx context.Context, issue *github.Issue) error 
 	if err != nil {
 		return fmt.Errorf("list events for issue #%d: %w", issue.GetNumber(), err)
 	}
-	comments, err := listComments(ctx, s.client, s.owner, s.repository, issue.GetNumber())
-	if err != nil {
-		return fmt.Errorf("list comments for issue #%d: %w", issue.GetNumber(), err)
-	}
 	triaged, err := s.issueTriaged(ctx, issue, events)
 	if err != nil {
 		return fmt.Errorf("check triage for issue #%d: %w", issue.GetNumber(), err)
 	}
-	if !triaged {
-		s.planReminder(issueTriageObjective, issue.GetNumber(), issue.GetCreatedAt().Time, "", "", remindersFrom(comments))
+	if triaged {
+		return nil
 	}
+	comments, err := listComments(ctx, s.client, s.owner, s.repository, issue.GetNumber())
+	if err != nil {
+		return fmt.Errorf("list comments for issue #%d: %w", issue.GetNumber(), err)
+	}
+	s.planReminder(issueTriageObjective, issue.GetNumber(), issue.GetCreatedAt().Time, "", "", remindersFrom(comments))
 	return nil
 }
 
