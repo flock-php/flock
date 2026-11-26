@@ -43,7 +43,7 @@ func (s *state) planPullRequestTargets(ctx context.Context, pull *github.PullReq
 	}
 	markers := remindersFrom(comments)
 
-	if err := s.planPRReview(ctx, pull, reviews, markers); err != nil {
+	if err := s.planPRReview(ctx, pull, reviews, events, markers); err != nil {
 		return err
 	}
 	if err := s.planMergeReview(ctx, pull, reviews, events, markers); err != nil {
@@ -52,12 +52,13 @@ func (s *state) planPullRequestTargets(ctx context.Context, pull *github.PullReq
 	return s.planRequestedChanges(ctx, pull, reviews, events, markers)
 }
 
-func (s *state) planPRReview(ctx context.Context, pull *github.PullRequest, reviews []*github.PullRequestReview, markers []marker) error {
+func (s *state) planPRReview(ctx context.Context, pull *github.PullRequest, reviews []*github.PullRequestReview, events []*github.IssueEvent, markers []marker) error {
 	if pull.GetDraft() {
 		return nil
 	}
+	start := prReviewStart(pull, events)
 	for _, review := range reviews {
-		if !submittedReview(review) {
+		if !submittedReview(review) || !review.GetSubmittedAt().After(start) {
 			continue
 		}
 		maintainer, err := s.isMaintainer(ctx, review.GetUser().GetLogin())
@@ -68,17 +69,13 @@ func (s *state) planPRReview(ctx context.Context, pull *github.PullRequest, revi
 			return nil
 		}
 	}
-	timeline, err := listIssueTimeline(ctx, s.client, s.owner, s.repository, pull.GetNumber())
-	if err != nil {
-		return fmt.Errorf("list timeline for pull request #%d: %w", pull.GetNumber(), err)
-	}
-	s.planReminder(prReviewObjective, pull.GetNumber(), prReviewStart(pull, timeline), "", "", markers)
+	s.planReminder(prReviewObjective, pull.GetNumber(), start, "", "", markers)
 	return nil
 }
 
-func prReviewStart(pull *github.PullRequest, timeline []*github.Timeline) time.Time {
+func prReviewStart(pull *github.PullRequest, events []*github.IssueEvent) time.Time {
 	var ready time.Time
-	for _, event := range timeline {
+	for _, event := range events {
 		if event.GetEvent() != "ready_for_review" {
 			continue
 		}
@@ -98,6 +95,7 @@ func submittedReview(review *github.PullRequestReview) bool {
 }
 
 func (s *state) planMergeReview(ctx context.Context, pull *github.PullRequest, reviews []*github.PullRequestReview, events []*github.IssueEvent, markers []marker) error {
+	requested := map[string]mergeRequest{}
 	for _, approval := range latestApprovals(reviews) {
 		approver := approval.GetUser().GetLogin()
 		mergeMaintainer, err := s.isMaintainer(ctx, approver)
@@ -113,17 +111,40 @@ func (s *state) planMergeReview(ctx context.Context, pull *github.PullRequest, r
 				continue
 			}
 			target := event.GetRequestedReviewer().GetLogin()
+			at := event.GetCreatedAt().Time
+			if current, ok := requested[target]; ok && !at.Before(current.at) {
+				continue
+			}
 			eligible, err := s.isMaintainer(ctx, target)
 			if err != nil {
 				return err
 			}
-			if !eligible || reviewRequestResolved(target, event.GetCreatedAt().Time, reviews, events) {
+			if !eligible || reviewRequestResolved(target, at, reviews, events) {
 				continue
 			}
-			s.planReminder(mergeReviewObjective, pull.GetNumber(), event.GetCreatedAt().Time, target, approver, markers)
+			requested[target] = mergeRequest{at: at, approver: approver}
 		}
 	}
+	targets := make([]string, 0, len(requested))
+	for target := range requested {
+		targets = append(targets, target)
+	}
+	sort.Slice(targets, func(i, j int) bool {
+		if !requested[targets[i]].at.Equal(requested[targets[j]].at) {
+			return requested[targets[i]].at.Before(requested[targets[j]].at)
+		}
+		return targets[i] < targets[j]
+	})
+	for _, target := range targets {
+		request := requested[target]
+		s.planReminder(mergeReviewObjective, pull.GetNumber(), request.at, target, request.approver, markers)
+	}
 	return nil
+}
+
+type mergeRequest struct {
+	at       time.Time
+	approver string
 }
 
 func latestSubmittedByUser(reviews []*github.PullRequestReview) map[string]*github.PullRequestReview {

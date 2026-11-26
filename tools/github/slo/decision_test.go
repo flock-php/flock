@@ -18,29 +18,22 @@ func TestPlanPRReviewSkipsDraftsAndStartsAtReadyForReview(t *testing.T) {
 	created := time.Date(2026, time.January, 1, 0, 0, 0, 0, time.UTC)
 	firstReady := created.Add(time.Hour)
 	ready := created.Add(150 * time.Hour)
-	client := githubTestClient(t, func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		switch r.URL.Path {
-		case "/repos/owner/repo/issues/9/timeline":
-			fmt.Fprintf(w, `[{"event":"ready_for_review","created_at":%q},{"event":"convert_to_draft","created_at":%q},{"event":"ready_for_review","created_at":%q}]`,
-				firstReady.Format(time.RFC3339), created.Add(2*time.Hour).Format(time.RFC3339), ready.Format(time.RFC3339))
-		case "/repos/owner/repo/issues/10/timeline":
-			io.WriteString(w, `[]`)
-		default:
-			http.Error(w, `{"message":"unexpected"}`, http.StatusNotFound)
-		}
-	})
-	current := &state{client: client, owner: "owner", repository: "repo", now: ready.Add(time.Hour), roles: map[string]string{}}
+	current := &state{now: ready.Add(time.Hour), roles: map[string]string{"maintainer": "maintain", "contributor": "read"}}
 	draft := &github.PullRequest{Number: github.Ptr(8), Draft: github.Ptr(true), CreatedAt: &github.Timestamp{Time: created}}
-	if err := current.planPRReview(context.Background(), draft, nil, nil); err != nil {
+	if err := current.planPRReview(context.Background(), draft, nil, nil, nil); err != nil {
 		t.Fatal(err)
 	}
 	if len(current.changes) != 0 {
 		t.Fatalf("draft changes = %#v, want no reminder", current.changes)
 	}
 
+	events := []*github.IssueEvent{
+		{Event: github.Ptr("ready_for_review"), CreatedAt: &github.Timestamp{Time: firstReady}},
+		{Event: github.Ptr("convert_to_draft"), CreatedAt: &github.Timestamp{Time: created.Add(2 * time.Hour)}},
+		{Event: github.Ptr("ready_for_review"), CreatedAt: &github.Timestamp{Time: ready}},
+	}
 	converted := &github.PullRequest{Number: github.Ptr(9), CreatedAt: &github.Timestamp{Time: created}}
-	if err := current.planPRReview(context.Background(), converted, nil, nil); err != nil {
+	if err := current.planPRReview(context.Background(), converted, nil, events, nil); err != nil {
 		t.Fatal(err)
 	}
 	if len(current.changes) != 0 {
@@ -48,17 +41,48 @@ func TestPlanPRReviewSkipsDraftsAndStartsAtReadyForReview(t *testing.T) {
 	}
 
 	current.now = ready.Add(50 * time.Hour)
-	if err := current.planPRReview(context.Background(), converted, nil, nil); err != nil {
+	draftComment := []*github.PullRequestReview{submittedReviewAt("maintainer", "COMMENTED", firstReady)}
+	if err := current.planPRReview(context.Background(), converted, draftComment, events, nil); err != nil {
 		t.Fatal(err)
 	}
 	if len(current.changes) != 1 || !current.changes[0].start.Equal(ready) || current.changes[0].threshold != 48*time.Hour {
-		t.Fatalf("converted draft changes = %#v, want the 48-hour reminder from ready_for_review", current.changes)
+		t.Fatalf("review before ready_for_review changes = %#v, want the 48-hour reminder from ready_for_review", current.changes)
+	}
+
+	current.changes = nil
+	atReady := []*github.PullRequestReview{submittedReviewAt("maintainer", "COMMENTED", ready)}
+	if err := current.planPRReview(context.Background(), converted, atReady, events, nil); err != nil {
+		t.Fatal(err)
+	}
+	if len(current.changes) != 1 || !current.changes[0].start.Equal(ready) {
+		t.Fatalf("review at ready_for_review changes = %#v, want the reminder from ready_for_review", current.changes)
+	}
+
+	current.changes = nil
+	afterReady := []*github.PullRequestReview{
+		submittedReviewAt("maintainer", "COMMENTED", firstReady),
+		submittedReviewAt("maintainer", "APPROVED", ready.Add(time.Minute)),
+	}
+	if err := current.planPRReview(context.Background(), converted, afterReady, events, nil); err != nil {
+		t.Fatal(err)
+	}
+	if len(current.changes) != 0 {
+		t.Fatalf("review after ready_for_review changes = %#v, want no reminder", current.changes)
+	}
+
+	current.changes = nil
+	contributorReview := []*github.PullRequestReview{submittedReviewAt("contributor", "COMMENTED", ready.Add(time.Minute))}
+	if err := current.planPRReview(context.Background(), converted, contributorReview, events, nil); err != nil {
+		t.Fatal(err)
+	}
+	if len(current.changes) != 1 || !current.changes[0].start.Equal(ready) {
+		t.Fatalf("non-maintainer review changes = %#v, want the reminder from ready_for_review", current.changes)
 	}
 
 	current.changes = nil
 	current.now = created.Add(100 * time.Hour)
 	opened := &github.PullRequest{Number: github.Ptr(10), CreatedAt: &github.Timestamp{Time: created}}
-	if err := current.planPRReview(context.Background(), opened, nil, nil); err != nil {
+	if err := current.planPRReview(context.Background(), opened, nil, nil, nil); err != nil {
 		t.Fatal(err)
 	}
 	if len(current.changes) != 1 || !current.changes[0].start.Equal(created) || current.changes[0].threshold != 48*time.Hour {
@@ -190,6 +214,79 @@ func TestPlanMergeReviewSkipsMaintainerApprovals(t *testing.T) {
 	}
 }
 
+func TestPlanMergeReviewPostsOneReminderPerTarget(t *testing.T) {
+	start := time.Date(2026, time.January, 1, 0, 0, 0, 0, time.UTC)
+	firstRequested := start.Add(time.Hour)
+	secondRequested := start.Add(2 * time.Hour)
+	current := &state{
+		now: secondRequested.Add(30 * time.Hour),
+		roles: map[string]string{
+			"contributor": "read",
+			"other":       "read",
+			"reviewer":    "admin",
+			"maintainer":  "maintain",
+		},
+	}
+	pull := &github.PullRequest{Number: github.Ptr(12)}
+	reviews := []*github.PullRequestReview{
+		submittedReviewAt("contributor", "APPROVED", start),
+		submittedReviewAt("other", "APPROVED", start.Add(30*time.Minute)),
+	}
+	events := []*github.IssueEvent{
+		reviewRequested("contributor", "reviewer", secondRequested),
+		reviewRequested("other", "reviewer", firstRequested),
+		reviewRequested("contributor", "reviewer", secondRequested),
+		reviewRequested("contributor", "maintainer", secondRequested),
+	}
+	if err := current.planMergeReview(context.Background(), pull, reviews, events, nil); err != nil {
+		t.Fatal(err)
+	}
+	if len(current.changes) != 2 {
+		t.Fatalf("changes = %#v, want one reminder per target", current.changes)
+	}
+	if current.changes[0].target != "reviewer" || !current.changes[0].start.Equal(firstRequested) ||
+		!strings.Contains(current.changes[0].body, "other approved") {
+		t.Fatalf("reviewer reminder = %#v, want the earliest unresolved request from other", current.changes[0])
+	}
+	if current.changes[1].target != "maintainer" || !current.changes[1].start.Equal(secondRequested) ||
+		!strings.Contains(current.changes[1].body, "contributor approved") {
+		t.Fatalf("maintainer reminder = %#v, want one request from contributor", current.changes[1])
+	}
+
+	current.changes = nil
+	markers := []marker{{
+		objective: mergeReviewObjective,
+		start:     firstRequested,
+		threshold: 24 * time.Hour,
+		target:    "reviewer",
+	}}
+	if err := current.planMergeReview(context.Background(), pull, reviews, events, markers); err != nil {
+		t.Fatal(err)
+	}
+	if len(current.changes) != 1 || current.changes[0].target != "maintainer" || !current.changes[0].start.Equal(secondRequested) {
+		t.Fatalf("changes = %#v, want the earliest reviewer marker to suppress only that target", current.changes)
+	}
+
+	current.changes = nil
+	resolved := append(reviews, submittedReviewAt("reviewer", "COMMENTED", firstRequested.Add(time.Minute)))
+	if err := current.planMergeReview(context.Background(), pull, resolved, events, nil); err != nil {
+		t.Fatal(err)
+	}
+	if len(current.changes) != 2 || current.changes[0].target != "maintainer" || current.changes[1].target != "reviewer" ||
+		!current.changes[1].start.Equal(secondRequested) || !strings.Contains(current.changes[1].body, "contributor approved") {
+		t.Fatalf("changes = %#v, want the later unresolved reviewer request after the earlier one was answered", current.changes)
+	}
+}
+
+func reviewRequested(actor, reviewer string, at time.Time) *github.IssueEvent {
+	return &github.IssueEvent{
+		Event:             github.Ptr("review_requested"),
+		Actor:             &github.User{Login: github.Ptr(actor)},
+		RequestedReviewer: &github.User{Login: github.Ptr(reviewer)},
+		CreatedAt:         &github.Timestamp{Time: at},
+	}
+}
+
 func TestMergeReviewBodyNamesApproverOnlyWhenPassed(t *testing.T) {
 	start := time.Date(2026, time.January, 1, 0, 0, 0, 0, time.UTC)
 	named := reminderBody(mergeReviewObjective, start, 24*time.Hour, "reviewer", "contributor")
@@ -236,24 +333,51 @@ func TestIsMaintainerTreatsNotFoundAsNonMaintainer(t *testing.T) {
 }
 
 func TestIssueTriaged(t *testing.T) {
-	current := &state{roles: map[string]string{"maintainer": "maintain"}}
+	current := &state{roles: map[string]string{"maintainer": "maintain", "contributor": "read"}}
 	label := &github.Label{Name: "needs triage"}
+	waiting := &github.Issue{Labels: []*github.Label{label}}
+	cleared := &github.Issue{}
+	maintainerUnlabeled := &github.IssueEvent{
+		Event: github.Ptr("unlabeled"),
+		Actor: &github.User{Login: github.Ptr("maintainer")},
+		Label: label,
+	}
 	for _, test := range []struct {
 		name   string
+		issue  *github.Issue
 		events []*github.IssueEvent
 		want   bool
 	}{
 		{
-			name: "maintainer unlabeled needs triage",
+			name:   "maintainer unlabeled needs triage",
+			issue:  cleared,
+			events: []*github.IssueEvent{maintainerUnlabeled},
+			want:   true,
+		},
+		{
+			name:  "maintainer labeled needs triage",
+			issue: waiting,
 			events: []*github.IssueEvent{{
-				Event: github.Ptr("unlabeled"),
+				Event: github.Ptr("labeled"),
 				Actor: &github.User{Login: github.Ptr("maintainer")},
 				Label: label,
 			}},
-			want: true,
 		},
 		{
-			name: "bot labeled needs triage",
+			name:  "maintainer unlabeled while needs triage is present again",
+			issue: waiting,
+			events: []*github.IssueEvent{
+				maintainerUnlabeled,
+				{
+					Event: github.Ptr("labeled"),
+					Actor: &github.User{Login: github.Ptr("maintainer")},
+					Label: label,
+				},
+			},
+		},
+		{
+			name:  "bot labeled needs triage",
+			issue: waiting,
 			events: []*github.IssueEvent{{
 				Event: github.Ptr("labeled"),
 				Actor: &github.User{Login: github.Ptr(reminderUser)},
@@ -261,7 +385,26 @@ func TestIssueTriaged(t *testing.T) {
 			}},
 		},
 		{
-			name: "maintainer unlabeled another label",
+			name:  "bot unlabeled needs triage",
+			issue: cleared,
+			events: []*github.IssueEvent{{
+				Event: github.Ptr("unlabeled"),
+				Actor: &github.User{Login: github.Ptr(reminderUser)},
+				Label: label,
+			}},
+		},
+		{
+			name:  "contributor unlabeled needs triage",
+			issue: cleared,
+			events: []*github.IssueEvent{{
+				Event: github.Ptr("unlabeled"),
+				Actor: &github.User{Login: github.Ptr("contributor")},
+				Label: label,
+			}},
+		},
+		{
+			name:  "maintainer unlabeled another label",
+			issue: cleared,
 			events: []*github.IssueEvent{{
 				Event: github.Ptr("unlabeled"),
 				Actor: &github.User{Login: github.Ptr("maintainer")},
@@ -270,7 +413,7 @@ func TestIssueTriaged(t *testing.T) {
 		},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			got, err := current.issueTriaged(context.Background(), test.events)
+			got, err := current.issueTriaged(context.Background(), test.issue, test.events)
 			if err != nil {
 				t.Fatal(err)
 			}
