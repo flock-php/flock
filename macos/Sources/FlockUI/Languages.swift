@@ -5,4 +5,5 @@ let appLanguages: [(code: String, name: String)] = [
     ("en", "English"),
     ("cs", "Čeština"),
     ("es", "Español"),
+    ("tr", "Türkçe"),
 ]

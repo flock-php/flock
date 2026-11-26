@@ -8,6 +8,7 @@
   <summary>Local development environment for Laravel and PHP</summary>
   <summary xml:lang="cs">Lokální vývojové prostředí pro Laravel a PHP</summary>
   <summary xml:lang="es">Entorno de desarrollo local para Laravel y PHP</summary>
+  <summary xml:lang="tr">Laravel ve PHP için yerel geliştirme ortamı</summary>
   <developer id="com.flockphp">
     <name>Guava s.r.o.</name>
   </developer>
@@ -24,16 +25,23 @@
       Flock ejecuta tus sitios de Laravel y PHP en este equipo, sin Docker: cada carpeta de
       proyecto es un sitio bajo .test, servido por HTTPS con un certificado de confianza.
     </p>
+    <p xml:lang="tr">
+      Flock, Laravel ve PHP sitelerinizi Docker olmadan bu bilgisayarda çalıştırır: her proje
+      klasörü .test altında bir sitedir ve güvenilir bir sertifikayla HTTPS üzerinden sunulur.
+    </p>
     <ul>
       <li>PHP, Composer and Node.js versions per site</li>
       <li xml:lang="cs">Verze PHP, Composeru a Node.js pro každý web</li>
       <li xml:lang="es">Versiones de PHP, Composer y Node.js por sitio</li>
+      <li xml:lang="tr">Site başına PHP, Composer ve Node.js sürümleri</li>
       <li>PostgreSQL, MySQL, Redis and more on 127.0.0.1</li>
       <li xml:lang="cs">PostgreSQL, MySQL, Redis a další na 127.0.0.1</li>
       <li xml:lang="es">PostgreSQL, MySQL, Redis y más en 127.0.0.1</li>
+      <li xml:lang="tr">127.0.0.1 üzerinde PostgreSQL, MySQL, Redis ve daha fazlası</li>
       <li>Mail, dumps and logs of your sites in one place</li>
       <li xml:lang="cs">Pošta, dumpy a logy vašich webů na jednom místě</li>
       <li xml:lang="es">Correo, dumps y registros de tus sitios en un solo lugar</li>
+      <li xml:lang="tr">Sitelerinizin e-postaları, dump'ları ve logları tek yerde</li>
     </ul>
   </description>
   <launchable type="desktop-id">dev.flock.Flock.desktop</launchable>
