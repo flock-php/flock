@@ -25,7 +25,7 @@ func (s *state) planReminder(objective string, number int, start time.Time, targ
 		return
 	}
 	for _, threshold := range thresholdsFor(objective) {
-		if s.now.Sub(start) < threshold || reminded(markers, objective, start, threshold, target) {
+		if s.elapsed(start) < threshold || reminded(markers, objective, start, threshold, target) {
 			continue
 		}
 		s.changes = append(s.changes, reminder{
@@ -38,6 +38,13 @@ func (s *state) planReminder(objective string, number int, start time.Time, targ
 		})
 		return
 	}
+}
+
+func (s *state) elapsed(start time.Time) time.Duration {
+	if s.calendar == nil {
+		return s.now.Sub(start)
+	}
+	return s.calendar.elapsed(start, s.now)
 }
 
 func (s *state) apply(ctx context.Context) error {

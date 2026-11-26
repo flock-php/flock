@@ -62,7 +62,7 @@ const (
     }
     @AppStorage("services.filter") var filter = ""
 }`
-	sampleRust = `fn x() { tr!("php.update_to", version = v); trn!("sites.count", n); tr!("settings.title"); }`
+	sampleRust   = `fn x() { tr!("php.update_to", version = v); trn!("sites.count", n); tr!("settings.title"); }`
 	sampleCSharp = `var a = Strings.Php_UpdateTo; var b = Localization.Plural(Strings.ResourceManager, "Sites_Count", n); var c = Strings.Settings_Title;`
 	sampleInno   = `Result := CustomMessage('Installer_NotInstalled');`
 )

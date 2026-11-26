@@ -11,12 +11,17 @@ import (
 // Run collects every open outside-contributor issue and pull request, plans
 // any newly crossed SLO threshold, and then posts its planned comments.
 func Run(ctx context.Context, client *github.Client, owner, repository string) error {
+	calendar, err := newHolidayCalendar()
+	if err != nil {
+		return err
+	}
 	current := &state{
 		client:     client,
 		owner:      owner,
 		repository: repository,
 		now:        time.Now().UTC(),
 		roles:      map[string]string{},
+		calendar:   calendar,
 	}
 	if err := current.collect(ctx); err != nil {
 		return err

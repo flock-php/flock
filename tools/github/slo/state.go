@@ -28,6 +28,7 @@ type state struct {
 	now        time.Time
 	roles      map[string]string
 	changes    []reminder
+	calendar   *holidayCalendar
 }
 
 func (s *state) isMaintainer(ctx context.Context, login string) (bool, error) {
