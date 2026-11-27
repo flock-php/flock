@@ -21,10 +21,11 @@ const (
 
 // SettingsFiles are the flock.yml and flock.local.yml files that apply to a site, in order: later
 // files win. A git worktree reads its own flock.yml (it comes with the branch), its site's
-// flock.local.yml (a new worktree has none of its own yet), then its own flock.local.yml.
-func SettingsFiles(cfg *config.Config, site config.Site) []string {
+// flock.local.yml (a new worktree has none of its own yet), then its own flock.local.yml. find
+// looks the site of a worktree up by name.
+func SettingsFiles(find func(name string) (config.Site, bool), site config.Site) []string {
 	if site.IsWorktree() {
-		if parent, ok := cfg.FindSite(site.Parent); ok {
+		if parent, ok := find(site.Parent); ok {
 			return []string{filepath.Join(site.Path, ConfigFile), filepath.Join(parent.Path, LocalFile), filepath.Join(site.Path, LocalFile)}
 		}
 	}
@@ -35,8 +36,8 @@ func SettingsFiles(cfg *config.Config, site config.Site) []string {
 // settings file that names it; both are "" when none does. The last file that sets the key wins,
 // so flock.local.yml replaces flock.yml, and an empty value turns it off. A relative path starts
 // at the folder of the file that names it, ~/ at the home folder.
-func CaddyFile(cfg *config.Config, site config.Site) (file, from string, err error) {
-	for _, path := range SettingsFiles(cfg, site) {
+func CaddyFile(find func(name string) (config.Site, bool), site config.Site) (file, from string, err error) {
+	for _, path := range SettingsFiles(find, site) {
 		data, err := os.ReadFile(path)
 		if errors.Is(err, os.ErrNotExist) {
 			continue

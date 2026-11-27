@@ -123,6 +123,40 @@ func (c *Config) WorktreeEntry(path string) (WorktreeEntry, bool) {
 	return WorktreeEntry{}, false
 }
 
+// worktreeEntries are the stored worktree entries by cleaned and by real path, so a caller that
+// looks up many worktrees resolves each entry's symlinks once. A lookup finds what WorktreeEntry
+// does.
+type worktreeEntries struct {
+	entries []WorktreeEntry
+	byPath  map[string]int
+	byReal  map[string]int
+}
+
+// worktreeEntries indexes the stored worktree entries.
+func (c *Config) worktreeEntries() worktreeEntries {
+	w := worktreeEntries{entries: c.Worktrees, byPath: map[string]int{}, byReal: map[string]int{}}
+	for i := len(c.Worktrees) - 1; i >= 0; i-- {
+		w.byPath[filepath.Clean(c.Worktrees[i].Path)] = i
+		w.byReal[realPath(c.Worktrees[i].Path)] = i
+	}
+
+	return w
+}
+
+// find looks up the entry of the worktree at path, whose symlinks resolve to resolved: the first
+// stored entry that is the same folder, as samePath decides.
+func (w worktreeEntries) find(path, resolved string) (WorktreeEntry, bool) {
+	i, ok := w.byPath[filepath.Clean(path)]
+	if j, found := w.byReal[resolved]; found && (!ok || j < i) {
+		i, ok = j, true
+	}
+	if !ok {
+		return WorktreeEntry{}, false
+	}
+
+	return w.entries[i], true
+}
+
 // SetWorktreeEntry adds or replaces the entry of e.Path.
 func (c *Config) SetWorktreeEntry(e WorktreeEntry) {
 	for i := range c.Worktrees {
@@ -157,6 +191,7 @@ func (c *Config) worktreeSites(byName map[string]Site) {
 	sort.Slice(parents, func(i, j int) bool { return parents[i].Name < parents[j].Name })
 
 	var byPath map[string]string // real path → site name, built once a site has worktrees
+	var entries worktreeEntries
 	for _, parent := range parents {
 		for _, wt := range Worktrees(parent.Path) {
 			if byPath == nil {
@@ -164,8 +199,10 @@ func (c *Config) worktreeSites(byName map[string]Site) {
 				for _, s := range parents {
 					byPath[realPath(s.Path)] = s.Name
 				}
+				entries = c.worktreeEntries()
 			}
-			if owner, ok := byPath[realPath(wt.Path)]; ok {
+			resolved := realPath(wt.Path)
+			if owner, ok := byPath[resolved]; ok {
 				if !byName[owner].Parked {
 					continue
 				}
@@ -176,7 +213,7 @@ func (c *Config) worktreeSites(byName map[string]Site) {
 			if slug == "" {
 				slug = WorktreeSlug(wt.ID)
 			}
-			if e, ok := c.WorktreeEntry(wt.Path); ok && e.Site == parent.Name && e.Slug != "" {
+			if e, ok := entries.find(wt.Path, resolved); ok && e.Site == parent.Name && e.Slug != "" {
 				slug = e.Slug
 			}
 			if slug == "" {

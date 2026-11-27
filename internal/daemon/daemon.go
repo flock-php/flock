@@ -435,7 +435,9 @@ func (d *daemon) projectFiles() string {
 	}
 	var b strings.Builder
 	seen := map[string]bool{}
-	for _, site := range cfg.AllSites() {
+	sites := cfg.AllSites()
+	find := config.SitesByName(sites)
+	for _, site := range sites {
 		fmt.Fprintf(&b, "site %s %s reverb=%t\n", site.Name, site.Path, reverb.Installed(site.Path))
 		for _, file := range project.Files(site.Path) {
 			if seen[file] {
@@ -452,8 +454,8 @@ func (d *daemon) projectFiles() string {
 			}
 		}
 		// The settings files and the Caddy directives they name (see siteHandlers).
-		files := project.SettingsFiles(cfg, site)
-		if file, _, _ := project.CaddyFile(cfg, site); file != "" {
+		files := project.SettingsFiles(find, site)
+		if file, _, _ := project.CaddyFile(find, site); file != "" {
 			files = append(files, file)
 		}
 		for _, file := range files {
@@ -467,9 +469,10 @@ func (d *daemon) projectFiles() string {
 
 // siteHandlers reads the Caddy directives a site's flock.yml or flock.local.yml names with
 // `caddyfile:` (see project.CaddyFile) and checks them in ws, the site as it is served. A problem
-// is a warning: the site is served without them, and the other sites aren't affected.
-func siteHandlers(cfg *config.Config, site config.Site, ws web.Site) (handlers, problem string) {
-	file, from, err := project.CaddyFile(cfg, site)
+// is a warning: the site is served without them, and the other sites aren't affected. find looks
+// the site of a worktree up by name.
+func siteHandlers(find func(name string) (config.Site, bool), site config.Site, ws web.Site) (handlers, problem string) {
+	file, from, err := project.CaddyFile(find, site)
 	if err != nil {
 		return "", fmt.Sprintf("caddyfile: %s: %v", site.Name, err)
 	}
@@ -661,6 +664,7 @@ func (d *daemon) reload() error {
 	shareables := map[string]shareable{}
 
 	sites := cfg.AllSites()
+	find := config.SitesByName(sites)
 	extras := cfg.DomainsBySite(sites)
 	// The Node.js sites' dev servers and ports; takenPorts are Flock's own and those given out.
 	nodeSpecs, nodePorts := map[string]supervisor.Spec{}, map[string]int{}
@@ -831,7 +835,7 @@ func (d *daemon) reload() error {
 		shareables[site.Name] = shareable{root: ws.Root, version: version}
 
 		// Checked once the site is complete: its directives adapt in the block it is served with.
-		if handlers, problem := siteHandlers(cfg, site, ws); problem != "" {
+		if handlers, problem := siteHandlers(find, site, ws); problem != "" {
 			warnings = append(warnings, problem)
 		} else {
 			ws.Handlers = handlers
@@ -906,7 +910,7 @@ func (d *daemon) reload() error {
 			if err != nil {
 				return err
 			}
-			site, _ := cfg.FindSite(s.Site)
+			site, _ := find(s.Site)
 			shares = append(shares, web.Share{Port: s.Port, Root: info.root, Public: filepath.Join(site.Path, "public"), FPM: upstreams, Debug: s.Debug})
 		}
 	}
