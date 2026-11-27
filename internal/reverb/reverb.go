@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"syscall"
 
 	"flock/internal/config"
@@ -51,11 +52,36 @@ func Spec(root string, s Site) supervisor.Spec {
 	}
 }
 
-// Env is what the app's .env needs for its broadcasts and its Echo client to go through the web
-// server: the site's host, and the scheme and port it is served on. install:broadcasting's
-// VITE_REVERB_* variables refer to these.
-func Env(host, scheme string, port int) []string {
-	return []string{"REVERB_HOST=" + host, "REVERB_PORT=" + strconv.Itoa(port), "REVERB_SCHEME=" + scheme}
+// Env is the app's whole Reverb block for its .env. The app's id, key and secret are a credential
+// only the app and its own Reverb server share, both reading it from this .env: the ones the app
+// has are kept (current returns a variable's value there, "" when unset), and an app without
+// them gets ones named after the site. The host, scheme and port send its broadcasts and its
+// Echo client through the web server. install:broadcasting's VITE_REVERB_* variables refer to
+// these.
+func Env(site, host, scheme string, port int, current func(key string) string) []string {
+	credential := func(key, fallback string) string {
+		if value := current(key); value != "" {
+			return key + "=" + dotenvValue(value)
+		}
+		return key + "=" + fallback
+	}
+	return []string{
+		credential("REVERB_APP_ID", site),
+		credential("REVERB_APP_KEY", site+"_key"),
+		credential("REVERB_APP_SECRET", site+"_secret"),
+		"REVERB_HOST=" + host,
+		"REVERB_PORT=" + strconv.Itoa(port),
+		"REVERB_SCHEME=" + scheme,
+	}
+}
+
+// dotenvValue writes a value as a .env file takes it: in double quotes when it has a character
+// that would end or change an unquoted one.
+func dotenvValue(value string) string {
+	if !strings.ContainsAny(value, " \t#\"'\\$") {
+		return value
+	}
+	return `"` + strings.NewReplacer(`\`, `\\`, `"`, `\"`).Replace(value) + `"`
 }
 
 func exists(path string) bool {

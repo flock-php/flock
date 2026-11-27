@@ -39,8 +39,17 @@ func TestReverbSiteRunsReverbStartOrSaysWhyNot(t *testing.T) {
 	if spec == nil || st.Problem != "" || st.Log != "reverb-app" || st.Port != site.ReverbPort {
 		t.Fatalf("with Reverb: %v %+v", spec, st)
 	}
-	if want := []string{"REVERB_HOST=app.test", "REVERB_PORT=8443", "REVERB_SCHEME=https"}; !slices.Equal(st.Env, want) {
+	if want := []string{"REVERB_APP_ID=app", "REVERB_APP_KEY=app_key", "REVERB_APP_SECRET=app_secret", "REVERB_HOST=app.test", "REVERB_PORT=8443", "REVERB_SCHEME=https"}; !slices.Equal(st.Env, want) {
 		t.Errorf(".env lines: %v", st.Env)
+	}
+
+	// The credential the app's .env has is the one shown; a variable it leaves empty is named after the site.
+	if err := os.WriteFile(filepath.Join(app, ".env"), []byte("REVERB_APP_ID=shop\nREVERB_APP_KEY=\"local key\"\nREVERB_APP_SECRET=\nREVERB_HOST=localhost\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	_, st = d.reverbSite(cfg, site, "8.4", "https", nil)
+	if want := []string{"REVERB_APP_ID=shop", `REVERB_APP_KEY="local key"`, "REVERB_APP_SECRET=app_secret", "REVERB_HOST=app.test", "REVERB_PORT=8443", "REVERB_SCHEME=https"}; !slices.Equal(st.Env, want) {
+		t.Errorf(".env lines of an app with a credential: %v", st.Env)
 	}
 	args := strings.Join(spec.Args, " ")
 	if !strings.HasPrefix(args, "artisan reverb:start --host=127.0.0.1 --port=") || !strings.Contains(args, "--hostname=127.0.0.1") || spec.Dir != app {
@@ -126,7 +135,7 @@ func TestAnEnabledReverbServerSaysWhyItCantRun(t *testing.T) {
 	plain, _ := cfg.FindSite("plain")
 
 	st := reverbBlocked(cfg, app, "http", "PHP 8.4 is not installed")
-	if st == nil || st.State != api.ReverbUnavailable || st.Problem != "PHP 8.4 is not installed" || st.Log != "reverb-app" || len(st.Env) != 3 {
+	if st == nil || st.State != api.ReverbUnavailable || st.Problem != "PHP 8.4 is not installed" || st.Log != "reverb-app" || len(st.Env) != 6 {
 		t.Fatalf("blocked: %+v", st)
 	}
 	if reverbBlocked(cfg, plain, "http", "anything") != nil {

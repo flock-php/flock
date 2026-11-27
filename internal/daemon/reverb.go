@@ -2,6 +2,7 @@ package daemon
 
 import (
 	"fmt"
+	"path/filepath"
 	"strings"
 
 	"flock/internal/api"
@@ -9,6 +10,7 @@ import (
 	"flock/internal/ports"
 	"flock/internal/reverb"
 	"flock/internal/supervisor"
+	"flock/internal/worktree"
 )
 
 // reverbStatus is a site's Reverb server as status reports it, before its state is known.
@@ -17,7 +19,11 @@ func reverbStatus(cfg *config.Config, site config.Site, scheme string) api.SiteR
 	if scheme == "https" {
 		port = cfg.Ports.HTTPS
 	}
-	return api.SiteReverb{Port: site.ReverbPort, Log: config.ReverbPortID(site.Name), Env: reverb.Env(cfg.Domain(site), scheme, port)}
+	current := func(string) string { return "" }
+	if env, err := worktree.ReadDotenv(filepath.Join(site.Path, ".env")); err == nil {
+		current = env.Get
+	}
+	return api.SiteReverb{Port: site.ReverbPort, Log: config.ReverbPortID(site.Name), Env: reverb.Env(site.Name, cfg.Domain(site), scheme, port, current)}
 }
 
 // reverbBlocked is the status of an enabled Reverb server that can't run because the site itself
