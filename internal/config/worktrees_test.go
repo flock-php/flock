@@ -173,3 +173,39 @@ func TestAStoredWorktreeEntryMatchesThroughASymlink(t *testing.T) {
 		t.Errorf("WorktreeEntry through the real path = %+v, %t", e, ok)
 	}
 }
+
+func TestTheFirstStoredWorktreeEntryOfAFolderWins(t *testing.T) {
+	dir := t.TempDir()
+	repo := filepath.Join(dir, "acme")
+	target := filepath.Join(dir, "target")
+	link := filepath.Join(dir, "link")
+	if err := os.MkdirAll(target, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(target, link); err != nil {
+		t.Skipf("symbolic links can't be made here: %v", err)
+	}
+	addWorktree(t, repo, filepath.Join(target, "auth"), "auth", "ref: refs/heads/feature/auth")
+
+	cfg := Default()
+	if err := cfg.Upsert(Site{Name: "acme", Path: repo}); err != nil {
+		t.Fatal(err)
+	}
+	// Both are the worktree's folder: the first through the symlink, the second by its own path.
+	cfg.Worktrees = []WorktreeEntry{
+		{Path: filepath.Join(link, "auth"), Site: "acme", Slug: "first"},
+		{Path: filepath.Join(target, "auth"), Site: "acme", Slug: "second"},
+	}
+
+	var names []string
+	for _, s := range cfg.AllSites() {
+		names = append(names, s.Name)
+	}
+
+	if got, want := strings.Join(names, " "), "acme first.acme"; got != want {
+		t.Errorf("sites = %s, want %s", got, want)
+	}
+	if e, ok := cfg.WorktreeEntry(filepath.Join(target, "auth")); !ok || e.Slug != "first" {
+		t.Errorf("WorktreeEntry = %+v, %t", e, ok)
+	}
+}
