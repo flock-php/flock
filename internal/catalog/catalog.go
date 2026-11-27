@@ -71,9 +71,36 @@ type Kind struct {
 	Prepare func(dir string) error
 	// Spec prepares the data directory (initialising it the first time) and describes the server.
 	Spec func(p Paths, port int) (supervisor.Spec, error)
+	// Hosts are HTTP ports of the service that Flock serves at names of their own, over HTTPS with
+	// its CA, for as long as the service is installed: pages on https:// can't reach plain
+	// http://127.0.0.1 (Safari blocks it as mixed content).
+	Hosts []Host
 	// Env is the .env snippet that connects a Laravel app, URL a connection URL ("" for none).
-	Env func(port int) string
-	URL func(port int) string
+	Env func(at At) string
+	URL func(at At) string
+}
+
+// Host is an HTTP port of a service that Flock serves at a name: Name under the TLD ("rustfs" for
+// rustfs.test), the port Offset from the service's.
+type Host struct {
+	Name   string
+	Offset int
+}
+
+// At is where an installed service is reached: its port, and the origins of the Hosts Flock serves,
+// by offset (https://rustfs.test). A Host whose name a site or proxy has is missing.
+type At struct {
+	Port    int
+	Origins map[int]string
+}
+
+// Origin is where the service's HTTP port at offset is reached: its Host's origin when Flock
+// serves one, else http://127.0.0.1:<port>.
+func (a At) Origin(offset int) string {
+	if o := a.Origins[offset]; o != "" {
+		return o
+	}
+	return fmt.Sprintf("http://127.0.0.1:%d", a.Port+offset)
 }
 
 func (k *Kind) pkg() string {

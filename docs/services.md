@@ -157,7 +157,7 @@ TYPESENSE_API_KEY=flock
 
 ### RustFS (S3-compatible storage)
 
-RustFS includes a web console on the port after the API port (9001). Create a bucket named `laravel` there.
+Flock serves RustFS over HTTPS at `rustfs.test`, and its web console at `https://rustfs-console.test/rustfs/console/`. Create a bucket named `laravel` in the console.
 
 ```bash
 FILESYSTEM_DISK=s3
@@ -165,10 +165,14 @@ AWS_ACCESS_KEY_ID=rustfsadmin
 AWS_SECRET_ACCESS_KEY=rustfsadmin
 AWS_DEFAULT_REGION=us-east-1
 AWS_BUCKET=laravel
-AWS_ENDPOINT=http://127.0.0.1:9000
-AWS_URL=http://127.0.0.1:9000/laravel
+AWS_ENDPOINT=https://rustfs.test
+AWS_URL=https://rustfs.test/laravel
 AWS_USE_PATH_STYLE_ENDPOINT=true
 ```
+
+Over HTTPS, a page on `https://` can upload straight to a presigned URL, as Livewire and Filament file uploads do. Safari blocks requests from an HTTPS page to `http://127.0.0.1` as mixed content. Uploads from the browser also need a CORS rule on the bucket that allows your site's origin, as on S3.
+
+The API and the console still answer on `127.0.0.1:9000` and `127.0.0.1:9001`. When a site or proxy has the name `rustfs`, it keeps it, and the settings Flock suggests use `http://127.0.0.1:9000` instead.
 
 ## Valkey or Redis?
 

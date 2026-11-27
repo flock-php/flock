@@ -48,6 +48,10 @@ type Site struct {
 	// Reverb is the loopback address of the site's Laravel Reverb server, which gets the site's
 	// WebSocket connections and broadcasts (see reverbRequest).
 	Reverb string
+	// Service is set on a name Flock serves for a catalog service (see catalog.Host): its id. Its
+	// requests go to Proxy, like a proxied name's, but it gets Caddy's plain 502 when the service
+	// doesn't answer: the proxy's page would tell to point the proxy elsewhere.
+	Service string
 	// CertFile and KeyFile (from certs.SiteCert, covering Domain and *.Domain) are set when the site
 	// is secured. Deeper subdomains and aliases get certificates from Config.Issue.
 	CertFile string
@@ -55,7 +59,7 @@ type Site struct {
 }
 
 // proxied reports whether the site is a proxied name (config.Proxy) rather than a site.
-func (s Site) proxied() bool { return s.Root == "" && s.Proxy != "" && s.Node == "" }
+func (s Site) proxied() bool { return s.Root == "" && s.Proxy != "" && s.Node == "" && s.Service == "" }
 
 // Waiting is a linked site that can't be served because its PHP isn't installed: its names get
 // Flock's page saying so (and offering the install) instead of the "not linked" page.

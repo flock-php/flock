@@ -222,6 +222,25 @@ func TestCaddyfileProxiesNamesToTheirServer(t *testing.T) {
 	}
 }
 
+func TestCaddyfileServesACatalogServicesNameWithoutTheProxyPage(t *testing.T) {
+	cfg := testConfig()
+	cfg.Sites = append(cfg.Sites,
+		Site{Domain: "rustfs.test", Proxy: "http://127.0.0.1:9000", Service: "rustfs", CertFile: "/c/rustfs.crt", KeyFile: "/c/rustfs.key"})
+	cf := Caddyfile(cfg)
+	if _, _, err := caddyconfig.GetAdapter("caddyfile").Adapt([]byte(cf), nil); err != nil {
+		t.Fatalf("%v\n%s", err, cf)
+	}
+
+	if want := "https://rustfs.test:443, https://*.rustfs.test:443, https://*.*.rustfs.test:443, https://*.*.*.rustfs.test:443, https://*.*.*.*.rustfs.test:443 {\n" +
+		"\timport flock_site\n\ttls {\n\t\tget_certificate flock\n\t}\n\treverse_proxy \"http://127.0.0.1:9000\"\n}\n"; !strings.Contains(cf, want) {
+		t.Errorf("missing %q in:\n%s", want, cf)
+	}
+	// A stopped service gets Caddy's 502: the proxy's page would offer to point the proxy elsewhere.
+	if strings.Contains(cf, "handle_errors") || strings.Contains(cf, "flock_proxy") {
+		t.Errorf("the service's name is served like a proxy:\n%s", cf)
+	}
+}
+
 // TestCaddyfileRejectsRemoteClientsBeforeAnyHandler checks the adapted config of every kind of
 // block: Caddy sorts handle and route before abort, so a site's Xdebug handle pair must not run
 // before the remote guard.
