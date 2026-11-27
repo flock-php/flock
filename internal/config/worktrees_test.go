@@ -138,3 +138,38 @@ func TestAWorktreeWinsOverTheSameSubdomainOfItsSite(t *testing.T) {
 		t.Error("adding a worktree's domain as a subdomain must be refused")
 	}
 }
+
+func TestAStoredWorktreeEntryMatchesThroughASymlink(t *testing.T) {
+	dir := t.TempDir()
+	repo := filepath.Join(dir, "acme")
+	target := filepath.Join(dir, "target")
+	link := filepath.Join(dir, "link")
+	if err := os.MkdirAll(target, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(target, link); err != nil {
+		t.Skipf("symbolic links can't be made here: %v", err)
+	}
+	// git records the real path (macOS: /private/tmp/...), the entry the path it was given (/tmp/...).
+	addWorktree(t, repo, filepath.Join(target, "auth"), "auth", "ref: refs/heads/feature/auth")
+	addWorktree(t, repo, filepath.Join(link, "bisect"), "bisect", "4b825dc642cb6eb9a060e54bf8d69288fbee4904")
+
+	cfg := Default()
+	if err := cfg.Upsert(Site{Name: "acme", Path: repo}); err != nil {
+		t.Fatal(err)
+	}
+	cfg.SetWorktreeEntry(WorktreeEntry{Path: filepath.Join(link, "auth"), Site: "acme", Slug: "login"})
+	cfg.SetWorktreeEntry(WorktreeEntry{Path: filepath.Join(target, "bisect"), Site: "acme", Slug: "hunt"})
+
+	var names []string
+	for _, s := range cfg.AllSites() {
+		names = append(names, s.Name)
+	}
+
+	if got, want := strings.Join(names, " "), "acme hunt.acme login.acme"; got != want {
+		t.Fatalf("sites = %s, want %s", got, want)
+	}
+	if e, ok := cfg.WorktreeEntry(filepath.Join(target, "auth")); !ok || e.Slug != "login" {
+		t.Errorf("WorktreeEntry through the real path = %+v, %t", e, ok)
+	}
+}
