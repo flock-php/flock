@@ -138,13 +138,18 @@ Flock can run a Laravel app's [Reverb](https://reverb.laravel.com) server for it
 
 Only Reverb's traffic goes to it: WebSocket connections under `/app/` and the signed requests Laravel broadcasts through under `/apps/`. Every other request on those paths stays the app's, so a panel at `/app` keeps working. This needs Reverb's default paths, so leave `REVERB_SERVER_PATH` unset.
 
-The app has to send its broadcasts and its Echo client to the site rather than to Reverb's own port. Flock shows the `.env` lines that do this, but doesn't change the project's `.env` itself:
+The app has to send its broadcasts and its Echo client to the site rather than to Reverb's own port. Flock shows the app's whole Reverb block for its `.env`, but doesn't change the project's `.env` itself:
 
 ```env
+REVERB_APP_ID=acme
+REVERB_APP_KEY=acme_key
+REVERB_APP_SECRET=acme_secret
 REVERB_HOST=acme.test
 REVERB_PORT=443
 REVERB_SCHEME=https
 ```
+
+The id, key and secret are a credential only the app and its own Reverb server share, and both read it from this `.env`, so any values work. Flock shows the ones the `.env` already has, and ones named after the site for an app without them. Restart the Reverb server after changing them.
 
 On a site served over HTTP only, they are `REVERB_PORT=80` and `REVERB_SCHEME=http`. `install:broadcasting --reverb` writes the `VITE_REVERB_*` variables as references to these, so the Echo client follows them. Rebuild the front end (`npm run build`, or restart `npm run dev`) after changing them.
 

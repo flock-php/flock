@@ -17,7 +17,8 @@ func newReverbCommand() *cobra.Command {
 		Long: `Flock runs ` + "`php artisan reverb:start`" + ` for the site with its PHP version, on a loopback port, and its
 web server sends the site's WebSocket connections (/app/...) and broadcasts (/apps/...) there.
 Browsers connect to the site's own address, over HTTPS when the site is secured; the app's .env
-needs the REVERB_HOST, REVERB_PORT and REVERB_SCHEME lines ` + "`flock reverb`" + ` shows.
+needs the REVERB_* lines ` + "`flock reverb`" + ` shows: its id, key and secret (the ones it has, or
+ones named after the site) and the site's host, port and scheme.
 
   flock reverb [site]           show the site's Reverb server and its .env lines
   flock reverb on [site]        run it (the project needs ` + "`php artisan install:broadcasting --reverb`" + `)
