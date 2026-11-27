@@ -90,6 +90,35 @@ func TestPlanPRReviewSkipsDraftsAndStartsAtReadyForReview(t *testing.T) {
 	}
 }
 
+func TestPlanMergeReviewSkipsDrafts(t *testing.T) {
+	start := time.Date(2026, time.January, 1, 0, 0, 0, 0, time.UTC)
+	requestedAt := start.Add(time.Hour)
+	current := &state{
+		now: requestedAt.Add(30 * time.Hour),
+		mergeAuthorized: map[string]bool{
+			"writer": false,
+			"merger": true,
+		},
+	}
+	reviews := []*github.PullRequestReview{submittedReviewAt("writer", "APPROVED", start)}
+	events := []*github.IssueEvent{reviewRequested("writer", "merger", requestedAt)}
+	draft := &github.PullRequest{Number: github.Ptr(8), Draft: github.Ptr(true)}
+	if err := current.planMergeReview(context.Background(), draft, reviews, events, nil); err != nil {
+		t.Fatal(err)
+	}
+	if len(current.changes) != 0 {
+		t.Fatalf("draft changes = %#v, want no merge-review reminder", current.changes)
+	}
+
+	ready := &github.PullRequest{Number: github.Ptr(8)}
+	if err := current.planMergeReview(context.Background(), ready, reviews, events, nil); err != nil {
+		t.Fatal(err)
+	}
+	if len(current.changes) != 1 || current.changes[0].target != "merger" {
+		t.Fatalf("ready changes = %#v, want a merge-review reminder for the same approval and request", current.changes)
+	}
+}
+
 func TestPlanRequestedChangesIgnoresALaterMaintainerReview(t *testing.T) {
 	reviewAt := time.Date(2026, time.January, 1, 0, 0, 0, 0, time.UTC)
 	client := githubTestClient(t, func(w http.ResponseWriter, r *http.Request) {
@@ -461,6 +490,11 @@ func TestIssueTriaged(t *testing.T) {
 			}},
 		},
 		{
+			name:  "never labeled",
+			issue: cleared,
+			want:  true,
+		},
+		{
 			name:  "maintainer unlabeled another label",
 			issue: cleared,
 			events: []*github.IssueEvent{{
@@ -468,6 +502,25 @@ func TestIssueTriaged(t *testing.T) {
 				Actor: &github.User{Login: github.Ptr("maintainer")},
 				Label: &github.Label{Name: "bug"},
 			}},
+			want: true,
+		},
+		{
+			name:  "contributor removed needs triage after a maintainer",
+			issue: cleared,
+			events: []*github.IssueEvent{
+				{
+					Event:     github.Ptr("unlabeled"),
+					Actor:     &github.User{Login: github.Ptr("maintainer")},
+					Label:     label,
+					CreatedAt: &github.Timestamp{Time: time.Date(2026, time.January, 1, 0, 0, 0, 0, time.UTC)},
+				},
+				{
+					Event:     github.Ptr("unlabeled"),
+					Actor:     &github.User{Login: github.Ptr("contributor")},
+					Label:     label,
+					CreatedAt: &github.Timestamp{Time: time.Date(2026, time.January, 2, 0, 0, 0, 0, time.UTC)},
+				},
+			},
 		},
 	} {
 		t.Run(test.name, func(t *testing.T) {
@@ -499,6 +552,38 @@ func TestPlanIssueTriageSkipsCommentsAfterTriage(t *testing.T) {
 
 	if err := current.planIssueTriage(context.Background(), issue); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestApplyPostsRemainingCommentsAfterFailure(t *testing.T) {
+	var posted []string
+	client := githubTestClient(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost || !strings.HasSuffix(r.URL.Path, "/comments") {
+			http.Error(w, `{"message":"unexpected"}`, http.StatusNotFound)
+			return
+		}
+		posted = append(posted, r.URL.Path)
+		if strings.Contains(r.URL.Path, "/issues/1/comments") {
+			http.Error(w, `{"message":"Resource not accessible by integration"}`, http.StatusForbidden)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		io.WriteString(w, `{"id":2,"body":"second"}`)
+	})
+	current := &state{
+		client: client, owner: "owner", repository: "repo",
+		changes: []reminder{
+			{number: 1, body: "first"},
+			{number: 2, body: "second"},
+		},
+	}
+
+	err := current.apply(context.Background())
+	if err == nil || !strings.Contains(err.Error(), "create SLO reminder on #1") || strings.Contains(err.Error(), "#2") {
+		t.Fatalf("apply() error = %v, want only the first comment failure", err)
+	}
+	if len(posted) != 2 || !strings.HasSuffix(posted[1], "/issues/2/comments") {
+		t.Fatalf("posted = %#v, want the second comment after the first failure", posted)
 	}
 }
 

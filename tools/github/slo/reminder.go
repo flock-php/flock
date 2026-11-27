@@ -2,6 +2,7 @@ package slo
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"regexp"
 	"slices"
@@ -48,12 +49,13 @@ func (s *state) elapsed(start time.Time) time.Duration {
 }
 
 func (s *state) apply(ctx context.Context) error {
+	var errs []error
 	for _, change := range s.changes {
 		if _, _, err := s.client.Issues.CreateComment(ctx, s.owner, s.repository, change.number, github.IssueCommentRequest{Body: change.body}); err != nil {
-			return fmt.Errorf("create SLO reminder on #%d: %w", change.number, err)
+			errs = append(errs, fmt.Errorf("create SLO reminder on #%d: %w", change.number, err))
 		}
 	}
-	return nil
+	return errors.Join(errs...)
 }
 
 func remindersFrom(comments []*github.IssueComment) []marker {

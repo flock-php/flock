@@ -51,19 +51,20 @@ func (s *state) issueTriaged(ctx context.Context, issue *github.Issue, events []
 	if issueHasLabel(issue, needsTriageLabel) {
 		return false, nil
 	}
+	var removal *github.IssueEvent
 	for _, event := range events {
 		if event.GetEvent() != "unlabeled" || event.GetLabel().GetName() != needsTriageLabel {
 			continue
 		}
-		maintainer, err := s.isMaintainer(ctx, event.GetActor().GetLogin())
-		if err != nil {
-			return false, err
-		}
-		if maintainer {
-			return true, nil
+		if removal == nil || !event.GetCreatedAt().Time.Before(removal.GetCreatedAt().Time) {
+			removal = event
 		}
 	}
-	return false, nil
+	// No removal means the issue is not waiting on needs triage.
+	if removal == nil {
+		return true, nil
+	}
+	return s.isMaintainer(ctx, removal.GetActor().GetLogin())
 }
 
 func issueHasLabel(issue *github.Issue, name string) bool {

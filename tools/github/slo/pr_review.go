@@ -95,6 +95,9 @@ func submittedReview(review *github.PullRequestReview) bool {
 }
 
 func (s *state) planMergeReview(ctx context.Context, pull *github.PullRequest, reviews []*github.PullRequestReview, events []*github.IssueEvent, markers []marker) error {
+	if pull.GetDraft() {
+		return nil
+	}
 	requested := map[string]mergeRequest{}
 	for _, approval := range latestApprovals(reviews) {
 		approver := approval.GetUser().GetLogin()
