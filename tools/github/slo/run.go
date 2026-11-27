@@ -16,12 +16,13 @@ func Run(ctx context.Context, client *github.Client, owner, repository string) e
 		return err
 	}
 	current := &state{
-		client:      client,
-		owner:       owner,
-		repository:  repository,
-		now:         time.Now().UTC(),
-		maintainers: map[string]bool{},
-		calendar:    calendar,
+		client:          client,
+		owner:           owner,
+		repository:      repository,
+		now:             time.Now().UTC(),
+		maintainers:     map[string]bool{},
+		mergeAuthorized: map[string]bool{},
+		calendar:        calendar,
 	}
 	if err := current.collect(ctx); err != nil {
 		return err

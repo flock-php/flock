@@ -24,6 +24,48 @@ func TestIsOutsideContributor(t *testing.T) {
 	}
 }
 
+func TestIsMaintainerRole(t *testing.T) {
+	for _, test := range []struct {
+		role string
+		want bool
+	}{
+		{role: "admin", want: true},
+		{role: "maintain", want: true},
+		{role: "write", want: true},
+		{role: "triage"},
+		{role: "read"},
+		{role: "none"},
+		{role: ""},
+	} {
+		t.Run(test.role, func(t *testing.T) {
+			if got := IsMaintainerRole(test.role); got != test.want {
+				t.Fatalf("IsMaintainerRole(%q) = %v, want %v", test.role, got, test.want)
+			}
+		})
+	}
+}
+
+func TestCanMergeRole(t *testing.T) {
+	for _, test := range []struct {
+		role string
+		want bool
+	}{
+		{role: "admin", want: true},
+		{role: "maintain", want: true},
+		{role: "write"},
+		{role: "triage"},
+		{role: "read"},
+		{role: "none"},
+		{role: ""},
+	} {
+		t.Run(test.role, func(t *testing.T) {
+			if got := CanMergeRole(test.role); got != test.want {
+				t.Fatalf("CanMergeRole(%q) = %v, want %v", test.role, got, test.want)
+			}
+		})
+	}
+}
+
 func TestIssueApprovalFor(t *testing.T) {
 	author := "contributor"
 	tests := []struct {

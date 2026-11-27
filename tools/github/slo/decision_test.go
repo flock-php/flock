@@ -165,12 +165,12 @@ func TestPlanRequestedChangesCountsRebasedCommitterDate(t *testing.T) {
 	}
 }
 
-func TestPlanMergeReviewSkipsMaintainerApprovals(t *testing.T) {
+func TestPlanMergeReviewSkipsMergeAuthorizedApprovals(t *testing.T) {
 	start := time.Date(2026, time.January, 1, 0, 0, 0, 0, time.UTC)
 	requestedAt := start.Add(time.Hour)
 	current := &state{
 		now: requestedAt.Add(30 * time.Hour),
-		maintainers: map[string]bool{
+		mergeAuthorized: map[string]bool{
 			"maintainer":  true,
 			"contributor": false,
 			"reviewer":    true,
@@ -220,7 +220,7 @@ func TestPlanMergeReviewPostsOneReminderPerTarget(t *testing.T) {
 	secondRequested := start.Add(2 * time.Hour)
 	current := &state{
 		now: secondRequested.Add(30 * time.Hour),
-		maintainers: map[string]bool{
+		mergeAuthorized: map[string]bool{
 			"contributor": false,
 			"other":       false,
 			"reviewer":    true,
@@ -275,6 +275,54 @@ func TestPlanMergeReviewPostsOneReminderPerTarget(t *testing.T) {
 	if len(current.changes) != 2 || current.changes[0].target != "maintainer" || current.changes[1].target != "reviewer" ||
 		!current.changes[1].start.Equal(secondRequested) || !strings.Contains(current.changes[1].body, "contributor approved") {
 		t.Fatalf("changes = %#v, want the later unresolved reviewer request after the earlier one was answered", current.changes)
+	}
+}
+
+func TestPlanMergeReviewRequiresMergeAuthority(t *testing.T) {
+	start := time.Date(2026, time.January, 1, 0, 0, 0, 0, time.UTC)
+	requestedAt := start.Add(time.Hour)
+	pull := &github.PullRequest{Number: github.Ptr(12)}
+	for _, test := range []struct {
+		name       string
+		approver   string
+		target     string
+		authorized map[string]bool
+		wantTarget string
+	}{
+		{
+			name:       "write reviewer is not notified",
+			approver:   "contributor",
+			target:     "writer",
+			authorized: map[string]bool{"contributor": false, "writer": false},
+		},
+		{
+			name:       "write approver needs merge review",
+			approver:   "writer",
+			target:     "merger",
+			authorized: map[string]bool{"writer": false, "merger": true},
+			wantTarget: "merger",
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			current := &state{
+				now:             requestedAt.Add(30 * time.Hour),
+				mergeAuthorized: test.authorized,
+			}
+			reviews := []*github.PullRequestReview{submittedReviewAt(test.approver, "APPROVED", start)}
+			events := []*github.IssueEvent{reviewRequested(test.approver, test.target, requestedAt)}
+			if err := current.planMergeReview(context.Background(), pull, reviews, events, nil); err != nil {
+				t.Fatal(err)
+			}
+			if test.wantTarget == "" {
+				if len(current.changes) != 0 {
+					t.Fatalf("changes = %#v, want no reminders", current.changes)
+				}
+				return
+			}
+			if len(current.changes) != 1 || current.changes[0].target != test.wantTarget {
+				t.Fatalf("changes = %#v, want a reminder for %q", current.changes, test.wantTarget)
+			}
+		})
 	}
 }
 

@@ -9,6 +9,8 @@ import (
 	"strconv"
 
 	"github.com/google/go-github/v93/github"
+
+	"flock/tools/github/contribution"
 )
 
 var mergeQueueRef = regexp.MustCompile(`/pr-(\d+)-[0-9a-f]+$`)
@@ -92,7 +94,7 @@ func (s *state) observe(ctx context.Context) error {
 	}
 	s.observed.enqueuer = enqueuer
 	s.observed.role = permission.GetRoleName()
-	if s.observed.role == "admin" || s.observed.role == "maintain" {
+	if contribution.CanMergeRole(s.observed.role) {
 		return nil
 	}
 	runs, err := listCancellableRuns(ctx, s.client, s.owner, s.repository, s.event.HeadSHA, s.runID)
@@ -104,7 +106,7 @@ func (s *state) observe(ctx context.Context) error {
 }
 
 func (s *state) plan() {
-	s.decision.allowed = s.observed.role == "admin" || s.observed.role == "maintain"
+	s.decision.allowed = contribution.CanMergeRole(s.observed.role)
 }
 
 func (s *state) apply(ctx context.Context) error {

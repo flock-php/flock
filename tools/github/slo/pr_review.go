@@ -98,11 +98,11 @@ func (s *state) planMergeReview(ctx context.Context, pull *github.PullRequest, r
 	requested := map[string]mergeRequest{}
 	for _, approval := range latestApprovals(reviews) {
 		approver := approval.GetUser().GetLogin()
-		mergeMaintainer, err := s.isMaintainer(ctx, approver)
+		approverCanMerge, err := s.canMerge(ctx, approver)
 		if err != nil {
 			return err
 		}
-		if mergeMaintainer {
+		if approverCanMerge {
 			continue
 		}
 		for _, event := range events {
@@ -115,11 +115,11 @@ func (s *state) planMergeReview(ctx context.Context, pull *github.PullRequest, r
 			if current, ok := requested[target]; ok && !at.Before(current.at) {
 				continue
 			}
-			eligible, err := s.isMaintainer(ctx, target)
+			targetCanMerge, err := s.canMerge(ctx, target)
 			if err != nil {
 				return err
 			}
-			if !eligible || reviewRequestResolved(target, at, reviews, events) {
+			if !targetCanMerge || reviewRequestResolved(target, at, reviews, events) {
 				continue
 			}
 			requested[target] = mergeRequest{at: at, approver: approver}
