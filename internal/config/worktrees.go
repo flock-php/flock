@@ -115,11 +115,17 @@ func (s Site) IsWorktree() bool { return s.Parent != "" }
 
 // WorktreeEntry looks up the stored entry of the worktree at path.
 func (c *Config) WorktreeEntry(path string) (WorktreeEntry, bool) {
-	return c.worktreeEntries().find(path, realPath(path))
+	for _, e := range c.Worktrees {
+		if samePath(e.Path, path) {
+			return e, true
+		}
+	}
+	return WorktreeEntry{}, false
 }
 
 // worktreeEntries are the stored worktree entries by cleaned and by real path, so a caller that
-// looks up many worktrees resolves each entry's symlinks once.
+// looks up many worktrees resolves each entry's symlinks once. A lookup finds what WorktreeEntry
+// does.
 type worktreeEntries struct {
 	entries []WorktreeEntry
 	byPath  map[string]int
