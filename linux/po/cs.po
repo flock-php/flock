@@ -121,6 +121,9 @@ msgstr "Vyžaduje pozornost · {version}"
 msgid "app.not_running"
 msgstr "Flock neběží"
 
+msgid "app.outcome_unknown"
+msgstr "Spojení selhalo. Změna se možná provedla; před dalším pokusem obnovte její stav."
+
 msgid "app.program_uses_ports"
 msgstr "{program} používá {ports}."
 
@@ -1470,6 +1473,54 @@ msgid_plural "sites.n_worktrees"
 msgstr[0] "{n} worktree"
 msgstr[1] "{n} worktrees"
 msgstr[2] "{n} worktrees"
+
+msgid "sites.new_app"
+msgstr "Nová aplikace…"
+
+msgid "sites.new_app_browse"
+msgstr "Procházet…"
+
+msgid "sites.new_app_create"
+msgstr "Vytvořit"
+
+msgid "sites.new_app_db"
+msgstr "Vytvořit databázi MySQL nebo MariaDB"
+
+msgid "sites.new_app_db_service"
+msgstr "Databázová služba"
+
+msgid "sites.new_app_db_service_auto"
+msgstr "Automaticky (MySQL nebo MariaDB)"
+
+msgid "sites.new_app_folder"
+msgstr "Složka"
+
+msgid "sites.new_app_hint_no_db"
+msgstr "Nebyla zjištěna žádná běžící služba MySQL nebo MariaDB (spusťte ji ve Službách)."
+
+msgid "sites.new_app_hint_requires_db"
+msgstr "Tato šablona vyžaduje běžící MySQL nebo MariaDB (spusťte ji ve Službách)."
+
+msgid "sites.new_app_https"
+msgstr "Poskytovat přes HTTPS"
+
+msgid "sites.new_app_name"
+msgstr "Název"
+
+msgid "sites.new_app_parent_folder"
+msgstr "Nadřazená složka"
+
+msgid "sites.new_app_preview_hint"
+msgstr "Zvolte název a složku pro spuštění na {scheme}://<name>.{tld}."
+
+msgid "sites.new_app_template"
+msgstr "Šablona"
+
+msgid "sites.new_app_title"
+msgstr "Nová aplikace"
+
+msgid "sites.new_app_tooltip"
+msgstr "Vytvořit nový projekt ze šablony a propojit jej jako web"
 
 msgid "sites.no_public_www_web_or"
 msgstr "Nebyla nalezena složka public/, www/, web/ ani webroot/ se souborem index.php, takže Flock místo webu zobrazuje informační stránku. Vyberte složku se souborem index.php aplikace."
