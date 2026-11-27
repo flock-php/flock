@@ -42,7 +42,9 @@ func (d *daemon) syncWorktrees(cfg *config.Config) {
 	current := map[string]bool{}
 	created := map[string]time.Time{} // when git created each worktree, by path
 	scanned := map[string]bool{}      // parents whose worktrees are in created
-	for _, site := range cfg.AllSites() {
+	sites := cfg.AllSites()
+	find := config.SitesByName(sites)
+	for _, site := range sites {
 		if !site.IsWorktree() {
 			continue
 		}
@@ -61,7 +63,7 @@ func (d *daemon) syncWorktrees(cfg *config.Config) {
 		}
 		if !scanned[site.Parent] {
 			scanned[site.Parent] = true
-			parent, _ := cfg.FindSite(site.Parent)
+			parent, _ := find(site.Parent)
 			for _, wt := range config.Worktrees(parent.Path) {
 				created[filepath.Clean(wt.Path)] = wt.Created
 			}
@@ -70,7 +72,7 @@ func (d *daemon) syncWorktrees(cfg *config.Config) {
 			continue
 		}
 		// A flock.yml that can't be read still starts it: the setup fails and says why.
-		if parent, ok := cfg.FindSite(site.Parent); ok {
+		if parent, ok := find(site.Parent); ok {
 			if settings, err := worktree.Load(parent.Path, site.Path); err == nil && !settings.Auto {
 				continue
 			}

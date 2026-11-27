@@ -446,6 +446,40 @@ func TestProjectFilesFollowsTheConfiguredCaddyfile(t *testing.T) {
 	}
 }
 
+func TestProjectFilesOfAWorktreeFollowsItsSiteSettings(t *testing.T) {
+	repo := filepath.Join(t.TempDir(), "acme")
+	git := func(args ...string) {
+		t.Helper()
+		cmd := exec.Command("git", append([]string{"-C", repo, "-c", "user.name=Flock", "-c", "user.email=flock@example.test"}, args...)...)
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v\n%s", args, err, out)
+		}
+	}
+	if err := os.Mkdir(repo, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	git("init", "-q")
+	git("commit", "-q", "--allow-empty", "-m", "init")
+	wt := filepath.Join(t.TempDir(), "acme-feature")
+	git("worktree", "add", "-q", "-b", "feature", wt)
+	writeFile(t, filepath.Join(repo, "flock.local.yml"), "caddyfile: mine.caddy\n")
+	writeFile(t, filepath.Join(repo, "mine.caddy"), "header X-A b\n")
+	d := daemon{cfg: &config.Config{Sites: []config.Site{{Name: "acme", Path: repo}}}}
+
+	fingerprint := d.projectFiles()
+
+	_, worktree, found := strings.Cut(fingerprint, "site feature.acme ")
+	if !found {
+		t.Fatalf("the worktree is not in the project fingerprint: %q", fingerprint)
+	}
+	worktree, _, _ = strings.Cut(worktree, "\nsite ")
+	for _, file := range []string{filepath.Join(repo, "flock.local.yml"), filepath.Join(repo, "mine.caddy")} {
+		if !strings.Contains(worktree, file+" ") {
+			t.Errorf("the worktree's fingerprint misses its site's [%s]: %q", file, worktree)
+		}
+	}
+}
+
 func TestProjectFilesNoticesReverbBeingInstalled(t *testing.T) {
 	site := t.TempDir()
 	d := daemon{cfg: &config.Config{Sites: []config.Site{{Name: "app", Path: site}}}}
@@ -468,22 +502,22 @@ func TestSiteHandlersProblemsLeaveTheSiteServedWithoutThem(t *testing.T) {
 	site := config.Site{Name: "app", Path: dir}
 	ws := web.Site{Domain: "app.test", Root: dir, FPM: []string{"127.0.0.1:1"}}
 
-	if handlers, problem := siteHandlers(cfg, site, ws); handlers != "" || problem != "" {
+	if handlers, problem := siteHandlers(cfg.FindSite, site, ws); handlers != "" || problem != "" {
 		t.Fatalf("without settings: got %q, %q", handlers, problem)
 	}
 
 	writeFile(t, filepath.Join(dir, "flock.yml"), "caddyfile: local.caddy\n")
-	if _, problem := siteHandlers(cfg, site, ws); !strings.Contains(problem, "doesn't exist") {
+	if _, problem := siteHandlers(cfg.FindSite, site, ws); !strings.Contains(problem, "doesn't exist") {
 		t.Fatalf("missing file: got %q", problem)
 	}
 
 	writeFile(t, filepath.Join(dir, "local.caddy"), "header X-A b\n}\n:9999 {\n")
-	if handlers, problem := siteHandlers(cfg, site, ws); handlers != "" || !strings.Contains(problem, "local.caddy:2") {
+	if handlers, problem := siteHandlers(cfg.FindSite, site, ws); handlers != "" || !strings.Contains(problem, "local.caddy:2") {
 		t.Fatalf("breakout: got %q, %q", handlers, problem)
 	}
 
 	writeFile(t, filepath.Join(dir, "local.caddy"), "header X-A b\n")
-	if handlers, problem := siteHandlers(cfg, site, ws); handlers != "header X-A b\n" || problem != "" {
+	if handlers, problem := siteHandlers(cfg.FindSite, site, ws); handlers != "header X-A b\n" || problem != "" {
 		t.Fatalf("valid file: got %q, %q", handlers, problem)
 	}
 }

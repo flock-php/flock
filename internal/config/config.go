@@ -375,7 +375,8 @@ func (c *Config) AllSites() []Site {
 	return sites
 }
 
-// FindSite looks a site up by name among all sites.
+// FindSite looks a site up by name among all sites. It discovers them all on each call: a caller
+// that looks up many sites uses SitesByName.
 func (c *Config) FindSite(name string) (Site, bool) {
 	for _, s := range c.AllSites() {
 		if s.Name == name {
@@ -383,6 +384,19 @@ func (c *Config) FindSite(name string) (Site, bool) {
 		}
 	}
 	return Site{}, false
+}
+
+// SitesByName looks sites up by name among sites, as FindSite does among all sites.
+func SitesByName(sites []Site) func(name string) (Site, bool) {
+	byName := make(map[string]Site, len(sites))
+	for _, s := range sites {
+		byName[s.Name] = s
+	}
+
+	return func(name string) (Site, bool) {
+		s, ok := byName[name]
+		return s, ok
+	}
 }
 
 // SiteForDir returns the site whose path contains dir (deepest match wins). Without a match it
