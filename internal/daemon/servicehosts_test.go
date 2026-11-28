@@ -212,3 +212,29 @@ func TestAFailedReloadKeepsRustFSOnItsNameOnlyOnTheSamePort(t *testing.T) {
 		t.Errorf("new port, env: %q", env)
 	}
 }
+
+func TestAFailedReloadDropsRustFSNameWhenTheTLDChanges(t *testing.T) {
+	s3 := upstream(t)
+	root, cfg := testRoot(t, func(c *config.Config) { installRustFS(t, c, s3.URL) })
+	client := startDaemon(t, root)
+
+	// The web server can't move to a busy port, so Caddy keeps serving rustfs.test, but DNS now
+	// answers only the new TLD, so that name no longer resolves.
+	blocker, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer blocker.Close()
+	cfg.Ports.HTTPS = blocker.Addr().(*net.TCPAddr).Port
+	cfg.TLD = "internal"
+	if err := cfg.Save(root); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := client.Reload(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	port := strings.TrimPrefix(s3.URL, "http://127.0.0.1:")
+	if env := service(t, client, "rustfs").Env; !strings.Contains(env, "\nAWS_ENDPOINT=http://127.0.0.1:"+port+"\n") {
+		t.Errorf("env: %q", env)
+	}
+}

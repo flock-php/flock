@@ -1038,11 +1038,12 @@ func (d *daemon) reload() error {
 	if webErr != nil {
 		// Caddy keeps the configuration it had, so the services keep the origins it serves: none
 		// before its first start, and then they are reached on 127.0.0.1. A service on a new port
-		// isn't behind its old route, so it is reached on 127.0.0.1 too.
+		// isn't behind its old route, so it is reached on 127.0.0.1 too, and so is every service
+		// once the TLD changed: DNS answers only the new one, so the old names don't resolve.
 		origins = map[string]map[int]string{}
 		for id, o := range d.origins {
 			was, _ := d.cfg.Services.Extra(id)
-			if now, ok := cfg.Services.Extra(id); ok && now.Port == was.Port {
+			if now, ok := cfg.Services.Extra(id); ok && now.Port == was.Port && cfg.TLD == d.cfg.TLD {
 				origins[id] = o
 			}
 		}
