@@ -146,7 +146,7 @@ func TestCatalogEndpoints(t *testing.T) {
 	kind := &catalog.Kind{
 		ID: "mariadb", Name: "MariaDB", Category: "Database", DefaultPort: 3306,
 		Line: func(v string) string { return strings.Join(strings.SplitN(v, ".", 3)[:2], ".") },
-		Env:  func(port int) string { return fmt.Sprintf("DB_PORT=%d", port) },
+		Env:  func(at catalog.At) string { return fmt.Sprintf("DB_PORT=%d", at.Port) },
 	}
 	root := t.TempDir()
 	b := &fakeBackend{root: root}

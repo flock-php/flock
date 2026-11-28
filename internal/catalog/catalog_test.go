@@ -39,7 +39,7 @@ func testKind() *Kind {
 		Spec: func(p Paths, port int) (supervisor.Spec, error) {
 			return supervisor.Spec{Path: filepath.Join(p.Dir, "bin", "mysqld"), Args: []string{p.Data, fmt.Sprint(port)}}, nil
 		},
-		Env: func(port int) string { return fmt.Sprintf("DB_PORT=%d", port) },
+		Env: func(at At) string { return fmt.Sprintf("DB_PORT=%d", at.Port) },
 	}
 }
 
@@ -372,8 +372,8 @@ func TestKinds(t *testing.T) {
 				k.LineOf(examples[k.ID]) == "" {
 				t.Errorf("incomplete kind %+v", k)
 			}
-			if k.Env(1234) == "" || !strings.Contains(k.Env(1234), "1234") {
-				t.Errorf("%s env: %q", k.ID, k.Env(1234))
+			if env := k.Env(At{Port: 1234}); env == "" || !strings.Contains(env, "1234") {
+				t.Errorf("%s env: %q", k.ID, env)
 			}
 		}
 	}
@@ -381,6 +381,37 @@ func TestKinds(t *testing.T) {
 		if (k.ID == "redis" || k.ID == "typesense") && k.Unavailable == "" {
 			t.Errorf("%s says nothing about Windows", k.ID)
 		}
+	}
+}
+
+func TestRustFSUsesItsHostsWhereServed(t *testing.T) {
+	var k *Kind
+	for _, kind := range Kinds("darwin") {
+		if kind.ID == "rustfs" {
+			k = kind
+		}
+	}
+	if len(k.Hosts) != 2 || k.Hosts[0] != (Host{Name: "rustfs"}) || k.Hosts[1] != (Host{Name: "rustfs-console", Offset: 1}) {
+		t.Fatalf("hosts: %+v", k.Hosts)
+	}
+
+	served := At{Port: 9000, Origins: map[int]string{0: "https://rustfs.test", 1: "https://rustfs-console.test"}}
+	env := k.Env(served)
+	if !strings.Contains(env, "\nAWS_ENDPOINT=https://rustfs.test\n") || !strings.Contains(env, "\nAWS_URL=https://rustfs.test/laravel\n") {
+		t.Errorf("env: %q", env)
+	}
+	if url := k.URL(served); url != "https://rustfs-console.test/rustfs/console/" {
+		t.Errorf("url: %q", url)
+	}
+
+	// Where a site or proxy has the names, the service is reached on 127.0.0.1 as before.
+	local := At{Port: 9000}
+	env = k.Env(local)
+	if !strings.Contains(env, "\nAWS_ENDPOINT=http://127.0.0.1:9000\n") || !strings.Contains(env, "\nAWS_URL=http://127.0.0.1:9000/laravel\n") {
+		t.Errorf("env: %q", env)
+	}
+	if url := k.URL(local); url != "http://127.0.0.1:9001/rustfs/console/" {
+		t.Errorf("url: %q", url)
 	}
 }
 

@@ -48,10 +48,10 @@ func mysql(goos string) *Kind {
 	return &Kind{
 		ID: "mysql", Name: "MySQL", Category: "Database", DefaultPort: 3306, Line: majorMinor,
 		Description: "The world's most popular open-source database. User root, no password.",
-		Env: func(port int) string {
-			return fmt.Sprintf("DB_CONNECTION=mysql\nDB_HOST=127.0.0.1\nDB_PORT=%d\nDB_DATABASE=laravel\nDB_USERNAME=root\nDB_PASSWORD=", port)
+		Env: func(at At) string {
+			return fmt.Sprintf("DB_CONNECTION=mysql\nDB_HOST=127.0.0.1\nDB_PORT=%d\nDB_DATABASE=laravel\nDB_USERNAME=root\nDB_PASSWORD=", at.Port)
 		},
-		URL: func(port int) string { return fmt.Sprintf("mysql://root@127.0.0.1:%d", port) },
+		URL: func(at At) string { return fmt.Sprintf("mysql://root@127.0.0.1:%d", at.Port) },
 		Prepare: func(dir string) error {
 			// The debug server, Japanese full-text dictionaries, static libraries and headers are
 			// more than half of it.
@@ -182,10 +182,10 @@ func mariadb(goos string) *Kind {
 	return &Kind{
 		ID: "mariadb", Name: "MariaDB", Category: "Database", DefaultPort: 3306, Line: majorMinor,
 		Description: "The community fork of MySQL, compatible with its clients. User root, no password.",
-		Env: func(port int) string {
-			return fmt.Sprintf("DB_CONNECTION=mariadb\nDB_HOST=127.0.0.1\nDB_PORT=%d\nDB_DATABASE=laravel\nDB_USERNAME=root\nDB_PASSWORD=", port)
+		Env: func(at At) string {
+			return fmt.Sprintf("DB_CONNECTION=mariadb\nDB_HOST=127.0.0.1\nDB_PORT=%d\nDB_DATABASE=laravel\nDB_USERNAME=root\nDB_PASSWORD=", at.Port)
 		},
-		URL: func(port int) string { return fmt.Sprintf("mysql://root@127.0.0.1:%d", port) },
+		URL: func(at At) string { return fmt.Sprintf("mysql://root@127.0.0.1:%d", at.Port) },
 		Prepare: func(dir string) error {
 			trim(dir, "include", "lib/debug", "share/doc")
 			return nil
@@ -211,10 +211,10 @@ func mongodb(goos string) *Kind {
 	return &Kind{
 		ID: "mongodb", Name: "MongoDB", Category: "Database", DefaultPort: 27017, Line: majorMinor,
 		Description: "The document database. Laravel uses it through the mongodb/laravel-mongodb package and PHP's mongodb extension.",
-		Env: func(port int) string {
-			return fmt.Sprintf("DB_CONNECTION=mongodb\nMONGODB_URI=mongodb://127.0.0.1:%d\nMONGODB_DATABASE=laravel", port)
+		Env: func(at At) string {
+			return fmt.Sprintf("DB_CONNECTION=mongodb\nMONGODB_URI=mongodb://127.0.0.1:%d\nMONGODB_DATABASE=laravel", at.Port)
 		},
-		URL: func(port int) string { return fmt.Sprintf("mongodb://127.0.0.1:%d", port) },
+		URL: func(at At) string { return fmt.Sprintf("mongodb://127.0.0.1:%d", at.Port) },
 		Prepare: func(dir string) error {
 			// The Windows zip is mostly debug symbols; mongos (the sharding router) isn't needed.
 			trim(dir, "bin/mongos", "bin/mongos.exe", "bin/install_compass", "bin/Install-Compass.ps1")
@@ -239,8 +239,8 @@ func valkey(goos string) *Kind {
 	return &Kind{
 		ID: "valkey", Name: "Valkey", Category: "Cache & Queue", DefaultPort: 6379, Line: majorMinor,
 		Description: "The open-source Redis: an in-memory store for your cache, queues and sessions. Laravel's Redis settings work unchanged.",
-		Env:         RedisEnv,
-		URL:         func(port int) string { return fmt.Sprintf("redis://127.0.0.1:%d", port) },
+		Env:         func(at At) string { return RedisEnv(at.Port) },
+		URL:         func(at At) string { return fmt.Sprintf("redis://127.0.0.1:%d", at.Port) },
 		Prepare:     needs(exe(goos, "valkey-server"), exe(goos, "valkey-cli")),
 		Spec:        func(p Paths, port int) (supervisor.Spec, error) { return redisSpec(goos, p, port, "valkey-server") },
 	}
@@ -251,8 +251,8 @@ func redis(goos string) *Kind {
 		ID: "redis", Name: "Redis", Category: "Cache & Queue", DefaultPort: 6379, Line: majorMinor,
 		Description: "The in-memory store for your cache, queues and sessions, from Redis Ltd.",
 		Unavailable: "Flock offers Valkey here instead: the open-source Redis, which works with Laravel's Redis settings unchanged.",
-		Env:         RedisEnv,
-		URL:         func(port int) string { return fmt.Sprintf("redis://127.0.0.1:%d", port) },
+		Env:         func(at At) string { return RedisEnv(at.Port) },
+		URL:         func(at At) string { return fmt.Sprintf("redis://127.0.0.1:%d", at.Port) },
 		Prepare:     needs(exe(goos, "redis-server"), exe(goos, "redis-cli")),
 		Spec:        func(p Paths, port int) (supervisor.Spec, error) { return redisSpec(goos, p, port, "redis-server") },
 	}
@@ -319,10 +319,10 @@ func meilisearch(goos string) *Kind {
 	return &Kind{
 		ID: "meilisearch", Name: "Meilisearch", Category: "Search", DefaultPort: 7700, Line: major,
 		Description: "Fast full-text search for Laravel Scout, with a search preview in the browser. No API key needed locally.",
-		Env: func(port int) string {
-			return fmt.Sprintf("SCOUT_DRIVER=meilisearch\nMEILISEARCH_HOST=http://127.0.0.1:%d\nMEILISEARCH_KEY=", port)
+		Env: func(at At) string {
+			return fmt.Sprintf("SCOUT_DRIVER=meilisearch\nMEILISEARCH_HOST=http://127.0.0.1:%d\nMEILISEARCH_KEY=", at.Port)
 		},
-		URL:     func(port int) string { return fmt.Sprintf("http://127.0.0.1:%d", port) },
+		URL:     func(at At) string { return fmt.Sprintf("http://127.0.0.1:%d", at.Port) },
 		Prepare: needs(exe(goos, "meilisearch")),
 		Spec: func(p Paths, port int) (supervisor.Spec, error) {
 			return supervisor.Spec{
@@ -348,10 +348,10 @@ func typesense(goos string) *Kind {
 		ID: "typesense", Name: "Typesense", Category: "Search", DefaultPort: 8108, Line: major,
 		Description: "Typo-tolerant search for Laravel Scout. API key \"" + TypesenseKey + "\".",
 		Unavailable: "Typesense has no Windows build — it runs only on macOS and Linux.",
-		Env: func(port int) string {
-			return fmt.Sprintf("SCOUT_DRIVER=typesense\nTYPESENSE_HOST=127.0.0.1\nTYPESENSE_PORT=%d\nTYPESENSE_PROTOCOL=http\nTYPESENSE_API_KEY=%s", port, TypesenseKey)
+		Env: func(at At) string {
+			return fmt.Sprintf("SCOUT_DRIVER=typesense\nTYPESENSE_HOST=127.0.0.1\nTYPESENSE_PORT=%d\nTYPESENSE_PROTOCOL=http\nTYPESENSE_API_KEY=%s", at.Port, TypesenseKey)
 		},
-		URL:     func(port int) string { return fmt.Sprintf("http://127.0.0.1:%d", port) },
+		URL:     func(at At) string { return fmt.Sprintf("http://127.0.0.1:%d", at.Port) },
 		Prepare: needs("typesense-server"),
 		Spec: func(p Paths, port int) (supervisor.Spec, error) {
 			return supervisor.Spec{
@@ -378,11 +378,15 @@ func rustfs(goos string) *Kind {
 	return &Kind{
 		ID: "rustfs", Name: "RustFS", Category: "Storage", DefaultPort: 9000, Line: major,
 		Description: "S3-compatible object storage for your filesystem disks, with a web console on the next port. Create the bucket \"laravel\" in the console.",
-		Env: func(port int) string {
+		// The S3 API and the console over HTTPS: a page on https:// can upload to presigned URLs in
+		// Safari too. Both pass the Host header unchanged, which signatures cover; the console calls
+		// the API on its own origin.
+		Hosts: []Host{{Name: "rustfs"}, {Name: "rustfs-console", Offset: 1}},
+		Env: func(at At) string {
 			return fmt.Sprintf("FILESYSTEM_DISK=s3\nAWS_ACCESS_KEY_ID=%s\nAWS_SECRET_ACCESS_KEY=%s\nAWS_DEFAULT_REGION=us-east-1\nAWS_BUCKET=laravel\n"+
-				"AWS_ENDPOINT=http://127.0.0.1:%d\nAWS_URL=http://127.0.0.1:%d/laravel\nAWS_USE_PATH_STYLE_ENDPOINT=true", RustFSAccessKey, RustFSSecretKey, port, port)
+				"AWS_ENDPOINT=%s\nAWS_URL=%[3]s/laravel\nAWS_USE_PATH_STYLE_ENDPOINT=true", RustFSAccessKey, RustFSSecretKey, at.Origin(0))
 		},
-		URL:     func(port int) string { return fmt.Sprintf("http://127.0.0.1:%d/rustfs/console/", port+1) },
+		URL:     func(at At) string { return at.Origin(1) + "/rustfs/console/" },
 		Prepare: needs(exe(goos, "rustfs")),
 		Spec: func(p Paths, port int) (supervisor.Spec, error) {
 			spec := supervisor.Spec{

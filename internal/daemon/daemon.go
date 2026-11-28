@@ -108,6 +108,8 @@ type daemon struct {
 	node     nodeRuns    // the Node.js sites' dev servers (see wakeNode)
 	warnings []string
 	problems map[string]string // why an installed catalog service isn't running, by id
+	// origins are the origins of the catalog services' Hosts Flock serves, by id and offset.
+	origins map[string]map[int]string
 	// breakpoints finds PhpStorm breakpoints; breakpointSites is what the last reload found, by site path.
 	breakpoints     xdebug.Detector
 	breakpointSites map[string]bool
@@ -884,6 +886,36 @@ func (d *daemon) reload() error {
 	}
 	d.runs.retain(commands)
 
+	// An installed catalog service's HTTP ports at names of their own (see catalog.Host), over HTTPS.
+	// They aren't proxies the user made, so the proxies don't list them; a site's or proxy's name wins.
+	origins := map[string]map[int]string{}
+	if d.catalog != nil {
+		for _, k := range d.catalog.Kinds() {
+			x, ok := cfg.Services.Extra(k.ID)
+			if !ok {
+				continue
+			}
+			for _, h := range k.Hosts {
+				domain := h.Name + "." + cfg.TLD
+				if taken[domain] {
+					warnings = append(warnings, fmt.Sprintf("%s: %s is served by a site or proxy of the same name, so %s is reached on 127.0.0.1", k.ID, domain, k.Name))
+					continue
+				}
+				ws := web.Site{Domain: domain, Proxy: fmt.Sprintf("http://127.0.0.1:%d", x.Port+h.Offset), Service: k.ID}
+				if ws.CertFile, ws.KeyFile, err = ca.SiteCert(domain); err != nil {
+					return fmt.Errorf("certificate for %s: %w", domain, err)
+				}
+				if origins[k.ID] == nil {
+					origins[k.ID] = map[int]string{}
+				}
+				origins[k.ID][h.Offset] = "https://" + domain + portSuffix("https", cfg)
+				taken[domain] = true
+				webSites = append(webSites, ws)
+				domains = append(domains, domain)
+			}
+		}
+	}
+
 	// Shares always go through the version's normal FastCGI pool, also for FrankenPHP sites: only
 	// FastCGI takes the per-request settings that keep a share safe (see web.Share).
 	var shares []web.Share
@@ -997,12 +1029,26 @@ func (d *daemon) reload() error {
 		bind = ""
 	}
 
-	if err := d.applyWeb(cfg, bind, webSites, waiting, rootless, shares, ca); err != nil {
-		warnings = append(warnings, "web: "+err.Error())
+	webErr := d.applyWeb(cfg, bind, webSites, waiting, rootless, shares, ca)
+	if webErr != nil {
+		warnings = append(warnings, "web: "+webErr.Error())
 	}
 
 	d.mu.Lock()
-	d.cfg, d.sites, d.proxies, d.warnings, d.problems, d.breakpointSites = cfg, statuses, proxies, warnings, problems, breakpoints
+	if webErr != nil {
+		// Caddy keeps the configuration it had, so the services keep the origins it serves: none
+		// before its first start, and then they are reached on 127.0.0.1. A service on a new port
+		// isn't behind its old route, so it is reached on 127.0.0.1 too, and so is every service
+		// once the TLD changed: DNS answers only the new one, so the old names don't resolve.
+		origins = map[string]map[int]string{}
+		for id, o := range d.origins {
+			was, _ := d.cfg.Services.Extra(id)
+			if now, ok := cfg.Services.Extra(id); ok && now.Port == was.Port && cfg.TLD == d.cfg.TLD {
+				origins[id] = o
+			}
+		}
+	}
+	d.cfg, d.sites, d.proxies, d.warnings, d.problems, d.origins, d.breakpointSites = cfg, statuses, proxies, warnings, problems, origins, breakpoints
 	d.mu.Unlock()
 
 	go d.checkWildcard()
@@ -1265,7 +1311,7 @@ func notUsingPHP(root, minor string, running map[string]string) map[string]bool 
 func (d *daemon) Services() []api.Service {
 	d.mu.Lock()
 	cfg := d.cfg
-	dnsUp, mailUp, webUp, wildcard, problems := d.dns != nil, d.mail != nil, d.webUp, d.wildcard, d.problems
+	dnsUp, mailUp, webUp, wildcard, problems, origins := d.dns != nil, d.mail != nil, d.webUp, d.wildcard, d.problems, d.origins
 	d.mu.Unlock()
 	if cfg == nil {
 		return []api.Service{}
@@ -1314,9 +1360,10 @@ func (d *daemon) Services() []api.Service {
 			if x, ok := cfg.Services.Extra(k.ID); ok {
 				s.Version, s.Port, s.Installed, s.Stoppable = x.Version, x.Port, true, true
 				s.Enabled, s.Running, s.Problem = cfg.Services.Running(k.ID), d.procUp(k.ID), problems[k.ID]
-				s.Env = k.Env(x.Port)
+				at := catalog.At{Port: x.Port, Origins: origins[k.ID]}
+				s.Env = k.Env(at)
 				if k.URL != nil {
-					s.URL = k.URL(x.Port)
+					s.URL = k.URL(at)
 				}
 			} else {
 				s.Port = k.DefaultPort
