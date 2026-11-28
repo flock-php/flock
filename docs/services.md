@@ -172,7 +172,9 @@ AWS_USE_PATH_STYLE_ENDPOINT=true
 
 Over HTTPS, a page on `https://` can upload straight to a presigned URL, as Livewire and Filament file uploads do. Safari blocks requests from an HTTPS page to `http://127.0.0.1` as mixed content. Uploads from the browser also need a CORS rule on the bucket that allows your site's origin, as on S3.
 
-The API and the console still answer on `127.0.0.1:9000` and `127.0.0.1:9001`. When a site or proxy has the name `rustfs`, it keeps it, and the settings Flock suggests use `http://127.0.0.1:9000` instead.
+The API still answers on `127.0.0.1` at RustFS's port, 9000 by default, and the console on the next port, 9001 by default. `flock services` and the service's detail in Settings show the port you installed it with.
+
+A site or proxy named `rustfs` or `rustfs-console` keeps its name, and Flock shows a warning. The settings Flock suggests then use `127.0.0.1` for that name. With the default ports, that's `http://127.0.0.1:9000` for the API, or `http://127.0.0.1:9001/rustfs/console/` for the console. Until the web server starts (for example, while another program holds the HTTPS port), the suggested settings use `127.0.0.1` for both.
 
 ## Valkey or Redis?
 
