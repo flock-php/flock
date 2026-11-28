@@ -13,6 +13,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"flock/internal/api"
 	"flock/internal/config"
@@ -139,5 +140,38 @@ func TestAProxyKeepsItsNameFromRustFS(t *testing.T) {
 	resp.Body.Close()
 	if resp.StatusCode != http.StatusOK || string(body) != "rustfs.test http" {
 		t.Fatalf("got %d %q", resp.StatusCode, body)
+	}
+}
+
+func TestRustFSKeepsLoopbackUntilTheWebServerStarts(t *testing.T) {
+	retryInterval = 100 * time.Millisecond
+	t.Cleanup(func() { retryInterval = 15 * time.Second })
+
+	s3 := upstream(t)
+	root, cfg := testRoot(t, func(c *config.Config) { installRustFS(t, c, s3.URL) })
+	blocker, err := net.Listen("tcp", "127.0.0.1:"+strconv.Itoa(cfg.Ports.HTTPS))
+	if err != nil {
+		t.Fatal(err)
+	}
+	client := startDaemon(t, root)
+
+	// Nothing serves https://rustfs.test yet.
+	port := strings.TrimPrefix(s3.URL, "http://127.0.0.1:")
+	rustfs := service(t, client, "rustfs")
+	if !strings.Contains(rustfs.Env, "\nAWS_ENDPOINT=http://127.0.0.1:"+port+"\n") {
+		t.Errorf("env: %q", rustfs.Env)
+	}
+	if strings.Contains(rustfs.URL, "rustfs-console.test") {
+		t.Errorf("url: %q", rustfs.URL)
+	}
+
+	blocker.Close()
+	want := "\nAWS_ENDPOINT=https://rustfs.test:" + strconv.Itoa(cfg.Ports.HTTPS) + "\n"
+	deadline := time.Now().Add(5 * time.Second)
+	for !strings.Contains(service(t, client, "rustfs").Env, want) {
+		if time.Now().After(deadline) {
+			t.Fatalf("the web server started, but the env is %q", service(t, client, "rustfs").Env)
+		}
+		time.Sleep(50 * time.Millisecond)
 	}
 }

@@ -1029,11 +1029,17 @@ func (d *daemon) reload() error {
 		bind = ""
 	}
 
-	if err := d.applyWeb(cfg, bind, webSites, waiting, rootless, shares, ca); err != nil {
-		warnings = append(warnings, "web: "+err.Error())
+	webErr := d.applyWeb(cfg, bind, webSites, waiting, rootless, shares, ca)
+	if webErr != nil {
+		warnings = append(warnings, "web: "+webErr.Error())
 	}
 
 	d.mu.Lock()
+	if webErr != nil {
+		// Caddy keeps the configuration it had, so the services keep the origins it serves: none
+		// before its first start, and then they are reached on 127.0.0.1.
+		origins = d.origins
+	}
 	d.cfg, d.sites, d.proxies, d.warnings, d.problems, d.origins, d.breakpointSites = cfg, statuses, proxies, warnings, problems, origins, breakpoints
 	d.mu.Unlock()
 
