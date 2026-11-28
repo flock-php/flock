@@ -1037,8 +1037,15 @@ func (d *daemon) reload() error {
 	d.mu.Lock()
 	if webErr != nil {
 		// Caddy keeps the configuration it had, so the services keep the origins it serves: none
-		// before its first start, and then they are reached on 127.0.0.1.
-		origins = d.origins
+		// before its first start, and then they are reached on 127.0.0.1. A service on a new port
+		// isn't behind its old route, so it is reached on 127.0.0.1 too.
+		origins = map[string]map[int]string{}
+		for id, o := range d.origins {
+			was, _ := d.cfg.Services.Extra(id)
+			if now, ok := cfg.Services.Extra(id); ok && now.Port == was.Port {
+				origins[id] = o
+			}
+		}
 	}
 	d.cfg, d.sites, d.proxies, d.warnings, d.problems, d.origins, d.breakpointSites = cfg, statuses, proxies, warnings, problems, origins, breakpoints
 	d.mu.Unlock()

@@ -175,3 +175,40 @@ func TestRustFSKeepsLoopbackUntilTheWebServerStarts(t *testing.T) {
 		time.Sleep(50 * time.Millisecond)
 	}
 }
+
+func TestAFailedReloadKeepsRustFSOnItsNameOnlyOnTheSamePort(t *testing.T) {
+	s3, moved := upstream(t), upstream(t)
+	root, cfg := testRoot(t, func(c *config.Config) { installRustFS(t, c, s3.URL) })
+	client := startDaemon(t, root)
+	https := strconv.Itoa(cfg.Ports.HTTPS)
+
+	// The web server can't move to a busy port, so Caddy keeps serving rustfs.test on the old one.
+	blocker, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer blocker.Close()
+	cfg.Ports.HTTPS = blocker.Addr().(*net.TCPAddr).Port
+	if err := cfg.Save(root); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := client.Reload(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if env := service(t, client, "rustfs").Env; !strings.Contains(env, "\nAWS_ENDPOINT=https://rustfs.test:"+https+"\n") {
+		t.Errorf("same port, env: %q", env)
+	}
+
+	// On a new port, RustFS isn't behind that route.
+	installRustFS(t, cfg, moved.URL)
+	if err := cfg.Save(root); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := client.Reload(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	port := strings.TrimPrefix(moved.URL, "http://127.0.0.1:")
+	if env := service(t, client, "rustfs").Env; !strings.Contains(env, "\nAWS_ENDPOINT=http://127.0.0.1:"+port+"\n") {
+		t.Errorf("new port, env: %q", env)
+	}
+}
